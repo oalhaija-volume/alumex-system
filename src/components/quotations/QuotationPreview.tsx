@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { BrandMark } from "@/components/BrandMark";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { PdfDownloadButton } from "@/components/pdf/PdfDownloadButton";
 import {
@@ -12,92 +11,393 @@ import {
   type QuotationDraft,
 } from "@/components/quotations/quotationTypes";
 
-function QuotationCoverPage({
+const totalPages = 3;
+
+function Logo() {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/logo/AlumexLogo.svg"
+      alt="Alumex Experts"
+      className="h-auto w-[38mm] object-contain"
+    />
+  );
+}
+
+function PageHeader({
+  quotationNumber,
+  page,
+}: {
+  quotationNumber: string;
+  page: number;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <header className="shrink-0">
+      <div className="flex items-start justify-between gap-8">
+        <Logo />
+        <div className="text-right text-[8px] font-bold uppercase tracking-wide text-slate-500">
+          <p>{t("quotations.quotation")}</p>
+          <p className="mt-1 text-[13px] tracking-normal text-slate-950">
+            {quotationNumber}
+          </p>
+          <p className="mt-1 font-semibold normal-case tracking-normal">
+            {t("common.page")} {page} / {totalPages}
+          </p>
+        </div>
+      </div>
+      <div className="mt-5 h-[1.5px] w-full bg-[var(--alumex-blue)]" />
+    </header>
+  );
+}
+
+function PageFooter({
+  quotationNumber,
+  page,
+}: {
+  quotationNumber: string;
+  page: number;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <footer className="mt-auto shrink-0 pt-5 text-[8px] font-semibold text-slate-500">
+      <div className="h-px bg-slate-200" />
+      <div className="mt-2 flex items-center justify-between gap-4">
+        <span>{quotationNumber}</span>
+        <span>{t("common.page")} {page} / {totalPages}</span>
+      </div>
+    </footer>
+  );
+}
+
+function DocumentPage({
+  children,
+  quotationNumber,
+  page,
+  className = "",
+}: {
+  children: React.ReactNode;
+  quotationNumber: string;
+  page: number;
+  className?: string;
+}) {
+  return (
+    <section
+      className={`a4-page quotation-pdf-page pdf-page print-page mx-auto mb-6 flex flex-col bg-white text-slate-950 shadow-sm ring-1 ring-slate-200 print:mb-0 print:shadow-none print:ring-0 ${className}`}
+    >
+      <PageHeader quotationNumber={quotationNumber} page={page} />
+      <div className="min-h-0 flex-1">{children}</div>
+      <PageFooter quotationNumber={quotationNumber} page={page} />
+    </section>
+  );
+}
+
+function Field({
+  label,
+  value,
+  dark = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  dark?: boolean;
+}) {
+  return (
+    <div
+      className={`min-w-0 rounded-md border px-4 py-3 ${
+        dark
+          ? "border-white/15 bg-white/10 text-white"
+          : "border-slate-200 bg-slate-50 text-slate-950"
+      }`}
+    >
+      <p
+        className={`text-[8px] font-bold uppercase tracking-wide ${
+          dark ? "text-white/65" : "text-slate-500"
+        }`}
+      >
+        {label}
+      </p>
+      <p className="mt-1.5 break-words text-[13px] font-bold leading-snug">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function formatIqd(value: number, locale: string) {
+  const formatter = new Intl.NumberFormat(locale === "ar" ? "ar-IQ" : "en-US", {
+    maximumFractionDigits: 0,
+  });
+  const amount = formatter.format(Math.round(value));
+
+  return locale === "ar" ? `${amount} د.ع` : `IQD ${amount}`;
+}
+
+function CoverPage({
   draft,
   grandTotal,
 }: {
   draft: QuotationDraft;
   grandTotal: number;
 }) {
-  const { formatCurrency, formatDate, t, term } = useI18n();
+  const { formatDate, locale, t, term } = useI18n();
 
   return (
-    <section className="a4-page pdf-page contract-cover-page relative mx-auto mb-6 overflow-hidden bg-white shadow-sm ring-1 ring-slate-200 print:mb-0 print:shadow-none print:ring-0">
-      <div className="absolute inset-x-0 top-0 h-3 bg-[var(--alumex-red)]" />
-      <div className="absolute inset-y-0 right-0 w-7 bg-[var(--alumex-blue)]" />
-      <div className="absolute right-7 top-0 h-64 w-28 bg-slate-900" />
-      <div className="absolute bottom-0 left-0 h-32 w-full bg-slate-950" />
-
+    <section className="a4-page quotation-pdf-page pdf-page contract-cover-page relative mx-auto mb-6 overflow-hidden bg-white text-slate-950 shadow-sm ring-1 ring-slate-200 print:mb-0 print:shadow-none print:ring-0">
+      <div className="absolute inset-x-0 top-0 h-2 bg-[var(--alumex-red)]" />
+      <div className="absolute bottom-0 left-0 h-[42mm] w-full bg-slate-950" />
+      <div className="absolute bottom-[42mm] left-0 h-[2mm] w-full bg-[var(--alumex-blue)]" />
       <div className="relative z-10 flex h-full min-h-0 flex-col">
         <header className="flex items-start justify-between gap-8">
-          <BrandMark />
+          <Logo />
           <div className="text-right">
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
+            <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-slate-500">
               {t("quotations.quotationPackage")}
             </p>
-            <p className="mt-2 text-sm font-bold text-[var(--alumex-blue)]">
+            <p className="mt-2 text-[15px] font-black text-[var(--alumex-blue)]">
               {draft.quotationNumber}
             </p>
           </div>
         </header>
 
-        <div className="mt-20 max-w-[140mm]">
-          <p className="text-sm font-bold uppercase tracking-[0.24em] text-[var(--alumex-red)]">
-            {t("app.name")}
+        <section className="mt-14 max-w-[138mm]">
+          <p className="text-[9px] font-black uppercase tracking-[0.24em] text-[var(--alumex-red)]">
+            {t("quotations.quotation")}
           </p>
-          <h1 className="mt-5 text-5xl font-black leading-[1.06] text-slate-950">
+          <h1 className="mt-4 text-[34px] font-black leading-[1.08] text-slate-950">
             {t("quotations.commercialQuotation")}
           </h1>
-          <div className="mt-8 h-1.5 w-28 bg-[var(--alumex-blue)]" />
-          <p className="mt-7 max-w-[128mm] text-base leading-7 text-slate-600">
+          <div className="mt-5 h-[2px] w-[34mm] bg-[var(--alumex-blue)]" />
+          <p className="mt-5 max-w-[124mm] text-[12px] leading-6 text-slate-600">
             {t("quotations.coverDescription")}
           </p>
-        </div>
+        </section>
 
-        <div className="mt-12 grid grid-cols-2 gap-3">
-          {[
-            [t("contracts.clientName"), term(draft.project.client)],
-            [t("projects.fields.projectName"), term(draft.project.projectName)],
-            [t("quotations.quotationNumber"), draft.quotationNumber],
-            [t("common.date"), formatDate(new Date())],
-            [t("contracts.totalAmount"), formatCurrency(grandTotal)],
-            [t("contracts.preparedBy"), draft.preparedBy || t("quotations.defaultPreparedBy")],
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              className="min-w-0 border-s-4 border-[var(--alumex-blue)] bg-slate-50 px-4 py-3"
-            >
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                {label}
-              </p>
-              <p className="mt-2 break-words text-base font-bold text-slate-950">{value}</p>
-            </div>
-          ))}
-        </div>
+        <section className="mt-10 grid grid-cols-2 gap-3">
+          <Field label={t("contracts.clientName")} value={term(draft.project.client)} />
+          <Field label={t("projects.fields.projectName")} value={term(draft.project.projectName)} />
+          <Field label={t("quotations.quotationNumber")} value={draft.quotationNumber} />
+          <Field label={t("common.date")} value={formatDate(new Date())} />
+          <Field label={t("contracts.totalAmount")} value={formatIqd(grandTotal, locale)} />
+          <Field
+            label={t("contracts.preparedBy")}
+            value={draft.preparedBy || t("quotations.defaultPreparedBy")}
+          />
+        </section>
 
-        <footer className="relative z-10 mt-auto grid grid-cols-[1fr_70mm] items-end gap-6 pt-10 text-white">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-300">
-              {t("quotations.projectType")}
-            </p>
-            <p className="mt-3 text-xl font-bold">{term(draft.project.projectType)}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-300">
-              {t("contracts.salesEngineer")}
-            </p>
-            <p className="mt-3 text-xl font-bold">
-              {term(draft.project.salesEngineer)}
-            </p>
-          </div>
-        </footer>
+        <section className="mt-auto grid grid-cols-2 gap-4 pb-1 text-white">
+          <Field label={t("quotations.projectType")} value={term(draft.project.projectType)} dark />
+          <Field label={t("contracts.salesEngineer")} value={term(draft.project.salesEngineer)} dark />
+        </section>
       </div>
     </section>
   );
 }
 
+function DetailsPage({
+  draft,
+  totals,
+}: {
+  draft: QuotationDraft;
+  totals: ReturnType<typeof calculateQuotationTotals>;
+}) {
+  const { locale, t, term } = useI18n();
+
+  return (
+    <DocumentPage quotationNumber={draft.quotationNumber} page={2}>
+      <section className="mt-6 grid grid-cols-2 gap-4">
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+          <h2 className="text-[9px] font-black uppercase tracking-wide text-[var(--alumex-blue)]">
+            {t("quotations.clientInformation")}
+          </h2>
+          <p className="mt-2 text-[14px] font-black leading-snug text-slate-950">
+            {term(draft.project.client)}
+          </p>
+          <p className="mt-1 text-[10px] leading-5 text-slate-600">
+            {term(draft.project.address)}
+          </p>
+        </div>
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+          <h2 className="text-[9px] font-black uppercase tracking-wide text-[var(--alumex-blue)]">
+            {t("quotations.projectInformation")}
+          </h2>
+          <p className="mt-2 text-[14px] font-black leading-snug text-slate-950">
+            {term(draft.project.projectName)}
+          </p>
+          <p className="mt-1 text-[10px] leading-5 text-slate-600">
+            {draft.project.projectNumber} - {term(draft.project.projectType)}
+          </p>
+          <p className="text-[10px] leading-5 text-slate-600">
+            {t("contracts.salesEngineer")}: {term(draft.project.salesEngineer)}
+          </p>
+        </div>
+      </section>
+
+      <section className="mt-5">
+        <h2 className="text-[9px] font-black uppercase tracking-wide text-slate-500">
+          {t("quotations.openings")}
+        </h2>
+        <div className="mt-2 overflow-hidden rounded-md border border-slate-200">
+          <table className="w-full table-fixed border-collapse text-left text-[6.7px] leading-tight">
+            <caption className="sr-only">{t("quotations.openingTotalsCaption")}</caption>
+            <thead className="bg-[var(--alumex-blue)] text-white">
+              <tr>
+                <th className="w-[8%] px-1 py-2">{t("common.code")}</th>
+                <th className="w-[11%] px-1 py-2">{t("common.location")}</th>
+                <th className="w-[12%] px-1 py-2">{t("common.system")}</th>
+                <th className="w-[10%] px-1 py-2">{t("quotations.glass")}</th>
+                <th className="w-[8%] px-1 py-2">{t("projects.openings.fields.width")}</th>
+                <th className="w-[8%] px-1 py-2">{t("projects.openings.fields.height")}</th>
+                <th className="w-[5%] px-1 py-2">{t("projects.openings.fields.quantity")}</th>
+                <th className="w-[8%] px-1 py-2">{t("common.areaSqm")}</th>
+                <th className="w-[11%] px-1 py-2">{t("quotations.unitPricePerSqm")}</th>
+                <th className="w-[8%] px-1 py-2">{t("common.discount")}</th>
+                <th className="w-[11%] px-1 py-2 text-right">{t("common.total")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {draft.lines.map((line, index) => {
+                const lineTotal = calculateLineTotal(line);
+
+                return (
+                  <tr
+                    key={line.id}
+                    className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}
+                  >
+                    <td className="break-words border-t border-slate-200 px-1 py-1.5 font-bold">
+                      {line.openingCode}
+                    </td>
+                    <td className="break-words border-t border-slate-200 px-1 py-1.5 text-slate-700">
+                      {term(line.floor)} - {term(line.room)}
+                    </td>
+                    <td className="break-words border-t border-slate-200 px-1 py-1.5 text-slate-700">
+                      {term(line.productSystem)}
+                    </td>
+                    <td className="break-words border-t border-slate-200 px-1 py-1.5 text-slate-700">
+                      {term(line.glassType)}
+                    </td>
+                    <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
+                      {line.width}
+                    </td>
+                    <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
+                      {line.height}
+                    </td>
+                    <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
+                      {line.quantity}
+                    </td>
+                    <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
+                      {lineTotal.area.toFixed(2)}
+                    </td>
+                    <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
+                      {formatIqd(line.unitPrice, locale)}
+                    </td>
+                    <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
+                      {line.discountPercent}%
+                    </td>
+                    <td className="border-t border-slate-200 px-1 py-1.5 text-right font-bold text-slate-950">
+                      {formatIqd(lineTotal.net, locale)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-5 grid grid-cols-[1fr_58mm] gap-4">
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+          <h2 className="text-[9px] font-black uppercase tracking-wide text-slate-500">
+            {t("common.notes")}
+          </h2>
+          <p className="mt-2 whitespace-pre-wrap text-[10px] leading-5 text-slate-700">
+            {draft.notes || t("quotations.noNotes")}
+          </p>
+        </div>
+        <div className="rounded-md border border-slate-200 bg-white p-4">
+          <h2 className="text-[9px] font-black uppercase tracking-wide text-[var(--alumex-blue)]">
+            {t("quotations.totals")}
+          </h2>
+          <div className="mt-3 space-y-2 text-[9px]">
+            <div className="flex justify-between gap-3">
+              <span className="text-slate-500">{t("common.subtotal")}</span>
+              <span className="font-bold">{formatIqd(totals.subtotal, locale)}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-slate-500">{t("common.lineDiscounts")}</span>
+              <span className="font-bold text-red-700">
+                -{formatIqd(totals.lineDiscountTotal, locale)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-slate-500">
+                {t("common.quotationDiscount")} ({draft.discountPercent}%)
+              </span>
+              <span className="font-bold text-red-700">
+                -{formatIqd(totals.quotationDiscount, locale)}
+              </span>
+            </div>
+            <div className="border-t border-slate-200 pt-2">
+              <div className="flex justify-between gap-3 text-[12px]">
+                <span className="font-black">{t("common.grandTotal")}</span>
+                <span className="font-black text-[var(--alumex-blue)]">
+                  {formatIqd(totals.grandTotal, locale)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </DocumentPage>
+  );
+}
+
+function ApprovalPage({ draft }: { draft: QuotationDraft }) {
+  const { t } = useI18n();
+
+  return (
+    <DocumentPage quotationNumber={draft.quotationNumber} page={3}>
+      <section className="mt-12">
+        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[var(--alumex-red)]">
+          {t("quotations.quotationApproval")}
+        </p>
+        <h2 className="mt-3 text-[24px] font-black leading-tight text-slate-950">
+          {t("common.signatures")}
+        </h2>
+        <p className="mt-4 max-w-[130mm] text-[11px] leading-6 text-slate-600">
+          {t("quotations.coverDescription")}
+        </p>
+      </section>
+
+      <section className="mt-24 grid grid-cols-2 gap-12">
+        <div className="min-h-[58mm] rounded-md border border-slate-200 bg-slate-50 p-5">
+          <p className="text-[9px] font-black uppercase tracking-wide text-slate-500">
+            {t("quotations.alumexRepresentative")}
+          </p>
+          <div className="mt-20 border-t border-slate-400 pt-3">
+            <p className="text-[12px] font-black text-slate-950">
+              {draft.preparedBy || t("quotations.preparedBy")}
+            </p>
+          </div>
+        </div>
+        <div className="min-h-[58mm] rounded-md border border-slate-200 bg-slate-50 p-5">
+          <p className="text-[9px] font-black uppercase tracking-wide text-slate-500">
+            {t("quotations.clientRepresentative")}
+          </p>
+          <div className="mt-20 border-t border-slate-400 pt-3">
+            <p className="text-[12px] font-black text-slate-950">
+              {draft.clientRepresentative || t("quotations.clientApproval")}
+            </p>
+          </div>
+        </div>
+      </section>
+    </DocumentPage>
+  );
+}
+
 export function QuotationPreview() {
-  const { formatCurrency, formatDate, t, term } = useI18n();
+  const { t } = useI18n();
   const [draft, setDraft] = useState<QuotationDraft | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -108,6 +408,7 @@ export function QuotationPreview() {
       if (storedDraft) {
         setDraft(JSON.parse(storedDraft) as QuotationDraft);
       }
+
       setIsLoading(false);
     }, 0);
 
@@ -187,202 +488,9 @@ export function QuotationPreview() {
       </div>
 
       <article id="quotation-pdf" className="mx-auto print:max-w-none">
-        <QuotationCoverPage draft={draft} grandTotal={totals.grandTotal} />
-
-        <section className="a4-page pdf-page print-page bg-white shadow-sm ring-1 ring-slate-200 print:shadow-none print:ring-0">
-          <header className="flex flex-col gap-6 border-b-4 border-[var(--alumex-blue)] pb-6 sm:flex-row sm:items-start sm:justify-between">
-          <BrandMark />
-          <div className="text-left sm:text-right">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--alumex-red)]">
-              {t("quotations.quotation")}
-            </p>
-            <h1 className="mt-2 text-2xl font-bold text-slate-950">
-              {draft.quotationNumber}
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {t("common.issued")}: {formatDate(new Date())}
-            </p>
-          </div>
-          </header>
-
-          <section className="mt-8 grid gap-4 md:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 p-4">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-              {t("quotations.clientInformation")}
-            </h2>
-            <p className="mt-3 text-lg font-bold text-slate-950">
-              {term(draft.project.client)}
-            </p>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              {term(draft.project.address)}
-            </p>
-          </div>
-          <div className="rounded-lg border border-slate-200 p-4">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-              {t("quotations.projectInformation")}
-            </h2>
-            <p className="mt-3 text-lg font-bold text-slate-950">
-              {term(draft.project.projectName)}
-            </p>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              {draft.project.projectNumber} - {term(draft.project.projectType)}
-            </p>
-            <p className="text-sm leading-6 text-slate-600">
-              {t("contracts.salesEngineer")}: {term(draft.project.salesEngineer)}
-            </p>
-          </div>
-          </section>
-
-          <section className="mt-7">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-            {t("quotations.openings")}
-          </h2>
-          <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
-            <table className="w-full table-fixed divide-y divide-slate-200 text-left text-[8.5px] leading-tight">
-              <caption className="sr-only">{t("quotations.openingTotalsCaption")}</caption>
-              <thead className="bg-slate-50 font-bold uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="w-[11%] px-1.5 py-2">{t("common.code")}</th>
-                  <th className="w-[14%] px-1.5 py-2">{t("common.location")}</th>
-                  <th className="w-[15%] px-1.5 py-2">{t("common.system")}</th>
-                  <th className="w-[10%] px-1.5 py-2">{t("projects.openings.fields.width")}</th>
-                  <th className="w-[10%] px-1.5 py-2">{t("projects.openings.fields.height")}</th>
-                  <th className="w-[7%] px-1.5 py-2">{t("projects.openings.fields.quantity")}</th>
-                  <th className="w-[10%] px-1.5 py-2">{t("common.areaSqm")}</th>
-                  <th className="w-[12%] px-1.5 py-2">{t("quotations.unitPricePerSqm")}</th>
-                  <th className="w-[11%] px-1.5 py-2 text-right">{t("common.total")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {draft.lines.map((line) => {
-                  const lineTotal = calculateLineTotal(line);
-
-                  return (
-                    <tr key={line.id}>
-                      <td className="break-words px-1.5 py-2 font-bold text-slate-950">
-                        {line.openingCode}
-                      </td>
-                      <td className="break-words px-1.5 py-2 text-slate-700">
-                        {term(line.floor)} - {term(line.room)}
-                      </td>
-                      <td className="break-words px-1.5 py-2 text-slate-700">
-                        {term(line.productSystem)}
-                      </td>
-                      <td className="px-1.5 py-2 text-slate-700">
-                        {t("common.cmValue", { value: line.width })}
-                      </td>
-                      <td className="px-1.5 py-2 text-slate-700">
-                        {t("common.cmValue", { value: line.height })}
-                      </td>
-                      <td className="px-1.5 py-2 text-slate-700">
-                        {line.quantity}
-                      </td>
-                      <td className="px-1.5 py-2 text-slate-700">
-                        {t("common.areaValue", { value: lineTotal.area.toFixed(2) })}
-                      </td>
-                      <td className="px-1.5 py-2 text-slate-700">
-                        {formatCurrency(line.unitPrice)}
-                      </td>
-                      <td className="px-1.5 py-2 text-right font-bold text-slate-950">
-                        {formatCurrency(lineTotal.net)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          </section>
-
-          <section className="mt-7 grid grid-cols-[1fr_70mm] gap-4">
-          <div className="rounded-lg border border-slate-200 p-4">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-            {t("common.notes")}
-            </h2>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700">
-              {draft.notes || t("quotations.noNotes")}
-            </p>
-          </div>
-          <div className="rounded-lg border border-slate-200 p-4">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-              {t("quotations.totals")}
-            </h2>
-            <div className="mt-4 space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-500">{t("common.subtotal")}</span>
-                <span className="font-bold text-slate-950">
-                  {formatCurrency(totals.subtotal)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">{t("common.lineDiscounts")}</span>
-                <span className="font-bold text-red-700">
-                  -{formatCurrency(totals.lineDiscountTotal)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">
-                  {t("common.quotationDiscount")} ({draft.discountPercent}%)
-                </span>
-                <span className="font-bold text-red-700">
-                  -{formatCurrency(totals.quotationDiscount)}
-                </span>
-              </div>
-              <div className="border-t border-slate-200 pt-3">
-                <div className="flex justify-between text-lg">
-                  <span className="font-bold text-slate-950">
-                    {t("common.grandTotal")}
-                  </span>
-                  <span className="font-bold text-[var(--alumex-blue)]">
-                    {formatCurrency(totals.grandTotal)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-          </section>
-        </section>
-
-        <section className="a4-page pdf-page print-page bg-white shadow-sm ring-1 ring-slate-200 print:shadow-none print:ring-0">
-          <div className="flex min-h-full flex-col">
-            <header className="border-b-4 border-[var(--alumex-blue)] pb-6">
-              <BrandMark />
-              <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-[var(--alumex-red)]">
-                {t("quotations.quotationApproval")}
-              </p>
-              <h2 className="mt-2 text-3xl font-bold text-slate-950">
-                {t("common.signatures")}
-              </h2>
-            </header>
-            <div className="mt-auto">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-            {t("common.signatures")}
-          </h2>
-          <div className="mt-12 grid gap-10 sm:grid-cols-2">
-            <div>
-              <div className="border-t border-slate-400 pt-3">
-                <p className="text-sm font-bold text-slate-950">
-                  {draft.preparedBy || t("quotations.preparedBy")}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {t("quotations.alumexRepresentative")}
-                </p>
-              </div>
-            </div>
-            <div>
-              <div className="border-t border-slate-400 pt-3">
-                <p className="text-sm font-bold text-slate-950">
-                  {draft.clientRepresentative || t("quotations.clientRepresentative")}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {t("quotations.clientApproval")}
-                </p>
-              </div>
-            </div>
-          </div>
-            </div>
-          </div>
-        </section>
+        <CoverPage draft={draft} grandTotal={totals.grandTotal} />
+        <DetailsPage draft={draft} totals={totals} />
+        <ApprovalPage draft={draft} />
       </article>
     </main>
   );

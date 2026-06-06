@@ -99,7 +99,8 @@
     "code": "الرمز",
     "system": "النظام",
     "signature": "التوقيع",
-    "signatures": "التواقيع"
+    "signatures": "التواقيع",
+    "page": "صفحة"
   },
   "dashboard": {
     "eyebrow": "نظرة عامة",

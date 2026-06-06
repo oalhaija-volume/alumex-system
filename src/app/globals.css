@@ -129,7 +129,7 @@ textarea {
   height: 297mm;
   min-height: 297mm;
   max-width: none;
-  padding: 14mm;
+  padding: 18mm 16mm;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -152,6 +152,16 @@ textarea {
 .pdf-page img {
   max-width: 100%;
   height: auto;
+}
+
+.quotation-pdf-page {
+  direction: inherit;
+}
+
+.quotation-pdf-page table,
+.quotation-pdf-page th,
+.quotation-pdf-page td {
+  overflow-wrap: anywhere;
 }
 
 .dark [class*="bg-slate-100"] {
@@ -242,6 +252,42 @@ textarea {
   color: #94a3b8 !important;
 }
 
+.dark .quotation-pdf-page {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.dark .quotation-pdf-page [class*="bg-white"] {
+  background-color: #ffffff !important;
+}
+
+.dark .quotation-pdf-page [class*="bg-slate-50"] {
+  background-color: #f8fafc !important;
+}
+
+.dark .quotation-pdf-page [class*="bg-slate-950"] {
+  background-color: #020617 !important;
+}
+
+.dark .quotation-pdf-page [class*="text-slate-950"],
+.dark .quotation-pdf-page [class*="text-slate-900"],
+.dark .quotation-pdf-page [class*="text-slate-800"] {
+  color: #0f172a !important;
+}
+
+.dark .quotation-pdf-page [class*="text-slate-700"],
+.dark .quotation-pdf-page [class*="text-slate-600"] {
+  color: #475569 !important;
+}
+
+.dark .quotation-pdf-page [class*="text-slate-500"] {
+  color: #64748b !important;
+}
+
+.dark .quotation-pdf-page [class*="border-slate-"] {
+  border-color: #e2e8f0 !important;
+}
+
 @media print {
   @page {
     size: A4;
@@ -257,7 +303,7 @@ textarea {
     height: 297mm !important;
     min-height: 297mm !important;
     max-width: none !important;
-    padding: 14mm !important;
+    padding: 18mm 16mm !important;
     margin: 0 auto !important;
     box-shadow: none !important;
     page-break-after: always;

@@ -19,10 +19,32 @@ import {
 } from "@/components/quotations/quotationTypes";
 import { loadSupabaseQuotations } from "@/components/quotations/supabaseQuotations";
 import { useProjects } from "@/components/projects/ProjectsProvider";
-import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+type ContractRow = {
+  id: string;
+  contract_number: string;
+  project_id: string;
+  quotation_id: string | null;
+  contract_value: number | string;
+  contract_date: string | null;
+  payment_terms: string | null;
+  warranty_terms: string | null;
+  execution_terms: string | null;
+  prepared_by_text: string | null;
+  language: ContractLanguage | null;
+  notes: string | null;
+};
+
+async function readApiError(response: Response, fallback: string) {
+  const body = (await response.json().catch(() => null)) as {
+    error?: string;
+  } | null;
+
+  return body?.error ?? fallback;
 }
 
 export function ContractGenerator() {
@@ -77,25 +99,20 @@ export function ContractGenerator() {
         setSavedQuotations(nextQuotations);
         setQuotationNumber(nextQuotations[0]?.quotationNumber ?? "");
 
-        const supabase = createSupabaseClient();
-        const { data } = await supabase
-          .from("contracts")
-          .select("id, contract_number, project_id, quotation_id, contract_value, contract_date, payment_terms, warranty_terms, execution_terms, prepared_by_text, language, notes, created_at")
-          .order("created_at", { ascending: false });
-        const nextContracts = ((data ?? []) as Array<{
-          id: string;
-          contract_number: string;
-          project_id: string;
-          quotation_id: string | null;
-          contract_value: number | string;
-          contract_date: string | null;
-          payment_terms: string | null;
-          warranty_terms: string | null;
-          execution_terms: string | null;
-          prepared_by_text: string | null;
-          language: ContractLanguage | null;
-          notes: string | null;
-        }>).reduce<ContractDraft[]>((contracts, contract) => {
+        const contractsResponse = await fetch("/api/contracts", {
+          cache: "no-store",
+        });
+
+        if (!contractsResponse.ok) {
+          throw new Error(
+            await readApiError(contractsResponse, t("contracts.loadError")),
+          );
+        }
+
+        const contractsBody = (await contractsResponse.json()) as {
+          contracts?: ContractRow[];
+        };
+        const nextContracts = (contractsBody.contracts ?? []).reduce<ContractDraft[]>((contracts, contract) => {
           const project = projects.find((item) => item.id === contract.project_id);
 
           if (!project) {
@@ -127,14 +144,19 @@ export function ContractGenerator() {
         }, []);
 
         setSavedContracts(nextContracts);
-      } catch {
+      } catch (loadError) {
         setSavedQuotations([]);
         setSavedContracts([]);
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : t("contracts.loadError"),
+        );
       }
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [clients, language, projects]);
+  }, [clients, language, projects, t]);
 
   async function openPreview() {
     if (!selectedProject || !selectedQuotation) {
@@ -147,13 +169,10 @@ export function ContractGenerator() {
     }
 
     setError("");
-    const supabase = createSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    const { data: contractRow, error: contractError } = await supabase
-      .from("contracts")
-      .insert({
+    const response = await fetch("/api/contracts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         contract_number: contractNumber,
         project_id: selectedProject.id,
         quotation_id: selectedQuotation.id,
@@ -167,18 +186,23 @@ export function ContractGenerator() {
         prepared_by_text: preparedBy || null,
         language,
         notes,
-        created_by: user?.id ?? null,
-      })
-      .select("id")
-      .single();
+      }),
+    });
 
-    if (contractError || !contractRow) {
-      setError(contractError?.message ?? t("contracts.saveError"));
+    if (!response.ok) {
+      setError(await readApiError(response, t("contracts.saveError")));
+      return;
+    }
+
+    const body = (await response.json()) as { contract?: { id: string } };
+
+    if (!body.contract) {
+      setError(t("contracts.saveError"));
       return;
     }
 
     const draft: ContractDraft = {
-      id: contractRow.id,
+      id: body.contract.id,
       contractNumber,
       contractDate,
       quotationNumber: selectedQuotation.quotationNumber,
@@ -208,14 +232,12 @@ export function ContractGenerator() {
     setError("");
 
     try {
-      const supabase = createSupabaseClient();
-      const { error: deleteError } = await supabase
-        .from("contracts")
-        .delete()
-        .eq("id", deleteTarget.id);
+      const response = await fetch(`/api/contracts/${deleteTarget.id}`, {
+        method: "DELETE",
+      });
 
-      if (deleteError) {
-        throw deleteError;
+      if (!response.ok) {
+        throw new Error(await readApiError(response, t("contracts.deleteError")));
       }
 
       setSavedContracts((contracts) =>

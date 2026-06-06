@@ -325,6 +325,7 @@
     "deleteContract": "حذف العقد",
     "deleteConfirm": "هل أنت متأكد أنك تريد حذف هذا العقد؟",
     "deleteError": "تعذر حذف العقد.",
+    "loadError": "تعذر الوصول إلى جدول العقود. تحقق من صلاحيات Supabase.",
     "saveError": "تعذر حفظ العقد.",
     "contractPackage": "ملف عقد",
     "coverTitle": "مقترح العقد",

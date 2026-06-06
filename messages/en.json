@@ -323,6 +323,7 @@
     "deleteContract": "Delete contract",
     "deleteConfirm": "Are you sure you want to delete this contract?",
     "deleteError": "Unable to delete contract.",
+    "loadError": "Unable to access contracts table. Check Supabase permissions.",
     "saveError": "Unable to save contract.",
     "contractPackage": "Contract Package",
     "coverTitle": "Contract Proposal",

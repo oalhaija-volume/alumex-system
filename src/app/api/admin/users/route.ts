@@ -33,7 +33,7 @@ export async function GET() {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("profiles")
-    .select("id, email, full_name, role, is_active, created_at, updated_at")
+    .select("id, email, full_name, role, status, is_active, created_at, updated_at")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -98,6 +98,7 @@ export async function POST(request: Request) {
       id: created.user.id,
       email: email.toLowerCase(),
       role,
+      status: "Active",
       is_active: true,
     },
     { onConflict: "id" },
@@ -112,4 +113,3 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ user: created.user }, { status: 201 });
 }
-

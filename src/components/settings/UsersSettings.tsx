@@ -9,6 +9,7 @@ type ManagedUser = {
   email: string;
   full_name: string | null;
   role: AppRole;
+  status?: "Active" | "Inactive";
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -34,6 +35,8 @@ export function UsersSettings() {
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ManagedUser | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchUsersList = useCallback(async () => {
     const response = await fetch("/api/admin/users", {
@@ -174,6 +177,40 @@ export function UsersSettings() {
     }
   }
 
+  async function deleteUser() {
+    if (!deleteTarget) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+    setIsDeleting(true);
+
+    try {
+      const response = await fetch(`/api/admin/users/${deleteTarget.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const message = await readError(response, t("settings.deleteUserError"));
+        setError(
+          message.includes("SUPABASE_SERVICE_ROLE_KEY")
+            ? t("settings.serviceRoleMissing")
+            : message,
+        );
+        return;
+      }
+
+      setNotice(t("settings.userDeleted"));
+      setDeleteTarget(null);
+      await loadUsers();
+    } catch {
+      setError(t("settings.deleteUserError"));
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted-strong">{t("settings.usersDescription")}</p>
@@ -256,10 +293,47 @@ export function UsersSettings() {
               term={term}
               t={t}
               formatDate={formatDate}
+              onDelete={setDeleteTarget}
             />
           ))
         )}
       </div>
+
+      {deleteTarget ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-user-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6"
+        >
+          <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-5 shadow-xl">
+            <h2 id="delete-user-title" className="text-lg font-bold text-foreground">
+              {t("settings.deleteUser")}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-muted-strong">
+              {t("settings.deleteUserConfirm", { email: deleteTarget.email })}
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteTarget(null)}
+                className="h-11 rounded-md border border-border bg-surface px-4 text-sm font-bold text-muted-strong transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:text-muted"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={deleteUser}
+                className="h-11 rounded-md bg-danger-text px-4 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
+              >
+                {isDeleting ? t("common.loading") : t("settings.deleteUser")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -271,6 +345,7 @@ function UserRow({
   term,
   t,
   formatDate,
+  onDelete,
 }: {
   user: ManagedUser;
   roles: AppRole[];
@@ -281,6 +356,7 @@ function UserRow({
   term: (value: string | null | undefined) => string;
   t: (key: string, replacements?: Record<string, string | number>) => string;
   formatDate: (value: Date | string | number) => string;
+  onDelete: (user: ManagedUser) => void;
 }) {
   const [selectedRole, setSelectedRole] = useState<AppRole>(user.role);
   const [password, setPassword] = useState("");
@@ -376,6 +452,14 @@ function UserRow({
           className="rounded-md bg-primary px-3 py-2 text-sm font-bold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
         >
           {user.is_active ? t("settings.deactivate") : t("settings.activate")}
+        </button>
+        <button
+          type="button"
+          disabled={isUpdating}
+          onClick={() => onDelete(user)}
+          className="rounded-md border border-danger-text bg-transparent px-3 py-2 text-sm font-bold text-danger-text transition hover:bg-danger-text hover:text-white disabled:cursor-not-allowed disabled:text-muted"
+        >
+          {t("settings.deleteUser")}
         </button>
       </div>
     </div>

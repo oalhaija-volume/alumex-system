@@ -51,6 +51,41 @@ function createQuotationLines(projectId: string, projects: Project[]): Quotation
   }));
 }
 
+function formatQuotationNumber(year: number, sequence: number) {
+  return `Q-${year}-${sequence.toString().padStart(4, "0")}`;
+}
+
+function nextQuotationNumberFromList(quotationNumbers: string[]) {
+  const year = new Date().getFullYear();
+  const prefix = `Q-${year}-`;
+  const highestSequence = quotationNumbers.reduce((highest, quotationNumber) => {
+    if (!quotationNumber.startsWith(prefix)) {
+      return highest;
+    }
+
+    const sequence = Number(quotationNumber.slice(prefix.length));
+    return Number.isFinite(sequence) ? Math.max(highest, sequence) : highest;
+  }, 0);
+
+  return formatQuotationNumber(year, highestSequence + 1);
+}
+
+async function fetchNextQuotationNumber() {
+  const response = await fetch("/api/quotations/next-number", {
+    cache: "no-store",
+  });
+  const body = (await response.json().catch(() => null)) as {
+    quotationNumber?: string;
+    error?: string;
+  } | null;
+
+  if (!response.ok || !body?.quotationNumber) {
+    throw new Error(body?.error ?? "Unable to generate quotation number.");
+  }
+
+  return body.quotationNumber;
+}
+
 export function QuotationBuilder() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -64,7 +99,9 @@ export function QuotationBuilder() {
     projects[0]?.id ??
     "";
   const [projectId, setProjectId] = useState(initialProjectId);
-  const [quotationNumber, setQuotationNumber] = useState("Q-2026-0150");
+  const [quotationNumber, setQuotationNumber] = useState(() =>
+    nextQuotationNumberFromList([]),
+  );
   const [discountPercent, setDiscountPercent] = useState(0);
   const [error, setError] = useState("");
   const [notes, setNotes] = useState(() => t("quotations.defaultNotes"));
@@ -73,6 +110,7 @@ export function QuotationBuilder() {
   );
   const [clientRepresentative, setClientRepresentative] = useState("");
   const [savedQuotations, setSavedQuotations] = useState<QuotationDraft[]>([]);
+  const [editingQuotationId, setEditingQuotationId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<QuotationDraft | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [lines, setLines] = useState<QuotationLine[]>(() =>
@@ -86,6 +124,18 @@ export function QuotationBuilder() {
   );
   const canCreateQuotation =
     hasClients && hasProjects && hasProjectsWithOpenings;
+  const existingProjectQuotation = selectedProject
+    ? savedQuotations.find((quotation) => quotation.project.id === selectedProject.id)
+    : undefined;
+  const isEditingExistingQuotation =
+    Boolean(editingQuotationId) &&
+    editingQuotationId === existingProjectQuotation?.id;
+  const displayedQuotationNumber =
+    existingProjectQuotation && !isEditingExistingQuotation
+      ? existingProjectQuotation.quotationNumber
+      : isEditingExistingQuotation
+        ? quotationNumber
+        : quotationNumber;
   const totals = useMemo(
     () => calculateQuotationTotals(lines, discountPercent),
     [lines, discountPercent],
@@ -94,8 +144,21 @@ export function QuotationBuilder() {
   const loadProject = useCallback((nextProjectId: string) => {
     setProjectId(nextProjectId);
     setLines(createQuotationLines(nextProjectId, projects));
+    setEditingQuotationId(null);
     setError("");
   }, [projects]);
+
+  const refreshSavedQuotations = useCallback(async () => {
+    const quotations = await loadSupabaseQuotations(projects);
+    setSavedQuotations(quotations);
+    return quotations;
+  }, [projects]);
+
+  const refreshNextQuotationNumber = useCallback(async () => {
+    const nextQuotationNumber = await fetchNextQuotationNumber();
+    setQuotationNumber(nextQuotationNumber);
+    return nextQuotationNumber;
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -116,14 +179,22 @@ export function QuotationBuilder() {
   useEffect(() => {
     const timer = window.setTimeout(async () => {
       try {
-        setSavedQuotations(await loadSupabaseQuotations(projects));
-      } catch {
+        await Promise.all([
+          refreshSavedQuotations(),
+          refreshNextQuotationNumber(),
+        ]);
+      } catch (loadError) {
         setSavedQuotations([]);
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : t("quotations.saveError"),
+        );
       }
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [projects]);
+  }, [projects, refreshNextQuotationNumber, refreshSavedQuotations, t]);
 
   function updateLine(
     lineId: string,
@@ -142,8 +213,30 @@ export function QuotationBuilder() {
     );
   }
 
+  function viewQuotation(quotation: QuotationDraft) {
+    window.localStorage.setItem(quotationStorageKey, JSON.stringify(quotation));
+    router.push("/quotations/preview");
+  }
+
+  function editQuotation(quotation: QuotationDraft) {
+    setProjectId(quotation.project.id);
+    setQuotationNumber(quotation.quotationNumber);
+    setDiscountPercent(quotation.discountPercent);
+    setNotes(quotation.notes);
+    setPreparedBy(quotation.preparedBy);
+    setClientRepresentative(quotation.clientRepresentative);
+    setLines(quotation.lines);
+    setEditingQuotationId(quotation.id ?? null);
+    setError("");
+  }
+
   async function openPreview() {
     setError("");
+
+    if (existingProjectQuotation && !isEditingExistingQuotation) {
+      viewQuotation(existingProjectQuotation);
+      return;
+    }
 
     if (!selectedProject || lines.length === 0) {
       setError(t("quotations.validationRequired"));
@@ -159,28 +252,120 @@ export function QuotationBuilder() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    const { data: quotationRow, error: quotationError } = await supabase
-      .from("quotations")
-      .insert({
-        quotation_number: quotationNumber,
-        project_id: selectedProject.id,
-        client_id: selectedProject.clientId,
-        status: "Draft",
-        quotation_discount_percent: discountPercent,
-        subtotal: totals.subtotal,
-        line_discount_total: totals.lineDiscountTotal,
-        quotation_discount_total: totals.quotationDiscount,
-        grand_total: totals.grandTotal,
-        notes,
-        prepared_by_text: preparedBy || null,
-        client_representative: clientRepresentative || null,
-        created_by: user?.id ?? null,
-      })
-      .select("id")
-      .single();
 
-    if (quotationError || !quotationRow) {
-      setError(quotationError?.message ?? t("quotations.saveError"));
+    if (isEditingExistingQuotation && editingQuotationId) {
+      const { error: quotationUpdateError } = await supabase
+        .from("quotations")
+        .update({
+          quotation_discount_percent: discountPercent,
+          subtotal: totals.subtotal,
+          line_discount_total: totals.lineDiscountTotal,
+          quotation_discount_total: totals.quotationDiscount,
+          grand_total: totals.grandTotal,
+          notes,
+          prepared_by_text: preparedBy || null,
+          client_representative: clientRepresentative || null,
+        })
+        .eq("id", editingQuotationId);
+
+      if (quotationUpdateError) {
+        setError(quotationUpdateError.message);
+        return;
+      }
+
+      const { error: deleteItemsError } = await supabase
+        .from("quotation_items")
+        .delete()
+        .eq("quotation_id", editingQuotationId);
+
+      if (deleteItemsError) {
+        setError(deleteItemsError.message);
+        return;
+      }
+
+      const { error: updateItemsError } = await supabase.from("quotation_items").insert(
+        lines.map((line) => ({
+          quotation_id: editingQuotationId,
+          opening_id: line.id,
+          opening_code: line.openingCode,
+          floor: line.floor || null,
+          room: line.room || null,
+          width: line.width,
+          height: line.height,
+          quantity: line.quantity,
+          product_system: line.productSystem || null,
+          glass_type: line.glassType || null,
+          aluminum_color: line.aluminumColor || null,
+          unit_price: line.unitPrice,
+          discount_percent: line.discountPercent,
+          notes: line.notes || null,
+        })),
+      );
+
+      if (updateItemsError) {
+        setError(updateItemsError.message);
+        return;
+      }
+
+      const draft: QuotationDraft = {
+        id: editingQuotationId,
+        quotationNumber,
+        project: selectedProject,
+        lines,
+        discountPercent,
+        notes,
+        preparedBy,
+        clientRepresentative,
+        savedAt: new Date().toISOString(),
+      };
+
+      window.localStorage.setItem(quotationStorageKey, JSON.stringify(draft));
+      setEditingQuotationId(null);
+      await refreshSavedQuotations();
+      router.push("/quotations/preview");
+      return;
+    }
+
+    let nextQuotationNumber = "";
+    let quotationRow: { id: string } | null = null;
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      nextQuotationNumber = await fetchNextQuotationNumber();
+      setQuotationNumber(nextQuotationNumber);
+
+      const { data, error: quotationError } = await supabase
+        .from("quotations")
+        .insert({
+          quotation_number: nextQuotationNumber,
+          project_id: selectedProject.id,
+          client_id: selectedProject.clientId,
+          status: "Draft",
+          quotation_discount_percent: discountPercent,
+          subtotal: totals.subtotal,
+          line_discount_total: totals.lineDiscountTotal,
+          quotation_discount_total: totals.quotationDiscount,
+          grand_total: totals.grandTotal,
+          notes,
+          prepared_by_text: preparedBy || null,
+          client_representative: clientRepresentative || null,
+          created_by: user?.id ?? null,
+        })
+        .select("id")
+        .single();
+
+      if (!quotationError && data) {
+        quotationRow = data;
+        break;
+      }
+
+      if (quotationError?.code !== "23505") {
+        setError(quotationError?.message ?? t("quotations.saveError"));
+        return;
+      }
+    }
+
+    if (!quotationRow) {
+      setError(t("quotations.saveError"));
       return;
     }
 
@@ -210,7 +395,7 @@ export function QuotationBuilder() {
 
     const draft: QuotationDraft = {
       id: quotationRow.id,
-      quotationNumber,
+      quotationNumber: nextQuotationNumber,
       project: selectedProject,
       lines,
       discountPercent,
@@ -221,7 +406,7 @@ export function QuotationBuilder() {
     };
 
     window.localStorage.setItem(quotationStorageKey, JSON.stringify(draft));
-    setSavedQuotations(await loadSupabaseQuotations(projects));
+    await refreshSavedQuotations();
     router.push("/quotations/preview");
   }
 
@@ -235,7 +420,11 @@ export function QuotationBuilder() {
 
     try {
       await deleteSupabaseQuotation(deleteTarget.id);
-      setSavedQuotations(await loadSupabaseQuotations(projects));
+      await refreshSavedQuotations();
+      await refreshNextQuotationNumber();
+      if (editingQuotationId === deleteTarget.id) {
+        setEditingQuotationId(null);
+      }
       setDeleteTarget(null);
     } catch (deleteError) {
       setError(
@@ -283,6 +472,21 @@ export function QuotationBuilder() {
                       {formatCurrency(quotationTotals.grandTotal)}
                     </p>
                   </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => viewQuotation(quotation)}
+                      className="h-10 rounded-md border border-blue-100 bg-blue-50 px-3 text-sm font-bold text-[var(--alumex-blue)]"
+                    >
+                      {t("quotations.viewQuotation")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => editQuotation(quotation)}
+                      className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground transition hover:border-primary"
+                    >
+                      {t("quotations.editQuotation")}
+                    </button>
                   {isAdmin ? (
                     <button
                       type="button"
@@ -292,6 +496,7 @@ export function QuotationBuilder() {
                       {t("common.delete")}
                     </button>
                   ) : null}
+                  </div>
                 </div>
               );
             })}
@@ -372,9 +577,9 @@ export function QuotationBuilder() {
               {t("quotations.quotationNumber")}
             </span>
             <input
-              value={quotationNumber}
-              onChange={(event) => setQuotationNumber(event.target.value)}
-              className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[var(--alumex-blue)] focus:ring-4 focus:ring-blue-100"
+              value={displayedQuotationNumber}
+              readOnly
+              className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none"
             />
           </label>
           <button
@@ -383,10 +588,54 @@ export function QuotationBuilder() {
             disabled={!selectedProject || lines.length === 0}
             className="h-11 rounded-md bg-[var(--alumex-blue)] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[var(--alumex-blue-dark)] disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {t("quotations.createQuotation")}
+            {existingProjectQuotation && !isEditingExistingQuotation
+              ? t("quotations.viewExistingQuotation")
+              : isEditingExistingQuotation
+                ? t("quotations.saveQuotationChanges")
+                : t("quotations.createQuotation")}
           </button>
         </div>
       </SectionCard>
+
+      {existingProjectQuotation ? (
+        <SectionCard title={t("quotations.existingQuotation")}>
+          <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface-muted p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-bold text-foreground">
+                {existingProjectQuotation.quotationNumber}
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                {t("quotations.existingQuotationDescription")}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => viewQuotation(existingProjectQuotation)}
+                className="h-10 rounded-md bg-primary px-3 text-sm font-bold text-white"
+              >
+                {t("quotations.viewQuotation")}
+              </button>
+              <button
+                type="button"
+                onClick={() => editQuotation(existingProjectQuotation)}
+                className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground transition hover:border-primary"
+              >
+                {t("quotations.editQuotation")}
+              </button>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => setDeleteTarget(existingProjectQuotation)}
+                  className="h-10 rounded-md border border-danger-text bg-transparent px-3 text-sm font-bold text-danger-text transition hover:bg-danger-text hover:text-white"
+                >
+                  {t("quotations.deleteQuotation")}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
 
       {selectedProject ? (
         <section className="grid gap-4 lg:grid-cols-3">

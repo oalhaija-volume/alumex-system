@@ -67,6 +67,7 @@ export async function PATCH(
   }
 
   const profileUpdate: { role?: AppRole; is_active?: boolean } = {};
+  const authUpdate: { ban_duration?: string } = {};
 
   if (role !== undefined) {
     profileUpdate.role = role;
@@ -74,6 +75,21 @@ export async function PATCH(
 
   if (isActive !== undefined) {
     profileUpdate.is_active = isActive;
+    (profileUpdate as { status?: "Active" | "Inactive" }).status = isActive
+      ? "Active"
+      : "Inactive";
+    authUpdate.ban_duration = isActive ? "none" : "876000h";
+  }
+
+  if (authUpdate.ban_duration) {
+    const { error: authError } = await admin.auth.admin.updateUserById(
+      id,
+      authUpdate,
+    );
+
+    if (authError) {
+      return NextResponse.json({ error: authError.message }, { status: 500 });
+    }
   }
 
   if (Object.keys(profileUpdate).length > 0) {
@@ -93,3 +109,33 @@ export async function PATCH(
   return NextResponse.json({ ok: true });
 }
 
+export async function DELETE(
+  _request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  const adminCheck = await requireAdminUser();
+
+  if (!adminCheck.ok) {
+    return NextResponse.json(
+      { error: adminCheck.error },
+      { status: adminCheck.status },
+    );
+  }
+
+  if (!hasSupabaseServiceRoleKey()) {
+    return NextResponse.json(
+      { error: supabaseServiceRoleError },
+      { status: 500 },
+    );
+  }
+
+  const { id } = await context.params;
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.deleteUser(id);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}

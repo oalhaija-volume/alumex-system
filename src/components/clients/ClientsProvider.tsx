@@ -38,6 +38,39 @@ type ClientRow = {
   notes: string | null;
 };
 
+type SupabaseErrorLike = {
+  message?: unknown;
+  details?: unknown;
+  hint?: unknown;
+  code?: unknown;
+};
+
+function formatSupabaseError(error: unknown, fallback: string) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (error && typeof error === "object") {
+    const supabaseError = error as SupabaseErrorLike;
+    const parts = [
+      typeof supabaseError.message === "string" ? supabaseError.message : "",
+      typeof supabaseError.details === "string" ? supabaseError.details : "",
+      typeof supabaseError.hint === "string" ? supabaseError.hint : "",
+      typeof supabaseError.code === "string" ? `Code: ${supabaseError.code}` : "",
+    ].filter(Boolean);
+
+    if (parts.length > 0) {
+      return parts.join(" ");
+    }
+  }
+
+  return fallback;
+}
+
+function logSupabaseError(action: string, error: unknown) {
+  console.error(`[ClientsProvider] ${action} failed`, error);
+}
+
 function mapClient(row: ClientRow): Client {
   return {
     id: row.id,
@@ -98,12 +131,13 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
         .order("created_at", { ascending: false });
 
       if (loadError) {
+        logSupabaseError("load clients", loadError);
         throw loadError;
       }
 
       setClients(((data ?? []) as ClientRow[]).map(mapClient));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load clients.");
+      setError(formatSupabaseError(loadError, "Unable to load clients."));
       setClients([]);
     } finally {
       setIsLoading(false);
@@ -129,7 +163,8 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
         .insert(toClientInsert(client, user?.id));
 
       if (createError) {
-        throw createError;
+        logSupabaseError("create client", createError);
+        throw new Error(formatSupabaseError(createError, "Unable to save client."));
       }
 
       await refreshClients();
@@ -146,7 +181,8 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
         .eq("id", id);
 
       if (updateError) {
-        throw updateError;
+        logSupabaseError("update client", updateError);
+        throw new Error(formatSupabaseError(updateError, "Unable to save client."));
       }
 
       await refreshClients();
@@ -163,7 +199,8 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
         .eq("id", id);
 
       if (deleteError) {
-        throw deleteError;
+        logSupabaseError("delete client", deleteError);
+        throw new Error(formatSupabaseError(deleteError, "Unable to delete client."));
       }
 
       await refreshClients();

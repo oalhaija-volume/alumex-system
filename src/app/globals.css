@@ -126,10 +126,32 @@ textarea {
 
 .a4-page {
   width: 210mm;
+  height: 297mm;
   min-height: 297mm;
-  max-width: 100%;
-  padding: 16mm;
+  max-width: none;
+  padding: 14mm;
   box-sizing: border-box;
+  overflow: hidden;
+}
+
+.pdf-page,
+.pdf-page *,
+.pdf-page *::before,
+.pdf-page *::after {
+  box-sizing: border-box;
+}
+
+.pdf-page {
+  width: 210mm;
+  height: 297mm;
+  min-height: 297mm;
+  max-width: none;
+  overflow: hidden;
+}
+
+.pdf-page img {
+  max-width: 100%;
+  height: auto;
 }
 
 .dark [class*="bg-slate-100"] {
@@ -232,6 +254,7 @@ textarea {
 
   .a4-page {
     width: 210mm !important;
+    height: 297mm !important;
     min-height: 297mm !important;
     max-width: none !important;
     padding: 14mm !important;

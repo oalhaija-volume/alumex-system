@@ -29,25 +29,44 @@ export async function exportElementToPdf({
   const pageHeight = pdf.internal.pageSize.getHeight();
 
   for (const [index, page] of sourcePages.entries()) {
+    await waitForImages(page);
     const image = await toPng(page, {
       cacheBust: true,
       pixelRatio: 2,
       backgroundColor: "#ffffff",
+      width: page.scrollWidth,
+      height: page.scrollHeight,
+      style: {
+        boxSizing: "border-box",
+        margin: "0",
+        maxWidth: "none",
+        transform: "none",
+      },
     });
-    const imageRatio = page.scrollWidth / page.scrollHeight;
-    const pageRatio = pageWidth / pageHeight;
-    const renderWidth = imageRatio > pageRatio ? pageWidth : pageHeight * imageRatio;
-    const renderHeight =
-      imageRatio > pageRatio ? pageWidth / imageRatio : pageHeight;
-    const x = (pageWidth - renderWidth) / 2;
-    const y = 0;
 
     if (index > 0) {
       pdf.addPage();
     }
 
-    pdf.addImage(image, "PNG", x, y, renderWidth, renderHeight);
+    pdf.addImage(image, "PNG", 0, 0, pageWidth, pageHeight);
   }
 
   pdf.save(fileName);
+}
+
+async function waitForImages(element: HTMLElement) {
+  const images = Array.from(element.querySelectorAll("img"));
+
+  await Promise.all(
+    images.map((image) => {
+      if (image.complete && image.naturalWidth > 0) {
+        return Promise.resolve();
+      }
+
+      return new Promise<void>((resolve) => {
+        image.addEventListener("load", () => resolve(), { once: true });
+        image.addEventListener("error", () => resolve(), { once: true });
+      });
+    }),
+  );
 }

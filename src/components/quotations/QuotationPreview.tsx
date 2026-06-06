@@ -24,11 +24,11 @@ function QuotationCoverPage({
   return (
     <section className="a4-page pdf-page contract-cover-page relative mx-auto mb-6 overflow-hidden bg-white shadow-sm ring-1 ring-slate-200 print:mb-0 print:shadow-none print:ring-0">
       <div className="absolute inset-x-0 top-0 h-3 bg-[var(--alumex-red)]" />
-      <div className="absolute inset-y-0 end-0 w-7 bg-[var(--alumex-blue)]" />
-      <div className="absolute end-7 top-0 h-72 w-36 bg-slate-900" />
-      <div className="absolute bottom-0 start-0 h-32 w-full bg-slate-950" />
+      <div className="absolute inset-y-0 right-0 w-7 bg-[var(--alumex-blue)]" />
+      <div className="absolute right-7 top-0 h-64 w-28 bg-slate-900" />
+      <div className="absolute bottom-0 left-0 h-32 w-full bg-slate-950" />
 
-      <div className="relative z-10 flex min-h-full flex-col">
+      <div className="relative z-10 flex h-full min-h-0 flex-col">
         <header className="flex items-start justify-between gap-8">
           <BrandMark />
           <div className="text-right">
@@ -41,20 +41,20 @@ function QuotationCoverPage({
           </div>
         </header>
 
-        <div className="mt-28 max-w-3xl">
+        <div className="mt-20 max-w-[140mm]">
           <p className="text-sm font-bold uppercase tracking-[0.24em] text-[var(--alumex-red)]">
             {t("app.name")}
           </p>
-          <h1 className="mt-5 text-5xl font-black leading-tight tracking-tight text-slate-950 sm:text-6xl">
+          <h1 className="mt-5 text-5xl font-black leading-[1.06] text-slate-950">
             {t("quotations.commercialQuotation")}
           </h1>
           <div className="mt-8 h-1.5 w-28 bg-[var(--alumex-blue)]" />
-          <p className="mt-8 max-w-2xl text-lg leading-8 text-slate-600">
+          <p className="mt-7 max-w-[128mm] text-base leading-7 text-slate-600">
             {t("quotations.coverDescription")}
           </p>
         </div>
 
-        <div className="mt-16 grid gap-4 md:grid-cols-2">
+        <div className="mt-12 grid grid-cols-2 gap-3">
           {[
             [t("contracts.clientName"), term(draft.project.client)],
             [t("projects.fields.projectName"), term(draft.project.projectName)],
@@ -65,17 +65,17 @@ function QuotationCoverPage({
           ].map(([label, value]) => (
             <div
               key={label}
-              className="border-s-4 border-[var(--alumex-blue)] bg-slate-50 px-5 py-4"
+              className="min-w-0 border-s-4 border-[var(--alumex-blue)] bg-slate-50 px-4 py-3"
             >
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
                 {label}
               </p>
-              <p className="mt-2 text-lg font-bold text-slate-950">{value}</p>
+              <p className="mt-2 break-words text-base font-bold text-slate-950">{value}</p>
             </div>
           ))}
         </div>
 
-        <footer className="relative z-10 mt-auto grid gap-6 pt-16 text-white md:grid-cols-[1fr_280px] md:items-end">
+        <footer className="relative z-10 mt-auto grid grid-cols-[1fr_70mm] items-end gap-6 pt-10 text-white">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-300">
               {t("quotations.projectType")}
@@ -233,24 +233,24 @@ export function QuotationPreview() {
           </div>
           </section>
 
-          <section className="mt-8">
+          <section className="mt-7">
           <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
             {t("quotations.openings")}
           </h2>
           <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-left text-[10px]">
+            <table className="w-full table-fixed divide-y divide-slate-200 text-left text-[8.5px] leading-tight">
               <caption className="sr-only">{t("quotations.openingTotalsCaption")}</caption>
               <thead className="bg-slate-50 font-bold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-3">{t("common.code")}</th>
-                  <th className="px-3 py-3">{t("common.location")}</th>
-                  <th className="px-3 py-3">{t("common.system")}</th>
-                  <th className="px-3 py-3">{t("projects.openings.fields.width")}</th>
-                  <th className="px-3 py-3">{t("projects.openings.fields.height")}</th>
-                  <th className="px-3 py-3">{t("projects.openings.fields.quantity")}</th>
-                  <th className="px-3 py-3">{t("common.areaSqm")}</th>
-                  <th className="px-3 py-3">{t("quotations.unitPricePerSqm")}</th>
-                  <th className="px-3 py-3 text-right">{t("common.total")}</th>
+                  <th className="w-[11%] px-1.5 py-2">{t("common.code")}</th>
+                  <th className="w-[14%] px-1.5 py-2">{t("common.location")}</th>
+                  <th className="w-[15%] px-1.5 py-2">{t("common.system")}</th>
+                  <th className="w-[10%] px-1.5 py-2">{t("projects.openings.fields.width")}</th>
+                  <th className="w-[10%] px-1.5 py-2">{t("projects.openings.fields.height")}</th>
+                  <th className="w-[7%] px-1.5 py-2">{t("projects.openings.fields.quantity")}</th>
+                  <th className="w-[10%] px-1.5 py-2">{t("common.areaSqm")}</th>
+                  <th className="w-[12%] px-1.5 py-2">{t("quotations.unitPricePerSqm")}</th>
+                  <th className="w-[11%] px-1.5 py-2 text-right">{t("common.total")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -259,31 +259,31 @@ export function QuotationPreview() {
 
                   return (
                     <tr key={line.id}>
-                      <td className="px-3 py-3 font-bold text-slate-950">
+                      <td className="break-words px-1.5 py-2 font-bold text-slate-950">
                         {line.openingCode}
                       </td>
-                      <td className="px-3 py-3 text-slate-700">
+                      <td className="break-words px-1.5 py-2 text-slate-700">
                         {term(line.floor)} - {term(line.room)}
                       </td>
-                      <td className="px-3 py-3 text-slate-700">
+                      <td className="break-words px-1.5 py-2 text-slate-700">
                         {term(line.productSystem)}
                       </td>
-                      <td className="px-3 py-3 text-slate-700">
+                      <td className="px-1.5 py-2 text-slate-700">
                         {t("common.cmValue", { value: line.width })}
                       </td>
-                      <td className="px-3 py-3 text-slate-700">
+                      <td className="px-1.5 py-2 text-slate-700">
                         {t("common.cmValue", { value: line.height })}
                       </td>
-                      <td className="px-3 py-3 text-slate-700">
+                      <td className="px-1.5 py-2 text-slate-700">
                         {line.quantity}
                       </td>
-                      <td className="px-3 py-3 text-slate-700">
+                      <td className="px-1.5 py-2 text-slate-700">
                         {t("common.areaValue", { value: lineTotal.area.toFixed(2) })}
                       </td>
-                      <td className="px-3 py-3 text-slate-700">
+                      <td className="px-1.5 py-2 text-slate-700">
                         {formatCurrency(line.unitPrice)}
                       </td>
-                      <td className="px-3 py-3 text-right font-bold text-slate-950">
+                      <td className="px-1.5 py-2 text-right font-bold text-slate-950">
                         {formatCurrency(lineTotal.net)}
                       </td>
                     </tr>
@@ -294,7 +294,7 @@ export function QuotationPreview() {
           </div>
           </section>
 
-          <section className="mt-8 grid gap-4 md:grid-cols-[1fr_360px]">
+          <section className="mt-7 grid grid-cols-[1fr_70mm] gap-4">
           <div className="rounded-lg border border-slate-200 p-4">
             <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
             {t("common.notes")}

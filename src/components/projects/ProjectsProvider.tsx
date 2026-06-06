@@ -62,6 +62,39 @@ type OpeningRow = {
   notes: string | null;
 };
 
+type SupabaseErrorLike = {
+  message?: unknown;
+  details?: unknown;
+  hint?: unknown;
+  code?: unknown;
+};
+
+function formatSupabaseError(error: unknown, fallback: string) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (error && typeof error === "object") {
+    const supabaseError = error as SupabaseErrorLike;
+    const parts = [
+      typeof supabaseError.message === "string" ? supabaseError.message : "",
+      typeof supabaseError.details === "string" ? supabaseError.details : "",
+      typeof supabaseError.hint === "string" ? supabaseError.hint : "",
+      typeof supabaseError.code === "string" ? `Code: ${supabaseError.code}` : "",
+    ].filter(Boolean);
+
+    if (parts.length > 0) {
+      return parts.join(" ");
+    }
+  }
+
+  return fallback;
+}
+
+function logSupabaseError(action: string, error: unknown) {
+  console.error(`[ProjectsProvider] ${action} failed`, error);
+}
+
 function normalizeNumber(value: number | string | null | undefined) {
   return Number(value ?? 0);
 }
@@ -127,10 +160,12 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         ]);
 
       if (projectsError) {
+        logSupabaseError("load projects", projectsError);
         throw projectsError;
       }
 
       if (openingsError) {
+        logSupabaseError("load openings", openingsError);
         throw openingsError;
       }
 
@@ -161,7 +196,7 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         }),
       );
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load projects.");
+      setError(formatSupabaseError(loadError, "Unable to load projects."));
       setProjects([]);
     } finally {
       setIsLoading(false);
@@ -198,7 +233,8 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (createError) {
-        throw createError;
+        logSupabaseError("create project", createError);
+        throw new Error(formatSupabaseError(createError, "Unable to save project."));
       }
 
       await refreshProjects();
@@ -224,7 +260,8 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         .eq("id", id);
 
       if (updateError) {
-        throw updateError;
+        logSupabaseError("update project", updateError);
+        throw new Error(formatSupabaseError(updateError, "Unable to save project."));
       }
 
       await refreshProjects();
@@ -268,7 +305,8 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         .insert(openingPayload(opening, projectId, user?.id));
 
       if (createError) {
-        throw createError;
+        logSupabaseError("create opening", createError);
+        throw new Error(formatSupabaseError(createError, "Unable to save opening."));
       }
 
       await refreshProjects();
@@ -289,7 +327,8 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         .eq("id", openingId);
 
       if (updateError) {
-        throw updateError;
+        logSupabaseError("update opening", updateError);
+        throw new Error(formatSupabaseError(updateError, "Unable to save opening."));
       }
 
       await refreshProjects();
@@ -306,7 +345,8 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         .eq("id", openingId);
 
       if (deleteError) {
-        throw deleteError;
+        logSupabaseError("delete opening", deleteError);
+        throw new Error(formatSupabaseError(deleteError, "Unable to delete opening."));
       }
 
       await refreshProjects();

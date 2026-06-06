@@ -1,6 +1,8 @@
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/lib/auth/permissions";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { hasSupabaseServiceRoleKey } from "@/lib/supabase/config";
 
 const seedAdminEmail = "admin@alumex.com";
 
@@ -19,18 +21,24 @@ export async function requireAdminUser(): Promise<AdminCheck> {
     return { ok: false, status: 401, error: "Authentication is required." };
   }
 
-  const { data: profile } = await supabase
+  const profileClient = hasSupabaseServiceRoleKey()
+    ? createAdminClient()
+    : supabase;
+  const { data: profile } = await profileClient
     .from("profiles")
-    .select("role, is_active")
+    .select("role, is_active, status")
     .eq("id", user.id)
     .maybeSingle();
 
   const profileData = profile as {
     role: AppRole | null;
     is_active: boolean | null;
+    status?: string | null;
   } | null;
+  const isInactive =
+    profileData?.is_active === false || profileData?.status === "Inactive";
   const role =
-    profileData?.is_active === false
+    isInactive
       ? null
       : user.email?.toLowerCase() === seedAdminEmail
         ? "Admin"
@@ -42,4 +50,3 @@ export async function requireAdminUser(): Promise<AdminCheck> {
 
   return { ok: true, user };
 }
-

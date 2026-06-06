@@ -2,10 +2,8 @@
 
 import { Suspense } from "react";
 import { BrandMark } from "@/components/BrandMark";
-import { LoginForm } from "@/components/auth/LoginForm";
 import { ProductionLoginForm } from "@/components/auth/ProductionLoginForm";
 import { useI18n } from "@/components/i18n/I18nProvider";
-import { isDemoLoginEnabled } from "@/lib/auth/devSession";
 
 export default function LoginPage() {
   const { t } = useI18n();
@@ -40,9 +38,7 @@ export default function LoginPage() {
               {t("auth.login")}
             </h2>
             <p className="mt-2 text-sm leading-6 text-muted">
-              {isDemoLoginEnabled
-                ? t("auth.demoDescription")
-                : t("auth.productionDescription")}
+              {t("auth.productionDescription")}
             </p>
           </div>
 
@@ -52,7 +48,6 @@ export default function LoginPage() {
             }
           >
             <ProductionLoginForm />
-            {isDemoLoginEnabled ? <LoginForm /> : null}
           </Suspense>
         </section>
       </div>

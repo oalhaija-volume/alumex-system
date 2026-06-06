@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { ClientForm, type ClientFormValues } from "@/components/clients/ClientForm";
 import { useClients } from "@/components/clients/ClientsProvider";
 import { useI18n } from "@/components/i18n/I18nProvider";
@@ -33,10 +34,12 @@ function matchesSearch(client: Client, search: string) {
 
 function ClientCard({
   client,
+  isAdmin,
   onEdit,
   onDelete,
 }: {
   client: Client;
+  isAdmin: boolean;
   onEdit: (client: Client) => void;
   onDelete: (client: Client) => void;
 }) {
@@ -88,13 +91,15 @@ function ClientCard({
         >
           {t("common.edit")}
         </button>
-        <button
-          type="button"
-          onClick={() => onDelete(client)}
-          className="h-10 flex-1 rounded-md border border-red-200 bg-red-50 px-3 text-sm font-bold text-red-700"
-        >
-          {t("common.delete")}
-        </button>
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={() => onDelete(client)}
+            className="h-10 flex-1 rounded-md border border-danger-text bg-transparent px-3 text-sm font-bold text-danger-text transition hover:bg-danger-text hover:text-white"
+          >
+            {t("common.delete")}
+          </button>
+        ) : null}
       </div>
     </article>
   );
@@ -102,10 +107,15 @@ function ClientCard({
 
 export function ClientsModule() {
   const { clients, createClient, updateClient, deleteClient } = useClients();
+  const { isAdmin } = useCurrentRole();
   const { t, term } = useI18n();
   const [search, setSearch] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | undefined>();
+  const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const filteredClients = useMemo(
     () => clients.filter((client) => matchesSearch(client, search)),
@@ -127,23 +137,51 @@ export function ClientsModule() {
     setIsFormOpen(false);
   }
 
-  function handleSubmit(values: ClientFormValues) {
-    if (editingClient) {
-      updateClient(editingClient.id, values);
-    } else {
-      createClient(values);
-    }
+  async function handleSubmit(values: ClientFormValues) {
+    setError("");
 
-    closeForm();
+    try {
+      if (editingClient) {
+        await updateClient(editingClient.id, values);
+      } else {
+        await createClient(values);
+      }
+
+      closeForm();
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error ? saveError.message : t("clients.saveError"),
+      );
+    }
   }
 
   function handleDelete(client: Client) {
-    const confirmed = window.confirm(
-      t("clients.deleteConfirm", { name: term(client.clientName) }),
-    );
+    setDeleteTarget(client);
+    setError("");
+    setNotice("");
+  }
 
-    if (confirmed) {
-      deleteClient(client.id);
+  async function confirmDelete() {
+    if (!deleteTarget) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setError("");
+    setNotice("");
+
+    try {
+      await deleteClient(deleteTarget.id);
+      setNotice(t("clients.deleteSuccess"));
+      setDeleteTarget(null);
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : t("clients.deleteError"),
+      );
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -174,6 +212,17 @@ export function ClientsModule() {
         </button>
       </div>
 
+      {error ? (
+        <p className="rounded-md border border-border bg-danger-surface px-3 py-2 text-sm font-semibold text-danger-text">
+          {error}
+        </p>
+      ) : null}
+      {notice ? (
+        <p className="rounded-md border border-border bg-success-surface px-3 py-2 text-sm font-semibold text-success-text">
+          {notice}
+        </p>
+      ) : null}
+
       {isFormOpen ? (
         <SectionCard
           title={
@@ -193,6 +242,7 @@ export function ClientsModule() {
           <ClientCard
             key={client.id}
             client={client}
+            isAdmin={isAdmin}
             onEdit={openEditForm}
             onDelete={handleDelete}
           />
@@ -242,13 +292,15 @@ export function ClientsModule() {
                       >
                         {t("common.edit")}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(client)}
-                        className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700"
-                      >
-                        {t("common.delete")}
-                      </button>
+                      {isAdmin ? (
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(client)}
+                          className="rounded-md border border-danger-text bg-transparent px-3 py-2 text-xs font-bold text-danger-text transition hover:bg-danger-text hover:text-white"
+                        >
+                          {t("common.delete")}
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -266,6 +318,44 @@ export function ClientsModule() {
           <p className="mt-2 text-sm text-slate-500">
             {t("clients.noClientsDescription")}
           </p>
+        </div>
+      ) : null}
+
+      {deleteTarget ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-client-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6"
+        >
+          <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-5 shadow-xl">
+            <h2 id="delete-client-title" className="text-lg font-bold text-foreground">
+              {t("clients.deleteClient")}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-muted-strong">
+              {t("clients.deleteConfirm", {
+                name: term(deleteTarget.clientName),
+              })}
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteTarget(null)}
+                className="h-11 rounded-md border border-border bg-surface px-4 text-sm font-bold text-muted-strong transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:text-muted"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={confirmDelete}
+                className="h-11 rounded-md bg-danger-text px-4 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
+              >
+                {isDeleting ? t("common.loading") : t("clients.deleteClient")}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

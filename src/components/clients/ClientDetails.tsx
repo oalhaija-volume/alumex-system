@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
+import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { ClientForm, type ClientFormValues } from "@/components/clients/ClientForm";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { useClients } from "@/components/clients/ClientsProvider";
@@ -24,6 +26,10 @@ export function ClientDetails() {
   const router = useRouter();
   const { t, term } = useI18n();
   const { findClient, updateClient, deleteClient } = useClients();
+  const { isAdmin } = useCurrentRole();
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [error, setError] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const client = findClient(params.clientId);
 
   if (!client) {
@@ -46,18 +52,33 @@ export function ClientDetails() {
 
   const activeClient = client;
 
-  function handleSubmit(values: ClientFormValues) {
-    updateClient(activeClient.id, values);
+  async function handleSubmit(values: ClientFormValues) {
+    setError("");
+
+    try {
+      await updateClient(activeClient.id, values);
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error ? saveError.message : t("clients.saveError"),
+      );
+    }
   }
 
-  function handleDelete() {
-    const confirmed = window.confirm(
-      t("clients.deleteConfirm", { name: term(activeClient.clientName) }),
-    );
+  async function handleDelete() {
+    setIsDeleting(true);
+    setError("");
 
-    if (confirmed) {
-      deleteClient(activeClient.id);
+    try {
+      await deleteClient(activeClient.id);
       router.push("/clients");
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : t("clients.deleteError"),
+      );
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -76,14 +97,22 @@ export function ClientDetails() {
         >
           {t("clients.backToClients")}
         </Link>
-        <button
-          type="button"
-          onClick={handleDelete}
-          className="h-11 rounded-md border border-red-200 bg-red-50 px-4 text-sm font-bold text-red-700"
-        >
-          {t("clients.deleteClient")}
-        </button>
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={() => setIsDeleteOpen(true)}
+            className="h-11 rounded-md border border-danger-text bg-transparent px-4 text-sm font-bold text-danger-text transition hover:bg-danger-text hover:text-white"
+          >
+            {t("clients.deleteClient")}
+          </button>
+        ) : null}
       </div>
+
+      {error ? (
+        <p className="rounded-md border border-border bg-danger-surface px-3 py-2 text-sm font-semibold text-danger-text">
+          {error}
+        </p>
+      ) : null}
 
       <section className="grid gap-4 lg:grid-cols-[0.75fr_1.25fr]">
         <SectionCard title={t("clients.clientInformation")}>
@@ -112,6 +141,44 @@ export function ClientDetails() {
           />
         </SectionCard>
       </section>
+
+      {isDeleteOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-client-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6"
+        >
+          <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-5 shadow-xl">
+            <h2 id="delete-client-title" className="text-lg font-bold text-foreground">
+              {t("clients.deleteClient")}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-muted-strong">
+              {t("clients.deleteConfirm", {
+                name: term(activeClient.clientName),
+              })}
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setIsDeleteOpen(false)}
+                className="h-11 rounded-md border border-border bg-surface px-4 text-sm font-bold text-muted-strong transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:text-muted"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDelete}
+                className="h-11 rounded-md bg-danger-text px-4 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
+              >
+                {isDeleting ? t("common.loading") : t("clients.deleteClient")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

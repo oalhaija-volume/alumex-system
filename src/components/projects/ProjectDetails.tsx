@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { PageHeader } from "@/components/PageHeader";
 import { ProjectForm, type ProjectFormValues } from "@/components/projects/ProjectForm";
@@ -24,6 +25,7 @@ export function ProjectDetails() {
   const params = useParams<{ projectId: string }>();
   const router = useRouter();
   const { t, term } = useI18n();
+  const [error, setError] = useState("");
   const {
     findProject,
     updateProject,
@@ -54,8 +56,16 @@ export function ProjectDetails() {
 
   const activeProject = project;
 
-  function handleSubmit(values: ProjectFormValues) {
-    updateProject(activeProject.id, values);
+  async function handleSubmit(values: ProjectFormValues) {
+    setError("");
+
+    try {
+      await updateProject(activeProject.id, values);
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error ? saveError.message : t("projects.saveError"),
+      );
+    }
   }
 
   return (
@@ -86,6 +96,12 @@ export function ProjectDetails() {
           </span>
         )}
       </div>
+
+      {error ? (
+        <p className="rounded-md border border-border bg-danger-surface px-3 py-2 text-sm font-semibold text-danger-text">
+          {error}
+        </p>
+      ) : null}
 
       <section className="grid gap-4 lg:grid-cols-[0.75fr_1.25fr]">
         <SectionCard title={t("projects.projectInformation")}>
@@ -121,14 +137,44 @@ export function ProjectDetails() {
 
       <StructuralOpenings
         openings={activeProject.structuralOpenings}
-        onAdd={(opening) => addOpening(activeProject.id, opening)}
-        onUpdate={(openingId, opening) =>
-          updateOpening(activeProject.id, openingId, opening)
-        }
-        onDelete={(openingId) => deleteOpening(activeProject.id, openingId)}
-        onDuplicate={(openingId) =>
-          duplicateOpening(activeProject.id, openingId)
-        }
+        onAdd={(opening) => {
+          void addOpening(activeProject.id, opening).catch((openingError) =>
+            setError(
+              openingError instanceof Error
+                ? openingError.message
+                : t("projects.openings.saveError"),
+            ),
+          );
+        }}
+        onUpdate={(openingId, opening) => {
+          void updateOpening(activeProject.id, openingId, opening).catch(
+            (openingError) =>
+              setError(
+                openingError instanceof Error
+                  ? openingError.message
+                  : t("projects.openings.saveError"),
+              ),
+          );
+        }}
+        onDelete={(openingId) => {
+          void deleteOpening(activeProject.id, openingId).catch((openingError) =>
+            setError(
+              openingError instanceof Error
+                ? openingError.message
+                : t("projects.openings.deleteError"),
+            ),
+          );
+        }}
+        onDuplicate={(openingId) => {
+          void duplicateOpening(activeProject.id, openingId).catch(
+            (openingError) =>
+              setError(
+                openingError instanceof Error
+                  ? openingError.message
+                  : t("projects.openings.saveError"),
+              ),
+          );
+        }}
       />
     </div>
   );

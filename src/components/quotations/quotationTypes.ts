@@ -6,6 +6,7 @@ export type QuotationLine = StructuralOpening & {
 };
 
 export type QuotationDraft = {
+  id?: string;
   quotationNumber: string;
   project: Project;
   lines: QuotationLine[];
@@ -26,7 +27,6 @@ export type QuotationTotals = {
 };
 
 export const quotationStorageKey = "alumex-current-quotation";
-export const savedQuotationsStorageKey = "alumex-local-quotations";
 
 export function calculateArea(opening: {
   width: number;

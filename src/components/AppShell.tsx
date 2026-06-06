@@ -3,16 +3,11 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { AuthStatus } from "@/components/auth/AuthStatus";
-import { DevelopmentModeBanner } from "@/components/auth/DevelopmentModeBanner";
-import { LogoutButton } from "@/components/auth/LogoutButton";
 import { BrandMark } from "@/components/BrandMark";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { navItems } from "@/data/ui";
-import { hasBrowserDevSession } from "@/lib/auth/devSession";
 
 const ProductionAuthStatus = dynamic(
   () =>
@@ -92,39 +87,22 @@ function NavLink({
   );
 }
 
-function ShellAuthStatus({ isDemoSession }: { isDemoSession: boolean }) {
-  return isDemoSession ? <AuthStatus /> : <ProductionAuthStatus />;
+function ShellAuthStatus() {
+  return <ProductionAuthStatus />;
 }
 
 function ShellLogoutButton({
-  isDemoSession,
   ...props
-}: LogoutButtonProps & { isDemoSession: boolean }) {
-  return isDemoSession ? (
-    <LogoutButton {...props} />
-  ) : (
-    <ProductionLogoutButton {...props} />
-  );
+}: LogoutButtonProps) {
+  return <ProductionLogoutButton {...props} />;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { direction, formatDate, t } = useI18n();
   const isRtl = direction === "rtl";
-  const [isDemoSession, setIsDemoSession] = useState(false);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setIsDemoSession(hasBrowserDevSession());
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className={isRtl ? "lg:mr-72" : "lg:ml-72"}>
-        <DevelopmentModeBanner />
-      </div>
       <aside
         className={`fixed inset-y-0 z-30 hidden w-72 border-border bg-surface px-5 py-5 lg:block ${
           isRtl ? "right-0 border-l" : "left-0 border-r"
@@ -137,9 +115,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <div className="absolute bottom-5 left-5 right-5 space-y-3">
-          <ShellAuthStatus isDemoSession={isDemoSession} />
+          <ShellAuthStatus />
           <ShellLogoutButton
-            isDemoSession={isDemoSession}
             className="h-10 w-full rounded-md bg-foreground px-4 text-sm font-bold text-background"
           />
         </div>
@@ -152,7 +129,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <LanguageSwitcher compact />
             <ThemeToggle compact />
             <ShellLogoutButton
-              isDemoSession={isDemoSession}
               className="rounded-md border border-border px-3 py-2 text-xs font-bold text-muted-strong"
             />
           </div>
@@ -177,7 +153,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {formatDate(new Date())}
               </div>
               <ShellLogoutButton
-                isDemoSession={isDemoSession}
                 className="h-10 rounded-md bg-foreground px-4 text-sm font-bold leading-10 text-background"
               />
             </div>

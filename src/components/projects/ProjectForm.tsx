@@ -47,7 +47,7 @@ export function ProjectForm({
       ? {
           projectNumber: project.projectNumber,
           projectName: project.projectName,
-          client: project.client,
+          client: project.clientId ?? project.client,
           address: project.address,
           projectType: project.projectType,
           salesEngineer: project.salesEngineer,
@@ -133,7 +133,7 @@ export function ProjectForm({
                 >
                   <option value="">{t("projects.fields.client")}</option>
                   {clients.map((client) => (
-                    <option key={client.id} value={client.clientName}>
+                    <option key={client.id} value={client.id}>
                       {term(client.clientName)}
                     </option>
                   ))}

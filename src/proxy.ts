@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { hasDevSession, isDemoLoginEnabled } from "@/lib/auth/devSession";
 import { canAccessRoute, type AppRole } from "@/lib/auth/permissions";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { createProxyClient } from "@/lib/supabase/proxy";
@@ -12,21 +11,6 @@ function isPublicRoute(pathname: string) {
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  const isDevSession = isDemoLoginEnabled && hasDevSession(request);
-
-  if (isDevSession) {
-    if (isPublicRoute(pathname) || pathname === "/unauthorized") {
-      if (pathname === "/login") {
-        return NextResponse.redirect(new URL("/dashboard", request.url));
-      }
-
-      return NextResponse.next();
-    }
-
-    if (canAccessRoute(pathname, "Admin")) {
-      return NextResponse.next();
-    }
-  }
 
   if (!hasSupabaseConfig()) {
     if (isPublicRoute(pathname) || pathname === "/unauthorized") {

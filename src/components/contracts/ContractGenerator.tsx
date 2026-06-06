@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useClients } from "@/components/clients/ClientsProvider";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { PageHeader } from "@/components/PageHeader";
@@ -14,9 +15,11 @@ import {
 } from "@/components/contracts/contractTypes";
 import {
   calculateQuotationTotals,
-  savedQuotationsStorageKey,
   type QuotationDraft,
 } from "@/components/quotations/quotationTypes";
+import { loadSupabaseQuotations } from "@/components/quotations/supabaseQuotations";
+import { useProjects } from "@/components/projects/ProjectsProvider";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -25,8 +28,11 @@ function today() {
 export function ContractGenerator() {
   const router = useRouter();
   const { formatCurrency, t, term } = useI18n();
+  const { isAdmin } = useCurrentRole();
   const { clients } = useClients();
+  const { projects } = useProjects();
   const [savedQuotations, setSavedQuotations] = useState<QuotationDraft[]>([]);
+  const [savedContracts, setSavedContracts] = useState<ContractDraft[]>([]);
   const [quotationNumber, setQuotationNumber] = useState("");
   const [contractNumber, setContractNumber] = useState("CT-2026-0090");
   const [contractDate, setContractDate] = useState(today());
@@ -44,6 +50,9 @@ export function ContractGenerator() {
   const [preparedBy, setPreparedBy] = useState(() =>
     t("contracts.defaultPreparedBy"),
   );
+  const [error, setError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<ContractDraft | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const selectedQuotation = savedQuotations.find(
     (quotation) => quotation.quotationNumber === quotationNumber,
   );
@@ -62,27 +71,114 @@ export function ContractGenerator() {
     : 0;
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const storedQuotations = window.localStorage.getItem(
-        savedQuotationsStorageKey,
-      );
-      const nextQuotations = storedQuotations
-        ? (JSON.parse(storedQuotations) as QuotationDraft[])
-        : [];
+    const timer = window.setTimeout(async () => {
+      try {
+        const nextQuotations = await loadSupabaseQuotations(projects);
+        setSavedQuotations(nextQuotations);
+        setQuotationNumber(nextQuotations[0]?.quotationNumber ?? "");
 
-      setSavedQuotations(nextQuotations);
-      setQuotationNumber(nextQuotations[0]?.quotationNumber ?? "");
+        const supabase = createSupabaseClient();
+        const { data } = await supabase
+          .from("contracts")
+          .select("id, contract_number, project_id, quotation_id, contract_value, contract_date, payment_terms, warranty_terms, execution_terms, prepared_by_text, language, notes, created_at")
+          .order("created_at", { ascending: false });
+        const nextContracts = ((data ?? []) as Array<{
+          id: string;
+          contract_number: string;
+          project_id: string;
+          quotation_id: string | null;
+          contract_value: number | string;
+          contract_date: string | null;
+          payment_terms: string | null;
+          warranty_terms: string | null;
+          execution_terms: string | null;
+          prepared_by_text: string | null;
+          language: ContractLanguage | null;
+          notes: string | null;
+        }>).reduce<ContractDraft[]>((contracts, contract) => {
+          const project = projects.find((item) => item.id === contract.project_id);
+
+          if (!project) {
+            return contracts;
+          }
+
+          contracts.push({
+            id: contract.id,
+            contractNumber: contract.contract_number,
+            contractDate: contract.contract_date ?? today(),
+            quotationNumber:
+              nextQuotations.find((quotation) => quotation.id === contract.quotation_id)
+                ?.quotationNumber ?? "",
+            project,
+            clientPhone:
+              clients.find((client) => client.id === project.clientId)?.mobile ?? "",
+            clientAddress: project.address,
+            totalAmount: Number(contract.contract_value ?? 0),
+            paymentTerms: contract.payment_terms ?? "",
+            warrantyTerms: contract.warranty_terms ?? "",
+            executionTerms: contract.execution_terms ?? "",
+            notes: contract.notes ?? "",
+            salesEngineer: project.salesEngineer,
+            preparedBy: contract.prepared_by_text ?? "",
+            language: contract.language ?? language,
+          });
+
+          return contracts;
+        }, []);
+
+        setSavedContracts(nextContracts);
+      } catch {
+        setSavedQuotations([]);
+        setSavedContracts([]);
+      }
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [clients, language, projects]);
 
-  function openPreview() {
+  async function openPreview() {
     if (!selectedProject || !selectedQuotation) {
       return;
     }
 
+    if (!selectedProject.clientId || !selectedQuotation.id) {
+      setError(t("contracts.saveError"));
+      return;
+    }
+
+    setError("");
+    const supabase = createSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data: contractRow, error: contractError } = await supabase
+      .from("contracts")
+      .insert({
+        contract_number: contractNumber,
+        project_id: selectedProject.id,
+        quotation_id: selectedQuotation.id,
+        client_id: selectedProject.clientId,
+        status: "Draft",
+        contract_value: totalAmount,
+        contract_date: contractDate,
+        payment_terms: paymentTerms,
+        warranty_terms: warrantyTerms,
+        execution_terms: executionTerms,
+        prepared_by_text: preparedBy || null,
+        language,
+        notes,
+        created_by: user?.id ?? null,
+      })
+      .select("id")
+      .single();
+
+    if (contractError || !contractRow) {
+      setError(contractError?.message ?? t("contracts.saveError"));
+      return;
+    }
+
     const draft: ContractDraft = {
+      id: contractRow.id,
       contractNumber,
       contractDate,
       quotationNumber: selectedQuotation.quotationNumber,
@@ -103,6 +199,40 @@ export function ContractGenerator() {
     router.push("/contracts/preview");
   }
 
+  async function confirmDeleteContract() {
+    if (!deleteTarget?.id) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setError("");
+
+    try {
+      const supabase = createSupabaseClient();
+      const { error: deleteError } = await supabase
+        .from("contracts")
+        .delete()
+        .eq("id", deleteTarget.id);
+
+      if (deleteError) {
+        throw deleteError;
+      }
+
+      setSavedContracts((contracts) =>
+        contracts.filter((contract) => contract.id !== deleteTarget.id),
+      );
+      setDeleteTarget(null);
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : t("contracts.deleteError"),
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -110,6 +240,48 @@ export function ContractGenerator() {
         title={t("contracts.generator")}
         description={t("contracts.generatorDescription")}
       />
+
+      {error ? (
+        <p className="rounded-md border border-border bg-danger-surface px-3 py-2 text-sm font-semibold text-danger-text">
+          {error}
+        </p>
+      ) : null}
+
+      <SectionCard title={t("contracts.savedContracts")}>
+        {savedContracts.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border bg-surface-muted p-5 text-sm font-semibold text-muted">
+            {t("contracts.noSavedContracts")}
+          </p>
+        ) : (
+          <div className="grid gap-3">
+            {savedContracts.map((contract) => (
+              <div
+                key={contract.id ?? contract.contractNumber}
+                className="flex flex-col gap-3 rounded-lg border border-border bg-surface-muted p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p className="text-sm font-bold text-foreground">
+                    {contract.contractNumber}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">
+                    {term(contract.project.projectName)} -{" "}
+                    {formatCurrency(contract.totalAmount)}
+                  </p>
+                </div>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTarget(contract)}
+                    className="h-10 rounded-md border border-danger-text bg-transparent px-3 text-sm font-bold text-danger-text transition hover:bg-danger-text hover:text-white"
+                  >
+                    {t("common.delete")}
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
 
       <SectionCard title={t("contracts.contractSource")}>
         <div className="grid gap-4 lg:grid-cols-[1fr_220px_220px_180px] lg:items-end">
@@ -310,6 +482,42 @@ export function ContractGenerator() {
           </label>
         </div>
       </SectionCard>
+
+      {deleteTarget ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-contract-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6"
+        >
+          <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-5 shadow-xl">
+            <h2 id="delete-contract-title" className="text-lg font-bold text-foreground">
+              {t("contracts.deleteContract")}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-muted-strong">
+              {t("contracts.deleteConfirm")}
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteTarget(null)}
+                className="h-11 rounded-md border border-border bg-surface px-4 text-sm font-bold text-muted-strong transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:text-muted"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={confirmDeleteContract}
+                className="h-11 rounded-md bg-danger-text px-4 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
+              >
+                {isDeleting ? t("common.loading") : t("contracts.deleteContract")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

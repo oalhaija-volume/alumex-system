@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useClients } from "@/components/clients/ClientsProvider";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { PageHeader } from "@/components/PageHeader";
@@ -12,10 +13,14 @@ import {
   calculateLineTotal,
   calculateQuotationTotals,
   quotationStorageKey,
-  savedQuotationsStorageKey,
   type QuotationDraft,
   type QuotationLine,
 } from "@/components/quotations/quotationTypes";
+import {
+  deleteSupabaseQuotation,
+  loadSupabaseQuotations,
+} from "@/components/quotations/supabaseQuotations";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import type { Project } from "@/data/ui";
 
 function defaultUnitPrice(system: string) {
@@ -50,6 +55,7 @@ export function QuotationBuilder() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { formatCurrency, t, term } = useI18n();
+  const { isAdmin } = useCurrentRole();
   const { clients } = useClients();
   const { projects } = useProjects();
   const requestedProjectId = searchParams.get("projectId") ?? "";
@@ -66,6 +72,9 @@ export function QuotationBuilder() {
     t("quotations.defaultPreparedBy"),
   );
   const [clientRepresentative, setClientRepresentative] = useState("");
+  const [savedQuotations, setSavedQuotations] = useState<QuotationDraft[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<QuotationDraft | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [lines, setLines] = useState<QuotationLine[]>(() =>
     createQuotationLines(initialProjectId, projects),
   );
@@ -104,6 +113,18 @@ export function QuotationBuilder() {
     return () => window.clearTimeout(timer);
   }, [loadProject, projectId, projects, requestedProjectId]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      try {
+        setSavedQuotations(await loadSupabaseQuotations(projects));
+      } catch {
+        setSavedQuotations([]);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [projects]);
+
   function updateLine(
     lineId: string,
     key: "unitPrice" | "discountPercent",
@@ -121,7 +142,7 @@ export function QuotationBuilder() {
     );
   }
 
-  function openPreview() {
+  async function openPreview() {
     setError("");
 
     if (!selectedProject || lines.length === 0) {
@@ -129,7 +150,66 @@ export function QuotationBuilder() {
       return;
     }
 
+    if (!selectedProject.clientId) {
+      setError(t("quotations.missingClient"));
+      return;
+    }
+
+    const supabase = createSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data: quotationRow, error: quotationError } = await supabase
+      .from("quotations")
+      .insert({
+        quotation_number: quotationNumber,
+        project_id: selectedProject.id,
+        client_id: selectedProject.clientId,
+        status: "Draft",
+        quotation_discount_percent: discountPercent,
+        subtotal: totals.subtotal,
+        line_discount_total: totals.lineDiscountTotal,
+        quotation_discount_total: totals.quotationDiscount,
+        grand_total: totals.grandTotal,
+        notes,
+        prepared_by_text: preparedBy || null,
+        client_representative: clientRepresentative || null,
+        created_by: user?.id ?? null,
+      })
+      .select("id")
+      .single();
+
+    if (quotationError || !quotationRow) {
+      setError(quotationError?.message ?? t("quotations.saveError"));
+      return;
+    }
+
+    const { error: itemsError } = await supabase.from("quotation_items").insert(
+      lines.map((line) => ({
+        quotation_id: quotationRow.id,
+        opening_id: line.id,
+        opening_code: line.openingCode,
+        floor: line.floor || null,
+        room: line.room || null,
+        width: line.width,
+        height: line.height,
+        quantity: line.quantity,
+        product_system: line.productSystem || null,
+        glass_type: line.glassType || null,
+        aluminum_color: line.aluminumColor || null,
+        unit_price: line.unitPrice,
+        discount_percent: line.discountPercent,
+        notes: line.notes || null,
+      })),
+    );
+
+    if (itemsError) {
+      setError(itemsError.message);
+      return;
+    }
+
     const draft: QuotationDraft = {
+      id: quotationRow.id,
       quotationNumber,
       project: selectedProject,
       lines,
@@ -141,21 +221,31 @@ export function QuotationBuilder() {
     };
 
     window.localStorage.setItem(quotationStorageKey, JSON.stringify(draft));
-    const storedQuotations = window.localStorage.getItem(savedQuotationsStorageKey);
-    const savedQuotations = storedQuotations
-      ? (JSON.parse(storedQuotations) as QuotationDraft[])
-      : [];
-    const nextSavedQuotations = [
-      draft,
-      ...savedQuotations.filter(
-        (quotation) => quotation.quotationNumber !== draft.quotationNumber,
-      ),
-    ];
-    window.localStorage.setItem(
-      savedQuotationsStorageKey,
-      JSON.stringify(nextSavedQuotations),
-    );
+    setSavedQuotations(await loadSupabaseQuotations(projects));
     router.push("/quotations/preview");
+  }
+
+  async function confirmDeleteQuotation() {
+    if (!deleteTarget?.id) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setError("");
+
+    try {
+      await deleteSupabaseQuotation(deleteTarget.id);
+      setSavedQuotations(await loadSupabaseQuotations(projects));
+      setDeleteTarget(null);
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : t("quotations.deleteError"),
+      );
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   return (
@@ -165,6 +255,49 @@ export function QuotationBuilder() {
         title={t("quotations.builder")}
         description={t("quotations.builderDescription")}
       />
+
+      <SectionCard title={t("quotations.savedQuotations")}>
+        {savedQuotations.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border bg-surface-muted p-5 text-sm font-semibold text-muted">
+            {t("quotations.noSavedQuotations")}
+          </p>
+        ) : (
+          <div className="grid gap-3">
+            {savedQuotations.map((quotation) => {
+              const quotationTotals = calculateQuotationTotals(
+                quotation.lines,
+                quotation.discountPercent,
+              );
+
+              return (
+                <div
+                  key={quotation.id ?? quotation.quotationNumber}
+                  className="flex flex-col gap-3 rounded-lg border border-border bg-surface-muted p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-bold text-foreground">
+                      {quotation.quotationNumber}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      {term(quotation.project.projectName)} -{" "}
+                      {formatCurrency(quotationTotals.grandTotal)}
+                    </p>
+                  </div>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(quotation)}
+                      className="h-10 rounded-md border border-danger-text bg-transparent px-3 text-sm font-bold text-danger-text transition hover:bg-danger-text hover:text-white"
+                    >
+                      {t("common.delete")}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SectionCard>
 
       {!canCreateQuotation ? (
         <SectionCard title={t("quotations.beforeCreateQuotation")}>
@@ -562,6 +695,42 @@ export function QuotationBuilder() {
         </SectionCard>
       </section>
         </>
+      ) : null}
+
+      {deleteTarget ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-quotation-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6"
+        >
+          <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-5 shadow-xl">
+            <h2 id="delete-quotation-title" className="text-lg font-bold text-foreground">
+              {t("quotations.deleteQuotation")}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-muted-strong">
+              {t("quotations.deleteConfirm")}
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteTarget(null)}
+                className="h-11 rounded-md border border-border bg-surface px-4 text-sm font-bold text-muted-strong transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:text-muted"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={confirmDeleteQuotation}
+                className="h-11 rounded-md bg-danger-text px-4 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
+              >
+                {isDeleting ? t("common.loading") : t("quotations.deleteQuotation")}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

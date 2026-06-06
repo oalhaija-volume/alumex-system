@@ -8,95 +8,168 @@ import {
   useMemo,
   useState,
 } from "react";
-import { clients as initialClients, type Client } from "@/data/ui";
+import type { Client } from "@/data/ui";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 type ClientInput = Omit<Client, "id">;
-const clientsStorageKey = "alumex-local-clients";
 
 type ClientsContextValue = {
   clients: Client[];
-  createClient: (client: ClientInput) => void;
-  updateClient: (id: string, client: ClientInput) => void;
-  deleteClient: (id: string) => void;
+  isLoading: boolean;
+  error: string;
+  refreshClients: () => Promise<void>;
+  createClient: (client: ClientInput) => Promise<void>;
+  updateClient: (id: string, client: ClientInput) => Promise<void>;
+  deleteClient: (id: string) => Promise<void>;
   findClient: (id: string) => Client | undefined;
 };
 
 const ClientsContext = createContext<ClientsContextValue | null>(null);
 
-function slugify(value: string) {
-  return (
-    value
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "") || "client"
-  );
+type ClientRow = {
+  id: string;
+  client_name: string;
+  mobile: string | null;
+  alternate_mobile: string | null;
+  address: string | null;
+  province: string | null;
+  city: string | null;
+  email: string | null;
+  notes: string | null;
+};
+
+function mapClient(row: ClientRow): Client {
+  return {
+    id: row.id,
+    clientName: row.client_name,
+    mobile: row.mobile ?? "",
+    alternateMobile: row.alternate_mobile ?? "",
+    address: row.address ?? "",
+    province: row.province ?? "",
+    city: row.city ?? "",
+    email: row.email ?? "",
+    notes: row.notes ?? "",
+  };
 }
 
-function createId(clientName: string, existingClients: Client[]) {
-  const base = slugify(clientName);
-  const exists = new Set(existingClients.map((client) => client.id));
+function toClientInsert(client: ClientInput, userId?: string) {
+  return {
+    client_name: client.clientName,
+    mobile: client.mobile || null,
+    alternate_mobile: client.alternateMobile || null,
+    address: client.address || null,
+    province: client.province || null,
+    city: client.city || null,
+    email: client.email || null,
+    notes: client.notes || null,
+    created_by: userId ?? null,
+  };
+}
 
-  if (!exists.has(base)) {
-    return base;
-  }
-
-  let index = 2;
-  while (exists.has(`${base}-${index}`)) {
-    index += 1;
-  }
-
-  return `${base}-${index}`;
+function toClientUpdate(client: ClientInput) {
+  return {
+    client_name: client.clientName,
+    mobile: client.mobile || null,
+    alternate_mobile: client.alternateMobile || null,
+    address: client.address || null,
+    province: client.province || null,
+    city: client.city || null,
+    email: client.email || null,
+    notes: client.notes || null,
+  };
 }
 
 export function ClientsProvider({ children }: { children: React.ReactNode }) {
-  const [clients, setClients] = useState<Client[]>(initialClients);
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const refreshClients = useCallback(async () => {
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const supabase = createSupabaseClient();
+      const { data, error: loadError } = await supabase
+        .from("clients")
+        .select(
+          "id, client_name, mobile, alternate_mobile, address, province, city, email, notes",
+        )
+        .order("created_at", { ascending: false });
+
+      if (loadError) {
+        throw loadError;
+      }
+
+      setClients(((data ?? []) as ClientRow[]).map(mapClient));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Unable to load clients.");
+      setClients([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const storedClients = window.localStorage.getItem(clientsStorageKey);
-
-      if (storedClients) {
-        setClients(JSON.parse(storedClients) as Client[]);
-      }
-
-      setHasLoaded(true);
+      void refreshClients();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [refreshClients]);
 
-  useEffect(() => {
-    if (hasLoaded) {
-      window.localStorage.setItem(clientsStorageKey, JSON.stringify(clients));
-    }
-  }, [clients, hasLoaded]);
+  const createClient = useCallback(
+    async (client: ClientInput) => {
+      const supabase = createSupabaseClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const { error: createError } = await supabase
+        .from("clients")
+        .insert(toClientInsert(client, user?.id));
 
-  const createClient = useCallback((client: ClientInput) => {
-    setClients((currentClients) => {
-      const createdClient = {
-        ...client,
-        id: createId(client.clientName, currentClients),
-      };
+      if (createError) {
+        throw createError;
+      }
 
-      return [createdClient, ...currentClients];
-    });
-  }, []);
+      await refreshClients();
+    },
+    [refreshClients],
+  );
 
-  const updateClient = useCallback((id: string, client: ClientInput) => {
-    setClients((currentClients) =>
-      currentClients.map((currentClient) =>
-        currentClient.id === id ? { ...client, id } : currentClient,
-      ),
-    );
-  }, []);
+  const updateClient = useCallback(
+    async (id: string, client: ClientInput) => {
+      const supabase = createSupabaseClient();
+      const { error: updateError } = await supabase
+        .from("clients")
+        .update(toClientUpdate(client))
+        .eq("id", id);
 
-  const deleteClient = useCallback((id: string) => {
-    setClients((currentClients) =>
-      currentClients.filter((client) => client.id !== id),
-    );
-  }, []);
+      if (updateError) {
+        throw updateError;
+      }
+
+      await refreshClients();
+    },
+    [refreshClients],
+  );
+
+  const deleteClient = useCallback(
+    async (id: string) => {
+      const supabase = createSupabaseClient();
+      const { error: deleteError } = await supabase
+        .from("clients")
+        .delete()
+        .eq("id", id);
+
+      if (deleteError) {
+        throw deleteError;
+      }
+
+      await refreshClients();
+    },
+    [refreshClients],
+  );
 
   const findClient = useCallback(
     (id: string) => clients.find((client) => client.id === id),
@@ -106,12 +179,24 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       clients,
+      isLoading,
+      error,
+      refreshClients,
       createClient,
       updateClient,
       deleteClient,
       findClient,
     }),
-    [clients, createClient, updateClient, deleteClient, findClient],
+    [
+      clients,
+      isLoading,
+      error,
+      refreshClients,
+      createClient,
+      updateClient,
+      deleteClient,
+      findClient,
+    ],
   );
 
   return (

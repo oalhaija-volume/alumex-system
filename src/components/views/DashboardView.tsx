@@ -5,17 +5,18 @@ import { AppShell } from "@/components/AppShell";
 import { MetricCard } from "@/components/MetricCard";
 import { PageHeader } from "@/components/PageHeader";
 import { useProjects } from "@/components/projects/ProjectsProvider";
-import { calculateQuotationTotals, savedQuotationsStorageKey, type QuotationDraft } from "@/components/quotations/quotationTypes";
+import { calculateQuotationTotals, type QuotationDraft } from "@/components/quotations/quotationTypes";
+import { loadSupabaseQuotations } from "@/components/quotations/supabaseQuotations";
 import { SectionCard } from "@/components/SectionCard";
 import { WorkflowList } from "@/components/WorkflowList";
-import { contractStorageKey } from "@/components/contracts/contractTypes";
 import { useI18n } from "@/components/i18n/I18nProvider";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 export function DashboardView() {
   const { formatCurrency, t, term } = useI18n();
   const { projects } = useProjects();
   const [savedQuotations, setSavedQuotations] = useState<QuotationDraft[]>([]);
-  const [hasCurrentContract, setHasCurrentContract] = useState(false);
+  const [contractCount, setContractCount] = useState(0);
   const activeProjects = projects.filter(
     (project) => project.status !== "Completed",
   );
@@ -50,16 +51,17 @@ export function DashboardView() {
       },
       {
         label: t("dashboard.stats.currentContract"),
-        value: hasCurrentContract ? "1" : "0",
-        detail: hasCurrentContract
-          ? t("dashboard.stats.currentContractDetail")
-          : t("dashboard.stats.noCurrentContractDetail"),
+        value: String(contractCount),
+        detail:
+          contractCount > 0
+            ? t("dashboard.stats.currentContractDetail")
+            : t("dashboard.stats.noCurrentContractDetail"),
         tone: "red" as const,
       },
     ],
     [
       activeProjects.length,
-      hasCurrentContract,
+      contractCount,
       projectsWithOpenings.length,
       savedQuotations.length,
       t,
@@ -67,21 +69,22 @@ export function DashboardView() {
   );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const storedQuotations = window.localStorage.getItem(
-        savedQuotationsStorageKey,
-      );
-
-      setSavedQuotations(
-        storedQuotations
-          ? (JSON.parse(storedQuotations) as QuotationDraft[])
-          : [],
-      );
-      setHasCurrentContract(Boolean(window.localStorage.getItem(contractStorageKey)));
+    const timer = window.setTimeout(async () => {
+      try {
+        setSavedQuotations(await loadSupabaseQuotations(projects));
+        const supabase = createSupabaseClient();
+        const { count } = await supabase
+          .from("contracts")
+          .select("id", { count: "exact", head: true });
+        setContractCount(count ?? 0);
+      } catch {
+        setSavedQuotations([]);
+        setContractCount(0);
+      }
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [projects]);
 
   return (
     <AppShell>

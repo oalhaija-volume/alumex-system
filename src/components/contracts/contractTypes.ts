@@ -4,6 +4,7 @@ import { calculateArea, formatCurrency } from "@/components/quotations/quotation
 export type ContractLanguage = "en" | "ar";
 
 export type ContractDraft = {
+  id?: string;
   contractNumber: string;
   contractDate: string;
   quotationNumber: string;

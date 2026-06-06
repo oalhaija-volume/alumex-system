@@ -1,0 +1,52 @@
+"use client";
+
+import { AppShell } from "@/components/AppShell";
+import { useI18n } from "@/components/i18n/I18nProvider";
+import { PageHeader } from "@/components/PageHeader";
+import { SectionCard } from "@/components/SectionCard";
+import { UsersSettings } from "@/components/settings/UsersSettings";
+
+const settings = [
+  ["settings.companyProfile", "settings.companyProfileValue"],
+  ["settings.quotationNumbering", "Q-YYYY-0000"],
+  ["settings.contractNumbering", "CT-YYYY-0000"],
+  ["settings.currency", "settings.currencyValue"],
+  ["settings.defaultTaxDisplay", "settings.defaultTaxDisplayValue"],
+  ["settings.approvalReminder", "settings.approvalReminderValue"],
+];
+
+export default function SettingsPage() {
+  const { t } = useI18n();
+
+  return (
+    <AppShell>
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow={t("settings.eyebrow")}
+          title={t("settings.title")}
+          description={t("settings.description")}
+        />
+        <SectionCard title={t("settings.generalSettings")}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {settings.map(([labelKey, valueKey]) => (
+              <div
+                key={labelKey}
+                className="rounded-lg border border-border bg-surface-muted p-4"
+              >
+                <p className="text-xs font-bold uppercase tracking-wide text-muted">
+                  {t(labelKey)}
+                </p>
+                <p className="mt-2 text-sm font-bold text-foreground">
+                  {valueKey.startsWith("settings.") ? t(valueKey) : valueKey}
+                </p>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+        <SectionCard title={t("settings.users")}>
+          <UsersSettings />
+        </SectionCard>
+      </div>
+    </AppShell>
+  );
+}

@@ -1,4 +1,5 @@
 import type { Project } from "@/data/ui";
+import type { QuotationLine } from "@/components/quotations/quotationTypes";
 import { calculateArea, formatCurrency } from "@/components/quotations/quotationTypes";
 
 export type ContractLanguage = "en" | "ar";
@@ -9,16 +10,29 @@ export type ContractDraft = {
   contractDate: string;
   quotationNumber: string;
   project: Project;
+  openingSchedule?: QuotationLine[];
   clientPhone: string;
   clientAddress: string;
   totalAmount: number;
   paymentTerms: string;
   warrantyTerms: string;
   executionTerms: string;
+  contractTerms: string;
+  firstPartyObligations: string;
+  secondPartyObligations: string;
   notes: string;
   salesEngineer: string;
   preparedBy: string;
   language: ContractLanguage;
+};
+
+export type ContractTemplate = {
+  paymentTerms: string;
+  warrantyTerms: string;
+  executionTerms: string;
+  contractTerms: string;
+  firstPartyObligations: string;
+  secondPartyObligations: string;
 };
 
 export const contractStorageKey = "alumex-current-contract";

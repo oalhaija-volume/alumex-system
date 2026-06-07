@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { BrandMark } from "@/components/BrandMark";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { PdfDownloadButton } from "@/components/pdf/PdfDownloadButton";
 import {
@@ -10,113 +9,483 @@ import {
   getProductSystems,
   type ContractDraft,
 } from "@/components/contracts/contractTypes";
+import {
+  calculateArea,
+  calculateLineTotal,
+  type QuotationLine,
+} from "@/components/quotations/quotationTypes";
 
-function ContractCoverPage({
-  draft,
+const scheduleRowsPerPage = 9;
+
+function Logo() {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/logo/AlumexLogo.svg"
+      alt="Alumex Experts"
+      className="h-auto w-[38mm] object-contain"
+    />
+  );
+}
+
+function chunkRows<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks.length > 0 ? chunks : [[]];
+}
+
+function formatIqd(value: number, locale: string) {
+  const formatted = new Intl.NumberFormat(locale === "ar" ? "ar-IQ" : "en-US", {
+    maximumFractionDigits: 0,
+  }).format(value);
+
+  return locale === "ar" ? `${formatted} د.ع` : `IQD ${formatted}`;
+}
+
+function PageShell({
+  children,
+  clientName,
+  contractNumber,
+  page,
+  totalPages,
+  title,
   isArabic,
 }: {
-  draft: ContractDraft;
+  children: React.ReactNode;
+  clientName: string;
+  contractNumber: string;
+  page: number;
+  totalPages: number;
+  title: string;
   isArabic: boolean;
 }) {
-  const { formatCurrency, formatDate, t, term } = useI18n();
+  const { t } = useI18n();
 
   return (
     <section
       dir={isArabic ? "rtl" : "ltr"}
-      className="pdf-page contract-cover-page relative mx-auto mb-6 min-h-[1050px] max-w-5xl overflow-hidden bg-white shadow-sm ring-1 ring-slate-200 print:mb-0 print:max-w-none print:shadow-none print:ring-0"
+      className="a4-page pdf-page print-page contract-pdf-page mx-auto mb-6 flex flex-col bg-white text-slate-950 shadow-sm ring-1 ring-slate-200 print:mb-0 print:shadow-none print:ring-0"
     >
-      <div className="absolute inset-x-0 top-0 h-3 bg-[var(--alumex-red)]" />
-      <div className="absolute inset-y-0 end-0 w-7 bg-[var(--alumex-blue)]" />
-      <div className="absolute end-7 top-0 h-72 w-36 bg-slate-900" />
-      <div className="absolute bottom-0 start-0 h-32 w-full bg-slate-950" />
-
-      <div className="relative z-10 flex min-h-[1050px] flex-col p-10 sm:p-14">
-        <header className="flex items-start justify-between gap-8">
-          <BrandMark />
+      <header className="border-b border-slate-200 pb-4">
+        <div className="flex items-start justify-between gap-6">
+          <Logo />
           <div className={isArabic ? "text-left" : "text-right"}>
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
-              {t("contracts.contractPackage")}
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--alumex-red)]">
+              {title}
             </p>
-            <p className="mt-2 text-sm font-bold text-[var(--alumex-blue)]">
-              {draft.contractNumber}
+            <p className="mt-1 text-xs font-bold text-slate-700">
+              {t("contracts.contractNumber")}: {contractNumber}
+            </p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              {t("contracts.clientName")}: {clientName}
+            </p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              {t("contracts.pageOf", { page, total: totalPages })}
             </p>
           </div>
-        </header>
+        </div>
+        <div className="mt-4 h-0.5 bg-[var(--alumex-blue)]" />
+      </header>
+      <div className="min-h-0 flex-1 py-5">{children}</div>
+      <footer className="mt-auto border-t border-slate-200 pt-3 text-[10px] font-semibold text-slate-500">
+        <div className="flex items-center justify-between gap-4">
+          <span>{t("contracts.legalFooter")}</span>
+          <span>{contractNumber}</span>
+        </div>
+      </footer>
+    </section>
+  );
+}
 
-        <div className="mt-28 max-w-3xl">
-          <p className="text-sm font-bold uppercase tracking-[0.24em] text-[var(--alumex-red)]">
+function InfoBox({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="border-s-4 border-[var(--alumex-blue)] bg-slate-50 px-4 py-3">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-bold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function LegalSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-md border border-slate-200 p-3">
+      <h2 className="text-xs font-black uppercase tracking-wide text-[var(--alumex-blue)]">
+        {title}
+      </h2>
+      <div className="mt-2 text-xs leading-5 text-slate-700">{children}</div>
+    </section>
+  );
+}
+
+function CoverPage({
+  draft,
+  isArabic,
+  totalPages,
+}: {
+  draft: ContractDraft;
+  isArabic: boolean;
+  totalPages: number;
+}) {
+  const { formatDate, locale, t, term } = useI18n();
+
+  return (
+    <PageShell
+      title={t("contracts.contractPackage")}
+      clientName={term(draft.project.client)}
+      contractNumber={draft.contractNumber}
+      page={1}
+      totalPages={totalPages}
+      isArabic={isArabic}
+    >
+      <div className="flex h-full flex-col">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-6">
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--alumex-red)]">
             {t("app.name")}
           </p>
-          <h1 className="mt-5 text-5xl font-black leading-tight tracking-tight text-slate-950 sm:text-6xl">
+          <h1 className="mt-4 max-w-[140mm] text-3xl font-black leading-tight text-slate-950">
             {t("contracts.supplyInstallationContract")}
           </h1>
-          <div className="mt-8 h-1.5 w-28 bg-[var(--alumex-blue)]" />
-          <p className="mt-8 max-w-2xl text-lg leading-8 text-slate-600">
+          <p className="mt-4 max-w-[140mm] text-sm leading-6 text-slate-600">
             {t("contracts.coverDescription")}
           </p>
         </div>
 
-        <div className="mt-16 grid gap-4 md:grid-cols-2">
-          {[
-            [
-              t("contracts.clientName"),
-              term(draft.project.client),
-            ],
-            [
-              t("projects.fields.projectName"),
-              term(draft.project.projectName),
-            ],
-            [
-              t("contracts.contractNumber"),
-              draft.contractNumber,
-            ],
-            [t("quotations.quotationNumber"), draft.quotationNumber],
-            [t("common.date"), formatDate(draft.contractDate)],
-            [
-              t("contracts.totalAmount"),
-              formatCurrency(draft.totalAmount),
-            ],
-            [
-              t("contracts.preparedBy"),
-              draft.preparedBy,
-            ],
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              className="border-s-4 border-[var(--alumex-blue)] bg-slate-50 px-5 py-4"
-            >
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                {label}
-              </p>
-              <p className="mt-2 text-lg font-bold text-slate-950">{value}</p>
-            </div>
-          ))}
+        <div className="mt-7 grid gap-3 md:grid-cols-2">
+          <InfoBox label={t("contracts.clientName")} value={term(draft.project.client)} />
+          <InfoBox
+            label={t("projects.fields.projectName")}
+            value={term(draft.project.projectName)}
+          />
+          <InfoBox label={t("contracts.contractNumber")} value={draft.contractNumber} />
+          <InfoBox label={t("quotations.quotationNumber")} value={draft.quotationNumber} />
+          <InfoBox label={t("common.date")} value={formatDate(draft.contractDate)} />
+          <InfoBox
+            label={t("contracts.totalAmount")}
+            value={formatIqd(draft.totalAmount, locale)}
+          />
+          <InfoBox label={t("contracts.salesEngineer")} value={term(draft.salesEngineer)} />
+          <InfoBox label={t("contracts.preparedBy")} value={draft.preparedBy} />
         </div>
 
-        <footer className="relative z-10 mt-auto grid gap-6 pt-16 text-white md:grid-cols-[1fr_280px] md:items-end">
+        <div className="mt-auto grid gap-4 border-t border-slate-200 pt-6 md:grid-cols-2">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-300">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
               {t("contracts.productSystems")}
             </p>
-            <p className="mt-3 text-xl font-bold">
+            <p className="mt-2 text-sm font-bold text-slate-950">
               {getProductSystems(draft.project).map((system) => term(system)).join(" | ") ||
                 t("common.notSpecified")}
             </p>
           </div>
           <div className={isArabic ? "text-left" : "text-right"}>
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-300">
-              {t("contracts.salesEngineer")}
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              {t("contracts.projectLocation")}
             </p>
-            <p className="mt-3 text-xl font-bold">{term(draft.salesEngineer)}</p>
+            <p className="mt-2 text-sm font-bold text-slate-950">
+              {term(draft.clientAddress || draft.project.address)}
+            </p>
           </div>
-        </footer>
+        </div>
       </div>
-    </section>
+    </PageShell>
+  );
+}
+
+function PartiesAndSpecsPage({
+  draft,
+  isArabic,
+  page,
+  totalPages,
+  lines,
+}: {
+  draft: ContractDraft;
+  isArabic: boolean;
+  page: number;
+  totalPages: number;
+  lines: QuotationLine[];
+}) {
+  const { formatDate, t, term } = useI18n();
+  const specs = Array.from(
+    new Map(
+      lines.map((line) => [
+        `${line.productSystem}-${line.glassType}-${line.aluminumColor}`,
+        line,
+      ]),
+    ).values(),
+  );
+
+  return (
+    <PageShell
+      title={t("contracts.contractBody")}
+      clientName={term(draft.project.client)}
+      contractNumber={draft.contractNumber}
+      page={page}
+      totalPages={totalPages}
+      isArabic={isArabic}
+    >
+      <div className="grid gap-4">
+        <LegalSection title={`A. ${t("contracts.contractParties")}`}>
+          <dl className="grid gap-2 md:grid-cols-2">
+            <div>
+              <dt className="font-bold text-slate-500">{t("contracts.firstParty")}</dt>
+              <dd className="mt-1 font-semibold text-slate-950">{t("contracts.firstPartyName")}</dd>
+            </div>
+            <div>
+              <dt className="font-bold text-slate-500">{t("contracts.secondParty")}</dt>
+              <dd className="mt-1 font-semibold text-slate-950">{term(draft.project.client)}</dd>
+            </div>
+            <div>
+              <dt className="font-bold text-slate-500">{t("contracts.projectLocation")}</dt>
+              <dd className="mt-1 font-semibold text-slate-950">
+                {term(draft.clientAddress || draft.project.address)}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-bold text-slate-500">{t("contracts.contractDate")}</dt>
+              <dd className="mt-1 font-semibold text-slate-950">{formatDate(draft.contractDate)}</dd>
+            </div>
+          </dl>
+        </LegalSection>
+
+        <LegalSection title={`B. ${t("contracts.productSpecifications")}`}>
+          <div className="overflow-hidden rounded-md border border-slate-200">
+            <table className="w-full border-collapse text-[10px]">
+              <thead className="bg-slate-100 text-slate-600">
+                <tr>
+                  <th className="p-2 text-start">{t("contracts.systemName")}</th>
+                  <th className="p-2 text-start">{t("contracts.profileWidth")}</th>
+                  <th className="p-2 text-start">{t("contracts.profileThickness")}</th>
+                  <th className="p-2 text-start">{t("contracts.glassType")}</th>
+                  <th className="p-2 text-start">{t("contracts.glassThickness")}</th>
+                  <th className="p-2 text-start">{t("contracts.color")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {specs.map((spec) => (
+                  <tr key={`${spec.productSystem}-${spec.glassType}-${spec.aluminumColor}`} className="border-t border-slate-200">
+                    <td className="p-2 font-semibold text-slate-950">{term(spec.productSystem)}</td>
+                    <td className="p-2">{t("common.notSpecified")}</td>
+                    <td className="p-2">{t("common.notSpecified")}</td>
+                    <td className="p-2">{term(spec.glassType)}</td>
+                    <td className="p-2">{t("common.notSpecified")}</td>
+                    <td className="p-2">{term(spec.aluminumColor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </LegalSection>
+
+        <LegalSection title={`E. ${t("contracts.paymentTerms")}`}>
+          <p className="whitespace-pre-wrap">{draft.paymentTerms}</p>
+        </LegalSection>
+
+        <LegalSection title={`F. ${t("contracts.warrantyTerms")}`}>
+          <p className="whitespace-pre-wrap">{draft.warrantyTerms}</p>
+        </LegalSection>
+
+        <LegalSection title={`G. ${t("contracts.executionPeriod")}`}>
+          <p className="whitespace-pre-wrap">{draft.executionTerms}</p>
+        </LegalSection>
+      </div>
+    </PageShell>
+  );
+}
+
+function SchedulePage({
+  draft,
+  isArabic,
+  page,
+  totalPages,
+  lines,
+}: {
+  draft: ContractDraft;
+  isArabic: boolean;
+  page: number;
+  totalPages: number;
+  lines: QuotationLine[];
+}) {
+  const { locale, t, term } = useI18n();
+
+  return (
+    <PageShell
+      title={t("contracts.openingSchedule")}
+      clientName={term(draft.project.client)}
+      contractNumber={draft.contractNumber}
+      page={page}
+      totalPages={totalPages}
+      isArabic={isArabic}
+    >
+      <LegalSection title={`C. ${t("contracts.openingSchedule")}`}>
+        <div className="overflow-hidden rounded-md border border-slate-200">
+          <table className="w-full border-collapse text-[9px] leading-tight">
+            <thead className="bg-slate-100 text-slate-600">
+              <tr>
+                <th className="p-1.5 text-start">{t("contracts.opening")}</th>
+                <th className="p-1.5 text-start">{t("projects.openings.fields.width")}</th>
+                <th className="p-1.5 text-start">{t("projects.openings.fields.height")}</th>
+                <th className="p-1.5 text-start">{t("projects.openings.fields.quantity")}</th>
+                <th className="p-1.5 text-start">{t("common.areaSqm")}</th>
+                <th className="p-1.5 text-start">{t("common.system")}</th>
+                <th className="p-1.5 text-start">{t("quotations.glass")}</th>
+                <th className="p-1.5 text-start">{t("quotations.unitPrice")}</th>
+                <th className="p-1.5 text-start">{t("common.total")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((line) => {
+                const lineTotal = calculateLineTotal(line);
+
+                return (
+                  <tr key={line.id} className="border-t border-slate-200">
+                    <td className="p-1.5 font-semibold text-slate-950">{line.openingCode}</td>
+                    <td className="p-1.5">{line.width}</td>
+                    <td className="p-1.5">{line.height}</td>
+                    <td className="p-1.5">{line.quantity}</td>
+                    <td className="p-1.5">{lineTotal.area.toFixed(2)}</td>
+                    <td className="p-1.5">{term(line.productSystem)}</td>
+                    <td className="p-1.5">{term(line.glassType)}</td>
+                    <td className="p-1.5">{formatIqd(line.unitPrice, locale)}</td>
+                    <td className="p-1.5 font-bold">{formatIqd(lineTotal.net, locale)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </LegalSection>
+    </PageShell>
+  );
+}
+
+function FinancialAndTermsPage({
+  draft,
+  isArabic,
+  page,
+  totalPages,
+  lines,
+}: {
+  draft: ContractDraft;
+  isArabic: boolean;
+  page: number;
+  totalPages: number;
+  lines: QuotationLine[];
+}) {
+  const { locale, t, term } = useI18n();
+  const totalArea = lines.reduce((sum, line) => sum + calculateArea(line), 0);
+  const advancePayment = draft.totalAmount * 0.4;
+  const remainingBalance = draft.totalAmount - advancePayment;
+
+  return (
+    <PageShell
+      title={t("contracts.financialSummary")}
+      clientName={term(draft.project.client)}
+      contractNumber={draft.contractNumber}
+      page={page}
+      totalPages={totalPages}
+      isArabic={isArabic}
+    >
+      <div className="grid gap-4">
+        <LegalSection title={`D. ${t("contracts.financialSummary")}`}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <InfoBox label={t("contracts.totalArea")} value={t("common.areaValue", { value: totalArea.toFixed(2) })} />
+            <InfoBox label={t("contracts.totalAmount")} value={formatIqd(draft.totalAmount, locale)} />
+            <InfoBox label={t("contracts.currency")} value={t("settings.currencyValue")} />
+            <InfoBox label={t("contracts.advancePayment")} value={formatIqd(advancePayment, locale)} />
+            <InfoBox label={t("contracts.remainingBalance")} value={formatIqd(remainingBalance, locale)} />
+          </div>
+        </LegalSection>
+
+        <LegalSection title={`H. ${t("contracts.firstPartyObligations")}`}>
+          <p className="whitespace-pre-wrap">{draft.firstPartyObligations}</p>
+        </LegalSection>
+
+        <LegalSection title={`I. ${t("contracts.secondPartyObligations")}`}>
+          <p className="whitespace-pre-wrap">{draft.secondPartyObligations}</p>
+        </LegalSection>
+
+        <LegalSection title={`J. ${t("contracts.generalTermsAndConditions")}`}>
+          <p className="whitespace-pre-wrap">{draft.contractTerms}</p>
+        </LegalSection>
+
+        {draft.notes ? (
+          <LegalSection title={t("common.notes")}>
+            <p className="whitespace-pre-wrap">{draft.notes}</p>
+          </LegalSection>
+        ) : null}
+      </div>
+    </PageShell>
+  );
+}
+
+function SignaturePage({
+  draft,
+  isArabic,
+  page,
+  totalPages,
+}: {
+  draft: ContractDraft;
+  isArabic: boolean;
+  page: number;
+  totalPages: number;
+}) {
+  const { t, term } = useI18n();
+
+  return (
+    <PageShell
+      title={t("contracts.signaturePage")}
+      clientName={term(draft.project.client)}
+      contractNumber={draft.contractNumber}
+      page={page}
+      totalPages={totalPages}
+      isArabic={isArabic}
+    >
+      <div className="flex h-full flex-col">
+        <LegalSection title={`K. ${t("common.signatures")}`}>
+          <p>{t("contracts.signatureConfirmation")}</p>
+        </LegalSection>
+
+        <div className="mt-auto grid gap-8">
+          {[
+            [t("contracts.clientRepresentative"), term(draft.project.client)],
+            [t("contracts.alumexRepresentative"), draft.preparedBy],
+            [t("contracts.salesEngineer"), term(draft.salesEngineer)],
+          ].map(([label, name]) => (
+            <div key={label} className="grid gap-3 rounded-md border border-slate-200 p-4 md:grid-cols-[1fr_1fr] md:items-end">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  {label}
+                </p>
+                <p className="mt-2 text-sm font-bold text-slate-950">{name}</p>
+              </div>
+              <div>
+                <div className="h-16 border-b border-slate-400" />
+                <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  {t("common.signature")}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </PageShell>
   );
 }
 
 export function ContractPreview() {
-  const { formatCurrency, formatDate, t, term } = useI18n();
+  const { t } = useI18n();
   const [draft, setDraft] = useState<ContractDraft | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -133,9 +502,22 @@ export function ContractPreview() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const productSystems = useMemo(
-    () => (draft ? getProductSystems(draft.project) : []),
-    [draft],
+  const lines = useMemo<QuotationLine[]>(() => {
+    if (!draft) {
+      return [];
+    }
+
+    return draft.openingSchedule?.length
+      ? draft.openingSchedule
+      : draft.project.structuralOpenings.map((opening) => ({
+          ...opening,
+          unitPrice: 0,
+          discountPercent: 0,
+        }));
+  }, [draft]);
+  const scheduleChunks = useMemo(
+    () => chunkRows(lines, scheduleRowsPerPage),
+    [lines],
   );
 
   if (isLoading) {
@@ -175,6 +557,8 @@ export function ContractPreview() {
   }
 
   const isArabic = draft.language === "ar";
+  const totalPages = 4 + scheduleChunks.length;
+  let page = 1;
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-6 print:bg-white print:p-0">
@@ -206,190 +590,37 @@ export function ContractPreview() {
         dir={isArabic ? "rtl" : "ltr"}
         className="mx-auto max-w-5xl print:max-w-none"
       >
-        <ContractCoverPage draft={draft} isArabic={isArabic} />
-
-        <section className="pdf-page print-page bg-white p-6 shadow-sm ring-1 ring-slate-200 print:p-8 print:shadow-none print:ring-0 sm:p-10">
-          <header className="flex flex-col gap-6 border-b-4 border-[var(--alumex-blue)] pb-6 sm:flex-row sm:items-start sm:justify-between">
-            <BrandMark />
-            <div className={isArabic ? "text-right" : "text-left sm:text-right"}>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--alumex-red)]">
-              {t("contracts.contract")}
-            </p>
-            <h1 className="mt-2 text-2xl font-bold text-slate-950">
-              {t("contracts.aluminumGlassWorksContract")}
-            </h1>
-            <p className="mt-2 text-sm font-semibold text-slate-600">
-              {t("contracts.contractNumber")}:{" "}
-              {draft.contractNumber}
-            </p>
-            <p className="text-sm text-slate-500">
-              {t("common.date")}: {formatDate(draft.contractDate)}
-            </p>
-            </div>
-          </header>
-
-          <section className="mt-8 grid gap-4 md:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 p-4">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-              {t("quotations.clientInformation")}
-            </h2>
-            <dl className="mt-4 grid gap-3 text-sm">
-              <div>
-                <dt className="font-bold text-slate-500">
-                  {t("contracts.clientName")}
-                </dt>
-                <dd className="mt-1 font-bold text-slate-950">
-                  {term(draft.project.client)}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-bold text-slate-500">
-                  {t("contracts.phone")}
-                </dt>
-                <dd className="mt-1 text-slate-700">
-                  {draft.clientPhone || t("common.notAvailable")}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-bold text-slate-500">
-                  {t("clients.fields.address")}
-                </dt>
-                <dd className="mt-1 text-slate-700">{term(draft.clientAddress)}</dd>
-              </div>
-            </dl>
-          </div>
-
-          <div className="rounded-lg border border-slate-200 p-4">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-              {t("quotations.projectInformation")}
-            </h2>
-            <dl className="mt-4 grid gap-3 text-sm">
-              <div>
-                <dt className="font-bold text-slate-500">
-                  {t("contracts.project")}
-                </dt>
-                <dd className="mt-1 font-bold text-slate-950">
-                  {term(draft.project.projectName)}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-bold text-slate-500">
-                  {t("contracts.salesEngineer")}
-                </dt>
-                <dd className="mt-1 text-slate-700">{term(draft.salesEngineer)}</dd>
-              </div>
-              <div>
-                <dt className="font-bold text-slate-500">
-                  {t("contracts.totalAmount")}
-                </dt>
-                <dd className="mt-1 text-lg font-bold text-[var(--alumex-blue)]">
-                  {formatCurrency(draft.totalAmount)}
-                </dd>
-              </div>
-            </dl>
-          </div>
-          </section>
-
-          <section className="mt-8 rounded-lg border border-slate-200 p-4">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-            {t("contracts.scopeOfWork")}
-          </h2>
-          <p className="mt-4 text-sm leading-7 text-slate-700">
-            {t("contracts.scopeDescription")}
-          </p>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <div className="rounded-md bg-slate-50 p-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                {t("contracts.productSystems")}
-              </p>
-              <p className="mt-2 text-sm font-bold text-slate-950">
-                {productSystems.length > 0
-                  ? productSystems.map((system) => term(system)).join(", ")
-                  : t("contracts.noSystemsAdded")}
-              </p>
-            </div>
-            <div className="rounded-md bg-slate-50 p-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                {t("quotations.openings")}
-              </p>
-              <p className="mt-2 text-sm font-bold text-slate-950">
-                {draft.project.structuralOpenings.length}
-              </p>
-            </div>
-          </div>
-          </section>
-
-          <section className="mt-8 grid gap-4 md:grid-cols-2">
-          {[
-            [
-              t("contracts.paymentTerms"),
-              draft.paymentTerms,
-              t("contracts.defaultPaymentTerms"),
-            ],
-            [
-              t("contracts.warrantyTerms"),
-              draft.warrantyTerms,
-              t("contracts.defaultWarrantyTerms"),
-            ],
-            [
-              t("contracts.executionTerms"),
-              draft.executionTerms,
-              t("contracts.defaultExecutionTerms"),
-            ],
-            [
-              t("common.notes"),
-              draft.notes,
-              t("contracts.defaultNotes"),
-            ],
-          ].map(([title, englishText, arabicText]) => (
-            <div key={title} className="rounded-lg border border-slate-200 p-4">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-                {title}
-              </h2>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700">
-                {englishText || arabicText}
-              </p>
-            </div>
-          ))}
-          </section>
-
-        </section>
-
-        <section className="pdf-page print-page mt-6 bg-white p-6 shadow-sm ring-1 ring-slate-200 print:mt-0 print:p-8 print:shadow-none print:ring-0 sm:p-10">
-          <div className="flex min-h-[900px] flex-col">
-            <header className="border-b-4 border-[var(--alumex-blue)] pb-6">
-              <BrandMark />
-              <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-[var(--alumex-red)]">
-                {t("quotations.clientApproval")}
-              </p>
-              <h2 className="mt-2 text-3xl font-bold text-slate-950">
-                {t("common.signatures")}
-              </h2>
-            </header>
-            <div className="mt-auto grid gap-10 sm:grid-cols-2">
-              <div>
-                <div className="border-t border-slate-400 pt-3">
-                  <p className="text-sm font-bold text-slate-950">
-                    {t("quotations.alumexRepresentative")}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {term(draft.salesEngineer)}
-                  </p>
-                </div>
-              </div>
-              <div>
-                <div className="border-t border-slate-400 pt-3">
-                  <p className="text-sm font-bold text-slate-950">
-                    {t("quotations.clientRepresentative")}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {term(draft.project.client)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+        <CoverPage draft={draft} isArabic={isArabic} totalPages={totalPages} />
+        <PartiesAndSpecsPage
+          draft={draft}
+          isArabic={isArabic}
+          page={++page}
+          totalPages={totalPages}
+          lines={lines}
+        />
+        {scheduleChunks.map((chunk) => (
+          <SchedulePage
+            key={`schedule-${page + 1}`}
+            draft={draft}
+            isArabic={isArabic}
+            page={++page}
+            totalPages={totalPages}
+            lines={chunk}
+          />
+        ))}
+        <FinancialAndTermsPage
+          draft={draft}
+          isArabic={isArabic}
+          page={++page}
+          totalPages={totalPages}
+          lines={lines}
+        />
+        <SignaturePage
+          draft={draft}
+          isArabic={isArabic}
+          page={++page}
+          totalPages={totalPages}
+        />
       </article>
     </main>
   );

@@ -7,15 +7,30 @@ import {
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
 
-const contractsPermissionError =
-  "Unable to access contracts table. Check Supabase permissions.";
+type SupabaseError = {
+  code?: string;
+  details?: string | null;
+  hint?: string | null;
+  message?: string;
+};
 
-function contractError(error: { message?: string } | null | undefined) {
-  if (error?.message?.toLowerCase().includes("permission denied")) {
-    return contractsPermissionError;
-  }
+function logContractSupabaseError(
+  route: "/api/contracts/[id]",
+  operation: "update" | "delete",
+  error: SupabaseError | null | undefined,
+) {
+  console.error("[api/contracts/[id]] Supabase error", {
+    route,
+    operation,
+    table: "public.contracts",
+    client: "createAdminClient",
+    executingRole: "service_role",
+    error,
+  });
+}
 
-  return error?.message ?? contractsPermissionError;
+function contractError(error: SupabaseError | null | undefined) {
+  return error?.message ?? "Unable to update contract.";
 }
 
 async function requireAuthenticatedUser() {
@@ -73,6 +88,9 @@ export async function PATCH(
       payment_terms: body.payment_terms ?? null,
       warranty_terms: body.warranty_terms ?? null,
       execution_terms: body.execution_terms ?? null,
+      contract_terms: body.contract_terms ?? null,
+      first_party_obligations: body.first_party_obligations ?? null,
+      second_party_obligations: body.second_party_obligations ?? null,
       prepared_by_text: body.prepared_by_text ?? null,
       language: body.language,
       notes: body.notes ?? null,
@@ -80,6 +98,7 @@ export async function PATCH(
     .eq("id", id);
 
   if (error) {
+    logContractSupabaseError("/api/contracts/[id]", "update", error);
     return NextResponse.json({ error: contractError(error) }, { status: 500 });
   }
 
@@ -111,6 +130,7 @@ export async function DELETE(
   const { error } = await admin.from("contracts").delete().eq("id", id);
 
   if (error) {
+    logContractSupabaseError("/api/contracts/[id]", "delete", error);
     return NextResponse.json({ error: contractError(error) }, { status: 500 });
   }
 

@@ -158,9 +158,16 @@ textarea {
   direction: inherit;
 }
 
+.contract-pdf-page {
+  direction: inherit;
+}
+
 .quotation-pdf-page table,
 .quotation-pdf-page th,
-.quotation-pdf-page td {
+.quotation-pdf-page td,
+.contract-pdf-page table,
+.contract-pdf-page th,
+.contract-pdf-page td {
   overflow-wrap: anywhere;
 }
 
@@ -257,34 +264,49 @@ textarea {
   color: #0f172a !important;
 }
 
-.dark .quotation-pdf-page [class*="bg-white"] {
+.dark .contract-pdf-page {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.dark .quotation-pdf-page [class*="bg-white"],
+.dark .contract-pdf-page [class*="bg-white"] {
   background-color: #ffffff !important;
 }
 
-.dark .quotation-pdf-page [class*="bg-slate-50"] {
+.dark .quotation-pdf-page [class*="bg-slate-50"],
+.dark .contract-pdf-page [class*="bg-slate-50"] {
   background-color: #f8fafc !important;
 }
 
-.dark .quotation-pdf-page [class*="bg-slate-950"] {
+.dark .quotation-pdf-page [class*="bg-slate-950"],
+.dark .contract-pdf-page [class*="bg-slate-950"] {
   background-color: #020617 !important;
 }
 
 .dark .quotation-pdf-page [class*="text-slate-950"],
 .dark .quotation-pdf-page [class*="text-slate-900"],
-.dark .quotation-pdf-page [class*="text-slate-800"] {
+.dark .quotation-pdf-page [class*="text-slate-800"],
+.dark .contract-pdf-page [class*="text-slate-950"],
+.dark .contract-pdf-page [class*="text-slate-900"],
+.dark .contract-pdf-page [class*="text-slate-800"] {
   color: #0f172a !important;
 }
 
 .dark .quotation-pdf-page [class*="text-slate-700"],
-.dark .quotation-pdf-page [class*="text-slate-600"] {
+.dark .quotation-pdf-page [class*="text-slate-600"],
+.dark .contract-pdf-page [class*="text-slate-700"],
+.dark .contract-pdf-page [class*="text-slate-600"] {
   color: #475569 !important;
 }
 
-.dark .quotation-pdf-page [class*="text-slate-500"] {
+.dark .quotation-pdf-page [class*="text-slate-500"],
+.dark .contract-pdf-page [class*="text-slate-500"] {
   color: #64748b !important;
 }
 
-.dark .quotation-pdf-page [class*="border-slate-"] {
+.dark .quotation-pdf-page [class*="border-slate-"],
+.dark .contract-pdf-page [class*="border-slate-"] {
   border-color: #e2e8f0 !important;
 }
 

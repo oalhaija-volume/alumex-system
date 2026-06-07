@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import type { ContractTemplate } from "@/components/contracts/contractTypes";
+import {
+  arabicContractTemplateDefaults,
+  replaceLegacyEnglishContractTemplate,
+} from "@/lib/contracts/templateDefaults";
 
 type ContractTemplateRow = {
   payment_terms: string | null;
@@ -22,14 +26,18 @@ async function readError(response: Response, fallback: string) {
 }
 
 function toTemplate(row: ContractTemplateRow | null | undefined): ContractTemplate {
-  return {
-    paymentTerms: row?.payment_terms ?? "",
-    warrantyTerms: row?.warranty_terms ?? "",
-    executionTerms: row?.execution_terms ?? "",
-    contractTerms: row?.contract_terms ?? "",
-    firstPartyObligations: row?.first_party_obligations ?? "",
-    secondPartyObligations: row?.second_party_obligations ?? "",
-  };
+  return replaceLegacyEnglishContractTemplate({
+    paymentTerms: row?.payment_terms ?? arabicContractTemplateDefaults.paymentTerms,
+    warrantyTerms: row?.warranty_terms ?? arabicContractTemplateDefaults.warrantyTerms,
+    executionTerms: row?.execution_terms ?? arabicContractTemplateDefaults.executionTerms,
+    contractTerms: row?.contract_terms ?? arabicContractTemplateDefaults.contractTerms,
+    firstPartyObligations:
+      row?.first_party_obligations ??
+      arabicContractTemplateDefaults.firstPartyObligations,
+    secondPartyObligations:
+      row?.second_party_obligations ??
+      arabicContractTemplateDefaults.secondPartyObligations,
+  });
 }
 
 function toPayload(template: ContractTemplate) {
@@ -45,14 +53,9 @@ function toPayload(template: ContractTemplate) {
 
 export function ContractTemplateSettings() {
   const { t } = useI18n();
-  const [template, setTemplate] = useState<ContractTemplate>({
-    paymentTerms: "",
-    warrantyTerms: "",
-    executionTerms: "",
-    contractTerms: "",
-    firstPartyObligations: "",
-    secondPartyObligations: "",
-  });
+  const [template, setTemplate] = useState<ContractTemplate>(
+    arabicContractTemplateDefaults,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");

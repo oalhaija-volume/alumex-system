@@ -32,6 +32,22 @@ function matchesSearch(client: Client, search: string) {
     .includes(term);
 }
 
+function clientSaveMessage(message: string, translate: (key: string) => string) {
+  if (message === "Client already exists.") {
+    return translate("clients.duplicateExists");
+  }
+
+  return message;
+}
+
+function clientDeleteMessage(message: string, translate: (key: string) => string) {
+  if (message === "Client has projects and cannot be deleted") {
+    return translate("clients.hasProjectsDeleteError");
+  }
+
+  return message;
+}
+
 function ClientCard({
   client,
   isAdmin,
@@ -116,6 +132,7 @@ export function ClientsModule() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const filteredClients = useMemo(
     () => clients.filter((client) => matchesSearch(client, search)),
@@ -138,7 +155,13 @@ export function ClientsModule() {
   }
 
   async function handleSubmit(values: ClientFormValues) {
+    if (isSaving) {
+      return;
+    }
+
     setError("");
+    setNotice("");
+    setIsSaving(true);
 
     try {
       if (editingClient) {
@@ -150,8 +173,12 @@ export function ClientsModule() {
       closeForm();
     } catch (saveError) {
       setError(
-        saveError instanceof Error ? saveError.message : t("clients.saveError"),
+        saveError instanceof Error
+          ? clientSaveMessage(saveError.message, t)
+          : t("clients.saveError"),
       );
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -177,7 +204,7 @@ export function ClientsModule() {
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
-          ? deleteError.message
+          ? clientDeleteMessage(deleteError.message, t)
           : t("clients.deleteError"),
       );
     } finally {
@@ -233,6 +260,7 @@ export function ClientsModule() {
             client={editingClient}
             onSubmit={handleSubmit}
             onCancel={closeForm}
+            isSubmitting={isSaving}
           />
         </SectionCard>
       ) : null}

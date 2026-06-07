@@ -5,6 +5,7 @@ import {
   hasSupabaseServiceRoleKey,
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
+import { generateNextContractNumber } from "@/lib/contracts/numbering";
 
 type SupabaseError = {
   code?: string;
@@ -13,25 +14,10 @@ type SupabaseError = {
   message?: string;
 };
 
-function formatContractNumber(year: number, sequence: number) {
-  return `CT-${year}-${sequence.toString().padStart(4, "0")}`;
-}
+const duplicateContractNumberMessage =
+  "This contract number already exists. A new contract number has been generated.";
 
-function nextContractNumber(contractNumbers: string[], year: number) {
-  const prefix = `CT-${year}-`;
-  const highestSequence = contractNumbers.reduce((highest, contractNumber) => {
-    if (!contractNumber.startsWith(prefix)) {
-      return highest;
-    }
-
-    const sequence = Number(contractNumber.slice(prefix.length));
-    return Number.isFinite(sequence) ? Math.max(highest, sequence) : highest;
-  }, 0);
-
-  return formatContractNumber(year, highestSequence + 1);
-}
-
-async function generateNextContractNumber(admin: ReturnType<typeof createAdminClient>) {
+async function loadContractNumbers(admin: ReturnType<typeof createAdminClient>) {
   const year = new Date().getFullYear();
   const prefix = `CT-${year}-`;
   const { data, error } = await admin
@@ -49,7 +35,7 @@ async function generateNextContractNumber(admin: ReturnType<typeof createAdminCl
       Boolean(contractNumber),
     );
 
-  return nextContractNumber(contractNumbers, year);
+  return contractNumbers;
 }
 
 function logContractSupabaseError(
@@ -67,6 +53,14 @@ function logContractSupabaseError(
 }
 
 function contractError(error: SupabaseError | null | undefined) {
+  if (
+    error?.code === "23505" ||
+    error?.message?.includes("contracts_contract_number_key") ||
+    error?.message?.toLowerCase().includes("duplicate key")
+  ) {
+    return duplicateContractNumberMessage;
+  }
+
   return error?.message ?? "Unable to load contracts.";
 }
 
@@ -138,6 +132,7 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
+  const collidedContractNumbers = new Set<string>();
   const contractPayload = {
     project_id: body.project_id,
     quotation_id: body.quotation_id ?? null,
@@ -161,7 +156,26 @@ export async function POST(request: Request) {
     let contractNumber: string;
 
     try {
-      contractNumber = await generateNextContractNumber(admin);
+      const contractNumbers = await loadContractNumbers(admin);
+      contractNumber = generateNextContractNumber({
+        contractNumbers,
+        reservedNumbers: Array.from(collidedContractNumbers),
+      });
+
+      const { data: existingContract, error: existingError } = await admin
+        .from("contracts")
+        .select("id")
+        .eq("contract_number", contractNumber)
+        .maybeSingle();
+
+      if (existingError) {
+        throw existingError;
+      }
+
+      if (existingContract) {
+        collidedContractNumbers.add(contractNumber);
+        continue;
+      }
     } catch (nextNumberError) {
       logContractSupabaseError("next-number", nextNumberError as SupabaseError);
       return NextResponse.json(
@@ -188,7 +202,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ contract: data }, { status: 201 });
     }
 
-    if (error?.code !== "23505") {
+    if (
+      error?.code === "23505" ||
+      error?.message?.includes("contracts_contract_number_key") ||
+      error?.message?.toLowerCase().includes("duplicate key")
+    ) {
+      collidedContractNumbers.add(contractNumber);
+      continue;
+    }
+
+    if (error) {
       logContractSupabaseError("insert", error);
       return NextResponse.json(
         { error: contractError(error) },
@@ -198,7 +221,7 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json(
-    { error: "Unable to generate a unique contract number." },
+    { error: duplicateContractNumberMessage },
     { status: 500 },
   );
 }

@@ -80,9 +80,40 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  max-width: 100vw;
+  overflow-x: hidden;
   transition:
     background-color 160ms ease,
     color 160ms ease;
+}
+
+html,
+body {
+  width: 100%;
+  max-width: 100vw;
+}
+
+* {
+  min-width: 0;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+table {
+  max-width: 100%;
+}
+
+.overflow-x-auto {
+  max-width: 100%;
+}
+
+.fixed {
+  max-width: 100vw;
 }
 
 button,
@@ -169,6 +200,25 @@ textarea {
 .contract-pdf-page th,
 .contract-pdf-page td {
   overflow-wrap: anywhere;
+}
+
+@media screen {
+  .a4-page,
+  .pdf-page {
+    width: min(210mm, calc(100vw - 2rem));
+    max-width: calc(100vw - 2rem);
+  }
+
+  .a4-page {
+    height: auto;
+    min-height: min(297mm, calc((100vw - 2rem) * 1.414));
+    padding: clamp(16px, 5vw, 18mm) clamp(14px, 4vw, 16mm);
+  }
+
+  .pdf-page {
+    height: auto;
+    min-height: min(297mm, calc((100vw - 2rem) * 1.414));
+  }
 }
 
 .dark [class*="bg-slate-100"] {

@@ -21,6 +21,22 @@ const details: Array<[string, keyof ClientFormValues]> = [
   ["clients.fields.notes", "notes"],
 ];
 
+function clientDeleteMessage(message: string, translate: (key: string) => string) {
+  if (message === "Client has projects and cannot be deleted") {
+    return translate("clients.hasProjectsDeleteError");
+  }
+
+  return message;
+}
+
+function clientSaveMessage(message: string, translate: (key: string) => string) {
+  if (message === "Client already exists.") {
+    return translate("clients.duplicateExists");
+  }
+
+  return message;
+}
+
 export function ClientDetails() {
   const params = useParams<{ clientId: string }>();
   const router = useRouter();
@@ -59,7 +75,9 @@ export function ClientDetails() {
       await updateClient(activeClient.id, values);
     } catch (saveError) {
       setError(
-        saveError instanceof Error ? saveError.message : t("clients.saveError"),
+        saveError instanceof Error
+          ? clientSaveMessage(saveError.message, t)
+          : t("clients.saveError"),
       );
     }
   }
@@ -74,7 +92,7 @@ export function ClientDetails() {
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
-          ? deleteError.message
+          ? clientDeleteMessage(deleteError.message, t)
           : t("clients.deleteError"),
       );
     } finally {

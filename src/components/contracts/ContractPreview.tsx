@@ -14,6 +14,7 @@ import {
   calculateLineTotal,
   type QuotationLine,
 } from "@/components/quotations/quotationTypes";
+import { messagesByLocale, type Locale, type Messages } from "@/lib/i18n";
 
 const scheduleRowsPerPage = 9;
 
@@ -46,6 +47,61 @@ function formatIqd(value: number, locale: string) {
   return locale === "ar" ? `${formatted} د.ع` : `IQD ${formatted}`;
 }
 
+type Replacements = Record<string, string | number>;
+
+function readMessage(messages: Messages, key: string) {
+  return key.split(".").reduce<unknown>((current, part) => {
+    if (current && typeof current === "object" && part in current) {
+      return (current as Record<string, unknown>)[part];
+    }
+
+    return undefined;
+  }, messages);
+}
+
+function interpolate(message: string, replacements?: Replacements) {
+  if (!replacements) {
+    return message;
+  }
+
+  return Object.entries(replacements).reduce(
+    (text, [key, value]) => text.replaceAll(`{${key}}`, String(value)),
+    message,
+  );
+}
+
+function useContractDocumentI18n(locale: Locale) {
+  const uiI18n = useI18n();
+  const messages = messagesByLocale[locale];
+
+  function t(key: string, replacements?: Replacements) {
+    const message = readMessage(messages, key);
+    return typeof message === "string"
+      ? interpolate(message, replacements)
+      : uiI18n.t(key, replacements);
+  }
+
+  function term(rawValue: string | null | undefined) {
+    if (!rawValue) {
+      return t("common.notAdded");
+    }
+
+    return messages.terms[rawValue as keyof typeof messages.terms] ?? rawValue;
+  }
+
+  function formatDate(value: Date | string | number) {
+    const date = value instanceof Date ? value : new Date(value);
+
+    return new Intl.DateTimeFormat(locale === "ar" ? "ar-IQ" : "en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    }).format(date);
+  }
+
+  return { t, term, formatDate, locale };
+}
+
 function PageShell({
   children,
   clientName,
@@ -63,7 +119,7 @@ function PageShell({
   title: string;
   isArabic: boolean;
 }) {
-  const { t } = useI18n();
+  const { t } = useContractDocumentI18n(isArabic ? "ar" : "en");
 
   return (
     <section
@@ -138,7 +194,9 @@ function CoverPage({
   isArabic: boolean;
   totalPages: number;
 }) {
-  const { formatDate, locale, t, term } = useI18n();
+  const { formatDate, locale, t, term } = useContractDocumentI18n(
+    isArabic ? "ar" : "en",
+  );
 
   return (
     <PageShell
@@ -216,7 +274,9 @@ function PartiesAndSpecsPage({
   totalPages: number;
   lines: QuotationLine[];
 }) {
-  const { formatDate, t, term } = useI18n();
+  const { formatDate, t, term } = useContractDocumentI18n(
+    isArabic ? "ar" : "en",
+  );
   const specs = Array.from(
     new Map(
       lines.map((line) => [
@@ -317,7 +377,9 @@ function SchedulePage({
   totalPages: number;
   lines: QuotationLine[];
 }) {
-  const { locale, t, term } = useI18n();
+  const { locale, t, term } = useContractDocumentI18n(
+    isArabic ? "ar" : "en",
+  );
 
   return (
     <PageShell
@@ -383,7 +445,9 @@ function FinancialAndTermsPage({
   totalPages: number;
   lines: QuotationLine[];
 }) {
-  const { locale, t, term } = useI18n();
+  const { locale, t, term } = useContractDocumentI18n(
+    isArabic ? "ar" : "en",
+  );
   const totalArea = lines.reduce((sum, line) => sum + calculateArea(line), 0);
   const advancePayment = draft.totalAmount * 0.4;
   const remainingBalance = draft.totalAmount - advancePayment;
@@ -441,7 +505,7 @@ function SignaturePage({
   page: number;
   totalPages: number;
 }) {
-  const { t, term } = useI18n();
+  const { t, term } = useContractDocumentI18n(isArabic ? "ar" : "en");
 
   return (
     <PageShell
@@ -561,8 +625,8 @@ export function ContractPreview() {
   let page = 1;
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-6 print:bg-white print:p-0">
-      <div className="no-print mx-auto mb-4 flex max-w-5xl flex-col gap-3 sm:flex-row sm:justify-between">
+    <main className="min-h-screen max-w-[100vw] overflow-x-hidden bg-slate-100 px-4 py-6 print:bg-white print:p-0">
+      <div className="no-print mx-auto mb-4 flex w-full max-w-5xl flex-col gap-3 sm:flex-row sm:justify-between">
         <Link
           href="/contracts"
           className="flex h-11 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700"
@@ -588,7 +652,7 @@ export function ContractPreview() {
       <article
         id="contract-pdf"
         dir={isArabic ? "rtl" : "ltr"}
-        className="mx-auto max-w-5xl print:max-w-none"
+        className="mx-auto w-full max-w-full overflow-x-hidden print:max-w-none print:overflow-visible"
       >
         <CoverPage draft={draft} isArabic={isArabic} totalPages={totalPages} />
         <PartiesAndSpecsPage

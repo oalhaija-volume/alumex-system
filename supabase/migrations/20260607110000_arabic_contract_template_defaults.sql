@@ -1,18 +1,22 @@
-alter table public.contracts
-add column if not exists contract_terms text,
-add column if not exists first_party_obligations text,
-add column if not exists second_party_obligations text;
-
-create table if not exists public.contract_templates (
-  id text primary key default 'default',
-  payment_terms text not null default $$الدفعة الاولى: يلتزم الطرف الثاني بدفع نسبة 50% من القيمة الاجمالية للعقد الى الطرف الاول عند توقيع العقد.
+insert into public.contract_templates (
+  id,
+  payment_terms,
+  warranty_terms,
+  execution_terms,
+  contract_terms,
+  first_party_obligations,
+  second_party_obligations
+)
+values (
+  'default',
+  $$الدفعة الاولى: يلتزم الطرف الثاني بدفع نسبة 50% من القيمة الاجمالية للعقد الى الطرف الاول عند توقيع العقد.
 الدفعة الثانية والنهائية: يلتزم الطرف الثاني بدفع كامل المبلغ المتبقي على المشروع حسب الفاتورة النهائية الى الطرف الاول عند جهوزية البضاعة خلال فترة اقصاها سبعة ايام بعد تبليغ الطرف الثاني من قبل الطرف الاول.
 في حال كانت القيمة الاجمالية للعقد أقل من (15,000,000) خمسة عشر مليون دينار عراقي تدفع الدفعة كاملة 100% عند توقيع العقد.$$,
-  warranty_terms text not null default $$يلتزم الطرف الاول بتقديم كفالة مدتها عشرة سنوات بعد تسديد كافة المستحقات المالية عند تسليم المشروع للطرف الثاني مقابل توقيع ورقة استلام وحسب شروط بطاقة الكفالة الخاصة بالطرف الاول.$$,
-  execution_terms text not null default $$يلتزم الطرف الاول بالمباشرة بالعمل في الموقع التابع للطرف الثاني خلال فترة اقصاها سبعة ايام عمل من تاريخ تسديد الدفعة النهائية.
+  $$يلتزم الطرف الاول بتقديم كفالة مدتها عشرة سنوات بعد تسديد كافة المستحقات المالية عند تسليم المشروع للطرف الثاني مقابل توقيع ورقة استلام وحسب شروط بطاقة الكفالة الخاصة بالطرف الاول.$$,
+  $$يلتزم الطرف الاول بالمباشرة بالعمل في الموقع التابع للطرف الثاني خلال فترة اقصاها سبعة ايام عمل من تاريخ تسديد الدفعة النهائية.
 مدة تنفيذ المشروع هي (45) خمسة واربعون يوم عمل باستثناء الظروف القاهرة والعطل الرسمية والتوقفات التأخيرية التي تكون بسبب الطرف الثاني.
 تحسب مدة تجهيز المشروع من تاريخ الموافقة والتوقيع على مخططات المشروع بعد اخذ القياسات النهائية مع وجوب جاهزية كافة الفتحات الانشائية لتركيب الألمنيوم بالصورة الصحيحة، وليس من تاريخ توقيع هذا العقد.$$,
-  contract_terms text not null default $$تعتبر مقدمة هذا العقد جزءا لا يتجزأ منه وهي ناطقة بما فيه ويرجع اليها في تفسير احكامه وبنوده.
+  $$تعتبر مقدمة هذا العقد جزءا لا يتجزأ منه وهي ناطقة بما فيه ويرجع اليها في تفسير احكامه وبنوده.
 اتفق الطرف الاول على توريد اعمال الالمنيوم وتركيبها وهي في حالة ممتازة وخالية من أي عيب مخفي او ظاهر، وبعد ان قام الطرف الثاني باختيارها وتفحصها وفق المواصفات المتفق عليها.
 مقطع السحاب (ALUMEX 16): عرض المقطع 14 سم، سماكة المقطع تتراوح بين 1.6 ملم الى 1.8 ملم، سعر المتر المربع (275,000) دينار عراقي.
 مقطع السحاب (ALUMEX 16 PRO): عرض المقطع 14 سم، سماكة المقطع تتراوح بين 1.6 ملم الى 2 ملم، سعر المتر المربع (285,000) دينار عراقي.
@@ -35,51 +39,24 @@ create table if not exists public.contract_templates (
 أي تعديل خطي بإضافة او شطب على بدن هذا العقد من قبل الطرفين او من ينوب عنهم يعتبر لاغيا.
 يتم اعتماد البريد الالكتروني او الكتب الرسمية او الرسائل النصية او الرسائل عبر تطبيق واتس اب المرسلة الى الطرف الثاني او من ينوب عنه كوثائق رسمية للمراسلات بين الطرفين.
 ينتهي عقد المقاولة الموقع بين الطرفين باتمام العمل المتفق عليه او بفسخ العقد رضاء او قضاء.$$,
-  first_party_obligations text not null default $$يلتزم الطرف الاول بتوريد وتركيب اعمال الالمنيوم للطرف الثاني حسب المواصفات والكميات المعتمدة.
+  $$يلتزم الطرف الاول بتوريد وتركيب اعمال الالمنيوم للطرف الثاني حسب المواصفات والكميات المعتمدة.
 يلتزم الطرف الاول بالمباشرة بالعمل في الموقع خلال المدة المحددة بعد تسديد الدفعة النهائية وجاهزية الموقع.
 يلتزم الطرف الاول بتجهيز المشروع بعد الموافقة والتوقيع على المخططات النهائية واخذ القياسات النهائية.
 يلتزم الطرف الاول بتقديم الكفالة حسب شروط بطاقة الكفالة الخاصة به بعد تسديد كافة المستحقات المالية وتسليم المشروع.$$,
-  second_party_obligations text not null default $$يكون الثمن مستحقا بذمة الطرف الثاني من لحظة توقيع العقد وحسب الفاتورة النهائية للمشروع.
+  $$يكون الثمن مستحقا بذمة الطرف الثاني من لحظة توقيع العقد وحسب الفاتورة النهائية للمشروع.
 اذا استحقت أي دفعة من الدفعات ولم تدفع في موعدها فإن جميع الدفعات اللاحقة تعتبر مستحقة الاداء فورا ودفعة واحدة دون الحاجة لتبادل اية انذارات او اخطارات، ويحق للطرف الاول مطالبة الطرف الثاني بالعطل والضرر اضافة الى فسخ العقد او تنفيذه حسب رغبة الطرف الاول.
 لا يجوز للطرف الثاني تغيير مكان العمل بأي حال من الاحوال، ويتعهد بتأمين كافة الوسائل الاساسية لضمان حسن سير العمل حسب المتعارف عليه.
 توفير الطريق والكهرباء وتجهيز الموقع للعمل واية اعمال مدنية مثل السكلات او سيارات الرافعات الكهربائية او اي حلوق فريمات اضافية في الموقع هي من مسؤولية الطرف الثاني.
 تكون مسؤولية ضمان البضاعة الموردة لموقع العمل على عاتق الطرف الثاني من اللحظة التي يتم فيها تسليم البضاعة اليه، ويكون ملزما بتوفير الحراسة لها في موقع العمل.
 يلتزم الطرف الثاني باستلام البضاعة وتجهيز موقع العمل خلال فترة اقصاها شهر من تاريخ تبليغه بجهوزية البضاعة، وخلاف ذلك يتحمل اجورا اضافية مقابل التخزين لدى مستودعات الطرف الاول.
-في حالة التأخير الناتج عن الطرف الثاني في استلام البضاعة لمدة تتجاوز السنة من تاريخ التبليغ بجهوزية البضاعة سيتم اتلاف البضاعة ولا يحق للطرف الثاني المطالبة بها او بثمنها، ويكون كامل مبلغ المشروع مستحقا بذمة الطرف الثاني.$$,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint contract_templates_singleton check (id = 'default')
-);
-
-insert into public.contract_templates (id)
-values ('default')
-on conflict (id) do nothing;
-
-drop trigger if exists contract_templates_set_updated_at on public.contract_templates;
-create trigger contract_templates_set_updated_at
-before update on public.contract_templates
-for each row execute function public.set_updated_at();
-
-grant select on table public.contract_templates to authenticated;
-grant update on table public.contract_templates to authenticated;
-grant all on table public.contract_templates to service_role;
-grant select, insert, update, delete on table public.contracts to authenticated;
-grant all on table public.contracts to service_role;
-
-alter table public.contract_templates enable row level security;
-
-drop policy if exists "contract_templates_select_authenticated" on public.contract_templates;
-drop policy if exists "contract_templates_update_admin" on public.contract_templates;
-
-create policy "contract_templates_select_authenticated"
-on public.contract_templates
-for select
-to authenticated
-using (true);
-
-create policy "contract_templates_update_admin"
-on public.contract_templates
-for update
-to authenticated
-using (public.is_admin())
-with check (public.is_admin());
+في حالة التأخير الناتج عن الطرف الثاني في استلام البضاعة لمدة تتجاوز السنة من تاريخ التبليغ بجهوزية البضاعة سيتم اتلاف البضاعة ولا يحق للطرف الثاني المطالبة بها او بثمنها، ويكون كامل مبلغ المشروع مستحقا بذمة الطرف الثاني.$$
+)
+on conflict (id) do update
+set
+  payment_terms = excluded.payment_terms,
+  warranty_terms = excluded.warranty_terms,
+  execution_terms = excluded.execution_terms,
+  contract_terms = excluded.contract_terms,
+  first_party_obligations = excluded.first_party_obligations,
+  second_party_obligations = excluded.second_party_obligations,
+  updated_at = now();

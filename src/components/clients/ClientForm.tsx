@@ -38,10 +38,12 @@ export function ClientForm({
   client,
   onSubmit,
   onCancel,
+  isSubmitting = false,
 }: {
   client?: Client;
   onSubmit: (values: ClientFormValues) => void;
   onCancel: () => void;
+  isSubmitting?: boolean;
 }) {
   const [values, setValues] = useState<ClientFormValues>(
     client
@@ -135,16 +137,22 @@ export function ClientForm({
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <button
           type="button"
+          disabled={isSubmitting}
           onClick={onCancel}
-          className="h-11 rounded-md border border-border bg-surface px-4 text-sm font-bold text-muted-strong transition hover:bg-surface-muted"
+          className="h-11 rounded-md border border-border bg-surface px-4 text-sm font-bold text-muted-strong transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:text-muted"
         >
           {t("common.cancel")}
         </button>
         <button
           type="submit"
-          className="h-11 rounded-md bg-primary px-4 text-sm font-bold text-white shadow-sm transition hover:bg-primary-hover"
+          disabled={isSubmitting}
+          className="h-11 rounded-md bg-primary px-4 text-sm font-bold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
         >
-          {client ? t("common.saveChanges") : t("clients.newClient")}
+          {isSubmitting
+            ? t("common.loading")
+            : client
+              ? t("common.saveChanges")
+              : t("clients.newClient")}
         </button>
       </div>
     </form>

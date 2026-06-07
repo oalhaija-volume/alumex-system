@@ -20,6 +20,12 @@ import {
 } from "@/components/quotations/quotationTypes";
 import { loadSupabaseQuotations } from "@/components/quotations/supabaseQuotations";
 import { useProjects } from "@/components/projects/ProjectsProvider";
+import {
+  arabicContractDefaultNotes,
+  arabicContractDefaultPreparedBy,
+  arabicContractTemplateDefaults,
+  replaceLegacyEnglishContractTemplate,
+} from "@/lib/contracts/templateDefaults";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -52,12 +58,26 @@ type ContractTemplateRow = {
   second_party_obligations: string | null;
 };
 
-async function readApiError(response: Response, fallback: string) {
+async function readApiError(
+  response: Response,
+  fallback: string,
+  duplicateFallback = fallback,
+) {
   const body = (await response.json().catch(() => null)) as {
     error?: string;
   } | null;
+  const error = body?.error ?? fallback;
 
-  return body?.error ?? fallback;
+  if (
+    error ===
+      "This contract number already exists. A new contract number has been generated." ||
+    error.includes("contracts_contract_number_key") ||
+    error.toLowerCase().includes("duplicate key")
+  ) {
+    return duplicateFallback;
+  }
+
+  return error;
 }
 
 async function fetchNextContractNumber(fallback: string) {
@@ -102,15 +122,8 @@ export function ContractGenerator() {
   const { clients } = useClients();
   const { projects } = useProjects();
   const defaultTemplate: ContractTemplate = useMemo(
-    () => ({
-      paymentTerms: t("contracts.defaultPaymentTerms"),
-      warrantyTerms: t("contracts.defaultWarrantyTerms"),
-      executionTerms: t("contracts.defaultExecutionTerms"),
-      contractTerms: t("contracts.defaultGeneralTerms"),
-      firstPartyObligations: t("contracts.defaultFirstPartyObligations"),
-      secondPartyObligations: t("contracts.defaultSecondPartyObligations"),
-    }),
-    [t],
+    () => arabicContractTemplateDefaults,
+    [],
   );
   const [savedQuotations, setSavedQuotations] = useState<QuotationDraft[]>([]);
   const [savedContracts, setSavedContracts] = useState<ContractDraft[]>([]);
@@ -120,10 +133,8 @@ export function ContractGenerator() {
   const [language, setLanguage] = useState<ContractLanguage>("ar");
   const [contractTemplate, setContractTemplate] =
     useState<ContractTemplate>(defaultTemplate);
-  const [notes, setNotes] = useState(() => t("contracts.defaultNotes"));
-  const [preparedBy, setPreparedBy] = useState(() =>
-    t("contracts.defaultPreparedBy"),
-  );
+  const [notes, setNotes] = useState(arabicContractDefaultNotes);
+  const [preparedBy, setPreparedBy] = useState(arabicContractDefaultPreparedBy);
   const [error, setError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ContractDraft | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -171,7 +182,7 @@ export function ContractGenerator() {
             ...defaultTemplate,
             ...templateFromRow(templateBody.template),
           };
-          setContractTemplate(nextTemplate);
+          setContractTemplate(replaceLegacyEnglishContractTemplate(nextTemplate));
         }
 
         setContractNumber(nextNumber);
@@ -190,6 +201,7 @@ export function ContractGenerator() {
             ...defaultTemplate,
             ...templateFromRow(contract),
           };
+          const legalTemplate = replaceLegacyEnglishContractTemplate(nextTemplate);
 
           contracts.push({
             id: contract.id,
@@ -210,12 +222,12 @@ export function ContractGenerator() {
               clients.find((client) => client.id === project.clientId)?.mobile ?? "",
             clientAddress: project.address,
             totalAmount: Number(contract.contract_value ?? 0),
-            paymentTerms: nextTemplate.paymentTerms,
-            warrantyTerms: nextTemplate.warrantyTerms,
-            executionTerms: nextTemplate.executionTerms,
-            contractTerms: nextTemplate.contractTerms,
-            firstPartyObligations: nextTemplate.firstPartyObligations,
-            secondPartyObligations: nextTemplate.secondPartyObligations,
+            paymentTerms: legalTemplate.paymentTerms,
+            warrantyTerms: legalTemplate.warrantyTerms,
+            executionTerms: legalTemplate.executionTerms,
+            contractTerms: legalTemplate.contractTerms,
+            firstPartyObligations: legalTemplate.firstPartyObligations,
+            secondPartyObligations: legalTemplate.secondPartyObligations,
             notes: contract.notes ?? "",
             salesEngineer: project.salesEngineer,
             preparedBy: contract.prepared_by_text ?? "",
@@ -286,7 +298,13 @@ export function ContractGenerator() {
     });
 
     if (!response.ok) {
-      setError(await readApiError(response, t("contracts.saveError")));
+      setError(
+        await readApiError(
+          response,
+          t("contracts.saveError"),
+          t("contracts.duplicateNumberRegenerated"),
+        ),
+      );
       return;
     }
 

@@ -102,7 +102,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isRtl = direction === "rtl";
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen max-w-[100vw] overflow-x-hidden bg-background text-foreground">
       <aside
         className={`fixed inset-y-0 z-30 hidden w-72 border-border bg-surface px-5 py-5 lg:block ${
           isRtl ? "right-0 border-l" : "left-0 border-r"
@@ -122,7 +122,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <header className="sticky top-0 z-20 border-b border-border bg-surface/95 px-4 py-3 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-20 max-w-[100vw] overflow-x-hidden border-b border-border bg-surface/95 px-4 py-3 backdrop-blur lg:hidden">
         <div className="flex items-center justify-between gap-3">
           <BrandMark />
           <div className="flex min-w-0 items-center gap-2">
@@ -135,10 +135,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className={`pb-24 lg:pb-0 ${isRtl ? "lg:mr-72" : "lg:ml-72"}`}>
-        <div className="hidden border-b border-border bg-surface px-8 py-4 lg:block">
-          <div className={`flex items-center justify-between gap-4 ${isRtl ? "flex-row-reverse" : ""}`}>
-            <div>
+      <main
+        className={`min-w-0 max-w-[100vw] overflow-x-hidden pb-24 lg:pb-0 ${
+          isRtl ? "lg:mr-72" : "lg:ml-72"
+        }`}
+      >
+        <div className="hidden max-w-full overflow-x-hidden border-b border-border bg-surface px-8 py-4 lg:block">
+          <div className={`flex min-w-0 items-center justify-between gap-4 ${isRtl ? "flex-row-reverse" : ""}`}>
+            <div className="min-w-0">
               <p className="text-sm font-bold text-foreground">
                 {t("topbar.workspace")}
               </p>
@@ -146,7 +150,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {t("topbar.workspaceDescription")}
               </p>
             </div>
-            <div className={`flex shrink-0 items-center gap-2 ${isRtl ? "flex-row-reverse" : ""}`}>
+            <div className={`flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 ${isRtl ? "flex-row-reverse" : ""}`}>
               <LanguageSwitcher />
               <ThemeToggle />
               <div className="h-10 rounded-md border border-border bg-surface-muted px-4 text-sm font-semibold leading-10 text-muted">
@@ -158,12 +162,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+        <div className="mx-auto w-full max-w-7xl overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
           {children}
         </div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-surface px-2 py-2 shadow-[0_-10px_25px_rgba(15,23,42,0.08)] lg:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-30 max-w-[100vw] overflow-x-hidden border-t border-border bg-surface px-2 py-2 shadow-[0_-10px_25px_rgba(15,23,42,0.08)] lg:hidden">
         <div className="flex gap-1">
           {navItems.map((item) => (
             <NavLink key={item.href} compact {...item} />

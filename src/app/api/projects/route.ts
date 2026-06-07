@@ -74,8 +74,23 @@ export async function DELETE(request: Request) {
     }
   }
 
+  const { error: documentsError } = await admin
+    .from("documents")
+    .delete()
+    .in("project_id", projectIds);
+
+  if (documentsError) {
+    console.error("[api/projects] optional project documents cleanup failed", {
+      route: "/api/projects",
+      operation: "delete-project-documents",
+      table: "public.documents",
+      client: "createAdminClient",
+      executingRole: "service_role",
+      error: documentsError,
+    });
+  }
+
   const deleteSteps = [
-    admin.from("documents").delete().in("project_id", projectIds),
     admin.from("contracts").delete().in("project_id", projectIds),
     admin.from("quotations").delete().in("project_id", projectIds),
     admin.from("openings").delete().in("project_id", projectIds),
@@ -92,4 +107,3 @@ export async function DELETE(request: Request) {
 
   return NextResponse.json({ ok: true });
 }
-

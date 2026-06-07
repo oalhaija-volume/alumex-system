@@ -5,24 +5,7 @@ import {
   hasSupabaseServiceRoleKey,
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
-
-function formatContractNumber(year: number, sequence: number) {
-  return `CT-${year}-${sequence.toString().padStart(4, "0")}`;
-}
-
-function nextContractNumber(contractNumbers: string[], year: number) {
-  const prefix = `CT-${year}-`;
-  const highestSequence = contractNumbers.reduce((highest, contractNumber) => {
-    if (!contractNumber.startsWith(prefix)) {
-      return highest;
-    }
-
-    const sequence = Number(contractNumber.slice(prefix.length));
-    return Number.isFinite(sequence) ? Math.max(highest, sequence) : highest;
-  }, 0);
-
-  return formatContractNumber(year, highestSequence + 1);
-}
+import { generateNextContractNumber } from "@/lib/contracts/numbering";
 
 export async function GET() {
   const supabase = await createClient();
@@ -73,6 +56,6 @@ export async function GET() {
     );
 
   return NextResponse.json({
-    contractNumber: nextContractNumber(contractNumbers, year),
+    contractNumber: generateNextContractNumber({ contractNumbers, year }),
   });
 }

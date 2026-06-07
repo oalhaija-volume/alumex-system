@@ -45,6 +45,14 @@ type SupabaseErrorLike = {
   code?: unknown;
 };
 
+async function readApiError(response: Response, fallback: string) {
+  const body = (await response.json().catch(() => null)) as {
+    error?: string;
+  } | null;
+
+  return body?.error ?? fallback;
+}
+
 function formatSupabaseError(error: unknown, fallback: string) {
   if (error instanceof Error) {
     return error.message;
@@ -154,17 +162,14 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
 
   const createClient = useCallback(
     async (client: ClientInput) => {
-      const supabase = createSupabaseClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const { error: createError } = await supabase
-        .from("clients")
-        .insert(toClientInsert(client, user?.id));
+      const response = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(toClientInsert(client)),
+      });
 
-      if (createError) {
-        logSupabaseError("create client", createError);
-        throw new Error(formatSupabaseError(createError, "Unable to save client."));
+      if (!response.ok) {
+        throw new Error(await readApiError(response, "Unable to save client."));
       }
 
       await refreshClients();
@@ -174,15 +179,14 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
 
   const updateClient = useCallback(
     async (id: string, client: ClientInput) => {
-      const supabase = createSupabaseClient();
-      const { error: updateError } = await supabase
-        .from("clients")
-        .update(toClientUpdate(client))
-        .eq("id", id);
+      const response = await fetch("/api/clients", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...toClientUpdate(client) }),
+      });
 
-      if (updateError) {
-        logSupabaseError("update client", updateError);
-        throw new Error(formatSupabaseError(updateError, "Unable to save client."));
+      if (!response.ok) {
+        throw new Error(await readApiError(response, "Unable to save client."));
       }
 
       await refreshClients();
@@ -192,15 +196,12 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
 
   const deleteClient = useCallback(
     async (id: string) => {
-      const supabase = createSupabaseClient();
-      const { error: deleteError } = await supabase
-        .from("clients")
-        .delete()
-        .eq("id", id);
+      const response = await fetch(`/api/clients?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
 
-      if (deleteError) {
-        logSupabaseError("delete client", deleteError);
-        throw new Error(formatSupabaseError(deleteError, "Unable to delete client."));
+      if (!response.ok) {
+        throw new Error(await readApiError(response, "Unable to delete client."));
       }
 
       await refreshClients();

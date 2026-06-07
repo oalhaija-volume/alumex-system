@@ -460,8 +460,8 @@ export function QuotationPreview() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-6 print:bg-white print:p-0">
-      <div className="no-print mx-auto mb-4 flex max-w-5xl flex-col gap-3 sm:flex-row sm:justify-between">
+    <main className="min-h-screen max-w-[100vw] overflow-x-hidden bg-slate-100 px-4 py-6 print:bg-white print:p-0">
+      <div className="no-print mx-auto mb-4 flex w-full max-w-5xl flex-col gap-3 sm:flex-row sm:justify-between">
         <Link
           href="/quotations"
           className="flex h-11 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700"
@@ -487,7 +487,7 @@ export function QuotationPreview() {
         </div>
       </div>
 
-      <article id="quotation-pdf" className="mx-auto print:max-w-none">
+      <article id="quotation-pdf" className="mx-auto w-full max-w-full overflow-x-hidden print:max-w-none print:overflow-visible">
         <CoverPage draft={draft} grandTotal={totals.grandTotal} />
         <DetailsPage draft={draft} totals={totals} />
         <ApprovalPage draft={draft} />

@@ -70,6 +70,20 @@ type SupabaseErrorLike = {
 };
 
 function formatSupabaseError(error: unknown, fallback: string) {
+  const rawMessage =
+    error instanceof Error
+      ? error.message
+      : error && typeof error === "object"
+        ? String((error as SupabaseErrorLike).message ?? "")
+        : "";
+
+  if (
+    rawMessage.toLowerCase().includes("documents") &&
+    rawMessage.toLowerCase().includes("permission denied")
+  ) {
+    return "Unable to load project documents.";
+  }
+
   if (error instanceof Error) {
     return error.message;
   }

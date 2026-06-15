@@ -4,10 +4,12 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BrandMark } from "@/components/BrandMark";
+import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { navItems } from "@/data/ui";
+import { canAccessRoute } from "@/lib/auth/permissions";
 
 const ProductionAuthStatus = dynamic(
   () =>
@@ -99,7 +101,12 @@ function ShellLogoutButton({
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { direction, formatDate, t } = useI18n();
+  const { isLoaded: isRoleLoaded, role } = useCurrentRole();
   const isRtl = direction === "rtl";
+
+  const visibleNavItems = isRoleLoaded
+    ? navItems.filter((item) => canAccessRoute(item.href, role))
+    : navItems;
 
   return (
     <div className="min-h-screen max-w-[100vw] overflow-x-hidden bg-background text-foreground">
@@ -110,7 +117,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         <BrandMark />
         <nav className="mt-8 space-y-1">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink key={item.href} {...item} />
           ))}
         </nav>
@@ -169,7 +176,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <nav className="fixed bottom-0 left-0 right-0 z-30 max-w-[100vw] overflow-x-hidden border-t border-border bg-surface px-2 py-2 shadow-[0_-10px_25px_rgba(15,23,42,0.08)] lg:hidden">
         <div className="flex gap-1">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink key={item.href} compact {...item} />
           ))}
         </div>

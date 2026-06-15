@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useClients } from "@/components/clients/ClientsProvider";
@@ -20,12 +20,14 @@ import {
 } from "@/components/quotations/quotationTypes";
 import { loadSupabaseQuotations } from "@/components/quotations/supabaseQuotations";
 import { useProjects } from "@/components/projects/ProjectsProvider";
+import { canViewSalesPrices } from "@/lib/auth/roles";
 import {
   arabicContractDefaultNotes,
   arabicContractDefaultPreparedBy,
   arabicContractTemplateDefaults,
   replaceLegacyEnglishContractTemplate,
 } from "@/lib/contracts/templateDefaults";
+import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -58,6 +60,22 @@ type ContractTemplateRow = {
   second_party_obligations: string | null;
 };
 
+type ContractSourceDraft = QuotationDraft & {
+  contractTotal?: number;
+  quotationStatus?: string;
+};
+
+type ContractSourceRow = {
+  id: string;
+  quotationNumber: string;
+  projectId: string;
+  projectName: string;
+  clientId: string;
+  clientName: string;
+  contractTotal: number;
+  status?: string | null;
+};
+
 async function readApiError(
   response: Response,
   fallback: string,
@@ -77,7 +95,7 @@ async function readApiError(
     return duplicateFallback;
   }
 
-  return error;
+  return error === fallback ? fallback : error;
 }
 
 async function fetchNextContractNumber(fallback: string) {
@@ -91,6 +109,93 @@ async function fetchNextContractNumber(fallback: string) {
 
   const body = (await response.json()) as { contractNumber?: string };
   return body.contractNumber ?? "";
+}
+
+function StepCard({
+  step,
+  title,
+  children,
+}: {
+  step: number;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border border-border bg-surface p-5 shadow-sm">
+      <div className="mb-4 flex items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">
+          {step}
+        </span>
+        <h2 className="text-lg font-bold text-foreground">{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SummaryItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-surface-muted p-4">
+      <p className="text-xs font-bold uppercase tracking-wide text-muted">
+        {label}
+      </p>
+      <p className="mt-2 text-sm font-bold leading-6 text-foreground">
+        {value || "Not added"}
+      </p>
+    </div>
+  );
+}
+
+async function loadContractSourceQuotations(
+  projects: ReturnType<typeof useProjects>["projects"],
+): Promise<ContractSourceDraft[]> {
+  const response = await fetch("/api/quotations/contract-source", {
+    cache: "no-store",
+  });
+  const body = (await response.json().catch(() => null)) as {
+    quotations?: ContractSourceRow[];
+    error?: string;
+  } | null;
+
+  if (!response.ok) {
+    throw new Error(body?.error ?? "Unable to load contract sources.");
+  }
+
+  return (body?.quotations ?? []).reduce<ContractSourceDraft[]>(
+    (sources, source) => {
+      const project = projects.find((item) => item.id === source.projectId);
+
+      if (!project) {
+        return sources;
+      }
+
+      sources.push({
+        id: source.id,
+        quotationNumber: source.quotationNumber,
+        project,
+        lines: project.structuralOpenings.map((opening) => ({
+          ...opening,
+          unitPrice: 0,
+          discountPercent: 0,
+        })),
+        discountPercent: 0,
+        notes: "",
+        preparedBy: project.salesEngineer,
+        clientRepresentative: source.clientName,
+        contractTotal: source.contractTotal,
+        quotationStatus: source.status ?? "Saved",
+      });
+
+      return sources;
+    },
+    [],
+  );
 }
 
 function templateFromRow(row: ContractTemplateRow | null | undefined) {
@@ -118,19 +223,19 @@ function payloadFromTemplate(template: ContractTemplate) {
 export function ContractGenerator() {
   const router = useRouter();
   const { formatCurrency, t, term } = useI18n();
-  const { isAdmin } = useCurrentRole();
+  const { isAdmin, isLoaded: isRoleLoaded, role } = useCurrentRole();
   const { clients } = useClients();
   const { projects } = useProjects();
   const defaultTemplate: ContractTemplate = useMemo(
     () => arabicContractTemplateDefaults,
     [],
   );
-  const [savedQuotations, setSavedQuotations] = useState<QuotationDraft[]>([]);
+  const [savedQuotations, setSavedQuotations] = useState<ContractSourceDraft[]>([]);
   const [savedContracts, setSavedContracts] = useState<ContractDraft[]>([]);
   const [quotationNumber, setQuotationNumber] = useState("");
   const [contractNumber, setContractNumber] = useState("");
   const [contractDate, setContractDate] = useState(today());
-  const [language, setLanguage] = useState<ContractLanguage>("ar");
+  const language: ContractLanguage = "ar";
   const [contractTemplate, setContractTemplate] =
     useState<ContractTemplate>(defaultTemplate);
   const [notes, setNotes] = useState(arabicContractDefaultNotes);
@@ -142,6 +247,12 @@ export function ContractGenerator() {
     (quotation) => quotation.quotationNumber === quotationNumber,
   );
   const selectedProject = selectedQuotation?.project;
+  const selectedExistingContract = selectedQuotation
+    ? savedContracts.find(
+        (contract) =>
+          contract.quotationNumber === selectedQuotation.quotationNumber,
+      )
+    : undefined;
   const selectedClient = selectedProject
     ? clients.find((client) => client.clientName === selectedProject.client)
     : undefined;
@@ -149,18 +260,39 @@ export function ContractGenerator() {
   const clientAddress = selectedClient?.address ?? selectedProject?.address ?? "";
   const productSystems = selectedProject ? getProductSystems(selectedProject) : [];
   const totalAmount = selectedQuotation
-    ? calculateQuotationTotals(
+    ? selectedQuotation.contractTotal ?? calculateQuotationTotals(
         selectedQuotation.lines,
         selectedQuotation.discountPercent,
       ).grandTotal
     : 0;
+  const canGenerateContract =
+    Boolean(selectedQuotation && selectedProject) &&
+    canViewSalesPrices(role) &&
+    !selectedExistingContract;
 
   useEffect(() => {
+    if (!isRoleLoaded) {
+      return;
+    }
+
     const timer = window.setTimeout(async () => {
       try {
-        const nextQuotations = await loadSupabaseQuotations(projects);
-        setSavedQuotations(nextQuotations);
-        setQuotationNumber((current) => current || nextQuotations[0]?.quotationNumber || "");
+        const nextQuotations = canViewSalesPrices(role)
+          ? await loadSupabaseQuotations(projects)
+          : await loadContractSourceQuotations(projects);
+        const nextQuotationSources: ContractSourceDraft[] = nextQuotations.map((quotation) => ({
+          ...quotation,
+          quotationStatus:
+            (quotation as ContractSourceDraft).quotationStatus ?? "Saved",
+        }));
+        setSavedQuotations(nextQuotationSources);
+        setQuotationNumber((current) =>
+          nextQuotationSources.some(
+            (quotation) => quotation.quotationNumber === current,
+          )
+            ? current
+            : "",
+        );
 
         const [contractsResponse, templateResponse, nextNumber] = await Promise.all([
           fetch("/api/contracts", { cache: "no-store" }),
@@ -208,11 +340,11 @@ export function ContractGenerator() {
             contractNumber: contract.contract_number,
             contractDate: contract.contract_date ?? today(),
             quotationNumber:
-              nextQuotations.find((quotation) => quotation.id === contract.quotation_id)
+              nextQuotationSources.find((quotation) => quotation.id === contract.quotation_id)
                 ?.quotationNumber ?? "",
             project,
             openingSchedule:
-              nextQuotations.find((quotation) => quotation.id === contract.quotation_id)
+              nextQuotationSources.find((quotation) => quotation.id === contract.quotation_id)
                 ?.lines ?? project.structuralOpenings.map((opening) => ({
                   ...opening,
                   unitPrice: 0,
@@ -241,19 +373,20 @@ export function ContractGenerator() {
       } catch (loadError) {
         setSavedQuotations([]);
         setSavedContracts([]);
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : t("contracts.loadError"),
-        );
+        console.error("[ContractGenerator] load contracts failed", loadError);
+        setError(friendlyDatabaseError(loadError, t("contracts.loadError")));
       }
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [clients, defaultTemplate, language, projects, t]);
+  }, [clients, defaultTemplate, isRoleLoaded, language, projects, role, t]);
 
   async function openPreview() {
     if (!selectedProject || !selectedQuotation) {
+      return;
+    }
+
+    if (!canGenerateContract) {
       return;
     }
 
@@ -272,9 +405,7 @@ export function ContractGenerator() {
       setContractNumber(nextContractNumber);
     } catch (numberError) {
       setError(
-        numberError instanceof Error
-          ? numberError.message
-          : t("contracts.nextNumberError"),
+        friendlyDatabaseError(numberError, t("contracts.nextNumberError")),
       );
       return;
     }
@@ -347,6 +478,11 @@ export function ContractGenerator() {
     router.push("/contracts/preview");
   }
 
+  function openExistingContract(contract: ContractDraft) {
+    window.localStorage.setItem(contractStorageKey, JSON.stringify(contract));
+    router.push("/contracts/preview");
+  }
+
   async function confirmDeleteContract() {
     if (!deleteTarget?.id) {
       return;
@@ -397,232 +533,268 @@ export function ContractGenerator() {
         </p>
       ) : null}
 
-      <SectionCard title={t("contracts.savedContracts")}>
-        {savedContracts.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border bg-surface-muted p-5 text-sm font-semibold text-muted">
-            {t("contracts.noSavedContracts")}
-          </p>
+      <StepCard step={1} title="Select Approved Quotation">
+        {savedQuotations.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border bg-surface-muted p-6 text-center">
+            <p className="text-base font-bold text-foreground">
+              No saved quotations yet.
+            </p>
+            <p className="mt-2 text-sm text-muted">
+              Create and save a quotation before generating a contract.
+            </p>
+          </div>
         ) : (
-          <div className="grid gap-3">
-            {savedContracts.map((contract) => (
-              <div
-                key={contract.id ?? contract.contractNumber}
-                className="flex flex-col gap-3 rounded-lg border border-border bg-surface-muted p-4 sm:flex-row sm:items-center sm:justify-between"
+          <div className="space-y-4">
+            <label className="block">
+              <span className="text-sm font-bold text-muted-strong">
+                Select saved quotation
+              </span>
+              <select
+                value={quotationNumber}
+                onChange={(event) => setQuotationNumber(event.target.value)}
+                className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-info-surface"
               >
-                <div>
-                  <p className="text-sm font-bold text-foreground">
-                    {contract.contractNumber}
-                  </p>
-                  <p className="mt-1 text-xs text-muted">
-                    {term(contract.project.projectName)} -{" "}
-                    {formatCurrency(contract.totalAmount)}
-                  </p>
-                </div>
-                {isAdmin ? (
-                  <button
-                    type="button"
-                    onClick={() => setDeleteTarget(contract)}
-                    className="h-10 rounded-md border border-danger-text bg-transparent px-3 text-sm font-bold text-danger-text transition hover:bg-danger-text hover:text-white"
+                <option value="">Choose a quotation...</option>
+                {savedQuotations.map((quotation) => (
+                  <option
+                    key={quotation.id ?? quotation.quotationNumber}
+                    value={quotation.quotationNumber}
                   >
-                    {t("common.delete")}
-                  </button>
-                ) : null}
+                    {quotation.quotationNumber} - {term(quotation.project.client)} -{" "}
+                    {term(quotation.project.projectName)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="overflow-hidden rounded-lg border border-border">
+              <div className="overflow-x-auto">
+                <table className="min-w-[920px] w-full divide-y divide-border text-left text-sm">
+                  <thead className="bg-surface-muted text-xs font-bold uppercase tracking-wide text-muted">
+                    <tr>
+                      <th className="px-3 py-3">Quotation Number</th>
+                      <th className="px-3 py-3">Client</th>
+                      <th className="px-3 py-3">Project</th>
+                      <th className="px-3 py-3">Total Amount</th>
+                      <th className="px-3 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {savedQuotations.map((quotation) => {
+                      const quotationTotal =
+                        quotation.contractTotal ??
+                        calculateQuotationTotals(
+                          quotation.lines,
+                          quotation.discountPercent,
+                        ).grandTotal;
+                      const isSelected =
+                        quotation.quotationNumber === quotationNumber;
+
+                      return (
+                        <tr
+                          key={quotation.id ?? quotation.quotationNumber}
+                          onClick={() => setQuotationNumber(quotation.quotationNumber)}
+                          className={`cursor-pointer transition ${
+                            isSelected
+                              ? "bg-info-surface"
+                              : "bg-surface hover:bg-surface-muted"
+                          }`}
+                        >
+                          <td className="px-3 py-3 font-bold text-primary">
+                            {quotation.quotationNumber}
+                          </td>
+                          <td className="px-3 py-3 font-semibold text-foreground">
+                            {term(quotation.project.client)}
+                          </td>
+                          <td className="px-3 py-3 text-muted-strong">
+                            {term(quotation.project.projectName)}
+                          </td>
+                          <td className="px-3 py-3 font-semibold text-foreground">
+                            {formatCurrency(quotationTotal)}
+                          </td>
+                          <td className="px-3 py-3 text-muted-strong">
+                            {quotation.quotationStatus ?? "Saved"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            ))}
+            </div>
           </div>
         )}
-      </SectionCard>
+      </StepCard>
 
-      <SectionCard title={t("contracts.contractSource")}>
-        <div className="grid gap-4 lg:grid-cols-[1fr_220px_220px_180px] lg:items-end">
-          <label>
-            <span className="text-sm font-bold text-muted-strong">
-              {t("contracts.selectQuotation")}
-            </span>
-            <select
-              value={quotationNumber}
-              onChange={(event) => setQuotationNumber(event.target.value)}
-              className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-info-surface"
-            >
-              {savedQuotations.map((quotation) => (
-                <option key={quotation.quotationNumber} value={quotation.quotationNumber}>
-                  {quotation.quotationNumber} - {term(quotation.project.projectName)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span className="text-sm font-bold text-muted-strong">
-              {t("contracts.contractNumber")}
-            </span>
-            <input
-              value={contractNumber}
-              readOnly
-              className="mt-2 h-11 w-full rounded-md border border-border bg-surface-muted px-3 text-sm font-bold text-foreground outline-none"
-            />
-          </label>
-          <label>
-            <span className="text-sm font-bold text-muted-strong">{t("common.date")}</span>
-            <input
-              type="date"
-              value={contractDate}
-              onChange={(event) => setContractDate(event.target.value)}
-              className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-info-surface"
-            />
-          </label>
-          <label>
-            <span className="text-sm font-bold text-muted-strong">{t("contracts.language")}</span>
-            <select
-              value={language}
-              onChange={(event) =>
-                setLanguage(event.target.value as ContractLanguage)
-              }
-              className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-info-surface"
-            >
-              <option value="ar">{t("contracts.arabicRtl")}</option>
-              <option value="en">{t("contracts.english")}</option>
-            </select>
-          </label>
-        </div>
-      </SectionCard>
-
-      {savedQuotations.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border bg-surface p-8 text-center">
-          <p className="text-sm font-bold text-foreground">
-            {t("contracts.noSavedQuotations")}
-          </p>
-          <p className="mt-2 text-sm text-muted">
-            {t("contracts.noSavedQuotationsDescription")}
-          </p>
-        </div>
-      ) : null}
-
-      {selectedProject ? (
-        <section className="grid gap-4 lg:grid-cols-3">
-          <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-wide text-muted">
-              {t("contracts.clientName")}
-            </p>
-            <p className="mt-2 text-lg font-bold text-foreground">
-              {term(selectedProject.client)}
-            </p>
-            <p className="mt-1 text-sm text-muted">{clientPhone}</p>
-          </div>
-          <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-wide text-muted">
-              {t("contracts.project")}
-            </p>
-            <p className="mt-2 text-lg font-bold text-foreground">
-              {term(selectedProject.projectName)}
-            </p>
-            <p className="mt-1 text-sm text-muted">
-              {term(selectedProject.address)}
-            </p>
-          </div>
-          <div className="rounded-lg border border-border bg-info-surface p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-wide text-info-text">
-              {t("contracts.totalAmount")}
-            </p>
-            <p className="mt-2 text-2xl font-bold text-primary">
-              {formatCurrency(totalAmount)}
-            </p>
-            <p className="mt-1 text-sm text-info-text">
-              {t("contracts.salesEngineer")}: {term(selectedProject.salesEngineer)}
-            </p>
-          </div>
-        </section>
-      ) : null}
-
-      <section className="grid gap-4 lg:grid-cols-[1fr_420px]">
-        <SectionCard title={t("contracts.autoFilledDetails")}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-border bg-surface-muted p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-muted">
-                {t("contracts.productSystems")}
-              </p>
-              <p className="mt-2 text-sm font-bold text-foreground">
-                {productSystems.length > 0
-                  ? productSystems.map((system) => term(system)).join(", ")
-                  : t("contracts.noSystemsAdded")}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-surface-muted p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-muted">
-                {t("quotations.openings")}
-              </p>
-              <p className="mt-2 text-sm font-bold text-foreground">
-                {t("contracts.structuralOpeningsCount", {
-                  count: selectedProject?.structuralOpenings.length ?? 0,
-                })}
-              </p>
-            </div>
-            <label className="rounded-lg border border-border bg-surface-muted p-4">
-              <span className="text-xs font-bold uppercase tracking-wide text-muted">
-                {t("contracts.preparedBy")}
-              </span>
-              <input
-                value={preparedBy}
-                onChange={(event) => setPreparedBy(event.target.value)}
-                className="mt-2 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-info-surface"
+      {selectedProject && selectedQuotation ? (
+        <>
+          <StepCard step={2} title="Review Contract Source">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <SummaryItem label="Client Name" value={term(selectedProject.client)} />
+              <SummaryItem label="Project Name" value={term(selectedProject.projectName)} />
+              <SummaryItem label="Quotation Number" value={selectedQuotation.quotationNumber} />
+              <SummaryItem label="Total Amount" value={formatCurrency(totalAmount)} />
+              <SummaryItem
+                label="Opening Count"
+                value={selectedProject.structuralOpenings.length}
               />
-            </label>
-          </div>
-        </SectionCard>
+              <SummaryItem
+                label="Product Systems"
+                value={
+                  productSystems.length > 0
+                    ? productSystems.map((system) => term(system)).join(", ")
+                    : t("contracts.noSystemsAdded")
+                }
+              />
+              <SummaryItem
+                label="Sales Engineer"
+                value={term(selectedProject.salesEngineer)}
+              />
+              <SummaryItem label="Client Phone" value={clientPhone || t("common.notAdded")} />
+            </div>
 
-        <SectionCard title={t("contracts.preview")}>
-          <button
-            type="button"
-            onClick={openPreview}
-            disabled={!selectedProject}
-            className="h-11 w-full rounded-md bg-primary px-4 text-sm font-bold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
-          >
-            {t("contracts.generateContract")}
-          </button>
-          <p className="mt-3 text-sm leading-6 text-muted">
-            {t("contracts.previewDescription")}
-          </p>
-        </SectionCard>
-      </section>
+            {selectedExistingContract ? (
+              <div className="mt-5 rounded-lg border border-info-text bg-info-surface p-4">
+                <p className="text-sm font-bold text-info-text">
+                  Existing contract found
+                </p>
+                <p className="mt-1 text-sm text-info-text">
+                  {selectedExistingContract.contractNumber} already exists for this quotation.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openExistingContract(selectedExistingContract)}
+                    className="h-10 rounded-md bg-primary px-4 text-sm font-bold text-white"
+                  >
+                    View Contract
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openExistingContract(selectedExistingContract)}
+                    className="h-10 rounded-md border border-border bg-surface px-4 text-sm font-bold text-muted-strong"
+                  >
+                    Edit Contract
+                  </button>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(selectedExistingContract)}
+                      className="h-10 rounded-md border border-danger-text bg-transparent px-4 text-sm font-bold text-danger-text transition hover:bg-danger-text hover:text-white"
+                    >
+                      Delete Contract
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </StepCard>
 
-      <SectionCard title={t("contracts.contractTerms")}>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <ContractTextField
-            label={t("contracts.paymentTerms")}
-            value={contractTemplate.paymentTerms}
-            onChange={(value) => updateTemplate("paymentTerms", value)}
-          />
-          <ContractTextField
-            label={t("contracts.warrantyTerms")}
-            value={contractTemplate.warrantyTerms}
-            onChange={(value) => updateTemplate("warrantyTerms", value)}
-          />
-          <ContractTextField
-            label={t("contracts.executionTerms")}
-            value={contractTemplate.executionTerms}
-            onChange={(value) => updateTemplate("executionTerms", value)}
-          />
-          <ContractTextField
-            label={t("contracts.generalTerms")}
-            value={contractTemplate.contractTerms}
-            onChange={(value) => updateTemplate("contractTerms", value)}
-          />
-          <ContractTextField
-            label={t("contracts.firstPartyObligations")}
-            value={contractTemplate.firstPartyObligations}
-            onChange={(value) => updateTemplate("firstPartyObligations", value)}
-          />
-          <ContractTextField
-            label={t("contracts.secondPartyObligations")}
-            value={contractTemplate.secondPartyObligations}
-            onChange={(value) => updateTemplate("secondPartyObligations", value)}
-          />
-          <ContractTextField
-            label={t("common.notes")}
-            value={notes}
-            onChange={setNotes}
-          />
-        </div>
-      </SectionCard>
+          {canViewSalesPrices(role) ? (
+            <>
+              <StepCard step={3} title="Contract Details">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <label>
+                    <span className="text-sm font-bold text-muted-strong">
+                      Auto-generated contract number
+                    </span>
+                    <input
+                      value={contractNumber}
+                      readOnly
+                      className="mt-2 h-11 w-full rounded-md border border-border bg-surface-muted px-3 text-sm font-bold text-foreground outline-none"
+                    />
+                  </label>
+                  <label>
+                    <span className="text-sm font-bold text-muted-strong">
+                      Date
+                    </span>
+                    <input
+                      type="date"
+                      value={contractDate}
+                      onChange={(event) => setContractDate(event.target.value)}
+                      className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-info-surface"
+                    />
+                  </label>
+                  <div>
+                    <span className="text-sm font-bold text-muted-strong">
+                      Language
+                    </span>
+                    <p className="mt-2 flex h-11 items-center rounded-md border border-border bg-surface-muted px-3 text-sm font-semibold text-foreground">
+                      {t("contracts.arabicRtl")}
+                    </p>
+                  </div>
+                  <label>
+                    <span className="text-sm font-bold text-muted-strong">
+                      Prepared by
+                    </span>
+                    <input
+                      value={preparedBy}
+                      onChange={(event) => setPreparedBy(event.target.value)}
+                      className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-info-surface"
+                    />
+                  </label>
+                </div>
+              </StepCard>
+
+              <SectionCard title={t("contracts.contractTerms")}>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <ContractTextField
+                    label={t("contracts.paymentTerms")}
+                    value={contractTemplate.paymentTerms}
+                    onChange={(value) => updateTemplate("paymentTerms", value)}
+                  />
+                  <ContractTextField
+                    label={t("contracts.warrantyTerms")}
+                    value={contractTemplate.warrantyTerms}
+                    onChange={(value) => updateTemplate("warrantyTerms", value)}
+                  />
+                  <ContractTextField
+                    label={t("contracts.executionTerms")}
+                    value={contractTemplate.executionTerms}
+                    onChange={(value) => updateTemplate("executionTerms", value)}
+                  />
+                  <ContractTextField
+                    label={t("contracts.generalTerms")}
+                    value={contractTemplate.contractTerms}
+                    onChange={(value) => updateTemplate("contractTerms", value)}
+                  />
+                  <ContractTextField
+                    label={t("contracts.firstPartyObligations")}
+                    value={contractTemplate.firstPartyObligations}
+                    onChange={(value) => updateTemplate("firstPartyObligations", value)}
+                  />
+                  <ContractTextField
+                    label={t("contracts.secondPartyObligations")}
+                    value={contractTemplate.secondPartyObligations}
+                    onChange={(value) => updateTemplate("secondPartyObligations", value)}
+                  />
+                  <ContractTextField
+                    label={t("common.notes")}
+                    value={notes}
+                    onChange={setNotes}
+                  />
+                </div>
+              </SectionCard>
+
+              <StepCard step={4} title="Generate Contract">
+                <button
+                  type="button"
+                  onClick={openPreview}
+                  disabled={!canGenerateContract}
+                  className="h-11 rounded-md bg-primary px-5 text-sm font-bold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
+                >
+                  Generate Contract from Selected Quotation
+                </button>
+                <p className="mt-3 text-sm leading-6 text-muted">
+                  {selectedExistingContract
+                    ? "This quotation already has a contract. Use View, Edit, or Delete above."
+                    : t("contracts.previewDescription")}
+                </p>
+              </StepCard>
+            </>
+          ) : null}
+        </>
+      ) : null}
 
       {deleteTarget ? (
         <div

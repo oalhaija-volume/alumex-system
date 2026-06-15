@@ -4,22 +4,30 @@ import type { FormEvent } from "react";
 import { useState } from "react";
 import { useClients } from "@/components/clients/ClientsProvider";
 import { useI18n } from "@/components/i18n/I18nProvider";
+import { ProjectLocationPicker } from "@/components/projects/ProjectLocationPicker";
 import { projectStatuses, type Project, type ProjectStatus } from "@/data/ui";
 
 export type ProjectFormValues = Omit<Project, "id" | "structuralOpenings">;
+type ProjectFormFieldKey = Exclude<
+  keyof ProjectFormValues,
+  "locationLatitude" | "locationLongitude" | "geofenceRadiusMeters"
+>;
 
 const emptyProject: ProjectFormValues = {
   projectNumber: "",
   projectName: "",
   client: "",
   address: "",
+  locationLatitude: null,
+  locationLongitude: null,
+  geofenceRadiusMeters: 100,
   projectType: "",
   salesEngineer: "",
   status: "Draft",
 };
 
 const fields: Array<{
-  key: keyof ProjectFormValues;
+  key: ProjectFormFieldKey;
   label: string;
   type?: "textarea" | "select";
   required?: boolean;
@@ -49,6 +57,9 @@ export function ProjectForm({
           projectName: project.projectName,
           client: project.clientId ?? project.client,
           address: project.address,
+          locationLatitude: project.locationLatitude ?? null,
+          locationLongitude: project.locationLongitude ?? null,
+          geofenceRadiusMeters: project.geofenceRadiusMeters ?? 100,
           projectType: project.projectType,
           salesEngineer: project.salesEngineer,
           status: project.status,
@@ -59,7 +70,7 @@ export function ProjectForm({
   const { clients } = useClients();
   const { t, term } = useI18n();
 
-  function updateValue(key: keyof ProjectFormValues, value: string) {
+  function updateValue(key: ProjectFormFieldKey, value: string) {
     setValues((currentValues) => ({
       ...currentValues,
       [key]: key === "status" ? (value as ProjectStatus) : value,
@@ -86,6 +97,9 @@ export function ProjectForm({
       projectName: values.projectName.trim(),
       client: values.client.trim(),
       address: values.address.trim(),
+      locationLatitude: values.locationLatitude ?? null,
+      locationLongitude: values.locationLongitude ?? null,
+      geofenceRadiusMeters: values.geofenceRadiusMeters ?? 100,
       projectType: values.projectType.trim(),
       salesEngineer: values.salesEngineer.trim(),
       status: values.status,
@@ -165,6 +179,24 @@ export function ProjectForm({
           );
         })}
       </div>
+      <ProjectLocationPicker
+        latitude={values.locationLatitude}
+        longitude={values.locationLongitude}
+        geofenceRadiusMeters={values.geofenceRadiusMeters}
+        onChange={(location) =>
+          setValues((currentValues) => ({
+            ...currentValues,
+            locationLatitude: location.latitude,
+            locationLongitude: location.longitude,
+          }))
+        }
+        onRadiusChange={(radius) =>
+          setValues((currentValues) => ({
+            ...currentValues,
+            geofenceRadiusMeters: radius,
+          }))
+        }
+      />
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <button
           type="button"

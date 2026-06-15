@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { canAccessRoute, type AppRole } from "@/lib/auth/permissions";
+import { normalizeAppRole } from "@/lib/auth/roles";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { createProxyClient } from "@/lib/supabase/proxy";
 
@@ -49,19 +50,22 @@ export async function proxy(request: NextRequest) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, is_active")
+    .select("role, is_active, status")
     .eq("id", user.id)
     .single();
   const profileData = profile as unknown as {
-    role: AppRole | null;
+    role: AppRole | "Sales User" | null;
     is_active?: boolean | null;
+    status?: string | null;
   } | null;
+  const isInactive =
+    profileData?.is_active !== true || profileData?.status === "Inactive";
   const role =
-    profileData?.is_active === false
+    isInactive
       ? null
       : user.email?.toLowerCase() === "admin@alumex.com"
         ? "Admin"
-        : profileData?.role ?? null;
+        : normalizeAppRole(profileData?.role);
 
   if (!canAccessRoute(pathname, role)) {
     return NextResponse.redirect(new URL("/unauthorized", request.url));

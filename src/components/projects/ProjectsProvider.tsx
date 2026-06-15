@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useClients } from "@/components/clients/ClientsProvider";
 import type { Project, ProjectStatus, StructuralOpening } from "@/data/ui";
+import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 type ProjectInput = Omit<Project, "id" | "structuralOpenings">;
@@ -42,6 +43,9 @@ type ProjectRow = {
   project_name: string;
   client_id: string;
   address: string | null;
+  location_latitude: number | string | null;
+  location_longitude: number | string | null;
+  geofence_radius_meters: number | string | null;
   project_type: string | null;
   sales_engineer_id: string | null;
   status: ProjectStatus;
@@ -62,20 +66,8 @@ type OpeningRow = {
   notes: string | null;
 };
 
-type SupabaseErrorLike = {
-  message?: unknown;
-  details?: unknown;
-  hint?: unknown;
-  code?: unknown;
-};
-
 function formatSupabaseError(error: unknown, fallback: string) {
-  const rawMessage =
-    error instanceof Error
-      ? error.message
-      : error && typeof error === "object"
-        ? String((error as SupabaseErrorLike).message ?? "")
-        : "";
+  const rawMessage = error instanceof Error ? error.message : "";
 
   if (
     rawMessage.toLowerCase().includes("documents") &&
@@ -84,25 +76,7 @@ function formatSupabaseError(error: unknown, fallback: string) {
     return "Unable to load project documents.";
   }
 
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (error && typeof error === "object") {
-    const supabaseError = error as SupabaseErrorLike;
-    const parts = [
-      typeof supabaseError.message === "string" ? supabaseError.message : "",
-      typeof supabaseError.details === "string" ? supabaseError.details : "",
-      typeof supabaseError.hint === "string" ? supabaseError.hint : "",
-      typeof supabaseError.code === "string" ? `Code: ${supabaseError.code}` : "",
-    ].filter(Boolean);
-
-    if (parts.length > 0) {
-      return parts.join(" ");
-    }
-  }
-
-  return fallback;
+  return friendlyDatabaseError(error, fallback);
 }
 
 function logSupabaseError(action: string, error: unknown) {
@@ -163,7 +137,7 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
           supabase
             .from("projects")
             .select(
-              "id, project_number, project_name, client_id, address, project_type, sales_engineer_id, status",
+              "id, project_number, project_name, client_id, address, location_latitude, location_longitude, geofence_radius_meters, project_type, sales_engineer_id, status",
             )
             .order("created_at", { ascending: false }),
           supabase
@@ -201,6 +175,18 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
             clientId: project.client_id,
             client: client?.clientName ?? "",
             address: project.address ?? "",
+            locationLatitude:
+              project.location_latitude === null
+                ? null
+                : normalizeNumber(project.location_latitude),
+            locationLongitude:
+              project.location_longitude === null
+                ? null
+                : normalizeNumber(project.location_longitude),
+            geofenceRadiusMeters:
+              project.geofence_radius_meters === null
+                ? 100
+                : normalizeNumber(project.geofence_radius_meters),
             projectType: project.project_type ?? "",
             salesEngineerId: project.sales_engineer_id ?? undefined,
             salesEngineer: "",
@@ -235,11 +221,25 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
       const projectNumber =
         project.projectNumber.trim() ||
         `PRJ-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+
+      if (
+        projects.some(
+          (currentProject) =>
+            currentProject.projectNumber.trim().toLowerCase() ===
+            projectNumber.toLowerCase(),
+        )
+      ) {
+        throw new Error("Project number already exists.");
+      }
+
       const { error: createError } = await supabase.from("projects").insert({
         project_number: projectNumber,
         project_name: project.projectName,
         client_id: clientId,
         address: project.address || null,
+        location_latitude: project.locationLatitude ?? null,
+        location_longitude: project.locationLongitude ?? null,
+        geofence_radius_meters: project.geofenceRadiusMeters ?? 100,
         project_type: project.projectType || null,
         status: project.status,
         sales_engineer_id: project.salesEngineerId ?? null,
@@ -253,13 +253,25 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
 
       await refreshProjects();
     },
-    [refreshProjects],
+    [projects, refreshProjects],
   );
 
   const updateProject = useCallback(
     async (id: string, project: ProjectInput) => {
       const supabase = createSupabaseClient();
       const clientId = project.clientId ?? project.client;
+
+      if (
+        projects.some(
+          (currentProject) =>
+            currentProject.id !== id &&
+            currentProject.projectNumber.trim().toLowerCase() ===
+              project.projectNumber.trim().toLowerCase(),
+        )
+      ) {
+        throw new Error("Project number already exists.");
+      }
+
       const { error: updateError } = await supabase
         .from("projects")
         .update({
@@ -267,6 +279,9 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
           project_name: project.projectName,
           client_id: clientId,
           address: project.address || null,
+          location_latitude: project.locationLatitude ?? null,
+          location_longitude: project.locationLongitude ?? null,
+          geofence_radius_meters: project.geofenceRadiusMeters ?? 100,
           project_type: project.projectType || null,
           status: project.status,
           sales_engineer_id: project.salesEngineerId ?? null,
@@ -280,7 +295,7 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
 
       await refreshProjects();
     },
-    [refreshProjects],
+    [projects, refreshProjects],
   );
 
   const deleteProjects = useCallback(

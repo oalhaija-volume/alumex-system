@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import type { AppRole } from "@/lib/auth/permissions";
+import { normalizeAppRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/client";
 
 export function useCurrentRole() {
   const [role, setRole] = useState<AppRole | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -18,8 +20,11 @@ export function useCurrentRole() {
 
         if (!user) {
           setRole(null);
+          setUserId(null);
           return;
         }
+
+        setUserId(user.id);
 
         if (user.email?.toLowerCase() === "admin@alumex.com") {
           setRole("Admin");
@@ -36,7 +41,11 @@ export function useCurrentRole() {
           is_active: boolean | null;
         } | null;
 
-        setRole(profile?.is_active === false ? null : profile?.role ?? null);
+        setRole(
+          profile?.is_active === false
+            ? null
+            : normalizeAppRole(profile?.role),
+        );
       } catch {
         setRole(null);
       } finally {
@@ -47,5 +56,5 @@ export function useCurrentRole() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  return { role, isLoaded, isAdmin: role === "Admin" };
+  return { role, userId, isLoaded, isAdmin: role === "Admin" };
 }

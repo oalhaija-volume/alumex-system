@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
+import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 import { exportElementToPdf } from "@/lib/pdf/exportPdf";
 
 export function PdfDownloadButton({
@@ -24,9 +25,8 @@ export function PdfDownloadButton({
     try {
       await exportElementToPdf({ elementId, fileName });
     } catch (pdfError) {
-      setError(
-        pdfError instanceof Error ? pdfError.message : t("errors.pdfError"),
-      );
+      console.error("[PdfDownloadButton] PDF generation failed", pdfError);
+      setError(friendlyDatabaseError(pdfError, t("errors.pdfError")));
     } finally {
       setIsGenerating(false);
     }

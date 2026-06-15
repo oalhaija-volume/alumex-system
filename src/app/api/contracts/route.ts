@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   hasSupabaseServiceRoleKey,
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
 import { generateNextContractNumber } from "@/lib/contracts/numbering";
+import { friendlyDatabaseError, isDuplicateError } from "@/lib/friendlyErrors";
 
 type SupabaseError = {
   code?: string;
@@ -16,6 +17,12 @@ type SupabaseError = {
 
 const duplicateContractNumberMessage =
   "This contract number already exists. A new contract number has been generated.";
+const contractRoles = [
+  "Admin",
+  "Sales Manager",
+  "Sales Rep",
+  "Finance / Accountant",
+] as const;
 
 async function loadContractNumbers(admin: ReturnType<typeof createAdminClient>) {
   const year = new Date().getFullYear();
@@ -39,50 +46,96 @@ async function loadContractNumbers(admin: ReturnType<typeof createAdminClient>) 
 }
 
 function logContractSupabaseError(
-  operation: "select" | "insert" | "next-number",
+  operation: "select" | "insert" | "next-number" | "workflow-update" | "rollback",
   error: SupabaseError | null | undefined,
 ) {
+  const errorDetails = getSupabaseErrorDetails(error);
+
   console.error("[api/contracts] Supabase error", {
     route: "/api/contracts",
     operation,
     table: "public.contracts",
     client: "createAdminClient",
     executingRole: "service_role",
-    error,
+    error: errorDetails,
+    rawError: error,
   });
 }
 
 function contractError(error: SupabaseError | null | undefined) {
-  if (
-    error?.code === "23505" ||
-    error?.message?.includes("contracts_contract_number_key") ||
-    error?.message?.toLowerCase().includes("duplicate key")
-  ) {
-    return duplicateContractNumberMessage;
-  }
-
-  return error?.message ?? "Unable to load contracts.";
+  return friendlyDatabaseError(
+    error,
+    "Unable to load contracts.",
+    duplicateContractNumberMessage,
+  );
 }
 
-async function requireAuthenticatedUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    return { ok: false as const, error: "Authentication is required." };
+function getSupabaseErrorDetails(error: unknown) {
+  if (error instanceof Error) {
+    return { message: error.message };
   }
 
-  return { ok: true as const, user };
+  if (!error || typeof error !== "object") {
+    return { message: "Unknown database error." };
+  }
+
+  const errorRecord = error as Record<string, unknown>;
+
+  return {
+    message:
+      typeof errorRecord.message === "string"
+        ? errorRecord.message
+        : undefined,
+    code:
+      typeof errorRecord.code === "string"
+        ? errorRecord.code
+        : undefined,
+    details:
+      typeof errorRecord.details === "string" || errorRecord.details === null
+        ? errorRecord.details
+        : undefined,
+    hint:
+      typeof errorRecord.hint === "string" || errorRecord.hint === null
+        ? errorRecord.hint
+        : undefined,
+  };
+}
+
+function contractErrorResponse(
+  error: unknown,
+  fallback: string,
+  status: number,
+) {
+  const friendlyMessage = friendlyDatabaseError(
+    error,
+    fallback,
+    duplicateContractNumberMessage,
+  );
+  const errorDetails = getSupabaseErrorDetails(error);
+
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: friendlyMessage }, { status });
+  }
+
+  return NextResponse.json(
+    {
+      error: errorDetails.message ?? friendlyMessage,
+      code: errorDetails.code,
+      details: errorDetails.details,
+      hint: errorDetails.hint,
+    },
+    { status },
+  );
 }
 
 export async function GET() {
-  const authCheck = await requireAuthenticatedUser();
+  const authCheck = await requireRole(contractRoles);
 
   if (!authCheck.ok) {
-    return NextResponse.json({ error: authCheck.error }, { status: 401 });
+    return NextResponse.json(
+      { error: authCheck.error },
+      { status: authCheck.status },
+    );
   }
 
   if (!hasSupabaseServiceRoleKey()) {
@@ -102,17 +155,20 @@ export async function GET() {
 
   if (error) {
     logContractSupabaseError("select", error);
-    return NextResponse.json({ error: contractError(error) }, { status: 500 });
+    return contractErrorResponse(error, "Unable to load contracts.", 500);
   }
 
   return NextResponse.json({ contracts: data ?? [] });
 }
 
 export async function POST(request: Request) {
-  const authCheck = await requireAuthenticatedUser();
+  const authCheck = await requireRole(contractRoles);
 
   if (!authCheck.ok) {
-    return NextResponse.json({ error: authCheck.error }, { status: 401 });
+    return NextResponse.json(
+      { error: authCheck.error },
+      { status: authCheck.status },
+    );
   }
 
   if (!hasSupabaseServiceRoleKey()) {
@@ -152,6 +208,34 @@ export async function POST(request: Request) {
     created_by: authCheck.user.id,
   };
 
+  if (typeof contractPayload.quotation_id === "string") {
+    const { data: existingQuotationContract, error: existingQuotationError } =
+      await admin
+        .from("contracts")
+        .select("id, contract_number")
+        .eq("quotation_id", contractPayload.quotation_id)
+        .maybeSingle();
+
+    if (existingQuotationError) {
+      logContractSupabaseError("select", existingQuotationError);
+      return contractErrorResponse(
+        existingQuotationError,
+        "Unable to verify existing contracts.",
+        500,
+      );
+    }
+
+    if (existingQuotationContract) {
+      return NextResponse.json(
+        {
+          error: "This quotation already has a contract.",
+          contract: existingQuotationContract,
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   for (let attempt = 0; attempt < 10; attempt += 1) {
     let contractNumber: string;
 
@@ -178,14 +262,10 @@ export async function POST(request: Request) {
       }
     } catch (nextNumberError) {
       logContractSupabaseError("next-number", nextNumberError as SupabaseError);
-      return NextResponse.json(
-        {
-          error:
-            nextNumberError instanceof Error
-              ? nextNumberError.message
-              : "Unable to generate contract number.",
-        },
-        { status: 500 },
+      return contractErrorResponse(
+        nextNumberError,
+        "Unable to generate contract number.",
+        500,
       );
     }
 
@@ -199,13 +279,48 @@ export async function POST(request: Request) {
       .single();
 
     if (!error && data) {
+      const { error: workflowError } = await admin
+        .from("projects")
+        .update({ workflow_status: "finance_down_payment_pending" })
+        .eq("id", contractPayload.project_id);
+
+      if (workflowError) {
+        logContractSupabaseError("workflow-update", workflowError);
+
+        const { error: rollbackError } = await admin
+          .from("contracts")
+          .delete()
+          .eq("id", data.id);
+
+        if (rollbackError) {
+          logContractSupabaseError("rollback", rollbackError);
+        }
+
+        return NextResponse.json(
+          process.env.NODE_ENV === "production"
+            ? {
+                error: friendlyDatabaseError(
+                  workflowError,
+                  "Contract was not saved because the workflow status could not be updated.",
+                ),
+              }
+            : {
+                error:
+                  getSupabaseErrorDetails(workflowError).message ??
+                  "Contract was not saved because the workflow status could not be updated.",
+                code: getSupabaseErrorDetails(workflowError).code,
+                details: getSupabaseErrorDetails(workflowError).details,
+                hint: getSupabaseErrorDetails(workflowError).hint,
+              },
+          { status: 500 },
+        );
+      }
+
       return NextResponse.json({ contract: data }, { status: 201 });
     }
 
     if (
-      error?.code === "23505" ||
-      error?.message?.includes("contracts_contract_number_key") ||
-      error?.message?.toLowerCase().includes("duplicate key")
+      isDuplicateError(error)
     ) {
       collidedContractNumbers.add(contractNumber);
       continue;
@@ -213,10 +328,7 @@ export async function POST(request: Request) {
 
     if (error) {
       logContractSupabaseError("insert", error);
-      return NextResponse.json(
-        { error: contractError(error) },
-        { status: 500 },
-      );
+      return contractErrorResponse(error, contractError(error), 500);
     }
   }
 

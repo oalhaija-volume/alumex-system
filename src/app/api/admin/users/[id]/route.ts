@@ -1,17 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireAdminUser } from "@/lib/auth/adminServer";
 import type { AppRole } from "@/lib/auth/permissions";
+import { isAppRole } from "@/lib/auth/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   hasSupabaseServiceRoleKey,
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
-
-const roles: AppRole[] = ["Admin", "Sales Manager", "Sales User"];
-
-function isRole(value: unknown): value is AppRole {
-  return roles.includes(value as AppRole);
-}
 
 export async function PATCH(
   request: Request,
@@ -38,6 +33,7 @@ export async function PATCH(
     role?: unknown;
     isActive?: unknown;
     password?: unknown;
+    fullName?: unknown;
   } | null;
   const role = body?.role === undefined ? undefined : body.role;
   const isActive =
@@ -46,8 +42,10 @@ export async function PATCH(
     typeof body?.password === "string" && body.password.trim()
       ? body.password.trim()
       : undefined;
+  const fullName =
+    typeof body?.fullName === "string" ? body.fullName.trim() : undefined;
 
-  if (role !== undefined && !isRole(role)) {
+  if (role !== undefined && !isAppRole(role)) {
     return NextResponse.json({ error: "Invalid role." }, { status: 400 });
   }
 
@@ -66,11 +64,19 @@ export async function PATCH(
     }
   }
 
-  const profileUpdate: { role?: AppRole; is_active?: boolean } = {};
+  const profileUpdate: {
+    role?: AppRole;
+    is_active?: boolean;
+    full_name?: string | null;
+  } = {};
   const authUpdate: { ban_duration?: string } = {};
 
   if (role !== undefined) {
     profileUpdate.role = role;
+  }
+
+  if (fullName !== undefined) {
+    profileUpdate.full_name = fullName || null;
   }
 
   if (isActive !== undefined) {

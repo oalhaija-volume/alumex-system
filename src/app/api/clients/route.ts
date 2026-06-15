@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireAdminUser } from "@/lib/auth/adminServer";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdminUser, requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   hasSupabaseServiceRoleKey,
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
+import { friendlyDatabaseError, isDuplicateError } from "@/lib/friendlyErrors";
 
 const duplicateClientMessage = "Client already exists.";
 const clientHasProjectsMessage = "Client has projects and cannot be deleted";
@@ -85,25 +85,16 @@ async function findDuplicateClient({
   return { duplicate };
 }
 
-async function requireAuthenticatedUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    return { ok: false as const, error: "Authentication is required." };
-  }
-
-  return { ok: true as const, user };
-}
+const clientWriteRoles = ["Admin", "Sales Manager", "Sales Rep"] as const;
 
 export async function POST(request: Request) {
-  const authCheck = await requireAuthenticatedUser();
+  const authCheck = await requireRole(clientWriteRoles);
 
   if (!authCheck.ok) {
-    return NextResponse.json({ error: authCheck.error }, { status: 401 });
+    return NextResponse.json(
+      { error: authCheck.error },
+      { status: authCheck.status },
+    );
   }
 
   if (!hasSupabaseServiceRoleKey()) {
@@ -150,7 +141,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(
-      { error: duplicateCheck.error.message },
+      { error: friendlyDatabaseError(duplicateCheck.error, "Unable to verify client duplicates.") },
       { status: 500 },
     );
   }
@@ -177,9 +168,7 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    const isDuplicate =
-      error.code === "23505" ||
-      error.message?.toLowerCase().includes("duplicate key");
+    const isDuplicate = isDuplicateError(error);
     console.error("[api/clients] create failed", {
       route: "/api/clients",
       operation: "insert",
@@ -190,7 +179,13 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(
-      { error: isDuplicate ? duplicateClientMessage : error.message },
+      {
+        error: friendlyDatabaseError(
+          error,
+          "Unable to save client.",
+          duplicateClientMessage,
+        ),
+      },
       { status: isDuplicate ? 409 : 500 },
     );
   }
@@ -199,10 +194,13 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const authCheck = await requireAuthenticatedUser();
+  const authCheck = await requireRole(clientWriteRoles);
 
   if (!authCheck.ok) {
-    return NextResponse.json({ error: authCheck.error }, { status: 401 });
+    return NextResponse.json(
+      { error: authCheck.error },
+      { status: authCheck.status },
+    );
   }
 
   if (!hasSupabaseServiceRoleKey()) {
@@ -252,7 +250,7 @@ export async function PATCH(request: Request) {
     });
 
     return NextResponse.json(
-      { error: duplicateCheck.error.message },
+      { error: friendlyDatabaseError(duplicateCheck.error, "Unable to verify client duplicates.") },
       { status: 500 },
     );
   }
@@ -279,9 +277,7 @@ export async function PATCH(request: Request) {
     .maybeSingle();
 
   if (error) {
-    const isDuplicate =
-      error.code === "23505" ||
-      error.message?.toLowerCase().includes("duplicate key");
+    const isDuplicate = isDuplicateError(error);
     console.error("[api/clients] update failed", {
       route: "/api/clients",
       operation: "update",
@@ -292,7 +288,13 @@ export async function PATCH(request: Request) {
     });
 
     return NextResponse.json(
-      { error: isDuplicate ? duplicateClientMessage : error.message },
+      {
+        error: friendlyDatabaseError(
+          error,
+          "Unable to save client.",
+          duplicateClientMessage,
+        ),
+      },
       { status: isDuplicate ? 409 : 500 },
     );
   }
@@ -351,7 +353,7 @@ export async function DELETE(request: Request) {
     });
 
     return NextResponse.json(
-      { error: projectsError.message },
+      { error: friendlyDatabaseError(projectsError, "Unable to verify related projects.") },
       { status: 500 },
     );
   }
@@ -381,7 +383,7 @@ export async function DELETE(request: Request) {
     });
 
     return NextResponse.json(
-      { error: deleteError.message },
+      { error: friendlyDatabaseError(deleteError, "Unable to delete client.") },
       { status: 500 },
     );
   }

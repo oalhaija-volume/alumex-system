@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseServiceRoleKey } from "@/lib/supabase/config";
+import { friendlyDatabaseError } from "@/lib/friendlyErrors";
+
+const quotationRoles = ["Admin", "Sales Manager", "Sales Rep"] as const;
 
 function formatQuotationNumber(year: number, sequence: number) {
   return `Q-${year}-${sequence.toString().padStart(4, "0")}`;
@@ -22,16 +25,12 @@ function nextQuotationNumber(quotationNumbers: string[], year: number) {
 }
 
 export async function GET() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  const authCheck = await requireRole(quotationRoles);
 
-  if (authError || !user) {
+  if (!authCheck.ok) {
     return NextResponse.json(
-      { error: "Authentication is required." },
-      { status: 401 },
+      { error: authCheck.error },
+      { status: authCheck.status },
     );
   }
 
@@ -39,14 +38,25 @@ export async function GET() {
   const prefix = `Q-${year}-`;
   const queryClient = hasSupabaseServiceRoleKey()
     ? createAdminClient()
-    : supabase;
+    : null;
+
+  if (!queryClient) {
+    return NextResponse.json(
+      { error: "Missing SUPABASE_SERVICE_ROLE_KEY. Add it on the server to enable quotation numbering." },
+      { status: 500 },
+    );
+  }
+
   const { data, error } = await queryClient
     .from("quotations")
     .select("quotation_number")
     .like("quotation_number", `${prefix}%`);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: friendlyDatabaseError(error, "Unable to generate quotation number.") },
+      { status: 500 },
+    );
   }
 
   const quotationNumbers = ((data ?? []) as Array<{ quotation_number: string | null }>)

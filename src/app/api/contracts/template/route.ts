@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdminUser } from "@/lib/auth/adminServer";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdminUser, requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   hasSupabaseServiceRoleKey,
@@ -18,6 +17,12 @@ type TemplatePayload = {
 
 const templateSelect =
   "payment_terms, warranty_terms, execution_terms, contract_terms, first_party_obligations, second_party_obligations";
+const contractRoles = [
+  "Admin",
+  "Sales Manager",
+  "Sales Rep",
+  "Finance / Accountant",
+] as const;
 
 function logTemplateError(operation: "select" | "update", error: unknown) {
   console.error("[api/contracts/template] Supabase error", {
@@ -34,25 +39,14 @@ function textValue(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
-async function requireAuthenticatedUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    return { ok: false as const, error: "Authentication is required." };
-  }
-
-  return { ok: true as const, user };
-}
-
 export async function GET() {
-  const authCheck = await requireAuthenticatedUser();
+  const authCheck = await requireRole(contractRoles);
 
   if (!authCheck.ok) {
-    return NextResponse.json({ error: authCheck.error }, { status: 401 });
+    return NextResponse.json(
+      { error: authCheck.error },
+      { status: authCheck.status },
+    );
   }
 
   if (!hasSupabaseServiceRoleKey()) {

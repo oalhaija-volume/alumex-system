@@ -21,7 +21,7 @@ export function StatusPill({ status }: { status: string }) {
 
   return (
     <span
-      className={`inline-flex h-7 items-center rounded-full px-3 text-xs font-semibold ring-1 ring-inset ${
+      className={`inline-flex h-7 items-center whitespace-nowrap rounded-full px-3 text-xs font-semibold ring-1 ring-inset ${
         statusStyles[status] ?? "bg-surface-muted text-muted-strong ring-border"
       }`}
     >

@@ -120,11 +120,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     }
 
     function formatCurrency(value: number) {
-      return new Intl.NumberFormat(locale === "ar" ? "ar-IQ" : "en-US", {
-        style: "currency",
-        currency: locale === "ar" ? "IQD" : "USD",
-        maximumFractionDigits: locale === "ar" ? 0 : 2,
-      }).format(locale === "ar" ? value * 1300 : value);
+      const formatted = new Intl.NumberFormat(locale === "ar" ? "ar-IQ" : "en-US", {
+        maximumFractionDigits: 0,
+      }).format(value);
+
+      return locale === "ar" ? `${formatted} د.ع` : `IQD ${formatted}`;
     }
 
     return {

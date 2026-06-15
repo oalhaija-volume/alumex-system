@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useClients } from "@/components/clients/ClientsProvider";
@@ -20,24 +20,20 @@ import {
   deleteSupabaseQuotation,
   loadSupabaseQuotations,
 } from "@/components/quotations/supabaseQuotations";
-import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import type { Project } from "@/data/ui";
+import {
+  clampDiscount,
+  discountLimitForRole,
+  loadProductPrices,
+  productPriceForSystem,
+  type ProductPrice,
+} from "@/lib/pricing/productPricing";
 
-function defaultUnitPrice(system: string) {
-  const lowerSystem = system.toLowerCase();
-
-  if (lowerSystem.includes("curtain")) {
-    return 165;
-  }
-
-  if (lowerSystem.includes("sliding")) {
-    return 95;
-  }
-
-  return 120;
-}
-
-function createQuotationLines(projectId: string, projects: Project[]): QuotationLine[] {
+function createQuotationLines(
+  projectId: string,
+  projects: Project[],
+  products: ProductPrice[],
+): QuotationLine[] {
   const project = projects.find((item) => item.id === projectId);
 
   if (!project) {
@@ -46,7 +42,7 @@ function createQuotationLines(projectId: string, projects: Project[]): Quotation
 
   return project.structuralOpenings.map((opening) => ({
     ...opening,
-    unitPrice: defaultUnitPrice(opening.productSystem),
+    unitPrice: productPriceForSystem(opening.productSystem, products),
     discountPercent: 0,
   }));
 }
@@ -86,13 +82,63 @@ async function fetchNextQuotationNumber() {
   return body.quotationNumber;
 }
 
+async function saveQuotation(payload: {
+  id?: string;
+  project_id: string;
+  client_id: string;
+  quotation_discount_percent: number;
+  subtotal: number;
+  line_discount_total: number;
+  quotation_discount_total: number;
+  grand_total: number;
+  notes: string;
+  prepared_by_text: string | null;
+  client_representative: string | null;
+  items: Array<{
+    opening_id: string;
+    opening_code: string;
+    floor: string | null;
+    room: string | null;
+    width: number;
+    height: number;
+    quantity: number;
+    product_system: string | null;
+    glass_type: string | null;
+    aluminum_color: string | null;
+    unit_price: number;
+    discount_percent: number;
+    notes: string | null;
+  }>;
+}) {
+  const response = await fetch("/api/quotations", {
+    method: payload.id ? "PATCH" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = (await response.json().catch(() => null)) as {
+    quotation?: {
+      id: string;
+      quotation_number: string;
+      created_at?: string | null;
+    };
+    error?: string;
+  } | null;
+
+  if (!response.ok || !body?.quotation) {
+    throw new Error(body?.error ?? "Unable to save quotation.");
+  }
+
+  return body.quotation;
+}
+
 export function QuotationBuilder() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { formatCurrency, t, term } = useI18n();
-  const { isAdmin } = useCurrentRole();
+  const { isAdmin, role } = useCurrentRole();
   const { clients } = useClients();
   const { projects } = useProjects();
+  const builderFormRef = useRef<HTMLDivElement | null>(null);
   const requestedProjectId = searchParams.get("projectId") ?? "";
   const initialProjectId =
     projects.find((project) => project.id === requestedProjectId)?.id ??
@@ -110,12 +156,14 @@ export function QuotationBuilder() {
   );
   const [clientRepresentative, setClientRepresentative] = useState("");
   const [savedQuotations, setSavedQuotations] = useState<QuotationDraft[]>([]);
+  const [productPrices, setProductPrices] = useState<ProductPrice[]>([]);
   const [editingQuotationId, setEditingQuotationId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<QuotationDraft | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [lines, setLines] = useState<QuotationLine[]>(() =>
-    createQuotationLines(initialProjectId, projects),
+    createQuotationLines(initialProjectId, projects, []),
   );
+  const discountLimit = discountLimitForRole(role);
   const selectedProject = projects.find((project) => project.id === projectId);
   const hasClients = clients.length > 0;
   const hasProjects = projects.length > 0;
@@ -127,15 +175,12 @@ export function QuotationBuilder() {
   const existingProjectQuotation = selectedProject
     ? savedQuotations.find((quotation) => quotation.project.id === selectedProject.id)
     : undefined;
-  const isEditingExistingQuotation =
-    Boolean(editingQuotationId) &&
-    editingQuotationId === existingProjectQuotation?.id;
+  const isEditingExistingQuotation = Boolean(editingQuotationId);
+  const canShowBuilder = canCreateQuotation || isEditingExistingQuotation;
   const displayedQuotationNumber =
-    existingProjectQuotation && !isEditingExistingQuotation
-      ? existingProjectQuotation.quotationNumber
-      : isEditingExistingQuotation
-        ? quotationNumber
-        : quotationNumber;
+    isEditingExistingQuotation
+      ? quotationNumber
+      : existingProjectQuotation?.quotationNumber ?? quotationNumber;
   const totals = useMemo(
     () => calculateQuotationTotals(lines, discountPercent),
     [lines, discountPercent],
@@ -143,10 +188,10 @@ export function QuotationBuilder() {
 
   const loadProject = useCallback((nextProjectId: string) => {
     setProjectId(nextProjectId);
-    setLines(createQuotationLines(nextProjectId, projects));
+    setLines(createQuotationLines(nextProjectId, projects, productPrices));
     setEditingQuotationId(null);
     setError("");
-  }, [projects]);
+  }, [productPrices, projects]);
 
   const refreshSavedQuotations = useCallback(async () => {
     const quotations = await loadSupabaseQuotations(projects);
@@ -160,8 +205,19 @@ export function QuotationBuilder() {
     return nextQuotationNumber;
   }, []);
 
+  const refreshProductPrices = useCallback(async () => {
+    const products = await loadProductPrices();
+
+    setProductPrices(products);
+    return products;
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      if (editingQuotationId) {
+        return;
+      }
+
       const nextProjectId =
         projects.find((project) => project.id === requestedProjectId)?.id ??
         (projectId && projects.some((project) => project.id === projectId)
@@ -174,15 +230,20 @@ export function QuotationBuilder() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [loadProject, projectId, projects, requestedProjectId]);
+  }, [editingQuotationId, loadProject, projectId, projects, requestedProjectId]);
 
   useEffect(() => {
     const timer = window.setTimeout(async () => {
       try {
-        await Promise.all([
+        const [, , nextProducts] = await Promise.all([
           refreshSavedQuotations(),
           refreshNextQuotationNumber(),
+          refreshProductPrices().catch(() => []),
         ]);
+
+        if (!editingQuotationId) {
+          setLines(createQuotationLines(projectId, projects, nextProducts));
+        }
       } catch (loadError) {
         setSavedQuotations([]);
         setError(
@@ -194,7 +255,15 @@ export function QuotationBuilder() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [projects, refreshNextQuotationNumber, refreshSavedQuotations, t]);
+  }, [
+    editingQuotationId,
+    projectId,
+    projects,
+    refreshNextQuotationNumber,
+    refreshProductPrices,
+    refreshSavedQuotations,
+    t,
+  ]);
 
   function updateLine(
     lineId: string,
@@ -206,7 +275,12 @@ export function QuotationBuilder() {
         line.id === lineId
           ? {
               ...line,
-              [key]: Number.isFinite(value) ? value : 0,
+              [key]:
+                key === "discountPercent"
+                  ? clampDiscount(value, discountLimit)
+                  : Number.isFinite(value)
+                    ? value
+                    : 0,
             }
           : line,
       ),
@@ -218,16 +292,53 @@ export function QuotationBuilder() {
     router.push("/quotations/preview");
   }
 
-  function editQuotation(quotation: QuotationDraft) {
-    setProjectId(quotation.project.id);
-    setQuotationNumber(quotation.quotationNumber);
-    setDiscountPercent(quotation.discountPercent);
-    setNotes(quotation.notes);
-    setPreparedBy(quotation.preparedBy);
-    setClientRepresentative(quotation.clientRepresentative);
-    setLines(quotation.lines);
-    setEditingQuotationId(quotation.id ?? null);
+  async function editQuotation(quotation: QuotationDraft) {
+    if (!quotation.id) {
+      setError("Unable to load quotation for editing.");
+      return;
+    }
+
     setError("");
+
+    try {
+      const quotations = await refreshSavedQuotations();
+      const latestQuotation = quotations.find(
+        (item) => item.id === quotation.id,
+      );
+
+      if (!latestQuotation) {
+        setError("Quotation was not found.");
+        return;
+      }
+
+      setProjectId(latestQuotation.project.id);
+      setQuotationNumber(latestQuotation.quotationNumber);
+      setDiscountPercent(
+        clampDiscount(latestQuotation.discountPercent, discountLimit),
+      );
+      setNotes(latestQuotation.notes);
+      setPreparedBy(latestQuotation.preparedBy);
+      setClientRepresentative(latestQuotation.clientRepresentative);
+      setLines(
+        latestQuotation.lines.map((line) => ({
+          ...line,
+          discountPercent: clampDiscount(line.discountPercent, discountLimit),
+        })),
+      );
+      setEditingQuotationId(latestQuotation.id ?? null);
+      window.requestAnimationFrame(() => {
+        builderFormRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Unable to load quotation for editing.",
+      );
+    }
   }
 
   async function openPreview() {
@@ -248,44 +359,28 @@ export function QuotationBuilder() {
       return;
     }
 
-    const supabase = createSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    if (
+      discountPercent > discountLimit ||
+      lines.some((line) => line.discountPercent > discountLimit)
+    ) {
+      setError(t("quotations.discountLimitError", { limit: discountLimit }));
+      return;
+    }
 
-    if (isEditingExistingQuotation && editingQuotationId) {
-      const { error: quotationUpdateError } = await supabase
-        .from("quotations")
-        .update({
-          quotation_discount_percent: discountPercent,
-          subtotal: totals.subtotal,
-          line_discount_total: totals.lineDiscountTotal,
-          quotation_discount_total: totals.quotationDiscount,
-          grand_total: totals.grandTotal,
-          notes,
-          prepared_by_text: preparedBy || null,
-          client_representative: clientRepresentative || null,
-        })
-        .eq("id", editingQuotationId);
-
-      if (quotationUpdateError) {
-        setError(quotationUpdateError.message);
-        return;
-      }
-
-      const { error: deleteItemsError } = await supabase
-        .from("quotation_items")
-        .delete()
-        .eq("quotation_id", editingQuotationId);
-
-      if (deleteItemsError) {
-        setError(deleteItemsError.message);
-        return;
-      }
-
-      const { error: updateItemsError } = await supabase.from("quotation_items").insert(
-        lines.map((line) => ({
-          quotation_id: editingQuotationId,
+    try {
+      const quotation = await saveQuotation({
+        id: isEditingExistingQuotation ? editingQuotationId ?? undefined : undefined,
+        project_id: selectedProject.id,
+        client_id: selectedProject.clientId,
+        quotation_discount_percent: discountPercent,
+        subtotal: totals.subtotal,
+        line_discount_total: totals.lineDiscountTotal,
+        quotation_discount_total: totals.quotationDiscount,
+        grand_total: totals.grandTotal,
+        notes,
+        prepared_by_text: preparedBy || null,
+        client_representative: clientRepresentative || null,
+        items: lines.map((line) => ({
           opening_id: line.id,
           opening_code: line.openingCode,
           floor: line.floor || null,
@@ -300,114 +395,32 @@ export function QuotationBuilder() {
           discount_percent: line.discountPercent,
           notes: line.notes || null,
         })),
-      );
+      });
 
-      if (updateItemsError) {
-        setError(updateItemsError.message);
-        return;
-      }
+      setQuotationNumber(quotation.quotation_number);
 
       const draft: QuotationDraft = {
-        id: editingQuotationId,
-        quotationNumber,
+        id: quotation.id,
+        quotationNumber: quotation.quotation_number,
         project: selectedProject,
         lines,
         discountPercent,
         notes,
         preparedBy,
         clientRepresentative,
-        savedAt: new Date().toISOString(),
+        savedAt: quotation.created_at ?? new Date().toISOString(),
       };
 
       window.localStorage.setItem(quotationStorageKey, JSON.stringify(draft));
       setEditingQuotationId(null);
       await refreshSavedQuotations();
       router.push("/quotations/preview");
-      return;
+    } catch (saveError) {
+      console.error("[QuotationBuilder] save quotation failed", saveError);
+      setError(
+        saveError instanceof Error ? saveError.message : t("quotations.saveError"),
+      );
     }
-
-    let nextQuotationNumber = "";
-    let quotationRow: { id: string } | null = null;
-
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      nextQuotationNumber = await fetchNextQuotationNumber();
-      setQuotationNumber(nextQuotationNumber);
-
-      const { data, error: quotationError } = await supabase
-        .from("quotations")
-        .insert({
-          quotation_number: nextQuotationNumber,
-          project_id: selectedProject.id,
-          client_id: selectedProject.clientId,
-          status: "Draft",
-          quotation_discount_percent: discountPercent,
-          subtotal: totals.subtotal,
-          line_discount_total: totals.lineDiscountTotal,
-          quotation_discount_total: totals.quotationDiscount,
-          grand_total: totals.grandTotal,
-          notes,
-          prepared_by_text: preparedBy || null,
-          client_representative: clientRepresentative || null,
-          created_by: user?.id ?? null,
-        })
-        .select("id")
-        .single();
-
-      if (!quotationError && data) {
-        quotationRow = data;
-        break;
-      }
-
-      if (quotationError?.code !== "23505") {
-        setError(quotationError?.message ?? t("quotations.saveError"));
-        return;
-      }
-    }
-
-    if (!quotationRow) {
-      setError(t("quotations.saveError"));
-      return;
-    }
-
-    const { error: itemsError } = await supabase.from("quotation_items").insert(
-      lines.map((line) => ({
-        quotation_id: quotationRow.id,
-        opening_id: line.id,
-        opening_code: line.openingCode,
-        floor: line.floor || null,
-        room: line.room || null,
-        width: line.width,
-        height: line.height,
-        quantity: line.quantity,
-        product_system: line.productSystem || null,
-        glass_type: line.glassType || null,
-        aluminum_color: line.aluminumColor || null,
-        unit_price: line.unitPrice,
-        discount_percent: line.discountPercent,
-        notes: line.notes || null,
-      })),
-    );
-
-    if (itemsError) {
-      setError(itemsError.message);
-      return;
-    }
-
-    const draft: QuotationDraft = {
-      id: quotationRow.id,
-      quotationNumber: nextQuotationNumber,
-      project: selectedProject,
-      lines,
-      discountPercent,
-      notes,
-      preparedBy,
-      clientRepresentative,
-      savedAt: new Date().toISOString(),
-    };
-
-    window.localStorage.setItem(quotationStorageKey, JSON.stringify(draft));
-    await refreshSavedQuotations();
-    router.push("/quotations/preview");
   }
 
   async function confirmDeleteQuotation() {
@@ -444,6 +457,12 @@ export function QuotationBuilder() {
         title={t("quotations.builder")}
         description={t("quotations.builderDescription")}
       />
+
+      {error ? (
+        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+          {error}
+        </p>
+      ) : null}
 
       <SectionCard title={t("quotations.savedQuotations")}>
         {savedQuotations.length === 0 ? (
@@ -482,7 +501,7 @@ export function QuotationBuilder() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => editQuotation(quotation)}
+                      onClick={() => void editQuotation(quotation)}
                       className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground transition hover:border-primary"
                     >
                       {t("quotations.editQuotation")}
@@ -504,7 +523,7 @@ export function QuotationBuilder() {
         )}
       </SectionCard>
 
-      {!canCreateQuotation ? (
+      {!canCreateQuotation && !isEditingExistingQuotation ? (
         <SectionCard title={t("quotations.beforeCreateQuotation")}>
           <div className="space-y-4 rounded-lg border border-dashed border-border bg-surface-muted p-5">
             <p className="text-sm font-bold text-foreground">
@@ -547,12 +566,12 @@ export function QuotationBuilder() {
         </SectionCard>
       ) : null}
 
-      {canCreateQuotation ? (
-        <>
+      {canShowBuilder ? (
+        <div ref={builderFormRef} className="space-y-6">
       <SectionCard title={t("quotations.projectSelection")}>
-        {error ? (
-          <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-            {error}
+        {isEditingExistingQuotation ? (
+          <p className="mb-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-semibold text-[var(--alumex-blue)]">
+            Editing quotation {quotationNumber}. Save with Update Quotation.
           </p>
         ) : null}
         <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
@@ -591,7 +610,7 @@ export function QuotationBuilder() {
             {existingProjectQuotation && !isEditingExistingQuotation
               ? t("quotations.viewExistingQuotation")
               : isEditingExistingQuotation
-                ? t("quotations.saveQuotationChanges")
+                ? "Update Quotation"
                 : t("quotations.createQuotation")}
           </button>
         </div>
@@ -618,7 +637,7 @@ export function QuotationBuilder() {
               </button>
               <button
                 type="button"
-                onClick={() => editQuotation(existingProjectQuotation)}
+                onClick={() => void editQuotation(existingProjectQuotation)}
                 className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground transition hover:border-primary"
               >
                 {t("quotations.editQuotation")}
@@ -750,7 +769,7 @@ export function QuotationBuilder() {
                         <input
                           type="number"
                           min="0"
-                          max="100"
+                          max={discountLimit}
                           value={line.discountPercent}
                           onChange={(event) =>
                             updateLine(
@@ -821,7 +840,7 @@ export function QuotationBuilder() {
                     <input
                       type="number"
                       min="0"
-                      max="100"
+                      max={discountLimit}
                       value={line.discountPercent}
                       onChange={(event) =>
                         updateLine(
@@ -913,13 +932,18 @@ export function QuotationBuilder() {
               <span className="text-sm font-bold text-slate-700">
                 {t("quotations.quotationDiscountPercent")}
               </span>
+              <span className="mt-1 block text-xs font-semibold text-muted">
+                {t("quotations.discountLimitNotice", { limit: discountLimit })}
+              </span>
               <input
                 type="number"
                 min="0"
-                max="100"
+                max={discountLimit}
                 value={discountPercent}
                 onChange={(event) =>
-                  setDiscountPercent(Number(event.target.value))
+                  setDiscountPercent(
+                    clampDiscount(Number(event.target.value), discountLimit),
+                  )
                 }
                 className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
               />
@@ -943,7 +967,7 @@ export function QuotationBuilder() {
           </div>
         </SectionCard>
       </section>
-        </>
+        </div>
       ) : null}
 
       {deleteTarget ? (

@@ -1,0 +1,2 @@
+-- Superseded by 20260613113000_product_price_settings.sql.
+-- Product prices, not project prices, are the supported pricing model.

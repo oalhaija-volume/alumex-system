@@ -9,12 +9,16 @@ import { calculateQuotationTotals, type QuotationDraft } from "@/components/quot
 import { loadSupabaseQuotations } from "@/components/quotations/supabaseQuotations";
 import { SectionCard } from "@/components/SectionCard";
 import { WorkflowList } from "@/components/WorkflowList";
+import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useI18n } from "@/components/i18n/I18nProvider";
+import { canViewSalesPrices } from "@/lib/auth/roles";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 export function DashboardView() {
   const { formatCurrency, t, term } = useI18n();
+  const { role } = useCurrentRole();
   const { projects } = useProjects();
+  const showSalesPrices = canViewSalesPrices(role);
   const [savedQuotations, setSavedQuotations] = useState<QuotationDraft[]>([]);
   const [contractCount, setContractCount] = useState(0);
   const activeProjects = projects.filter(
@@ -71,7 +75,9 @@ export function DashboardView() {
   useEffect(() => {
     const timer = window.setTimeout(async () => {
       try {
-        setSavedQuotations(await loadSupabaseQuotations(projects));
+        setSavedQuotations(
+          showSalesPrices ? await loadSupabaseQuotations(projects) : [],
+        );
         const supabase = createSupabaseClient();
         const { count } = await supabase
           .from("contracts")
@@ -84,7 +90,7 @@ export function DashboardView() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [projects]);
+  }, [projects, showSalesPrices]);
 
   return (
     <AppShell>
@@ -102,10 +108,12 @@ export function DashboardView() {
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
-          <SectionCard title={t("dashboard.quotationActivity")}>
-            {savedQuotations.length > 0 ? (
+          {showSalesPrices ? (
+            <SectionCard title={t("dashboard.quotationActivity")}>
+              {savedQuotations.length > 0 ? (
               <WorkflowList
                 items={savedQuotations.slice(0, 3).map((quotation) => ({
+                  key: quotation.id ?? quotation.quotationNumber,
                   title: quotation.quotationNumber,
                   meta: term(quotation.project.projectName),
                   value: formatCurrency(
@@ -116,16 +124,18 @@ export function DashboardView() {
                   ),
                 }))}
               />
-            ) : (
+              ) : (
               <p className="rounded-lg border border-dashed border-border bg-surface-muted p-5 text-sm font-semibold text-muted">
                 {t("dashboard.noQuotationActivity")}
               </p>
-            )}
-          </SectionCard>
+              )}
+            </SectionCard>
+          ) : null}
           <SectionCard title={t("dashboard.upcomingDeadlines")}>
             {activeProjects.length > 0 ? (
               <WorkflowList
                 items={activeProjects.slice(0, 3).map((project) => ({
+                  key: project.id,
                   title: term(project.projectName),
                   meta: `${term(project.client)} - ${term(project.salesEngineer)}`,
                   value: term(project.status),

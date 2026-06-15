@@ -1,5 +1,6 @@
 type WorkflowListProps = {
   items: Array<{
+    key: string;
     title: string;
     meta: string;
     value: string;
@@ -11,7 +12,7 @@ export function WorkflowList({ items }: WorkflowListProps) {
     <div className="space-y-3">
       {items.map((item) => (
         <div
-          key={item.title}
+          key={item.key}
           className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-muted px-3 py-3"
         >
           <div className="min-w-0">

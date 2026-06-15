@@ -76,9 +76,9 @@ export function calculateQuotationTotals(
 }
 
 export function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
+  const formatted = new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
   }).format(value);
+
+  return `IQD ${formatted}`;
 }

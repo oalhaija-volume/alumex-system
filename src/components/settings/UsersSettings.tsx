@@ -2,20 +2,21 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { AppRole } from "@/lib/auth/permissions";
+import { appRoles, normalizeAppRole } from "@/lib/auth/roles";
 import { useI18n } from "@/components/i18n/I18nProvider";
 
 type ManagedUser = {
   id: string;
   email: string;
   full_name: string | null;
-  role: AppRole;
+  role: AppRole | "Sales User";
   status?: "Active" | "Inactive";
   is_active: boolean;
   created_at: string;
   updated_at: string;
 };
 
-const roles: AppRole[] = ["Admin", "Sales Manager", "Sales User"];
+const roles = appRoles;
 
 async function readError(response: Response, fallback: string) {
   const body = (await response.json().catch(() => null)) as {
@@ -30,7 +31,7 @@ export function UsersSettings() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<AppRole>("Sales User");
+  const [role, setRole] = useState<AppRole>("Sales Rep");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -136,7 +137,7 @@ export function UsersSettings() {
 
       setEmail("");
       setPassword("");
-      setRole("Sales User");
+      setRole("Sales Rep");
       setNotice(t("settings.userCreated"));
       await loadUsers();
     } catch {
@@ -358,7 +359,9 @@ function UserRow({
   formatDate: (value: Date | string | number) => string;
   onDelete: (user: ManagedUser) => void;
 }) {
-  const [selectedRole, setSelectedRole] = useState<AppRole>(user.role);
+  const [selectedRole, setSelectedRole] = useState<AppRole>(
+    normalizeAppRole(user.role) ?? "Sales Rep",
+  );
   const [password, setPassword] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -413,7 +416,7 @@ function UserRow({
 
         <button
           type="button"
-          disabled={isUpdating || selectedRole === user.role}
+          disabled={isUpdating || selectedRole === normalizeAppRole(user.role)}
           onClick={() => runUpdate({ role: selectedRole })}
           className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground transition hover:border-primary disabled:cursor-not-allowed disabled:text-muted"
         >

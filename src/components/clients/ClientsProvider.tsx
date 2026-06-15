@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import type { Client } from "@/data/ui";
+import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 type ClientInput = Omit<Client, "id">;
@@ -38,41 +39,12 @@ type ClientRow = {
   notes: string | null;
 };
 
-type SupabaseErrorLike = {
-  message?: unknown;
-  details?: unknown;
-  hint?: unknown;
-  code?: unknown;
-};
-
 async function readApiError(response: Response, fallback: string) {
   const body = (await response.json().catch(() => null)) as {
     error?: string;
   } | null;
 
   return body?.error ?? fallback;
-}
-
-function formatSupabaseError(error: unknown, fallback: string) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (error && typeof error === "object") {
-    const supabaseError = error as SupabaseErrorLike;
-    const parts = [
-      typeof supabaseError.message === "string" ? supabaseError.message : "",
-      typeof supabaseError.details === "string" ? supabaseError.details : "",
-      typeof supabaseError.hint === "string" ? supabaseError.hint : "",
-      typeof supabaseError.code === "string" ? `Code: ${supabaseError.code}` : "",
-    ].filter(Boolean);
-
-    if (parts.length > 0) {
-      return parts.join(" ");
-    }
-  }
-
-  return fallback;
 }
 
 function logSupabaseError(action: string, error: unknown) {
@@ -145,7 +117,7 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
 
       setClients(((data ?? []) as ClientRow[]).map(mapClient));
     } catch (loadError) {
-      setError(formatSupabaseError(loadError, "Unable to load clients."));
+      setError(friendlyDatabaseError(loadError, "Unable to load clients."));
       setClients([]);
     } finally {
       setIsLoading(false);

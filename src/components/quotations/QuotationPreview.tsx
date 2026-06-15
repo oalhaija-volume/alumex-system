@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { PdfDownloadButton } from "@/components/pdf/PdfDownloadButton";
+import { canViewSalesPrices } from "@/lib/auth/roles";
 import {
   calculateLineTotal,
   calculateQuotationTotals,
@@ -137,9 +139,11 @@ function formatIqd(value: number, locale: string) {
 function CoverPage({
   draft,
   grandTotal,
+  showSalesPrices,
 }: {
   draft: QuotationDraft;
   grandTotal: number;
+  showSalesPrices: boolean;
 }) {
   const { formatDate, locale, t, term } = useI18n();
 
@@ -179,7 +183,9 @@ function CoverPage({
           <Field label={t("projects.fields.projectName")} value={term(draft.project.projectName)} />
           <Field label={t("quotations.quotationNumber")} value={draft.quotationNumber} />
           <Field label={t("common.date")} value={formatDate(new Date())} />
-          <Field label={t("contracts.totalAmount")} value={formatIqd(grandTotal, locale)} />
+          {showSalesPrices ? (
+            <Field label={t("contracts.totalAmount")} value={formatIqd(grandTotal, locale)} />
+          ) : null}
           <Field
             label={t("contracts.preparedBy")}
             value={draft.preparedBy || t("quotations.defaultPreparedBy")}
@@ -198,9 +204,11 @@ function CoverPage({
 function DetailsPage({
   draft,
   totals,
+  showSalesPrices,
 }: {
   draft: QuotationDraft;
   totals: ReturnType<typeof calculateQuotationTotals>;
+  showSalesPrices: boolean;
 }) {
   const { locale, t, term } = useI18n();
 
@@ -251,9 +259,13 @@ function DetailsPage({
                 <th className="w-[8%] px-1 py-2">{t("projects.openings.fields.height")}</th>
                 <th className="w-[5%] px-1 py-2">{t("projects.openings.fields.quantity")}</th>
                 <th className="w-[8%] px-1 py-2">{t("common.areaSqm")}</th>
-                <th className="w-[11%] px-1 py-2">{t("quotations.unitPricePerSqm")}</th>
-                <th className="w-[8%] px-1 py-2">{t("common.discount")}</th>
-                <th className="w-[11%] px-1 py-2 text-right">{t("common.total")}</th>
+                {showSalesPrices ? (
+                  <>
+                    <th className="w-[11%] px-1 py-2">{t("quotations.unitPricePerSqm")}</th>
+                    <th className="w-[8%] px-1 py-2">{t("common.discount")}</th>
+                    <th className="w-[11%] px-1 py-2 text-right">{t("common.total")}</th>
+                  </>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -289,15 +301,19 @@ function DetailsPage({
                     <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
                       {lineTotal.area.toFixed(2)}
                     </td>
-                    <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
-                      {formatIqd(line.unitPrice, locale)}
-                    </td>
-                    <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
-                      {line.discountPercent}%
-                    </td>
-                    <td className="border-t border-slate-200 px-1 py-1.5 text-right font-bold text-slate-950">
-                      {formatIqd(lineTotal.net, locale)}
-                    </td>
+                    {showSalesPrices ? (
+                      <>
+                        <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
+                          {formatIqd(line.unitPrice, locale)}
+                        </td>
+                        <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
+                          {line.discountPercent}%
+                        </td>
+                        <td className="border-t border-slate-200 px-1 py-1.5 text-right font-bold text-slate-950">
+                          {formatIqd(lineTotal.net, locale)}
+                        </td>
+                      </>
+                    ) : null}
                   </tr>
                 );
               })}
@@ -306,7 +322,7 @@ function DetailsPage({
         </div>
       </section>
 
-      <section className="mt-5 grid grid-cols-[1fr_58mm] gap-4">
+      <section className={`mt-5 grid gap-4 ${showSalesPrices ? "grid-cols-[1fr_58mm]" : "grid-cols-1"}`}>
         <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
           <h2 className="text-[9px] font-black uppercase tracking-wide text-slate-500">
             {t("common.notes")}
@@ -315,7 +331,8 @@ function DetailsPage({
             {draft.notes || t("quotations.noNotes")}
           </p>
         </div>
-        <div className="rounded-md border border-slate-200 bg-white p-4">
+        {showSalesPrices ? (
+          <div className="rounded-md border border-slate-200 bg-white p-4">
           <h2 className="text-[9px] font-black uppercase tracking-wide text-[var(--alumex-blue)]">
             {t("quotations.totals")}
           </h2>
@@ -347,7 +364,8 @@ function DetailsPage({
               </div>
             </div>
           </div>
-        </div>
+          </div>
+        ) : null}
       </section>
     </DocumentPage>
   );
@@ -397,7 +415,9 @@ function ApprovalPage({ draft }: { draft: QuotationDraft }) {
 }
 
 export function QuotationPreview() {
-  const { t } = useI18n();
+  const { direction, t } = useI18n();
+  const { role } = useCurrentRole();
+  const showSalesPrices = canViewSalesPrices(role);
   const [draft, setDraft] = useState<QuotationDraft | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -487,9 +507,13 @@ export function QuotationPreview() {
         </div>
       </div>
 
-      <article id="quotation-pdf" className="mx-auto w-full max-w-full overflow-x-hidden print:max-w-none print:overflow-visible">
-        <CoverPage draft={draft} grandTotal={totals.grandTotal} />
-        <DetailsPage draft={draft} totals={totals} />
+      <article
+        id="quotation-pdf"
+        dir={direction}
+        className="mx-auto w-full max-w-full overflow-x-hidden print:max-w-none print:overflow-visible"
+      >
+        <CoverPage draft={draft} grandTotal={totals.grandTotal} showSalesPrices={showSalesPrices} />
+        <DetailsPage draft={draft} totals={totals} showSalesPrices={showSalesPrices} />
         <ApprovalPage draft={draft} />
       </article>
     </main>

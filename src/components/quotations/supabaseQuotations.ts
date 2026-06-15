@@ -1,5 +1,4 @@
 import type { Project } from "@/data/ui";
-import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import type { QuotationDraft, QuotationLine } from "@/components/quotations/quotationTypes";
 
 type QuotationRow = {
@@ -56,38 +55,25 @@ function mapLine(item: QuotationItemRow): QuotationLine {
 export async function loadSupabaseQuotations(
   projects: Project[],
 ): Promise<QuotationDraft[]> {
-  const supabase = createSupabaseClient();
-  const [{ data: quotationRows, error: quotationsError }, { data: itemRows, error: itemsError }] =
-    await Promise.all([
-      supabase
-        .from("quotations")
-        .select(
-          "id, quotation_number, project_id, quotation_discount_percent, notes, prepared_by_text, client_representative, created_at",
-        )
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("quotation_items")
-        .select(
-          "id, quotation_id, opening_id, opening_code, floor, room, width, height, quantity, product_system, glass_type, aluminum_color, unit_price, discount_percent, notes",
-        ),
-    ]);
+  const response = await fetch("/api/quotations", { cache: "no-store" });
+  const body = (await response.json().catch(() => null)) as {
+    quotations?: QuotationRow[];
+    items?: QuotationItemRow[];
+    error?: string;
+  } | null;
 
-  if (quotationsError) {
-    throw quotationsError;
-  }
-
-  if (itemsError) {
-    throw itemsError;
+  if (!response.ok) {
+    throw new Error(body?.error ?? "Unable to load quotations.");
   }
 
   const itemsByQuotation = new Map<string, QuotationLine[]>();
-  ((itemRows ?? []) as QuotationItemRow[]).forEach((item) => {
+  (body?.items ?? []).forEach((item) => {
     const list = itemsByQuotation.get(item.quotation_id) ?? [];
     list.push(mapLine(item));
     itemsByQuotation.set(item.quotation_id, list);
   });
 
-  return ((quotationRows ?? []) as QuotationRow[]).reduce<QuotationDraft[]>(
+  return (body?.quotations ?? []).reduce<QuotationDraft[]>(
     (quotations, quotation) => {
       const project = projects.find((item) => item.id === quotation.project_id);
 
@@ -114,10 +100,16 @@ export async function loadSupabaseQuotations(
 }
 
 export async function deleteSupabaseQuotation(id: string) {
-  const supabase = createSupabaseClient();
-  const { error } = await supabase.from("quotations").delete().eq("id", id);
+  const response = await fetch(`/api/quotations?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  const body = (await response.json().catch(() => null)) as {
+    error?: string;
+  } | null;
 
-  if (error) {
-    throw error;
+  if (!response.ok) {
+    throw new Error(
+      body?.error ?? "Quotation was not deleted. It may already have been removed.",
+    );
   }
 }

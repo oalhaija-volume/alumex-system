@@ -1,17 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireAdminUser } from "@/lib/auth/adminServer";
-import type { AppRole } from "@/lib/auth/permissions";
+import { isAppRole } from "@/lib/auth/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   hasSupabaseServiceRoleKey,
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
-
-const roles: AppRole[] = ["Admin", "Sales Manager", "Sales User"];
-
-function isRole(value: unknown): value is AppRole {
-  return roles.includes(value as AppRole);
-}
 
 export async function GET() {
   const adminCheck = await requireAdminUser();
@@ -64,11 +58,14 @@ export async function POST(request: Request) {
     email?: unknown;
     password?: unknown;
     role?: unknown;
+    fullName?: unknown;
   } | null;
   const email = typeof body?.email === "string" ? body.email.trim() : "";
   const password =
     typeof body?.password === "string" ? body.password.trim() : "";
-  const role = isRole(body?.role) ? body.role : null;
+  const role = isAppRole(body?.role) ? body.role : null;
+  const fullName =
+    typeof body?.fullName === "string" ? body.fullName.trim() : "";
 
   if (!email || !password || !role) {
     return NextResponse.json(
@@ -83,7 +80,7 @@ export async function POST(request: Request) {
       email,
       password,
       email_confirm: true,
-      user_metadata: { role },
+      user_metadata: { role, full_name: fullName || undefined },
     });
 
   if (createError || !created.user) {
@@ -97,6 +94,7 @@ export async function POST(request: Request) {
     {
       id: created.user.id,
       email: email.toLowerCase(),
+      full_name: fullName || null,
       role,
       status: "Active",
       is_active: true,

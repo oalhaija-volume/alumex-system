@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { PdfDownloadButton } from "@/components/pdf/PdfDownloadButton";
 import {
@@ -14,6 +15,7 @@ import {
   calculateLineTotal,
   type QuotationLine,
 } from "@/components/quotations/quotationTypes";
+import { canViewFinanceValues, canViewSalesPrices } from "@/lib/auth/roles";
 import { messagesByLocale, type Locale, type Messages } from "@/lib/i18n";
 
 const scheduleRowsPerPage = 9;
@@ -188,10 +190,12 @@ function LegalSection({
 function CoverPage({
   draft,
   isArabic,
+  showFinanceValues,
   totalPages,
 }: {
   draft: ContractDraft;
   isArabic: boolean;
+  showFinanceValues: boolean;
   totalPages: number;
 }) {
   const { formatDate, locale, t, term } = useContractDocumentI18n(
@@ -229,10 +233,12 @@ function CoverPage({
           <InfoBox label={t("contracts.contractNumber")} value={draft.contractNumber} />
           <InfoBox label={t("quotations.quotationNumber")} value={draft.quotationNumber} />
           <InfoBox label={t("common.date")} value={formatDate(draft.contractDate)} />
-          <InfoBox
-            label={t("contracts.totalAmount")}
-            value={formatIqd(draft.totalAmount, locale)}
-          />
+          {showFinanceValues ? (
+            <InfoBox
+              label={t("contracts.totalAmount")}
+              value={formatIqd(draft.totalAmount, locale)}
+            />
+          ) : null}
           <InfoBox label={t("contracts.salesEngineer")} value={term(draft.salesEngineer)} />
           <InfoBox label={t("contracts.preparedBy")} value={draft.preparedBy} />
         </div>
@@ -296,6 +302,14 @@ function PartiesAndSpecsPage({
       isArabic={isArabic}
     >
       <div className="grid gap-4">
+        {isArabic ? (
+          <LegalSection title="تمهيد العقد">
+            <p className="whitespace-pre-wrap">
+              بعد مشيئة الله تم الاتفاق بين الطرفين وهما في الحالة المعتبرة شرعا وقانونا على توريد وتركيب اعمال الالمنيوم للطرف الثاني وفق الشروط والاحكام الواردة في هذا العقد. وتعد مقدمة هذا العقد جزءا لا يتجزأ منه ويرجع اليها في تفسير احكامه وبنوده.
+            </p>
+          </LegalSection>
+        ) : null}
+
         <LegalSection title={`A. ${t("contracts.contractParties")}`}>
           <dl className="grid gap-2 md:grid-cols-2">
             <div>
@@ -368,12 +382,14 @@ function SchedulePage({
   draft,
   isArabic,
   page,
+  showSalesPrices,
   totalPages,
   lines,
 }: {
   draft: ContractDraft;
   isArabic: boolean;
   page: number;
+  showSalesPrices: boolean;
   totalPages: number;
   lines: QuotationLine[];
 }) {
@@ -402,8 +418,12 @@ function SchedulePage({
                 <th className="p-1.5 text-start">{t("common.areaSqm")}</th>
                 <th className="p-1.5 text-start">{t("common.system")}</th>
                 <th className="p-1.5 text-start">{t("quotations.glass")}</th>
-                <th className="p-1.5 text-start">{t("quotations.unitPrice")}</th>
-                <th className="p-1.5 text-start">{t("common.total")}</th>
+                {showSalesPrices ? (
+                  <>
+                    <th className="p-1.5 text-start">{t("quotations.unitPrice")}</th>
+                    <th className="p-1.5 text-start">{t("common.total")}</th>
+                  </>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -419,8 +439,12 @@ function SchedulePage({
                     <td className="p-1.5">{lineTotal.area.toFixed(2)}</td>
                     <td className="p-1.5">{term(line.productSystem)}</td>
                     <td className="p-1.5">{term(line.glassType)}</td>
-                    <td className="p-1.5">{formatIqd(line.unitPrice, locale)}</td>
-                    <td className="p-1.5 font-bold">{formatIqd(lineTotal.net, locale)}</td>
+                    {showSalesPrices ? (
+                      <>
+                        <td className="p-1.5">{formatIqd(line.unitPrice, locale)}</td>
+                        <td className="p-1.5 font-bold">{formatIqd(lineTotal.net, locale)}</td>
+                      </>
+                    ) : null}
                   </tr>
                 );
               })}
@@ -436,12 +460,14 @@ function FinancialAndTermsPage({
   draft,
   isArabic,
   page,
+  showFinanceValues,
   totalPages,
   lines,
 }: {
   draft: ContractDraft;
   isArabic: boolean;
   page: number;
+  showFinanceValues: boolean;
   totalPages: number;
   lines: QuotationLine[];
 }) {
@@ -462,15 +488,17 @@ function FinancialAndTermsPage({
       isArabic={isArabic}
     >
       <div className="grid gap-4">
-        <LegalSection title={`D. ${t("contracts.financialSummary")}`}>
-          <div className="grid gap-3 md:grid-cols-2">
-            <InfoBox label={t("contracts.totalArea")} value={t("common.areaValue", { value: totalArea.toFixed(2) })} />
-            <InfoBox label={t("contracts.totalAmount")} value={formatIqd(draft.totalAmount, locale)} />
-            <InfoBox label={t("contracts.currency")} value={t("settings.currencyValue")} />
-            <InfoBox label={t("contracts.advancePayment")} value={formatIqd(advancePayment, locale)} />
-            <InfoBox label={t("contracts.remainingBalance")} value={formatIqd(remainingBalance, locale)} />
-          </div>
-        </LegalSection>
+        {showFinanceValues ? (
+          <LegalSection title={`D. ${t("contracts.financialSummary")}`}>
+            <div className="grid gap-3 md:grid-cols-2">
+              <InfoBox label={t("contracts.totalArea")} value={t("common.areaValue", { value: totalArea.toFixed(2) })} />
+              <InfoBox label={t("contracts.totalAmount")} value={formatIqd(draft.totalAmount, locale)} />
+              <InfoBox label={t("contracts.currency")} value={t("settings.currencyValue")} />
+              <InfoBox label={t("contracts.advancePayment")} value={formatIqd(advancePayment, locale)} />
+              <InfoBox label={t("contracts.remainingBalance")} value={formatIqd(remainingBalance, locale)} />
+            </div>
+          </LegalSection>
+        ) : null}
 
         <LegalSection title={`H. ${t("contracts.firstPartyObligations")}`}>
           <p className="whitespace-pre-wrap">{draft.firstPartyObligations}</p>
@@ -483,6 +511,14 @@ function FinancialAndTermsPage({
         <LegalSection title={`J. ${t("contracts.generalTermsAndConditions")}`}>
           <p className="whitespace-pre-wrap">{draft.contractTerms}</p>
         </LegalSection>
+
+        {isArabic ? (
+          <LegalSection title="التحرير والقبول">
+            <p className="whitespace-pre-wrap">
+              يتكون هذا العقد من ستة بنود اساسية ويقع على خمس صفحات. تم توقيع هذا العقد بايجاب وقبول الطرفين وفي مجلس واحد بتاريخ العقد.
+            </p>
+          </LegalSection>
+        ) : null}
 
         {draft.notes ? (
           <LegalSection title={t("common.notes")}>
@@ -519,6 +555,11 @@ function SignaturePage({
       <div className="flex h-full flex-col">
         <LegalSection title={`K. ${t("common.signatures")}`}>
           <p>{t("contracts.signatureConfirmation")}</p>
+          {isArabic ? (
+            <p className="mt-2">
+              يوقع عن الطرف الاول المدير المفوض او المدير العام او من ينوب عنهم، ويوقع عن الطرف الثاني المالك او من يمثله قانونا.
+            </p>
+          ) : null}
         </LegalSection>
 
         <div className="mt-auto grid gap-8">
@@ -550,6 +591,7 @@ function SignaturePage({
 
 export function ContractPreview() {
   const { t } = useI18n();
+  const { role } = useCurrentRole();
   const [draft, setDraft] = useState<ContractDraft | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -621,6 +663,8 @@ export function ContractPreview() {
   }
 
   const isArabic = draft.language === "ar";
+  const showSalesPrices = canViewSalesPrices(role);
+  const showFinanceValues = canViewFinanceValues(role);
   const totalPages = 4 + scheduleChunks.length;
   let page = 1;
 
@@ -654,7 +698,12 @@ export function ContractPreview() {
         dir={isArabic ? "rtl" : "ltr"}
         className="mx-auto w-full max-w-full overflow-x-hidden print:max-w-none print:overflow-visible"
       >
-        <CoverPage draft={draft} isArabic={isArabic} totalPages={totalPages} />
+        <CoverPage
+          draft={draft}
+          isArabic={isArabic}
+          showFinanceValues={showFinanceValues}
+          totalPages={totalPages}
+        />
         <PartiesAndSpecsPage
           draft={draft}
           isArabic={isArabic}
@@ -668,6 +717,7 @@ export function ContractPreview() {
             draft={draft}
             isArabic={isArabic}
             page={++page}
+            showSalesPrices={showSalesPrices}
             totalPages={totalPages}
             lines={chunk}
           />
@@ -676,6 +726,7 @@ export function ContractPreview() {
           draft={draft}
           isArabic={isArabic}
           page={++page}
+          showFinanceValues={showFinanceValues}
           totalPages={totalPages}
           lines={lines}
         />

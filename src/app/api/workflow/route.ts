@@ -555,6 +555,8 @@ function canRoleSeeProject({
 
   if (role === "Operations Manager") {
     return [
+      "finance_down_payment_confirmed",
+      "finance_payment_exception",
       "operations_manager_review",
       "project_manager_assigned",
       "project_engineer_assigned",
@@ -1767,7 +1769,11 @@ export async function PATCH(request: Request) {
       : "sales_contract_created";
     const previousAssigneeId = projectData[config.assignmentField];
     const allowedAssignmentStatuses: Record<AssignmentType, ProjectWorkflowStatus[]> = {
-      projectManager: ["operations_manager_review"],
+      projectManager: [
+        "finance_down_payment_confirmed",
+        "finance_payment_exception",
+        "operations_manager_review",
+      ],
       projectEngineer: ["project_manager_assigned"],
       siteEngineer: ["project_engineer_assigned"],
     };
@@ -1979,7 +1985,7 @@ async function handleFinanceAction({
     > = {
       confirmDownPayment: {
         eventType: "finance_down_payment",
-        nextStatus: "operations_manager_review",
+        nextStatus: "finance_down_payment_confirmed",
         paymentStatus: "Down payment received",
         note: "Down payment confirmed",
         allowedStatuses: [
@@ -1990,7 +1996,7 @@ async function handleFinanceAction({
       },
       markPaymentException: {
         eventType: "finance_down_payment",
-        nextStatus: "operations_manager_review",
+        nextStatus: "finance_payment_exception",
         paymentStatus: "Payment exception",
         note: "Payment exception marked",
         allowedStatuses: [

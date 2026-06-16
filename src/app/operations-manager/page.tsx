@@ -9,6 +9,8 @@ export default function OperationsManagerPage() {
         queueDescription="Assign project managers and monitor projects after finance handoff through delivery and installation."
         showProjectStatusCards
         focusStatuses={[
+          "finance_down_payment_confirmed",
+          "finance_payment_exception",
           "operations_manager_review",
           "project_manager_assigned",
           "project_engineer_assigned",

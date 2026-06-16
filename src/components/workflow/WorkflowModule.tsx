@@ -1285,7 +1285,11 @@ function AssignmentPanel({
 }) {
   const canAssignProjectManager =
     (role === "Admin" || role === "Operations Manager") &&
-    project.workflowStatus === "operations_manager_review";
+    [
+      "finance_down_payment_confirmed",
+      "finance_payment_exception",
+      "operations_manager_review",
+    ].includes(project.workflowStatus);
   const canAssignProjectEngineer =
     (role === "Admin" || role === "Project Manager") &&
     project.workflowStatus === "project_manager_assigned";

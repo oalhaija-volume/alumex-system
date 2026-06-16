@@ -7,6 +7,9 @@ import { SectionCard } from "@/components/SectionCard";
 import { ContractTemplateSettings } from "@/components/settings/ContractTemplateSettings";
 import { ProductPricingSettings } from "@/components/settings/ProductPricingSettings";
 import { UsersSettings } from "@/components/settings/UsersSettings";
+import { VehiclesSettings } from "@/components/settings/VehiclesSettings";
+import { DriversSettings } from "@/components/settings/DriversSettings";
+import { InstallationTeamsSettings } from "@/components/settings/InstallationTeamsSettings";
 
 const settings = [
   ["settings.companyProfile", "settings.companyProfileValue"],
@@ -53,6 +56,15 @@ export default function SettingsPage() {
         </SectionCard>
         <SectionCard title={t("settings.contractTemplate")}>
           <ContractTemplateSettings />
+        </SectionCard>
+        <SectionCard title="Vehicles">
+          <VehiclesSettings />
+        </SectionCard>
+        <SectionCard title="Drivers">
+          <DriversSettings />
+        </SectionCard>
+        <SectionCard title="Installation Teams">
+          <InstallationTeamsSettings />
         </SectionCard>
       </div>
     </AppShell>

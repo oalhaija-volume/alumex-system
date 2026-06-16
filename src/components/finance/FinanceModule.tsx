@@ -64,7 +64,11 @@ function isPaymentException(project: FinanceProject) {
 }
 
 function isWaitingOperationsAssignment(project: FinanceProject) {
-  return project.workflowStatus === "operations_manager_review";
+  return [
+    "finance_down_payment_confirmed",
+    "finance_payment_exception",
+    "operations_manager_review",
+  ].includes(project.workflowStatus);
 }
 
 function isWaitingFinanceCheck(project: FinanceProject) {

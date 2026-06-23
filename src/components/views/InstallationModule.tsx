@@ -39,7 +39,7 @@ type Project = {
   project_number: string;
   project_name: string;
   address: string;
-  project_workflow_status: string;
+  workflow_status: string;
   clients: {
     client_name: string;
     mobile: string | null;
@@ -56,7 +56,7 @@ async function readError(response: Response, fallback: string) {
 }
 
 export function InstallationModule() {
-  const { t, formatDate } = useI18n();
+  const { t } = useI18n();
   const [projects, setProjects] = useState<Project[]>([]);
   const [teams, setTeams] = useState<InstallationTeam[]>([]);
   const [assignments, setAssignments] = useState<InstallationAssignment[]>([]);
@@ -98,8 +98,12 @@ export function InstallationModule() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    const timer = window.setTimeout(() => {
+      void fetchData();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [fetchData]);
 
   async function handleAssignTeam(e: FormEvent) {
     e.preventDefault();
@@ -176,7 +180,7 @@ export function InstallationModule() {
 
   const availableProjects = projects.filter(
     (p) =>
-      p.project_workflow_status === "delivered" &&
+      p.workflow_status === "delivered" &&
       !assignments.some((a) => a.project_id === p.id && a.status !== "completed")
   );
 

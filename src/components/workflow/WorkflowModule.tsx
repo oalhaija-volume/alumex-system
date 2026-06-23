@@ -672,11 +672,23 @@ function ProjectStatusCards({
               ) : null}
 
               <Link
-                href={`/projects/${project.id}?from=workflow`}
+                href={`/workflow/${project.id}`}
                 className="mt-4 inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-bold text-white"
               >
                 Details
               </Link>
+              {[
+                "site_engineer_assigned",
+                "measurement_pending",
+                "project_description_draft",
+              ].includes(project.workflowStatus) ? (
+                <Link
+                  href={`/site-measurements/${project.id}`}
+                  className="ml-2 mt-4 inline-flex h-10 items-center rounded-md bg-material-primary-container px-4 text-sm font-bold text-material-on-primary-container"
+                >
+                  Measurements
+                </Link>
+              ) : null}
             </article>
           );
         })}
@@ -751,11 +763,11 @@ function QueueTable({ projects }: { projects: WorkflowProject[] }) {
               <tr
                 key={project.id}
                 tabIndex={0}
-                onClick={() => router.push(`/projects/${project.id}?from=workflow`)}
+                onClick={() => router.push(`/workflow/${project.id}`)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    router.push(`/projects/${project.id}?from=workflow`);
+                    router.push(`/workflow/${project.id}`);
                   }
                 }}
                 className="cursor-pointer bg-surface transition hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-primary"
@@ -792,7 +804,7 @@ function QueueTable({ projects }: { projects: WorkflowProject[] }) {
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      router.push(`/projects/${project.id}?from=workflow`);
+                      router.push(`/workflow/${project.id}`);
                     }}
                     className="h-9 rounded-md bg-primary px-3 text-xs font-bold text-white"
                   >
@@ -816,7 +828,7 @@ function QueueCards({ projects }: { projects: WorkflowProject[] }) {
       {projects.map((project) => (
         <Link
           key={project.id}
-          href={`/projects/${project.id}?from=workflow`}
+          href={`/workflow/${project.id}`}
           className="rounded-lg border border-border bg-surface p-4 shadow-sm"
         >
           <div className="flex items-start justify-between gap-3">
@@ -865,13 +877,7 @@ function CommercialPanel({ project }: { project: WorkflowProject }) {
   const { commercial } = project;
 
   if (commercial.visibility === "hidden") {
-    return (
-      <SectionCard title="Commercial information">
-        <p className="rounded-lg border border-dashed border-border bg-surface-muted p-4 text-sm font-semibold text-muted">
-          Commercial values are hidden for your role.
-        </p>
-      </SectionCard>
-    );
+    return null;
   }
 
   if (commercial.visibility === "finance") {
@@ -1460,29 +1466,49 @@ function ProjectDescriptionPanel({
     <SectionCard title="Project Description & Audit">
       <div className="space-y-4">
         {canStartMeasurement ? (
-          <button
-            type="button"
-            onClick={() => void runAction("startMeasurement")}
-            disabled={Boolean(isSaving)}
-            className="rounded-md bg-primary px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSaving === "startMeasurement"
-              ? t("common.loading")
-              : "Start Detailed Measurement"}
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => void runAction("startMeasurement")}
+              disabled={Boolean(isSaving)}
+              className="material-button-filled"
+            >
+              {isSaving === "startMeasurement"
+                ? t("common.loading")
+                : "Start Detailed Measurement"}
+            </button>
+            {role === "Site Engineer" ? (
+              <Link
+                href={`/site-measurements/${project.id}`}
+                className="material-button-tonal"
+              >
+                Mobile measurement page
+              </Link>
+            ) : null}
+          </div>
         ) : null}
 
         {canCompleteMeasurement ? (
-          <button
-            type="button"
-            onClick={() => void runAction("completeMeasurement")}
-            disabled={Boolean(isSaving)}
-            className="rounded-md bg-primary px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSaving === "completeMeasurement"
-              ? t("common.loading")
-              : "Detailed Measurement Completed"}
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => void runAction("completeMeasurement")}
+              disabled={Boolean(isSaving)}
+              className="material-button-filled"
+            >
+              {isSaving === "completeMeasurement"
+                ? t("common.loading")
+                : "Detailed Measurement Completed"}
+            </button>
+            {role === "Site Engineer" ? (
+              <Link
+                href={`/site-measurements/${project.id}`}
+                className="material-button-tonal"
+              >
+                Mobile measurement page
+              </Link>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="grid gap-3 lg:grid-cols-2">

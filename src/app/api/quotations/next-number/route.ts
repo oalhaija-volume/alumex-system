@@ -4,7 +4,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseServiceRoleKey } from "@/lib/supabase/config";
 import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 
-const quotationRoles = ["Admin", "Sales Manager", "Sales Rep"] as const;
+const quotationRoles = [
+  "Admin",
+  "Sales Manager",
+  "Sales Rep",
+  "Branch Manager",
+] as const;
 
 function formatQuotationNumber(year: number, sequence: number) {
   return `Q-${year}-${sequence.toString().padStart(4, "0")}`;

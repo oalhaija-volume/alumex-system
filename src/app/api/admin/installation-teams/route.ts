@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminUser } from "@/lib/auth/adminServer";
+import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseServiceRoleKey, supabaseServiceRoleError } from "@/lib/supabase/config";
 
@@ -12,6 +13,21 @@ type InstallationTeamPayload = {
 };
 
 export async function GET() {
+  const authCheck = await requireAdminUser();
+  if (!authCheck.ok) {
+    return NextResponse.json(
+      { error: authCheck.error },
+      { status: authCheck.status },
+    );
+  }
+
+  if (!hasSupabaseServiceRoleKey()) {
+    return NextResponse.json(
+      { error: supabaseServiceRoleError },
+      { status: 500 },
+    );
+  }
+
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("installation_teams")
@@ -19,7 +35,10 @@ export async function GET() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: friendlyDatabaseError(error, "Unable to load installation teams.") },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json(data);
@@ -74,7 +93,10 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: friendlyDatabaseError(error, "Unable to save installation team.") },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json(data, { status: 201 });
@@ -119,7 +141,10 @@ export async function PUT(request: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: friendlyDatabaseError(error, "Unable to save installation team.") },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json(data);
@@ -134,6 +159,13 @@ export async function DELETE(request: Request) {
     );
   }
 
+  if (!hasSupabaseServiceRoleKey()) {
+    return NextResponse.json(
+      { error: supabaseServiceRoleError },
+      { status: 500 },
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
 
@@ -145,7 +177,10 @@ export async function DELETE(request: Request) {
   const { error } = await admin.from("installation_teams").delete().eq("id", id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: friendlyDatabaseError(error, "Unable to delete installation team.") },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ success: true });

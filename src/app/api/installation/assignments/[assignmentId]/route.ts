@@ -3,10 +3,10 @@ import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseServiceRoleKey, supabaseServiceRoleError } from "@/lib/supabase/config";
 
-const installationRoles = ["Admin", "Project Manager"] as const;
+const installationRoles = ["Admin", "Installation Head", "Installation Team"] as const;
 
 export async function GET(
-  request: Request,
+  _request: Request,
   context: { params: Promise<{ assignmentId: string }> }
 ) {
   const authCheck = await requireRole([...installationRoles]);
@@ -129,7 +129,7 @@ export async function PUT(
     await admin
       .from("projects")
       .update({
-        project_workflow_status: "installation_in_progress",
+        workflow_status: "installation_in_progress",
         updated_at: new Date().toISOString(),
       })
       .eq("id", assignment.project_id);
@@ -137,7 +137,7 @@ export async function PUT(
     await admin
       .from("projects")
       .update({
-        project_workflow_status: "installation_completed",
+        workflow_status: "installation_completed",
         updated_at: new Date().toISOString(),
       })
       .eq("id", assignment.project_id);

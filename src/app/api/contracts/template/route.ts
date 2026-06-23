@@ -21,6 +21,7 @@ const contractRoles = [
   "Admin",
   "Sales Manager",
   "Sales Rep",
+  "Branch Manager",
   "Finance / Accountant",
 ] as const;
 

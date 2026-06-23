@@ -3,9 +3,9 @@ import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseServiceRoleKey, supabaseServiceRoleError } from "@/lib/supabase/config";
 
-const installationRoles = ["Admin", "Project Manager"] as const;
+const installationRoles = ["Admin", "Installation Head", "Installation Team"] as const;
 
-export async function GET(request: Request) {
+export async function GET() {
   const authCheck = await requireRole([...installationRoles]);
   if (!authCheck.ok) {
     return NextResponse.json(

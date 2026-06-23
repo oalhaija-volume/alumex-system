@@ -8,10 +8,10 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useClients } from "@/components/clients/ClientsProvider";
 import type { Project, ProjectStatus, StructuralOpening } from "@/data/ui";
 import { friendlyDatabaseError } from "@/lib/friendlyErrors";
-import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 type ProjectInput = Omit<Project, "id" | "structuralOpenings">;
 type StructuralOpeningInput = Omit<StructuralOpening, "id">;
@@ -20,6 +20,7 @@ type ProjectsContextValue = {
   projects: Project[];
   isLoading: boolean;
   error: string;
+  warning: string;
   refreshProjects: () => Promise<void>;
   createProject: (project: ProjectInput) => Promise<void>;
   updateProject: (id: string, project: ProjectInput) => Promise<void>;
@@ -49,6 +50,7 @@ type ProjectRow = {
   project_type: string | null;
   sales_engineer_id: string | null;
   status: ProjectStatus;
+  clients?: { client_name: string | null } | Array<{ client_name: string | null }> | null;
 };
 
 type OpeningRow = {
@@ -59,6 +61,7 @@ type OpeningRow = {
   opening_code: string;
   width: number | string;
   height: number | string;
+  solid_panel_height?: number | string | null;
   quantity: number;
   product_system: string | null;
   glass_type: string | null;
@@ -79,12 +82,24 @@ function formatSupabaseError(error: unknown, fallback: string) {
   return friendlyDatabaseError(error, fallback);
 }
 
-function logSupabaseError(action: string, error: unknown) {
-  console.error(`[ProjectsProvider] ${action} failed`, error);
+async function readApiError(response: Response, fallback: string) {
+  const body = (await response.json().catch(() => null)) as {
+    error?: string;
+  } | null;
+
+  return body?.error ?? fallback;
 }
 
 function normalizeNumber(value: number | string | null | undefined) {
   return Number(value ?? 0);
+}
+
+function projectClientName(project: ProjectRow) {
+  const client = Array.isArray(project.clients)
+    ? project.clients[0]
+    : project.clients;
+
+  return client?.client_name ?? "";
 }
 
 function mapOpening(row: OpeningRow): StructuralOpening {
@@ -95,6 +110,7 @@ function mapOpening(row: OpeningRow): StructuralOpening {
     openingCode: row.opening_code,
     width: normalizeNumber(row.width),
     height: normalizeNumber(row.height),
+    solidPanelHeight: normalizeNumber(row.solid_panel_height),
     quantity: row.quantity,
     productSystem: row.product_system ?? "",
     glassType: row.glass_type ?? "",
@@ -103,105 +119,105 @@ function mapOpening(row: OpeningRow): StructuralOpening {
   };
 }
 
-function openingPayload(opening: StructuralOpeningInput, projectId?: string, userId?: string) {
+function mapProject(
+  project: ProjectRow,
+  clients: ReturnType<typeof useClients>["clients"],
+  openingsByProject = new Map<string, StructuralOpening[]>(),
+): Project {
+  const client = clients.find((item) => item.id === project.client_id);
+
   return {
-    ...(projectId ? { project_id: projectId } : {}),
-    floor: opening.floor || null,
-    room: opening.room || null,
-    opening_code: opening.openingCode,
-    width: opening.width,
-    height: opening.height,
-    quantity: opening.quantity,
-    product_system: opening.productSystem || null,
-    glass_type: opening.glassType || null,
-    aluminum_color: opening.aluminumColor || null,
-    notes: opening.notes || null,
-    ...(userId ? { created_by: userId } : {}),
+    id: project.id,
+    projectNumber: project.project_number,
+    projectName: project.project_name,
+    clientId: project.client_id,
+    client: client?.clientName ?? projectClientName(project),
+    address: project.address ?? "",
+    locationLatitude:
+      project.location_latitude === null
+        ? null
+        : normalizeNumber(project.location_latitude),
+    locationLongitude:
+      project.location_longitude === null
+        ? null
+        : normalizeNumber(project.location_longitude),
+    geofenceRadiusMeters:
+      project.geofence_radius_meters === null
+        ? 100
+        : normalizeNumber(project.geofence_radius_meters),
+    projectType: project.project_type ?? "",
+    salesEngineerId: project.sales_engineer_id ?? undefined,
+    salesEngineer: "",
+    status: project.status,
+    structuralOpenings: openingsByProject.get(project.id) ?? [],
   };
 }
 
 export function ProjectsProvider({ children }: { children: React.ReactNode }) {
+  const { isLoaded: isRoleLoaded, role } = useCurrentRole();
   const { clients } = useClients();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
+  const canLoadProjects = Boolean(role);
 
   const refreshProjects = useCallback(async () => {
+    if (!isRoleLoaded) {
+      return;
+    }
+
+    if (!canLoadProjects) {
+      setProjects([]);
+      setError("");
+      setWarning("");
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError("");
+    setWarning("");
 
     try {
-      const supabase = createSupabaseClient();
-      const [{ data: projectRows, error: projectsError }, { data: openingRows, error: openingsError }] =
-        await Promise.all([
-          supabase
-            .from("projects")
-            .select(
-              "id, project_number, project_name, client_id, address, location_latitude, location_longitude, geofence_radius_meters, project_type, sales_engineer_id, status",
-            )
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("openings")
-            .select(
-              "id, project_id, floor, room, opening_code, width, height, quantity, product_system, glass_type, aluminum_color, notes",
-            ),
-        ]);
+      const response = await fetch("/api/projects", { cache: "no-store" });
+      const body = (await response.json().catch(() => null)) as
+        | {
+            projects?: ProjectRow[];
+            openings?: OpeningRow[];
+            error?: string;
+            warning?: string;
+          }
+        | null;
 
-      if (projectsError) {
-        logSupabaseError("load projects", projectsError);
-        throw projectsError;
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Unable to load projects.");
       }
 
-      if (openingsError) {
-        logSupabaseError("load openings", openingsError);
-        throw openingsError;
+      if (body?.warning) {
+        setWarning(
+          `Projects loaded using compatibility mode. Apply supabase/manual_sql/20260622_opening_solid_panel_height.sql to remove this warning. Details: ${body.warning}`,
+        );
       }
 
       const openingsByProject = new Map<string, StructuralOpening[]>();
-      ((openingRows ?? []) as OpeningRow[]).forEach((opening) => {
+      (body?.openings ?? []).forEach((opening) => {
         const list = openingsByProject.get(opening.project_id) ?? [];
         list.push(mapOpening(opening));
         openingsByProject.set(opening.project_id, list);
       });
 
       setProjects(
-        ((projectRows ?? []) as ProjectRow[]).map((project) => {
-          const client = clients.find((item) => item.id === project.client_id);
-
-          return {
-            id: project.id,
-            projectNumber: project.project_number,
-            projectName: project.project_name,
-            clientId: project.client_id,
-            client: client?.clientName ?? "",
-            address: project.address ?? "",
-            locationLatitude:
-              project.location_latitude === null
-                ? null
-                : normalizeNumber(project.location_latitude),
-            locationLongitude:
-              project.location_longitude === null
-                ? null
-                : normalizeNumber(project.location_longitude),
-            geofenceRadiusMeters:
-              project.geofence_radius_meters === null
-                ? 100
-                : normalizeNumber(project.geofence_radius_meters),
-            projectType: project.project_type ?? "",
-            salesEngineerId: project.sales_engineer_id ?? undefined,
-            salesEngineer: "",
-            status: project.status,
-            structuralOpenings: openingsByProject.get(project.id) ?? [],
-          };
-        }),
+        (body?.projects ?? []).map((project) =>
+          mapProject(project, clients, openingsByProject),
+        ),
       );
     } catch (loadError) {
       setError(formatSupabaseError(loadError, "Unable to load projects."));
-      setProjects([]);
     } finally {
       setIsLoading(false);
     }
-  }, [clients]);
+  }, [canLoadProjects, clients, isRoleLoaded]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -213,69 +229,12 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
 
   const createProject = useCallback(
     async (project: ProjectInput) => {
-      const supabase = createSupabaseClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const clientId = project.clientId ?? project.client;
-      const projectNumber =
-        project.projectNumber.trim() ||
-        `PRJ-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
-
-      if (
-        projects.some(
-          (currentProject) =>
-            currentProject.projectNumber.trim().toLowerCase() ===
-            projectNumber.toLowerCase(),
-        )
-      ) {
-        throw new Error("Project number already exists.");
-      }
-
-      const { error: createError } = await supabase.from("projects").insert({
-        project_number: projectNumber,
-        project_name: project.projectName,
-        client_id: clientId,
-        address: project.address || null,
-        location_latitude: project.locationLatitude ?? null,
-        location_longitude: project.locationLongitude ?? null,
-        geofence_radius_meters: project.geofenceRadiusMeters ?? 100,
-        project_type: project.projectType || null,
-        status: project.status,
-        sales_engineer_id: project.salesEngineerId ?? null,
-        created_by: user?.id ?? null,
-      });
-
-      if (createError) {
-        logSupabaseError("create project", createError);
-        throw new Error(formatSupabaseError(createError, "Unable to save project."));
-      }
-
-      await refreshProjects();
-    },
-    [projects, refreshProjects],
-  );
-
-  const updateProject = useCallback(
-    async (id: string, project: ProjectInput) => {
-      const supabase = createSupabaseClient();
       const clientId = project.clientId ?? project.client;
 
-      if (
-        projects.some(
-          (currentProject) =>
-            currentProject.id !== id &&
-            currentProject.projectNumber.trim().toLowerCase() ===
-              project.projectNumber.trim().toLowerCase(),
-        )
-      ) {
-        throw new Error("Project number already exists.");
-      }
-
-      const { error: updateError } = await supabase
-        .from("projects")
-        .update({
-          project_number: project.projectNumber,
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           project_name: project.projectName,
           client_id: clientId,
           address: project.address || null,
@@ -285,17 +244,55 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
           project_type: project.projectType || null,
           status: project.status,
           sales_engineer_id: project.salesEngineerId ?? null,
-        })
-        .eq("id", id);
+        }),
+      });
 
-      if (updateError) {
-        logSupabaseError("update project", updateError);
-        throw new Error(formatSupabaseError(updateError, "Unable to save project."));
+      if (!response.ok) {
+        throw new Error(await readApiError(response, "Unable to save project."));
+      }
+
+      const savedProject = (await response.json().catch(() => null)) as ProjectRow | null;
+
+      if (savedProject) {
+        setProjects((currentProjects) => [
+          mapProject(savedProject, clients),
+          ...currentProjects.filter((item) => item.id !== savedProject.id),
+        ]);
       }
 
       await refreshProjects();
     },
-    [projects, refreshProjects],
+    [clients, refreshProjects],
+  );
+
+  const updateProject = useCallback(
+    async (id: string, project: ProjectInput) => {
+      const clientId = project.clientId ?? project.client;
+
+      const response = await fetch("/api/projects", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          project_name: project.projectName,
+          client_id: clientId,
+          address: project.address || null,
+          location_latitude: project.locationLatitude ?? null,
+          location_longitude: project.locationLongitude ?? null,
+          geofence_radius_meters: project.geofenceRadiusMeters ?? 100,
+          project_type: project.projectType || null,
+          status: project.status,
+          sales_engineer_id: project.salesEngineerId ?? null,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readApiError(response, "Unable to save project."));
+      }
+
+      await refreshProjects();
+    },
+    [refreshProjects],
   );
 
   const deleteProjects = useCallback(
@@ -325,17 +322,14 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
 
   const addOpening = useCallback(
     async (projectId: string, opening: StructuralOpeningInput) => {
-      const supabase = createSupabaseClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const { error: createError } = await supabase
-        .from("openings")
-        .insert(openingPayload(opening, projectId, user?.id));
+      const response = await fetch(`/api/projects/${projectId}/openings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(opening),
+      });
 
-      if (createError) {
-        logSupabaseError("create opening", createError);
-        throw new Error(formatSupabaseError(createError, "Unable to save opening."));
+      if (!response.ok) {
+        throw new Error(await readApiError(response, "Unable to save opening."));
       }
 
       await refreshProjects();
@@ -349,15 +343,14 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
       openingId: string,
       opening: StructuralOpeningInput,
     ) => {
-      const supabase = createSupabaseClient();
-      const { error: updateError } = await supabase
-        .from("openings")
-        .update(openingPayload(opening))
-        .eq("id", openingId);
+      const response = await fetch(`/api/projects/${_projectId}/openings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: openingId, ...opening }),
+      });
 
-      if (updateError) {
-        logSupabaseError("update opening", updateError);
-        throw new Error(formatSupabaseError(updateError, "Unable to save opening."));
+      if (!response.ok) {
+        throw new Error(await readApiError(response, "Unable to save opening."));
       }
 
       await refreshProjects();
@@ -366,16 +359,14 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
   );
 
   const deleteOpening = useCallback(
-    async (_projectId: string, openingId: string) => {
-      const supabase = createSupabaseClient();
-      const { error: deleteError } = await supabase
-        .from("openings")
-        .delete()
-        .eq("id", openingId);
+    async (projectId: string, openingId: string) => {
+      const response = await fetch(
+        `/api/projects/${projectId}/openings?openingId=${encodeURIComponent(openingId)}`,
+        { method: "DELETE" },
+      );
 
-      if (deleteError) {
-        logSupabaseError("delete opening", deleteError);
-        throw new Error(formatSupabaseError(deleteError, "Unable to delete opening."));
+      if (!response.ok) {
+        throw new Error(await readApiError(response, "Unable to delete opening."));
       }
 
       await refreshProjects();
@@ -407,6 +398,7 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
       projects,
       isLoading,
       error,
+      warning,
       refreshProjects,
       createProject,
       updateProject,
@@ -421,6 +413,7 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
       projects,
       isLoading,
       error,
+      warning,
       refreshProjects,
       createProject,
       updateProject,

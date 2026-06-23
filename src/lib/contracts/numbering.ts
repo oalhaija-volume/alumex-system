@@ -1,17 +1,21 @@
-export function formatContractNumber(year: number, sequence: number) {
-  return `CT-${year}-${sequence.toString().padStart(4, "0")}`;
+export function formatContractNumber(year: number, month: number, sequence: number) {
+  const period = `${year}${month.toString().padStart(2, "0")}`;
+
+  return `CT-${period}-${sequence.toString().padStart(4, "0")}`;
 }
 
 export function generateNextContractNumber({
   contractNumbers,
   reservedNumbers = [],
-  year = new Date().getFullYear(),
+  date = new Date(),
 }: {
   contractNumbers: string[];
   reservedNumbers?: string[];
-  year?: number;
+  date?: Date;
 }) {
-  const prefix = `CT-${year}-`;
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const prefix = `CT-${year}${month.toString().padStart(2, "0")}-`;
   const unavailableNumbers = new Set([
     ...contractNumbers,
     ...reservedNumbers,
@@ -30,7 +34,7 @@ export function generateNextContractNumber({
 
   do {
     sequence += 1;
-    candidate = formatContractNumber(year, sequence);
+    candidate = formatContractNumber(year, month, sequence);
   } while (unavailableNumbers.has(candidate));
 
   return candidate;

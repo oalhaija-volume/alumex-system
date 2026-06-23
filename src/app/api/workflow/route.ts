@@ -6,10 +6,10 @@ import {
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
 import {
-  canViewSalesPrices,
   normalizeAppRole,
   type AppRole,
 } from "@/lib/auth/roles";
+import { lifecycleStageForWorkflowStatus } from "@/lib/workflow/lifecycle";
 import {
   commercialVisibilityForRole,
   isWorkflowStatus,
@@ -70,6 +70,7 @@ type OpeningRow = {
   opening_code: string;
   width: number | string;
   height: number | string;
+  solid_panel_height?: number | string | null;
   quantity: number;
   area_sqm: number | string;
   product_system: string | null;
@@ -225,6 +226,7 @@ type WorkflowProject = {
     room: string;
     width: number;
     height: number;
+    solidPanelHeight: number;
     quantity: number;
     areaSqm: number;
     productSystem: string;
@@ -256,6 +258,18 @@ type AssignableUser = {
   id: string;
   name: string;
   role: AppRole;
+};
+
+type WorkflowEventPayload = {
+  project_id: string;
+  event_type: string;
+  from_workflow_status: ProjectWorkflowStatus;
+  to_workflow_status: ProjectWorkflowStatus;
+  actor_id: string;
+  assigned_user_id?: string | null;
+  assignment_field?: string | null;
+  notes: string;
+  metadata?: Record<string, unknown>;
 };
 
 type AssignmentType =
@@ -593,7 +607,7 @@ function canRoleSeeProject({
     return project.site_engineer_id === userId;
   }
 
-  if (role === "Auditor") {
+  if (role === "Auditor" || role === "Audit Team") {
     return status === "audit_pending";
   }
 
@@ -601,15 +615,157 @@ function canRoleSeeProject({
     return status === "branch_manager_review";
   }
 
-  if (role === "Delivery Head") {
-    return ["final_payment_received", "delivery_pending"].includes(status);
+  if (role === "Factory") {
+    return [
+      "approved_for_factory",
+      "sent_to_factory",
+      "factory_in_progress",
+      "factory_completed",
+    ].includes(status);
   }
 
-  if (role === "Installation Head") {
+  if (role === "Glass Department") {
+    return ["sent_to_factory", "factory_in_progress"].includes(status);
+  }
+
+  if (role === "Delivery Head" || role === "Delivery Team") {
+    return ["final_payment_received", "delivery_pending", "delivered"].includes(status);
+  }
+
+  if (role === "Installation Head" || role === "Installation Team") {
     return ["delivered", "installation_in_progress", "installation_completed"].includes(status);
   }
 
+  if (role === "Quality Control") {
+    return ["installation_completed", "quality_control", "project_handover"].includes(status);
+  }
+
   return false;
+}
+
+async function recordProjectStageHistory({
+  admin,
+  projectId,
+  previousStatus,
+  nextStatus,
+  userId,
+  eventId,
+  notes,
+  metadata,
+}: {
+  admin: ReturnType<typeof createAdminClient>;
+  projectId: string;
+  previousStatus: ProjectWorkflowStatus;
+  nextStatus: ProjectWorkflowStatus;
+  userId: string;
+  eventId: string;
+  notes: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const nextStage = lifecycleStageForWorkflowStatus(nextStatus);
+
+  if (!nextStage) {
+    return;
+  }
+
+  const previousStage = lifecycleStageForWorkflowStatus(previousStatus);
+  const { data: openStages, error: openStageError } = await admin
+    .from("project_stage_history")
+    .select("id, stage_key")
+    .eq("project_id", projectId)
+    .is("exited_at", null)
+    .order("entered_at", { ascending: false })
+    .limit(1);
+
+  if (openStageError) {
+    throw openStageError;
+  }
+
+  const currentOpenStage = (openStages ?? [])[0] as
+    | { id: string; stage_key: string }
+    | undefined;
+  const stageChanged =
+    previousStage?.key !== nextStage.key ||
+    currentOpenStage?.stage_key !== nextStage.key;
+
+  if (!stageChanged && currentOpenStage?.stage_key === nextStage.key) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  if (currentOpenStage) {
+    const { error: closeError } = await admin
+      .from("project_stage_history")
+      .update({ exited_at: now })
+      .eq("project_id", projectId)
+      .is("exited_at", null);
+
+    if (closeError) {
+      throw closeError;
+    }
+  }
+
+  const { error: historyError } = await admin
+    .from("project_stage_history")
+    .insert({
+      project_id: projectId,
+      stage_key: nextStage.key,
+      workflow_status: nextStatus,
+      entered_at: now,
+      responsible_user_id: userId,
+      source_event_id: eventId,
+      notes,
+      metadata: {
+        ...metadata,
+        stageSequence: nextStage.sequence,
+        stageName: nextStage.label,
+      },
+    });
+
+  if (historyError) {
+    throw historyError;
+  }
+}
+
+async function insertWorkflowEventWithStage({
+  admin,
+  payload,
+}: {
+  admin: ReturnType<typeof createAdminClient>;
+  payload: WorkflowEventPayload;
+}) {
+  const { data, error } = await admin
+    .from("project_workflow_events")
+    .insert({
+      ...payload,
+      metadata: payload.metadata ?? {},
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  const event = data as { id: string };
+
+  try {
+    await recordProjectStageHistory({
+      admin,
+      projectId: payload.project_id,
+      previousStatus: payload.from_workflow_status,
+      nextStatus: payload.to_workflow_status,
+      userId: payload.actor_id,
+      eventId: event.id,
+      notes: payload.notes,
+      metadata: payload.metadata,
+    });
+  } catch (stageHistoryError) {
+    console.error("[api/workflow] stage history update failed", stageHistoryError);
+  }
+
+  return event;
 }
 
 async function requireWorkflowUser() {
@@ -706,7 +862,7 @@ export async function GET(request: Request) {
   const requestedProjectId = searchParams.get("projectId");
   const { admin, role, user } = authCheck;
   const visibility = commercialVisibilityForRole(role);
-  const canLoadQuotationItems = canViewSalesPrices(role);
+  const canLoadQuotationItems = visibility === "full";
 
   try {
     const [
@@ -730,7 +886,7 @@ export async function GET(request: Request) {
         .select("id, email, full_name, role, is_active, status"),
       admin
         .from("openings")
-        .select("id, project_id, floor, room, opening_code, width, height, quantity, area_sqm, product_system, glass_type, aluminum_color, notes"),
+        .select("id, project_id, floor, room, opening_code, width, height, solid_panel_height, quantity, area_sqm, product_system, glass_type, aluminum_color, notes"),
       admin
         .from("quotations")
         .select("id, quotation_number, project_id, status, subtotal, line_discount_total, quotation_discount_total, grand_total, created_at")
@@ -894,6 +1050,7 @@ export async function GET(request: Request) {
           room: opening.room ?? "",
           width: numberValue(opening.width),
           height: numberValue(opening.height),
+          solidPanelHeight: numberValue(opening.solid_panel_height),
           quantity: opening.quantity,
           areaSqm: numberValue(opening.area_sqm),
           productSystem: opening.product_system ?? "",
@@ -1137,7 +1294,11 @@ async function handleWorkflowAction({
       role === "Site Engineer" && projectData.site_engineer_id === user.id;
     const canEditDescription = role === "Admin" || isAssignedProjectEngineer;
     const canManageMeasurement = canEditDescription || isAssignedSiteEngineer;
-    const canManageFactory = role === "Admin" || isAssignedProjectEngineer;
+    const canManageFactory =
+      role === "Admin" ||
+      role === "Factory" ||
+      role === "Glass Department" ||
+      isAssignedProjectEngineer;
     const isAssignedProjectManager =
       role === "Project Manager" && projectData.project_manager_id === user.id;
     const canManageInstallation = role === "Admin" || isAssignedProjectManager;
@@ -1162,19 +1323,20 @@ async function handleWorkflowAction({
         throw updateError;
       }
 
-      const { error: eventError } = await admin
-        .from("project_workflow_events")
-        .insert({
-          project_id: projectId,
-          event_type: eventType,
-          from_workflow_status: previousStatus,
-          to_workflow_status: nextStatus,
-          actor_id: user.id,
-          notes,
-          metadata: metadata ?? {},
+      try {
+        await insertWorkflowEventWithStage({
+          admin,
+          payload: {
+            project_id: projectId,
+            event_type: eventType,
+            from_workflow_status: previousStatus,
+            to_workflow_status: nextStatus,
+            actor_id: user.id,
+            notes,
+            metadata,
+          },
         });
-
-      if (eventError) {
+      } catch (eventError) {
         await rollbackProjectWorkflowStatus({
           admin,
           projectId,
@@ -1243,7 +1405,8 @@ async function handleWorkflowAction({
       (workflowAction === "markDeliveryPending" ||
         workflowAction === "markDelivered") &&
       role !== "Admin" &&
-      role !== "Delivery Head"
+      role !== "Delivery Head" &&
+      role !== "Delivery Team"
     ) {
       return NextResponse.json(
         { error: "Delivery head access is required." },
@@ -1354,24 +1517,25 @@ async function handleWorkflowAction({
         }
       }
 
-      const { error: eventError } = await admin
-        .from("project_workflow_events")
-        .insert({
-          project_id: projectId,
-          event_type:
-            workflowAction === "sendDescriptionToAudit"
-              ? "description_sent_to_audit"
-              : "description_saved",
-          from_workflow_status: previousStatus,
-          to_workflow_status: nextStatus,
-          actor_id: user.id,
-          notes:
-            workflowAction === "sendDescriptionToAudit"
-              ? "Project description sent to audit"
-              : "Project description saved",
+      try {
+        await insertWorkflowEventWithStage({
+          admin,
+          payload: {
+            project_id: projectId,
+            event_type:
+              workflowAction === "sendDescriptionToAudit"
+                ? "description_sent_to_audit"
+                : "description_saved",
+            from_workflow_status: previousStatus,
+            to_workflow_status: nextStatus,
+            actor_id: user.id,
+            notes:
+              workflowAction === "sendDescriptionToAudit"
+                ? "Project description sent to audit"
+                : "Project description saved",
+          },
         });
-
-      if (eventError) {
+      } catch (eventError) {
         if (nextStatus !== previousStatus) {
           await rollbackProjectWorkflowStatus({
             admin,
@@ -1430,25 +1594,26 @@ async function handleWorkflowAction({
         throw updateError;
       }
 
-      const { error: eventError } = await admin
-        .from("project_workflow_events")
-        .insert({
-          project_id: projectId,
-          event_type:
-            workflowAction === "approveAudit"
-              ? "audit_approved"
-              : "audit_rejected",
-          from_workflow_status: previousStatus,
-          to_workflow_status: nextStatus,
-          actor_id: user.id,
-          notes:
-            workflowAction === "approveAudit"
-              ? "Audit approved"
-              : "Audit rejected",
-          metadata: { comments },
+      try {
+        await insertWorkflowEventWithStage({
+          admin,
+          payload: {
+            project_id: projectId,
+            event_type:
+              workflowAction === "approveAudit"
+                ? "audit_approved"
+                : "audit_rejected",
+            from_workflow_status: previousStatus,
+            to_workflow_status: nextStatus,
+            actor_id: user.id,
+            notes:
+              workflowAction === "approveAudit"
+                ? "Audit approved"
+                : "Audit rejected",
+            metadata: { comments },
+          },
         });
-
-      if (eventError) {
+      } catch (eventError) {
         await rollbackProjectWorkflowStatus({
           admin,
           projectId,
@@ -1806,24 +1971,25 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const { error: eventError } = await admin
-      .from("project_workflow_events")
-      .insert({
-        project_id: body.projectId,
-        event_type: "assignment",
-        from_workflow_status: previousStatus,
-        to_workflow_status: config.nextStatus,
-        actor_id: user.id,
-        assigned_user_id: body.assigneeId,
-        assignment_field: config.assignmentField,
-        notes: `${config.targetRole} assigned`,
-        metadata: {
-          assignmentType: config.assignmentType,
-          assignedRole: config.targetRole,
+    try {
+      await insertWorkflowEventWithStage({
+        admin,
+        payload: {
+          project_id: body.projectId,
+          event_type: "assignment",
+          from_workflow_status: previousStatus,
+          to_workflow_status: config.nextStatus,
+          actor_id: user.id,
+          assigned_user_id: body.assigneeId,
+          assignment_field: config.assignmentField,
+          notes: `${config.targetRole} assigned`,
+          metadata: {
+            assignmentType: config.assignmentType,
+            assignedRole: config.targetRole,
+          },
         },
       });
-
-    if (eventError) {
+    } catch (eventError) {
       console.error("[api/workflow] assignment event log failed", eventError);
 
       const { error: rollbackError } = await admin
@@ -2101,55 +2267,36 @@ async function handleFinanceAction({
       );
     }
 
-    const { error: eventError } = await admin
-      .from("project_workflow_events")
-      .insert({
-        project_id: projectId,
-        event_type: actionConfig.eventType,
-        from_workflow_status: previousStatus,
-        to_workflow_status: actionConfig.nextStatus,
-        actor_id: user.id,
-        notes: actionConfig.note,
-        metadata: {
-          financeAction,
-          contractId: contractData.id,
-          contractValue,
-          downPaymentRequired: requiredDownPayment,
-          downPaymentReceived: receivedAmount,
+    try {
+      await insertWorkflowEventWithStage({
+        admin,
+        payload: {
+          project_id: projectId,
+          event_type: actionConfig.eventType,
+          from_workflow_status: previousStatus,
+          to_workflow_status: actionConfig.nextStatus,
+          actor_id: user.id,
+          notes: actionConfig.note,
+          metadata: {
+            financeAction,
+            contractId: contractData.id,
+            contractValue,
+            downPaymentRequired: requiredDownPayment,
+            downPaymentReceived: receivedAmount,
+          },
         },
       });
-
-    if (eventError) {
+    } catch (eventError) {
       console.error("[api/workflow] finance event log failed", eventError);
-      await rollbackProjectWorkflowStatus({
-        admin,
-        projectId,
-        previousStatus,
-      });
-      await rollbackProjectFinance({
-        admin,
-        projectId,
-        previousFinance: financeData
-          ? {
-              project_id: projectId,
-              contract_id: financeData.contract_id,
-              down_payment_required: financeData.down_payment_required,
-              down_payment_received: financeData.down_payment_received,
-              payment_status: financeData.payment_status,
-              exception_reason: financeData.exception_reason,
-              confirmed_by: financeData.confirmed_by,
-              confirmed_at: financeData.confirmed_at,
-            }
-          : null,
-      });
 
-      return NextResponse.json(
-        {
-          error:
-            "Finance update was not saved because the workflow event log is not available.",
+      return NextResponse.json({
+        finance: {
+          projectId,
+          workflowStatus: actionConfig.nextStatus,
+          paymentStatus: actionConfig.paymentStatus,
+          eventLogWarning: true,
         },
-        { status: 500 },
-      );
+      });
     }
 
     return NextResponse.json({

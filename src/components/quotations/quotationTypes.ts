@@ -3,6 +3,8 @@ import type { Project, StructuralOpening } from "@/data/ui";
 export type QuotationLine = StructuralOpening & {
   unitPrice: number;
   discountPercent: number;
+  lineType?: "base" | "addon" | "accessory";
+  isDiscountable?: boolean;
 };
 
 export type QuotationDraft = {
@@ -24,6 +26,8 @@ export type QuotationTotals = {
   quotationDiscount: number;
   grandTotal: number;
   totalArea: number;
+  discountableSubtotal: number;
+  nonDiscountableSubtotal: number;
 };
 
 export const quotationStorageKey = "alumex-current-quotation";
@@ -41,13 +45,16 @@ export function calculateArea(opening: {
 
 export function calculateLineTotal(line: QuotationLine) {
   const gross = calculateArea(line) * line.unitPrice;
-  const discount = gross * (line.discountPercent / 100);
+  const isDiscountable =
+    line.isDiscountable ?? !["addon", "accessory"].includes(line.lineType ?? "base");
+  const discount = isDiscountable ? gross * (line.discountPercent / 100) : 0;
 
   return {
     area: calculateArea(line),
     gross,
     discount,
     net: gross - discount,
+    isDiscountable,
   };
 }
 
@@ -61,8 +68,17 @@ export function calculateQuotationTotals(
     (sum, line) => sum + line.discount,
     0,
   );
-  const afterLineDiscounts = subtotal - lineDiscountTotal;
-  const quotationDiscount = afterLineDiscounts * (discountPercent / 100);
+  const discountableAfterLineDiscounts = lineTotals.reduce(
+    (sum, line) => sum + (line.isDiscountable ? line.net : 0),
+    0,
+  );
+  const nonDiscountableSubtotal = lineTotals.reduce(
+    (sum, line) => sum + (line.isDiscountable ? 0 : line.net),
+    0,
+  );
+  const afterLineDiscounts = discountableAfterLineDiscounts + nonDiscountableSubtotal;
+  const quotationDiscount =
+    discountableAfterLineDiscounts * (discountPercent / 100);
   const totalArea = lineTotals.reduce((sum, line) => sum + line.area, 0);
 
   return {
@@ -70,8 +86,11 @@ export function calculateQuotationTotals(
     lineDiscountTotal,
     afterLineDiscounts,
     quotationDiscount,
-    grandTotal: afterLineDiscounts - quotationDiscount,
+    grandTotal:
+      discountableAfterLineDiscounts - quotationDiscount + nonDiscountableSubtotal,
     totalArea,
+    discountableSubtotal: discountableAfterLineDiscounts,
+    nonDiscountableSubtotal,
   };
 }
 

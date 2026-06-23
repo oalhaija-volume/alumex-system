@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/adminServer";
+import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseServiceRoleKey, supabaseServiceRoleError } from "@/lib/supabase/config";
 
-const factoryRoles = ["Admin"] as const;
+const factoryRoles = ["Admin", "Factory", "Glass Department"] as const;
 
 export async function GET(request: Request) {
-  const authCheck = await requireRole([...factoryRoles, "Installation Head", "Delivery Head"]);
+  const authCheck = await requireRole(factoryRoles);
   if (!authCheck.ok) {
     return NextResponse.json(
       { error: authCheck.error },
@@ -28,11 +29,11 @@ export async function GET(request: Request) {
       client_id,
       address,
       clients(client_name, mobile, email),
-      project_workflow_status,
+      workflow_status,
       created_at,
       updated_at
     `)
-    .in("project_workflow_status", [
+    .in("workflow_status", [
       "approved_for_factory",
       "sent_to_factory",
       "factory_in_progress",
@@ -41,13 +42,16 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false });
 
   if (status) {
-    query = query.eq("project_workflow_status", status);
+    query = query.eq("workflow_status", status);
   }
 
   const { data, error } = await query;
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: friendlyDatabaseError(error, "Unable to load factory projects.") },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json(data);
@@ -97,7 +101,7 @@ export async function PUT(request: Request) {
   const { data, error } = await admin
     .from("projects")
     .update({
-      project_workflow_status: newStatus,
+      workflow_status: newStatus,
       updated_at: new Date().toISOString(),
     })
     .eq("id", projectId)
@@ -105,7 +109,10 @@ export async function PUT(request: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: friendlyDatabaseError(error, "Unable to update factory project.") },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json(data);

@@ -14,6 +14,9 @@ export type ContractDraft = {
   clientPhone: string;
   clientAddress: string;
   totalAmount: number;
+  sourceTotalAmount?: number;
+  contractDiscountPercent?: number;
+  contractDiscountTotal?: number;
   paymentTerms: string;
   warrantyTerms: string;
   executionTerms: string;
@@ -24,6 +27,12 @@ export type ContractDraft = {
   salesEngineer: string;
   preparedBy: string;
   language: ContractLanguage;
+  clientSignatureDataUrl?: string;
+  clientSignedName?: string;
+  clientSignedAt?: string;
+  salesSignatureDataUrl?: string;
+  salesSignedName?: string;
+  salesSignedAt?: string;
 };
 
 export type ContractTemplate = {

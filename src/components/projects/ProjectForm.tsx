@@ -32,7 +32,6 @@ const fields: Array<{
   type?: "textarea" | "select";
   required?: boolean;
 }> = [
-  { key: "projectNumber", label: "projects.fields.projectNumber" },
   { key: "projectName", label: "projects.fields.projectName", required: true },
   { key: "client", label: "projects.fields.client", required: true },
   { key: "projectType", label: "projects.fields.projectType", required: true },
@@ -113,6 +112,14 @@ export function ProjectForm({
           {error}
         </p>
       ) : null}
+      <div className="rounded-md border border-border bg-surface-muted px-3 py-2">
+        <p className="text-xs font-bold uppercase tracking-wide text-muted">
+          {t("projects.fields.projectNumber")}
+        </p>
+        <p className="mt-1 text-sm font-semibold text-foreground">
+          {project?.projectNumber ?? t("projects.projectNumberGenerated")}
+        </p>
+      </div>
       <div className="grid gap-4 md:grid-cols-2">
         {fields.map((field) => {
           const id = `project-${field.key}`;

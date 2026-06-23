@@ -8,6 +8,7 @@ import { useI18n } from "@/components/i18n/I18nProvider";
 type ManagedUser = {
   id: string;
   email: string;
+  username: string | null;
   full_name: string | null;
   role: AppRole | "Sales User";
   status?: "Active" | "Inactive";
@@ -29,7 +30,7 @@ async function readError(response: Response, fallback: string) {
 export function UsersSettings() {
   const { t, term, formatDate } = useI18n();
   const [users, setUsers] = useState<ManagedUser[]>([]);
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<AppRole>("Sales Rep");
   const [error, setError] = useState("");
@@ -111,7 +112,7 @@ export function UsersSettings() {
     setError("");
     setNotice("");
 
-    if (!email.trim() || !password.trim()) {
+    if (!username.trim() || !password.trim()) {
       setError(t("settings.emailRequired"));
       return;
     }
@@ -122,7 +123,7 @@ export function UsersSettings() {
       const response = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, role }),
+        body: JSON.stringify({ username, password, role }),
       });
 
       if (!response.ok) {
@@ -135,7 +136,7 @@ export function UsersSettings() {
         return;
       }
 
-      setEmail("");
+      setUsername("");
       setPassword("");
       setRole("Sales Rep");
       setNotice(t("settings.userCreated"));
@@ -219,14 +220,14 @@ export function UsersSettings() {
       <form onSubmit={createUser} className="grid gap-3 lg:grid-cols-[1fr_1fr_220px_auto]">
         <label className="block">
           <span className="text-xs font-bold uppercase tracking-wide text-muted">
-            {t("settings.loginEmail")}
+            {t("settings.loginUsername")}
           </span>
           <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            type="text"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
             className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground outline-none transition placeholder:text-muted focus:border-primary focus:ring-4 focus:ring-info-surface"
-            placeholder={t("auth.emailPlaceholder")}
+            placeholder={t("auth.usernamePlaceholder")}
           />
         </label>
         <label className="block">
@@ -312,7 +313,9 @@ export function UsersSettings() {
               {t("settings.deleteUser")}
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-strong">
-              {t("settings.deleteUserConfirm", { email: deleteTarget.email })}
+              {t("settings.deleteUserConfirm", {
+                username: deleteTarget.username ?? deleteTarget.email,
+              })}
             </p>
             <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button
@@ -382,7 +385,9 @@ function UserRow({
     <div className="rounded-lg border border-border bg-surface-muted p-4">
       <div className="grid gap-4 xl:grid-cols-[1.4fr_180px_170px_1.6fr] xl:items-end">
         <div>
-          <p className="text-sm font-bold text-foreground">{user.email}</p>
+          <p className="text-sm font-bold text-foreground">
+            {user.username ?? user.email}
+          </p>
           <p className="mt-1 text-xs font-semibold text-muted">
             {t("settings.created")} {formatDate(user.created_at)}
           </p>

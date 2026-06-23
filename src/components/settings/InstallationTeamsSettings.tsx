@@ -23,7 +23,7 @@ async function readError(response: Response, fallback: string) {
 }
 
 export function InstallationTeamsSettings() {
-  const { t, formatDate } = useI18n();
+  const { t } = useI18n();
   const [teams, setTeams] = useState<InstallationTeam[]>([]);
   const [teamHeadName, setTeamHeadName] = useState("");
   const [laborCount, setLaborCount] = useState("");
@@ -50,7 +50,7 @@ export function InstallationTeamsSettings() {
     return (await response.json()) as InstallationTeam[];
   }, [t]);
 
-  async function loadTeams() {
+  const loadTeams = useCallback(async () => {
     setError("");
     setIsLoading(true);
 
@@ -63,11 +63,15 @@ export function InstallationTeamsSettings() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [fetchTeams, t]);
 
   useEffect(() => {
-    loadTeams();
-  }, []);
+    const timer = window.setTimeout(() => {
+      void loadTeams();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [loadTeams]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -309,7 +313,7 @@ export function InstallationTeamsSettings() {
           <div className="bg-white rounded-lg p-6 max-w-sm">
             <h3 className="text-lg font-semibold mb-2">Delete Team</h3>
             <p className="text-gray-600 mb-4">
-              Are you sure you want to delete "{deleteTarget.team_head_name}"?
+              Are you sure you want to delete &quot;{deleteTarget.team_head_name}&quot;?
             </p>
             <div className="flex gap-2 justify-end">
               <button

@@ -2,12 +2,16 @@
 
 import { useEffect, useState } from "react";
 import type { AppRole } from "@/lib/auth/permissions";
+import type { EmployeePageAccess } from "@/lib/auth/pageAccess";
 import { normalizeAppRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/client";
 
 export function useCurrentRole() {
   const [role, setRole] = useState<AppRole | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [pageAccess, setPageAccess] = useState<
+    Array<Pick<EmployeePageAccess, "route_path" | "can_access">>
+  >([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -21,6 +25,7 @@ export function useCurrentRole() {
         if (!user) {
           setRole(null);
           setUserId(null);
+          setPageAccess([]);
           return;
         }
 
@@ -28,14 +33,21 @@ export function useCurrentRole() {
 
         if (user.email?.toLowerCase() === "admin@alumex.com") {
           setRole("Admin");
+          setPageAccess([]);
           return;
         }
 
-        const { data } = await supabase
-          .from("profiles")
-          .select("role, is_active")
-          .eq("id", user.id)
-          .single();
+        const [{ data }, { data: accessData }] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("role, is_active")
+            .eq("id", user.id)
+            .single(),
+          supabase
+            .from("employee_page_access")
+            .select("route_path, can_access")
+            .eq("user_id", user.id),
+        ]);
         const profile = data as {
           role: AppRole | null;
           is_active: boolean | null;
@@ -46,8 +58,14 @@ export function useCurrentRole() {
             ? null
             : normalizeAppRole(profile?.role),
         );
+        setPageAccess(
+          (accessData ?? []) as Array<
+            Pick<EmployeePageAccess, "route_path" | "can_access">
+          >,
+        );
       } catch {
         setRole(null);
+        setPageAccess([]);
       } finally {
         setIsLoaded(true);
       }
@@ -56,5 +74,5 @@ export function useCurrentRole() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  return { role, userId, isLoaded, isAdmin: role === "Admin" };
+  return { role, userId, pageAccess, isLoaded, isAdmin: role === "Admin" };
 }

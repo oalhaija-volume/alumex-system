@@ -8,9 +8,9 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import type { Client } from "@/data/ui";
-import { friendlyDatabaseError } from "@/lib/friendlyErrors";
-import { createClient as createSupabaseClient } from "@/lib/supabase/client";
+import { canViewSalesPrices } from "@/lib/auth/roles";
 
 type ClientInput = Omit<Client, "id">;
 
@@ -45,10 +45,6 @@ async function readApiError(response: Response, fallback: string) {
   } | null;
 
   return body?.error ?? fallback;
-}
-
-function logSupabaseError(action: string, error: unknown) {
-  console.error(`[ClientsProvider] ${action} failed`, error);
 }
 
 function mapClient(row: ClientRow): Client {
@@ -93,36 +89,47 @@ function toClientUpdate(client: ClientInput) {
 }
 
 export function ClientsProvider({ children }: { children: React.ReactNode }) {
+  const { isLoaded: isRoleLoaded, role } = useCurrentRole();
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const canLoadClients = canViewSalesPrices(role);
 
   const refreshClients = useCallback(async () => {
+    if (!isRoleLoaded) {
+      return;
+    }
+
+    if (!canLoadClients) {
+      setClients([]);
+      setError("");
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError("");
 
     try {
-      const supabase = createSupabaseClient();
-      const { data, error: loadError } = await supabase
-        .from("clients")
-        .select(
-          "id, client_name, mobile, alternate_mobile, address, province, city, email, notes",
-        )
-        .order("created_at", { ascending: false });
+      const response = await fetch("/api/clients", { cache: "no-store" });
+      const body = (await response.json().catch(() => null)) as
+        | { clients?: ClientRow[]; error?: string }
+        | null;
 
-      if (loadError) {
-        logSupabaseError("load clients", loadError);
-        throw loadError;
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Unable to load clients.");
       }
 
-      setClients(((data ?? []) as ClientRow[]).map(mapClient));
+      setClients((body?.clients ?? []).map(mapClient));
     } catch (loadError) {
-      setError(friendlyDatabaseError(loadError, "Unable to load clients."));
+      setError(
+        loadError instanceof Error ? loadError.message : "Unable to load clients.",
+      );
       setClients([]);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [canLoadClients, isRoleLoaded]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {

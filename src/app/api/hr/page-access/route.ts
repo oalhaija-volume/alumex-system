@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdminUser } from "@/lib/auth/adminServer";
+import { requireRole } from "@/lib/auth/adminServer";
 import { pageAccessItems } from "@/lib/auth/pageAccess";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -67,12 +67,12 @@ function mapAccessPayload(access: unknown, userId: string, adminUserId: string) 
 }
 
 export async function GET() {
-  const adminCheck = await requireAdminUser();
+  const roleCheck = await requireRole(["Admin", "HR"]);
 
-  if (!adminCheck.ok) {
+  if (!roleCheck.ok) {
     return NextResponse.json(
-      { error: adminCheck.error },
-      { status: adminCheck.status },
+      { error: roleCheck.error },
+      { status: roleCheck.status },
     );
   }
 
@@ -101,12 +101,12 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const adminCheck = await requireAdminUser();
+  const roleCheck = await requireRole(["Admin", "HR"]);
 
-  if (!adminCheck.ok) {
+  if (!roleCheck.ok) {
     return NextResponse.json(
-      { error: adminCheck.error },
-      { status: adminCheck.status },
+      { error: roleCheck.error },
+      { status: roleCheck.status },
     );
   }
 
@@ -127,14 +127,7 @@ export async function PUT(request: Request) {
     );
   }
 
-  const accessRows = mapAccessPayload(body?.access, userId, adminCheck.user.id);
-
-  if (accessRows.length === 0) {
-    return NextResponse.json(
-      { error: "At least one page access entry is required." },
-      { status: 400 },
-    );
-  }
+  const accessRows = mapAccessPayload(body?.access, userId, roleCheck.user.id);
 
   const admin = createAdminClient();
   const { error: deleteError } = await admin
@@ -148,6 +141,10 @@ export async function PUT(request: Request) {
       { error: friendlyDatabaseError(deleteError, "Unable to save page access.") },
       { status: 500 },
     );
+  }
+
+  if (accessRows.length === 0) {
+    return NextResponse.json({ access: [] });
   }
 
   const { data, error } = await admin

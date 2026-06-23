@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { hasSupabaseServiceRoleKey, supabaseServiceRoleError } from "@/lib/supabase/config";
 
-const deliveryRoles = ["Admin", "Delivery Head"] as const;
+const deliveryRoles = ["Admin", "Delivery Head", "Delivery Team"] as const;
 
-export async function GET(request: Request) {
+export async function GET() {
   const authCheck = await requireRole([...deliveryRoles]);
   if (!authCheck.ok) {
     return NextResponse.json(
@@ -24,12 +23,12 @@ export async function GET(request: Request) {
       project_name,
       client_id,
       address,
-      project_workflow_status,
+      workflow_status,
       clients(client_name, mobile, email),
       created_at,
       updated_at
     `)
-    .in("project_workflow_status", [
+    .in("workflow_status", [
       "final_payment_received",
       "delivery_pending",
       "delivered",

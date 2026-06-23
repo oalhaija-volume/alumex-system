@@ -1,13 +1,5 @@
-import { Suspense } from "react";
-import { AppShell } from "@/components/AppShell";
-import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
+import { redirect } from "next/navigation";
 
 export default function QuotationsPage() {
-  return (
-    <AppShell>
-      <Suspense fallback={null}>
-        <QuotationBuilder />
-      </Suspense>
-    </AppShell>
-  );
+  redirect("/commercial");
 }

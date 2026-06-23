@@ -3,10 +3,10 @@ import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseServiceRoleKey, supabaseServiceRoleError } from "@/lib/supabase/config";
 
-const deliveryRoles = ["Admin", "Delivery Head"] as const;
+const deliveryRoles = ["Admin", "Delivery Head", "Delivery Team"] as const;
 
 export async function GET(
-  request: Request,
+  _request: Request,
   context: { params: Promise<{ assignmentId: string }> }
 ) {
   const authCheck = await requireRole([...deliveryRoles]);
@@ -21,7 +21,7 @@ export async function GET(
 
   const admin = createAdminClient();
   const { data, error } = await admin
-    .from("delivery_vehicles")
+    .from("delivery_vehicles_with_capacity")
     .select(`
       id,
       delivery_assignment_id,

@@ -15,6 +15,27 @@
   --alumex-red: #d71920;
   --alumex-steel: #64748b;
   --alumex-line: #dbe3ef;
+  --md-primary: #0057a8;
+  --md-on-primary: #ffffff;
+  --md-primary-container: #d6e3ff;
+  --md-on-primary-container: #001b3d;
+  --md-secondary: #526070;
+  --md-on-secondary: #ffffff;
+  --md-secondary-container: #d6e4f7;
+  --md-on-secondary-container: #0f1d2a;
+  --md-error: #ba1a1a;
+  --md-on-error: #ffffff;
+  --md-surface: #f8fafd;
+  --md-on-surface: #191c20;
+  --md-surface-container-low: #ffffff;
+  --md-surface-container: #eef3f8;
+  --md-surface-container-high: #e8edf3;
+  --md-outline: #73777f;
+  --md-outline-variant: #c3c7cf;
+  --md-state-hover: color-mix(in srgb, var(--md-primary) 8%, transparent);
+  --md-state-focus: color-mix(in srgb, var(--md-primary) 12%, transparent);
+  --md-elevation-1: 0 1px 2px rgba(15, 23, 42, 0.1), 0 1px 3px rgba(15, 23, 42, 0.08);
+  --md-elevation-2: 0 2px 6px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.08);
   --success-surface: #ecfdf5;
   --success-text: #047857;
   --warning-surface: #fffbeb;
@@ -40,6 +61,27 @@
   --alumex-red: #ff5a63;
   --alumex-steel: #cbd5e1;
   --alumex-line: #334155;
+  --md-primary: #9ecaff;
+  --md-on-primary: #00325c;
+  --md-primary-container: #004880;
+  --md-on-primary-container: #d3e4ff;
+  --md-secondary: #bbc7d7;
+  --md-on-secondary: #263140;
+  --md-secondary-container: #3c4756;
+  --md-on-secondary-container: #d7e3f4;
+  --md-error: #ffb4ab;
+  --md-on-error: #690005;
+  --md-surface: #101418;
+  --md-on-surface: #e0e2e8;
+  --md-surface-container-low: #181c20;
+  --md-surface-container: #1c2024;
+  --md-surface-container-high: #272a2f;
+  --md-outline: #8d9199;
+  --md-outline-variant: #43474e;
+  --md-state-hover: color-mix(in srgb, var(--md-primary) 10%, transparent);
+  --md-state-focus: color-mix(in srgb, var(--md-primary) 14%, transparent);
+  --md-elevation-1: 0 1px 2px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
+  --md-elevation-2: 0 2px 8px rgba(0, 0, 0, 0.5), 0 6px 16px rgba(0, 0, 0, 0.35);
   --success-surface: #063627;
   --success-text: #86efac;
   --warning-surface: #3b2a07;
@@ -70,6 +112,19 @@
   --color-danger-text: var(--danger-text);
   --color-info-surface: var(--info-surface);
   --color-info-text: var(--info-text);
+  --color-material-primary: var(--md-primary);
+  --color-material-on-primary: var(--md-on-primary);
+  --color-material-primary-container: var(--md-primary-container);
+  --color-material-on-primary-container: var(--md-on-primary-container);
+  --color-material-secondary-container: var(--md-secondary-container);
+  --color-material-on-secondary-container: var(--md-on-secondary-container);
+  --color-material-surface: var(--md-surface);
+  --color-material-on-surface: var(--md-on-surface);
+  --color-material-surface-container-low: var(--md-surface-container-low);
+  --color-material-surface-container: var(--md-surface-container);
+  --color-material-surface-container-high: var(--md-surface-container-high);
+  --color-material-outline: var(--md-outline);
+  --color-material-outline-variant: var(--md-outline-variant);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -77,8 +132,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--md-surface);
+  color: var(--md-on-surface);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   max-width: 100vw;
   overflow-x: hidden;
@@ -131,6 +186,154 @@ textarea {
 ::selection {
   background: var(--alumex-blue);
   color: #ffffff;
+}
+
+@layer components {
+  .material-card {
+    max-width: 100%;
+    overflow: hidden;
+    border-radius: 8px;
+    border: 1px solid var(--md-outline-variant);
+    background: var(--md-surface-container-low);
+    box-shadow: var(--md-elevation-1);
+  }
+
+  .material-card-muted {
+    border-radius: 8px;
+    border: 1px solid var(--md-outline-variant);
+    background: var(--md-surface-container);
+  }
+
+  .material-button-filled,
+  .material-button-tonal,
+  .material-button-outlined,
+  .material-button-danger {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 6px;
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.25rem;
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .material-button-filled {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    box-shadow: var(--md-elevation-1);
+  }
+
+  .material-button-filled:hover {
+    background: var(--alumex-blue-dark);
+  }
+
+  .material-button-tonal {
+    background: var(--md-primary-container);
+    color: var(--md-on-primary-container);
+  }
+
+  .material-button-tonal:hover {
+    background: color-mix(in srgb, var(--md-primary-container) 86%, var(--md-primary));
+  }
+
+  .material-button-outlined {
+    border: 1px solid var(--md-outline-variant);
+    background: transparent;
+    color: var(--md-primary);
+  }
+
+  .material-button-outlined:hover {
+    background: var(--md-state-hover);
+  }
+
+  .material-button-danger {
+    background: var(--md-error);
+    color: var(--md-on-error);
+    box-shadow: var(--md-elevation-1);
+  }
+
+  .material-button-filled:disabled,
+  .material-button-tonal:disabled,
+  .material-button-outlined:disabled,
+  .material-button-danger:disabled {
+    cursor: not-allowed;
+    border-color: var(--md-outline-variant);
+    background: var(--md-surface-container-high);
+    color: var(--muted);
+    box-shadow: none;
+  }
+
+  .material-label {
+    margin-bottom: 0.5rem;
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--md-on-surface);
+  }
+
+  .material-field {
+    min-height: 44px;
+    width: 100%;
+    border-radius: 6px;
+    border: 1px solid var(--md-outline-variant);
+    background: var(--md-surface-container-low);
+    padding: 0.625rem 0.75rem;
+    color: var(--md-on-surface);
+    outline: none;
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      background-color 160ms ease;
+  }
+
+  .material-field:focus {
+    border-color: var(--md-primary);
+    box-shadow: 0 0 0 4px var(--md-state-focus);
+  }
+
+  .material-alert-success,
+  .material-alert-error {
+    border-radius: 8px;
+    border: 1px solid;
+    padding: 0.875rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 650;
+  }
+
+  .material-alert-success {
+    border-color: color-mix(in srgb, var(--success-text) 24%, transparent);
+    background: var(--success-surface);
+    color: var(--success-text);
+  }
+
+  .material-alert-error {
+    border-color: color-mix(in srgb, var(--danger-text) 24%, transparent);
+    background: var(--danger-surface);
+    color: var(--danger-text);
+  }
+
+  .material-status {
+    display: inline-flex;
+    min-height: 28px;
+    align-items: center;
+    white-space: nowrap;
+    border-radius: 999px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1rem;
+    border: 1px solid var(--md-outline-variant);
+    background: var(--md-surface-container);
+    color: var(--muted-strong);
+  }
 }
 
 .rtl .text-left {

@@ -9,6 +9,8 @@ import { friendlyDatabaseError, isDuplicateError } from "@/lib/friendlyErrors";
 
 const duplicateClientMessage = "Client already exists.";
 const clientHasProjectsMessage = "Client has projects and cannot be deleted";
+const clientReadRoles = ["Admin", "Sales Manager", "Sales Rep", "Branch Manager"] as const;
+const clientWriteRoles = ["Admin", "Sales Manager", "Sales Rep"] as const;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -30,6 +32,13 @@ type ExistingClient = {
   email: string | null;
 };
 
+type DuplicateClientMatch = {
+  field: "mobile" | "email" | "name_mobile";
+  clientName: string;
+  mobile: string;
+  email: string;
+};
+
 function textValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -40,6 +49,22 @@ function normalizePhone(value: string) {
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
+}
+
+function duplicateClientDetail(match: DuplicateClientMatch) {
+  const clientName = match.clientName || "an existing client";
+  const mobileDetail = match.mobile ? ` (${match.mobile})` : "";
+  const emailDetail = match.email ? ` (${match.email})` : "";
+
+  if (match.field === "email") {
+    return `Client already exists with the same email: ${clientName}${emailDetail}.`;
+  }
+
+  if (match.field === "name_mobile") {
+    return `Client already exists with the same name and mobile: ${clientName}${mobileDetail}.`;
+  }
+
+  return `Client already exists with the same mobile: ${clientName}${mobileDetail}.`;
 }
 
 async function findDuplicateClient({
@@ -64,28 +89,100 @@ async function findDuplicateClient({
     return { error };
   }
 
-  const duplicate = ((existingClients ?? []) as ExistingClient[]).some(
-    (client) => {
+  const duplicate = ((existingClients ?? []) as ExistingClient[]).reduce<
+    DuplicateClientMatch | null
+  >(
+    (match, client) => {
+      if (match) {
+        return match;
+      }
+
       if (excludeId && client.id === excludeId) {
-        return false;
+        return null;
       }
 
       const existingMobile = normalizePhone(client.mobile ?? "");
       const existingEmail = normalizeEmail(client.email ?? "");
       const existingName = (client.client_name ?? "").trim();
 
-      return (
-        (normalizedMobile && existingMobile === normalizedMobile) ||
-        (normalizedEmail && existingEmail === normalizedEmail) ||
-        (existingName === clientName && existingMobile === normalizedMobile)
-      );
+      if (normalizedMobile && existingMobile === normalizedMobile) {
+        return {
+          field: "mobile",
+          clientName: existingName,
+          mobile: client.mobile ?? "",
+          email: client.email ?? "",
+        };
+      }
+
+      if (normalizedEmail && existingEmail === normalizedEmail) {
+        return {
+          field: "email",
+          clientName: existingName,
+          mobile: client.mobile ?? "",
+          email: client.email ?? "",
+        };
+      }
+
+      if (existingName === clientName && existingMobile === normalizedMobile) {
+        return {
+          field: "name_mobile",
+          clientName: existingName,
+          mobile: client.mobile ?? "",
+          email: client.email ?? "",
+        };
+      }
+
+      return null;
     },
+    null,
   );
 
   return { duplicate };
 }
 
-const clientWriteRoles = ["Admin", "Sales Manager", "Sales Rep"] as const;
+export async function GET() {
+  const authCheck = await requireRole(clientReadRoles);
+
+  if (!authCheck.ok) {
+    return NextResponse.json(
+      { error: authCheck.error },
+      { status: authCheck.status },
+    );
+  }
+
+  if (!hasSupabaseServiceRoleKey()) {
+    return NextResponse.json(
+      { error: supabaseServiceRoleError },
+      { status: 500 },
+    );
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("clients")
+    .select(
+      "id, client_name, mobile, alternate_mobile, address, province, city, email, notes",
+    )
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("[api/clients] load failed", {
+      route: "/api/clients",
+      operation: "select",
+      table: "public.clients",
+      client: "createAdminClient",
+      executingRole: "service_role",
+      error,
+    });
+
+    return NextResponse.json(
+      { error: friendlyDatabaseError(error, "Unable to load clients.") },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ clients: data ?? [] });
+}
 
 export async function POST(request: Request) {
   const authCheck = await requireRole(clientWriteRoles);
@@ -147,7 +244,10 @@ export async function POST(request: Request) {
   }
 
   if (duplicateCheck.duplicate) {
-    return NextResponse.json({ error: duplicateClientMessage }, { status: 409 });
+    return NextResponse.json(
+      { error: duplicateClientDetail(duplicateCheck.duplicate) },
+      { status: 409 },
+    );
   }
 
   const admin = createAdminClient();
@@ -256,7 +356,10 @@ export async function PATCH(request: Request) {
   }
 
   if (duplicateCheck.duplicate) {
-    return NextResponse.json({ error: duplicateClientMessage }, { status: 409 });
+    return NextResponse.json(
+      { error: duplicateClientDetail(duplicateCheck.duplicate) },
+      { status: 409 },
+    );
   }
 
   const admin = createAdminClient();

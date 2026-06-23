@@ -5,7 +5,9 @@ import { useI18n } from "@/components/i18n/I18nProvider";
 import { PageHeader } from "@/components/PageHeader";
 import { SectionCard } from "@/components/SectionCard";
 import { ContractTemplateSettings } from "@/components/settings/ContractTemplateSettings";
+import { DiscountPolicySettings } from "@/components/settings/DiscountPolicySettings";
 import { ProductPricingSettings } from "@/components/settings/ProductPricingSettings";
+import { OpeningDropdownSettings } from "@/components/settings/OpeningDropdownSettings";
 import { UsersSettings } from "@/components/settings/UsersSettings";
 import { VehiclesSettings } from "@/components/settings/VehiclesSettings";
 import { DriversSettings } from "@/components/settings/DriversSettings";
@@ -53,6 +55,12 @@ export default function SettingsPage() {
         </SectionCard>
         <SectionCard title={t("settings.productPricing")}>
           <ProductPricingSettings />
+        </SectionCard>
+        <SectionCard title={t("settings.openingDropdowns")}>
+          <OpeningDropdownSettings />
+        </SectionCard>
+        <SectionCard title={t("settings.discountPolicies")}>
+          <DiscountPolicySettings />
         </SectionCard>
         <SectionCard title={t("settings.contractTemplate")}>
           <ContractTemplateSettings />

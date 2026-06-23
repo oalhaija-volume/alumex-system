@@ -9,7 +9,7 @@ type Project = {
   project_name: string;
   client_id: string;
   address: string;
-  project_workflow_status: string;
+  workflow_status: string;
   created_at: string;
   updated_at: string;
   clients: {
@@ -23,27 +23,48 @@ type StatusColor = {
   bg: string;
   text: string;
   badge: string;
+  border: string;
 };
 
 const statusConfig: Record<string, { label: string; color: StatusColor; actions?: string[] }> = {
   approved_for_factory: {
     label: "Approved for Factory",
-    color: { bg: "bg-blue-50", text: "text-blue-700", badge: "bg-blue-100 text-blue-800" },
+    color: {
+      bg: "bg-info-surface",
+      text: "text-info-text",
+      badge: "bg-material-primary-container text-material-on-primary-container",
+      border: "border-l-material-primary",
+    },
     actions: ["sent_to_factory"],
   },
   sent_to_factory: {
     label: "Sent to Factory",
-    color: { bg: "bg-orange-50", text: "text-orange-700", badge: "bg-orange-100 text-orange-800" },
+    color: {
+      bg: "bg-warning-surface",
+      text: "text-warning-text",
+      badge: "bg-warning-surface text-warning-text",
+      border: "border-l-warning-text",
+    },
     actions: ["factory_in_progress"],
   },
   factory_in_progress: {
     label: "In Progress",
-    color: { bg: "bg-yellow-50", text: "text-yellow-700", badge: "bg-yellow-100 text-yellow-800" },
+    color: {
+      bg: "bg-warning-surface",
+      text: "text-warning-text",
+      badge: "bg-warning-surface text-warning-text",
+      border: "border-l-warning-text",
+    },
     actions: ["factory_completed"],
   },
   factory_completed: {
     label: "Completed",
-    color: { bg: "bg-green-50", text: "text-green-700", badge: "bg-green-100 text-green-800" },
+    color: {
+      bg: "bg-success-surface",
+      text: "text-success-text",
+      badge: "bg-success-surface text-success-text",
+      border: "border-l-success-text",
+    },
     actions: [],
   },
 };
@@ -57,7 +78,7 @@ async function readError(response: Response, fallback: string) {
 }
 
 export function AluminumFactoryModule() {
-  const { t, formatDate } = useI18n();
+  const { t } = useI18n();
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -80,7 +101,7 @@ export function AluminumFactoryModule() {
     return (await response.json()) as Project[];
   }, [selectedStatus]);
 
-  async function loadProjects() {
+  const loadProjects = useCallback(async () => {
     setError("");
     setIsLoading(true);
 
@@ -93,11 +114,15 @@ export function AluminumFactoryModule() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [fetchProjects]);
 
   useEffect(() => {
-    loadProjects();
-  }, [selectedStatus]);
+    const timer = window.setTimeout(() => {
+      void loadProjects();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [loadProjects]);
 
   async function handleStatusChange(projectId: string, newStatus: string) {
     setError("");
@@ -139,18 +164,18 @@ export function AluminumFactoryModule() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold">Aluminum Factory Dashboard</h1>
-        <p className="text-gray-600 mt-1">Track and manage production status</p>
+        <p className="mt-1 text-muted">Track and manage production status</p>
       </div>
 
       {/* Error and Notice */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+        <div className="material-alert-error">
           {error}
         </div>
       )}
 
       {notice && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg">
+        <div className="material-alert-success">
           {notice}
         </div>
       )}
@@ -159,11 +184,11 @@ export function AluminumFactoryModule() {
       <div className="flex gap-2 flex-wrap">
         <button
           onClick={() => setSelectedStatus("all")}
-          className={`px-4 py-2 rounded-lg font-medium transition ${
+          className={
             selectedStatus === "all"
-              ? "bg-blue-600 text-white"
-              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-          }`}
+              ? "material-button-filled"
+              : "material-button-tonal"
+          }
         >
           All
         </button>
@@ -171,11 +196,11 @@ export function AluminumFactoryModule() {
           <button
             key={status}
             onClick={() => setSelectedStatus(status)}
-            className={`px-4 py-2 rounded-lg font-medium transition ${
+            className={
               selectedStatus === status
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-            }`}
+                ? "material-button-filled"
+                : "material-button-tonal"
+            }
           >
             {config.label}
           </button>
@@ -185,31 +210,28 @@ export function AluminumFactoryModule() {
       {/* Projects Grid */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
         {projects.map((project) => {
-          const config = statusConfig[project.project_workflow_status] || {
-            label: project.project_workflow_status,
-            color: { bg: "bg-gray-50", text: "text-gray-700", badge: "bg-gray-100 text-gray-800" },
+          const config = statusConfig[project.workflow_status] || {
+            label: project.workflow_status,
+            color: {
+              bg: "bg-material-surface-container",
+              text: "text-muted-strong",
+              badge: "bg-material-surface-container-high text-muted-strong",
+              border: "border-l-material-outline",
+            },
           };
 
           return (
             <div
               key={project.id}
-              className={`${config.color.bg} border-l-4 rounded-lg p-6 ${
-                config.color.text === "text-blue-700"
-                  ? "border-l-blue-500"
-                  : config.color.text === "text-orange-700"
-                  ? "border-l-orange-500"
-                  : config.color.text === "text-yellow-700"
-                  ? "border-l-yellow-500"
-                  : "border-l-green-500"
-              }`}
+              className={`material-card border-l-4 p-6 ${config.color.bg} ${config.color.border}`}
             >
               {/* Project Header */}
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="font-bold text-lg">{project.project_name}</h3>
-                  <p className="text-sm text-gray-600">#{project.project_number}</p>
+                  <p className="text-sm text-muted">#{project.project_number}</p>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${config.color.badge}`}>
+                <span className={`material-status ${config.color.badge}`}>
                   {config.label}
                 </span>
               </div>
@@ -217,15 +239,15 @@ export function AluminumFactoryModule() {
               {/* Project Details */}
               <div className="space-y-2 mb-4 text-sm">
                 <div>
-                  <p className="text-gray-600">Client</p>
+                  <p className="text-muted">Client</p>
                   <p className="font-semibold">{project.clients.client_name}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600">Location</p>
+                  <p className="text-muted">Location</p>
                   <p className="font-semibold">{project.address || "Not specified"}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600">Contact</p>
+                  <p className="text-muted">Contact</p>
                   <p className="text-sm">{project.clients.mobile || project.clients.email || "N/A"}</p>
                 </div>
               </div>
@@ -240,12 +262,12 @@ export function AluminumFactoryModule() {
                         key={action}
                         onClick={() => handleStatusChange(project.id, action)}
                         disabled={updatingId === project.id}
-                        className={`flex-1 px-3 py-2 rounded-lg font-medium transition text-sm ${
+                        className={`flex-1 ${
                           updatingId === project.id
-                            ? "bg-gray-400 text-white cursor-not-allowed"
+                            ? "material-button-tonal cursor-not-allowed"
                             : action === "factory_completed"
-                            ? "bg-green-600 text-white hover:bg-green-700"
-                            : "bg-blue-600 text-white hover:bg-blue-700"
+                            ? "material-button-filled"
+                            : "material-button-tonal"
                         }`}
                       >
                         {updatingId === project.id ? "Updating..." : `Mark as ${actionLabel.split(" ").pop()}`}
@@ -256,7 +278,7 @@ export function AluminumFactoryModule() {
               )}
 
               {(!config.actions || config.actions.length === 0) && (
-                <div className="text-center py-2 text-gray-500 text-sm">
+                <div className="py-2 text-center text-sm text-muted">
                   No further actions available
                 </div>
               )}
@@ -267,9 +289,9 @@ export function AluminumFactoryModule() {
 
       {/* Empty State */}
       {projects.length === 0 && (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-gray-600 text-lg">No projects available</p>
-          <p className="text-gray-500 text-sm mt-1">
+        <div className="material-card-muted py-12 text-center">
+          <p className="text-lg text-muted-strong">No projects available</p>
+          <p className="mt-1 text-sm text-muted">
             {selectedStatus === "all"
               ? "Projects will appear here once they are approved for factory production"
               : "No projects with this status"}

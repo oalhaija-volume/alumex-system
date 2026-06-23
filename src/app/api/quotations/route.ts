@@ -5,6 +5,7 @@ import {
   hasSupabaseServiceRoleKey,
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
+import { discountLimitForRoleFromSettings } from "@/lib/pricing/discountPolicyServer";
 import { friendlyDatabaseError, isDuplicateError } from "@/lib/friendlyErrors";
 import { canViewSalesPrices, normalizeAppRole } from "@/lib/auth/roles";
 import type { AppRole } from "@/lib/auth/roles";
@@ -21,12 +22,15 @@ type QuotationItemPayload = {
   room?: unknown;
   width?: unknown;
   height?: unknown;
+  solid_panel_height?: unknown;
   quantity?: unknown;
   product_system?: unknown;
   glass_type?: unknown;
   aluminum_color?: unknown;
   unit_price?: unknown;
   discount_percent?: unknown;
+  line_type?: unknown;
+  is_discountable?: unknown;
   notes?: unknown;
 };
 
@@ -89,22 +93,6 @@ async function requireQuotationUser() {
   return { ok: true as const, user, role };
 }
 
-function discountLimitForRole(role: AppRole | null) {
-  if (role === "Sales Rep") {
-    return 2;
-  }
-
-  if (role === "Sales Manager") {
-    return 4;
-  }
-
-  if (role === "Branch Manager") {
-    return 6;
-  }
-
-  return 100;
-}
-
 function discountLimitError(role: AppRole | null, limit: number) {
   return `${role ?? "This role"} can add a maximum discount of ${limit}%.`;
 }
@@ -126,6 +114,14 @@ function numberValue(value: unknown) {
 function integerValue(value: unknown) {
   const number = Number(value ?? 0);
   return Number.isInteger(number) ? number : 0;
+}
+
+function lineTypeValue(value: unknown) {
+  return value === "addon" || value === "accessory" ? value : "base";
+}
+
+function booleanValue(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 function nullableUuid(value: unknown) {
@@ -182,6 +178,18 @@ function getSupabaseErrorDetails(error: unknown): SupabaseErrorDetails {
   };
 }
 
+function isMissingColumnError(error: unknown) {
+  const details = getSupabaseErrorDetails(error);
+  const message = `${details.message ?? ""} ${details.details ?? ""} ${details.hint ?? ""}`;
+
+  return (
+    details.code === "42703" ||
+    details.code === "PGRST204" ||
+    message.includes("line_type") ||
+    message.includes("is_discountable")
+  );
+}
+
 function quotationErrorResponse(
   error: unknown,
   fallback: string,
@@ -213,6 +221,12 @@ function mapItems(items: unknown) {
   return items.map((item) => {
     const row = item as QuotationItemPayload;
 
+    const lineType = lineTypeValue(row.line_type);
+    const isDiscountable = booleanValue(
+      row.is_discountable,
+      lineType === "base",
+    );
+
     return {
       opening_id: nullableUuid(row.opening_id),
       opening_code: textValue(row.opening_code),
@@ -220,12 +234,18 @@ function mapItems(items: unknown) {
       room: nullableText(row.room),
       width: numberValue(row.width),
       height: numberValue(row.height),
+      solid_panel_height: Math.min(
+        Math.max(numberValue(row.solid_panel_height), 0),
+        numberValue(row.height),
+      ),
       quantity: integerValue(row.quantity),
       product_system: nullableText(row.product_system),
       glass_type: nullableText(row.glass_type),
       aluminum_color: nullableText(row.aluminum_color),
       unit_price: numberValue(row.unit_price),
-      discount_percent: numberValue(row.discount_percent),
+      discount_percent: isDiscountable ? numberValue(row.discount_percent) : 0,
+      line_type: lineType,
+      is_discountable: isDiscountable,
       notes: nullableText(row.notes),
     };
   });
@@ -246,10 +266,8 @@ export async function GET() {
   }
 
   const admin = createAdminClient();
-  const [
-    { data: quotations, error: quotationsError },
-    { data: items, error: itemsError },
-  ] = await Promise.all([
+  const [{ data: quotations, error: quotationsError }, itemsResult] =
+    await Promise.all([
     admin
       .from("quotations")
       .select(
@@ -259,7 +277,7 @@ export async function GET() {
     admin
       .from("quotation_items")
       .select(
-        "id, quotation_id, opening_id, opening_code, floor, room, width, height, quantity, product_system, glass_type, aluminum_color, unit_price, discount_percent, notes",
+        "id, quotation_id, opening_id, opening_code, floor, room, width, height, solid_panel_height, quantity, product_system, glass_type, aluminum_color, unit_price, discount_percent, line_type, is_discountable, notes",
       ),
   ]);
 
@@ -271,10 +289,32 @@ export async function GET() {
     );
   }
 
-  if (itemsError) {
-    logQuotationError("select-quotation-items", itemsError);
+  let items = itemsResult.data as unknown[] | null;
+  if (itemsResult.error && isMissingColumnError(itemsResult.error)) {
+    const fallbackItemsResult = await admin
+      .from("quotation_items")
+      .select(
+        "id, quotation_id, opening_id, opening_code, floor, room, width, height, quantity, product_system, glass_type, aluminum_color, unit_price, discount_percent, notes",
+      );
+
+    items = fallbackItemsResult.data as unknown[] | null;
+
+    if (fallbackItemsResult.error) {
+      logQuotationError("select-quotation-items", fallbackItemsResult.error);
+      return NextResponse.json(
+        {
+          error: readApiError(
+            fallbackItemsResult.error,
+            "Unable to load quotation items.",
+          ),
+        },
+        { status: 500 },
+      );
+    }
+  } else if (itemsResult.error) {
+    logQuotationError("select-quotation-items", itemsResult.error);
     return NextResponse.json(
-      { error: readApiError(itemsError, "Unable to load quotation items.") },
+      { error: readApiError(itemsResult.error, "Unable to load quotation items.") },
       { status: 500 },
     );
   }
@@ -318,10 +358,13 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
-  const discountLimit = discountLimitForRole(authCheck.role);
+  const discountLimit = await discountLimitForRoleFromSettings(
+    authCheck.role,
+    admin,
+  );
   const hasInvalidDiscount =
     numberValue(body.quotation_discount_percent) > discountLimit ||
-    items.some((item) => item.discount_percent > discountLimit);
+    items.some((item) => item.is_discountable && item.discount_percent > discountLimit);
 
   if (hasInvalidDiscount) {
     return NextResponse.json(
@@ -367,6 +410,21 @@ export async function POST(request: Request) {
     const { data, error } = rpcResult;
 
     if (!error && Array.isArray(data) && data[0]) {
+      const { error: workflowError } = await admin
+        .from("projects")
+        .update({ workflow_status: "sales_quotation_created" })
+        .eq("id", body.project_id)
+        .eq("workflow_status", "sales_client_created");
+
+      if (workflowError) {
+        logQuotationError("workflow-update", workflowError);
+        return quotationErrorResponse(
+          workflowError,
+          "Quotation was saved, but the project workflow could not be updated.",
+          500,
+        );
+      }
+
       return NextResponse.json({ quotation: data[0] }, { status: 201 });
     }
 
@@ -429,10 +487,13 @@ export async function PATCH(request: Request) {
   }
 
   const admin = createAdminClient();
-  const discountLimit = discountLimitForRole(authCheck.role);
+  const discountLimit = await discountLimitForRoleFromSettings(
+    authCheck.role,
+    admin,
+  );
   const hasInvalidDiscount =
     numberValue(body.quotation_discount_percent) > discountLimit ||
-    items.some((item) => item.discount_percent > discountLimit);
+    items.some((item) => item.is_discountable && item.discount_percent > discountLimit);
 
   if (hasInvalidDiscount) {
     return NextResponse.json(

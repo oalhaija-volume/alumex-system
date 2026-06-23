@@ -21,6 +21,8 @@ type Driver = {
   vehicles?: Vehicle;
 };
 
+const vehiclesChangedEvent = "alumex:vehicles-changed";
+
 async function readError(response: Response, fallback: string) {
   const body = (await response.json().catch(() => null)) as {
     error?: string;
@@ -30,7 +32,7 @@ async function readError(response: Response, fallback: string) {
 }
 
 export function DriversSettings() {
-  const { t, formatDate } = useI18n();
+  const { t } = useI18n();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [driverName, setDriverName] = useState("");
@@ -64,13 +66,14 @@ export function DriversSettings() {
     });
 
     if (!response.ok) {
-      return [];
+      const message = await readError(response, t("settings.loadError"));
+      throw new Error(message);
     }
 
     return (await response.json()) as Vehicle[];
-  }, []);
+  }, [t]);
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setError("");
     setIsLoading(true);
 
@@ -88,11 +91,35 @@ export function DriversSettings() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [fetchDrivers, fetchVehicles, t]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [loadData]);
+
+  useEffect(() => {
+    function refreshVehicles() {
+      void fetchVehicles()
+        .then(setVehicles)
+        .catch((refreshError) => {
+          setError(
+            refreshError instanceof Error
+              ? refreshError.message
+              : t("settings.loadError"),
+          );
+        });
+    }
+
+    window.addEventListener(vehiclesChangedEvent, refreshVehicles);
+
+    return () => {
+      window.removeEventListener(vehiclesChangedEvent, refreshVehicles);
+    };
+  }, [fetchVehicles, t]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -340,7 +367,7 @@ export function DriversSettings() {
           <div className="bg-white rounded-lg p-6 max-w-sm">
             <h3 className="text-lg font-semibold mb-2">Delete Driver</h3>
             <p className="text-gray-600 mb-4">
-              Are you sure you want to delete "{deleteTarget.driver_name}"?
+              Are you sure you want to delete &quot;{deleteTarget.driver_name}&quot;?
             </p>
             <div className="flex gap-2 justify-end">
               <button

@@ -19,9 +19,16 @@ export type Database = {
         | "Project Engineer"
         | "Site Engineer"
         | "Auditor"
+        | "Audit Team"
         | "Branch Manager"
+        | "Factory"
+        | "Glass Department"
         | "Delivery Head"
-        | "Installation Head";
+        | "Delivery Team"
+        | "Installation Head"
+        | "Installation Team"
+        | "Quality Control"
+        | "HR";
       project_status:
         | "Draft"
         | "Measuring"
@@ -33,6 +40,7 @@ export type Database = {
       contract_status: "Draft" | "Review" | "Active" | "Completed" | "Cancelled";
       project_workflow_status:
         | "sales_client_created"
+        | "sales_opportunity_created"
         | "sales_quotation_created"
         | "sales_contract_created"
         | "finance_down_payment_pending"
@@ -53,12 +61,17 @@ export type Database = {
         | "sent_to_factory"
         | "factory_in_progress"
         | "factory_completed"
+        | "glass_production"
+        | "assembly"
         | "final_payment_requested"
         | "final_payment_received"
         | "delivery_pending"
         | "delivered"
         | "installation_in_progress"
-        | "installation_completed";
+        | "installation_completed"
+        | "quality_control"
+        | "project_handover"
+        | "closed";
       document_owner_type: "client" | "project" | "quotation" | "contract";
       activity_entity_type:
         | "profile"
@@ -75,6 +88,7 @@ export type Database = {
         Row: {
           id: string;
           email: string;
+          username: string | null;
           full_name: string | null;
           role: Database["public"]["Enums"]["app_role"];
           is_active: boolean;
@@ -85,6 +99,7 @@ export type Database = {
         Insert: {
           id: string;
           email: string;
+          username?: string | null;
           full_name?: string | null;
           role?: Database["public"]["Enums"]["app_role"];
           is_active?: boolean;
@@ -179,6 +194,7 @@ export type Database = {
           opening_code: string;
           width: number;
           height: number;
+          solid_panel_height: number;
           quantity: number;
           area_sqm: number;
           product_system: string | null;
@@ -197,6 +213,7 @@ export type Database = {
           opening_code: string;
           width: number;
           height: number;
+          solid_panel_height?: number;
           quantity?: number;
           product_system?: string | null;
           glass_type?: string | null;
@@ -328,6 +345,7 @@ export type Database = {
           room: string | null;
           width: number;
           height: number;
+          solid_panel_height: number;
           quantity: number;
           area_sqm: number;
           product_system: string | null;
@@ -335,6 +353,8 @@ export type Database = {
           aluminum_color: string | null;
           unit_price: number;
           discount_percent: number;
+          line_type: string;
+          is_discountable: boolean;
           gross_total: number;
           discount_total: number;
           net_total: number;
@@ -351,12 +371,15 @@ export type Database = {
           room?: string | null;
           width: number;
           height: number;
+          solid_panel_height?: number;
           quantity?: number;
           product_system?: string | null;
           glass_type?: string | null;
           aluminum_color?: string | null;
           unit_price?: number;
           discount_percent?: number;
+          line_type?: string;
+          is_discountable?: boolean;
           notes?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -372,6 +395,9 @@ export type Database = {
           client_id: string;
           status: Database["public"]["Enums"]["contract_status"];
           contract_value: number;
+          source_contract_value: number;
+          contract_discount_percent: number;
+          contract_discount_total: number;
           signed_at: string | null;
           start_date: string | null;
           end_date: string | null;
@@ -383,6 +409,13 @@ export type Database = {
           first_party_obligations: string | null;
           second_party_obligations: string | null;
           prepared_by_text: string | null;
+          client_signature_data_url: string | null;
+          client_signed_name: string | null;
+          client_signed_at: string | null;
+          sales_signature_data_url: string | null;
+          sales_signed_name: string | null;
+          sales_signed_at: string | null;
+          signed_by_sales_user_id: string | null;
           language: string | null;
           notes: string | null;
           created_by: string | null;
@@ -397,6 +430,9 @@ export type Database = {
           client_id: string;
           status?: Database["public"]["Enums"]["contract_status"];
           contract_value?: number;
+          source_contract_value?: number;
+          contract_discount_percent?: number;
+          contract_discount_total?: number;
           signed_at?: string | null;
           start_date?: string | null;
           end_date?: string | null;
@@ -408,6 +444,13 @@ export type Database = {
           first_party_obligations?: string | null;
           second_party_obligations?: string | null;
           prepared_by_text?: string | null;
+          client_signature_data_url?: string | null;
+          client_signed_name?: string | null;
+          client_signed_at?: string | null;
+          sales_signature_data_url?: string | null;
+          sales_signed_name?: string | null;
+          sales_signed_at?: string | null;
+          signed_by_sales_user_id?: string | null;
           language?: string | null;
           notes?: string | null;
           created_by?: string | null;

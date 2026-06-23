@@ -14,29 +14,55 @@ create table public.installation_assignments (
 -- Add RLS policies for installation_assignments
 alter table public.installation_assignments enable row level security;
 
-create policy "Authenticated users can view installation assignments"
+create policy "installation_assignments_select_all"
   on public.installation_assignments
   for select
   to authenticated
   using (true);
 
-create policy "Admin and Project Manager can manage installation assignments"
+create policy "installation_assignments_admin_insert"
   on public.installation_assignments
-  for all
+  for insert
+  to authenticated
+  with check (
+    is_admin() or
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid()
+      and role = 'Project Manager'
+    )
+  );
+
+create policy "installation_assignments_admin_update"
+  on public.installation_assignments
+  for update
   to authenticated
   using (
-    is_admin() or 
+    is_admin() or
     exists (
-      select 1 from profiles 
-      where id = auth.uid() 
+      select 1 from public.profiles
+      where id = auth.uid()
       and role = 'Project Manager'
     )
   )
   with check (
-    is_admin() or 
+    is_admin() or
     exists (
-      select 1 from profiles 
-      where id = auth.uid() 
+      select 1 from public.profiles
+      where id = auth.uid()
+      and role = 'Project Manager'
+    )
+  );
+
+create policy "installation_assignments_admin_delete"
+  on public.installation_assignments
+  for delete
+  to authenticated
+  using (
+    is_admin() or
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid()
       and role = 'Project Manager'
     )
   );

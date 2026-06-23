@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireAdminUser } from "@/lib/auth/adminServer";
+import { requireAdminUser, requireRole } from "@/lib/auth/adminServer";
+import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseServiceRoleKey, supabaseServiceRoleError } from "@/lib/supabase/config";
 
@@ -11,7 +12,24 @@ type DriverPayload = {
   is_active?: unknown;
 };
 
+const driverReadRoles = ["Admin", "Delivery Head", "Delivery Team"] as const;
+
 export async function GET() {
+  const authCheck = await requireRole(driverReadRoles);
+  if (!authCheck.ok) {
+    return NextResponse.json(
+      { error: authCheck.error },
+      { status: authCheck.status },
+    );
+  }
+
+  if (!hasSupabaseServiceRoleKey()) {
+    return NextResponse.json(
+      { error: supabaseServiceRoleError },
+      { status: 500 },
+    );
+  }
+
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("drivers")
@@ -19,7 +37,10 @@ export async function GET() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: friendlyDatabaseError(error, "Unable to load drivers.") },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json(data);
@@ -74,7 +95,10 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: friendlyDatabaseError(error, "Unable to save driver.") },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json(data, { status: 201 });
@@ -119,7 +143,10 @@ export async function PUT(request: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: friendlyDatabaseError(error, "Unable to save driver.") },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json(data);
@@ -134,6 +161,13 @@ export async function DELETE(request: Request) {
     );
   }
 
+  if (!hasSupabaseServiceRoleKey()) {
+    return NextResponse.json(
+      { error: supabaseServiceRoleError },
+      { status: 500 },
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
 
@@ -145,7 +179,10 @@ export async function DELETE(request: Request) {
   const { error } = await admin.from("drivers").delete().eq("id", id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: friendlyDatabaseError(error, "Unable to delete driver.") },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ success: true });

@@ -46,12 +46,48 @@ type DeliveryAssignment = {
   };
 };
 
+type PackingRecommendation = {
+  totalCubicMeters: number;
+  packingAllowancePercent: number;
+  message: string;
+  unassignedCubicMeters: number;
+  items: Array<{
+    id: string;
+    openingCode: string;
+    location: string;
+    productSystem: string;
+    glassType: string;
+    widthMeters: number;
+    heightMeters: number;
+    quantity: number;
+    sectionDepthMm: number;
+    estimatedCubicMeters: number;
+  }>;
+  recommendedVehicles: Array<{
+    vehicleId: string;
+    vehicleName: string;
+    plateNumber: string;
+    capacityCubicMeters: number;
+    assignedCubicMeters: number;
+    utilizationPercent: number;
+  }>;
+};
+
+type PackingResponse = {
+  quotation: {
+    id: string;
+    quotationNumber: string;
+    createdAt: string;
+  } | null;
+  recommendation: PackingRecommendation;
+};
+
 type Project = {
   id: string;
   project_number: string;
   project_name: string;
   address: string;
-  project_workflow_status: string;
+  workflow_status: string;
   clients: {
     client_name: string;
     mobile: string | null;
@@ -68,7 +104,7 @@ async function readError(response: Response, fallback: string) {
 }
 
 export function DeliveryModule() {
-  const { t, formatDate } = useI18n();
+  const { t } = useI18n();
   const [projects, setProjects] = useState<Project[]>([]);
   const [assignments, setAssignments] = useState<DeliveryAssignment[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -86,6 +122,8 @@ export function DeliveryModule() {
   const [selectedDriver, setSelectedDriver] = useState<string>("");
   const [cubicSpace, setCubicSpace] = useState("");
   const [isAddingVehicle, setIsAddingVehicle] = useState(false);
+  const [packingResponse, setPackingResponse] = useState<PackingResponse | null>(null);
+  const [isLoadingPacking, setIsLoadingPacking] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -96,14 +134,30 @@ export function DeliveryModule() {
         fetch("/api/admin/drivers", { cache: "no-store" }),
       ]);
 
-      if (!projectsRes.ok || !assignmentsRes.ok) {
-        throw new Error("Failed to load delivery data");
+      if (!projectsRes.ok) {
+        const message = await readError(projectsRes, "Failed to load delivery projects");
+        throw new Error(message);
+      }
+
+      if (!assignmentsRes.ok) {
+        const message = await readError(assignmentsRes, "Failed to load delivery assignments");
+        throw new Error(message);
+      }
+
+      if (!vehiclesRes.ok) {
+        const message = await readError(vehiclesRes, "Failed to load delivery vehicles");
+        throw new Error(message);
+      }
+
+      if (!driversRes.ok) {
+        const message = await readError(driversRes, "Failed to load delivery drivers");
+        throw new Error(message);
       }
 
       const projectsData = (await projectsRes.json()) as Project[];
       const assignmentsData = (await assignmentsRes.json()) as DeliveryAssignment[];
-      const vehiclesData = vehiclesRes.ok ? ((await vehiclesRes.json()) as Vehicle[]) : [];
-      const driversData = driversRes.ok ? ((await driversRes.json()) as Driver[]) : [];
+      const vehiclesData = (await vehiclesRes.json()) as Vehicle[];
+      const driversData = (await driversRes.json()) as Driver[];
 
       setProjects(projectsData);
       setAssignments(assignmentsData);
@@ -119,8 +173,12 @@ export function DeliveryModule() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    const timer = window.setTimeout(() => {
+      void fetchData();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [fetchData]);
 
   async function handleCreateAssignment(e: FormEvent) {
     e.preventDefault();
@@ -177,9 +235,46 @@ export function DeliveryModule() {
     }
   }
 
+  async function loadPackingRecommendation(projectId: string) {
+    setIsLoadingPacking(true);
+    setPackingResponse(null);
+
+    try {
+      const response = await fetch(
+        `/api/delivery/packing?projectId=${encodeURIComponent(projectId)}`,
+        { cache: "no-store" },
+      );
+
+      if (!response.ok) {
+        const message = await readError(response, "Failed to load packing recommendation");
+        throw new Error(message);
+      }
+
+      setPackingResponse((await response.json()) as PackingResponse);
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Failed to load packing recommendation",
+      );
+    } finally {
+      setIsLoadingPacking(false);
+    }
+  }
+
   function handleSelectAssignment(assignmentId: string) {
+    const assignment = assignments.find((item) => item.id === assignmentId);
     setSelectedAssignment(assignmentId);
-    loadAssignmentVehicles(assignmentId);
+    void loadAssignmentVehicles(assignmentId);
+
+    if (assignment) {
+      void loadPackingRecommendation(assignment.projects.id);
+    }
+  }
+
+  function applyVehicleRecommendation(vehicleId: string, cubicMeters: number) {
+    setSelectedVehicle(vehicleId);
+    setCubicSpace(String(cubicMeters));
   }
 
   async function handleAddVehicle(e: FormEvent) {
@@ -247,6 +342,7 @@ export function DeliveryModule() {
       await fetchData();
       setSelectedAssignment("");
       setAssignmentVehicles([]);
+      setPackingResponse(null);
       setNotice("Delivery marked as completed");
       setTimeout(() => setNotice(""), 3000);
     } catch (completeError) {
@@ -396,6 +492,130 @@ export function DeliveryModule() {
                 <p className="text-sm text-gray-600">
                   Location: {currentAssignment.projects.address}
                 </p>
+              </div>
+
+              <div className="mb-6 rounded-lg border border-material-outline-variant bg-material-surface-container-low p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="font-semibold">Packing recommendation</h3>
+                    <p className="mt-1 text-sm text-muted">
+                      Based on latest quotation openings, aluminum section depth defaults, and truck cubic capacity.
+                    </p>
+                  </div>
+                  {packingResponse?.quotation && (
+                    <span className="material-status">
+                      {packingResponse.quotation.quotationNumber}
+                    </span>
+                  )}
+                </div>
+
+                {isLoadingPacking ? (
+                  <p className="mt-4 text-sm text-muted">{t("common.loading")}</p>
+                ) : packingResponse ? (
+                  <div className="mt-4 space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="material-card-muted p-3">
+                        <p className="text-xs font-bold uppercase text-muted">Estimated goods</p>
+                        <p className="mt-1 text-2xl font-bold">
+                          {packingResponse.recommendation.totalCubicMeters.toFixed(2)} m³
+                        </p>
+                      </div>
+                      <div className="material-card-muted p-3">
+                        <p className="text-xs font-bold uppercase text-muted">Packing allowance</p>
+                        <p className="mt-1 text-2xl font-bold">
+                          {packingResponse.recommendation.packingAllowancePercent}%
+                        </p>
+                      </div>
+                      <div className="material-card-muted p-3">
+                        <p className="text-xs font-bold uppercase text-muted">Openings</p>
+                        <p className="mt-1 text-2xl font-bold">
+                          {packingResponse.recommendation.items.length}
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-sm font-semibold text-muted-strong">
+                      {packingResponse.recommendation.message}
+                    </p>
+
+                    {packingResponse.recommendation.recommendedVehicles.length > 0 && (
+                      <div className="space-y-2">
+                        {packingResponse.recommendation.recommendedVehicles.map((vehicle) => (
+                          <div
+                            key={vehicle.vehicleId}
+                            className="flex flex-col gap-3 rounded-lg border border-material-outline-variant bg-material-surface-container p-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div>
+                              <p className="font-semibold">
+                                {vehicle.vehicleName}
+                                {vehicle.plateNumber ? ` - ${vehicle.plateNumber}` : ""}
+                              </p>
+                              <p className="text-sm text-muted">
+                                Load {vehicle.assignedCubicMeters.toFixed(2)} m³ of {vehicle.capacityCubicMeters.toFixed(2)} m³
+                                {" "}({vehicle.utilizationPercent}%)
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                applyVehicleRecommendation(
+                                  vehicle.vehicleId,
+                                  vehicle.assignedCubicMeters,
+                                )
+                              }
+                              className="material-button-tonal"
+                            >
+                              Use this truck
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {packingResponse.recommendation.unassignedCubicMeters > 0 && (
+                      <div className="material-alert-error">
+                        Remaining unfitted volume:{" "}
+                        {packingResponse.recommendation.unassignedCubicMeters.toFixed(2)} m³
+                      </div>
+                    )}
+
+                    {packingResponse.recommendation.items.length > 0 && (
+                      <details className="rounded-lg border border-material-outline-variant bg-material-surface-container p-3">
+                        <summary className="cursor-pointer text-sm font-bold">
+                          View estimated quotation goods
+                        </summary>
+                        <div className="mt-3 space-y-2">
+                          {packingResponse.recommendation.items.map((item) => (
+                            <div
+                              key={item.id}
+                              className="grid gap-2 rounded-md bg-material-surface-container-low p-3 text-sm sm:grid-cols-[1fr_auto]"
+                            >
+                              <div>
+                                <p className="font-semibold">
+                                  {item.openingCode} - {item.productSystem}
+                                </p>
+                                <p className="text-muted">
+                                  {item.location || "No location"} - {item.glassType}
+                                </p>
+                                <p className="text-muted">
+                                  {item.widthMeters.toFixed(2)}m x {item.heightMeters.toFixed(2)}m x {item.quantity}
+                                  {" "}section {item.sectionDepthMm}mm
+                                </p>
+                              </div>
+                              <p className="font-bold">
+                                {item.estimatedCubicMeters.toFixed(2)} m³
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-muted">
+                    Select an active delivery to calculate quotation goods and truck fit.
+                  </p>
+                )}
               </div>
 
               <form onSubmit={handleAddVehicle} className="space-y-4 mb-6 pb-6 border-b">

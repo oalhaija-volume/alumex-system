@@ -28,6 +28,12 @@ import {
   replaceLegacyEnglishContractTemplate,
 } from "@/lib/contracts/templateDefaults";
 import { friendlyDatabaseError } from "@/lib/friendlyErrors";
+import {
+  clampDiscount,
+  defaultDiscountLimitForRole,
+  discountLimitFromPolicies,
+  loadDiscountPolicies,
+} from "@/lib/pricing/discountPolicy";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -39,6 +45,9 @@ type ContractRow = {
   project_id: string;
   quotation_id: string | null;
   contract_value: number | string;
+  source_contract_value?: number | string | null;
+  contract_discount_percent?: number | string | null;
+  contract_discount_total?: number | string | null;
   contract_date: string | null;
   payment_terms: string | null;
   warranty_terms: string | null;
@@ -47,6 +56,12 @@ type ContractRow = {
   first_party_obligations: string | null;
   second_party_obligations: string | null;
   prepared_by_text: string | null;
+  client_signature_data_url: string | null;
+  client_signed_name: string | null;
+  client_signed_at: string | null;
+  sales_signature_data_url: string | null;
+  sales_signed_name: string | null;
+  sales_signed_at: string | null;
   language: ContractLanguage | null;
   notes: string | null;
 };
@@ -240,9 +255,14 @@ export function ContractGenerator() {
     useState<ContractTemplate>(defaultTemplate);
   const [notes, setNotes] = useState(arabicContractDefaultNotes);
   const [preparedBy, setPreparedBy] = useState(arabicContractDefaultPreparedBy);
+  const [contractDiscountPercent, setContractDiscountPercent] = useState(0);
+  const [discountLimit, setDiscountLimit] = useState(() =>
+    defaultDiscountLimitForRole(role),
+  );
   const [error, setError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ContractDraft | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editingContractId, setEditingContractId] = useState<string | null>(null);
   const selectedQuotation = savedQuotations.find(
     (quotation) => quotation.quotationNumber === quotationNumber,
   );
@@ -259,16 +279,19 @@ export function ContractGenerator() {
   const clientPhone = selectedClient?.mobile ?? "";
   const clientAddress = selectedClient?.address ?? selectedProject?.address ?? "";
   const productSystems = selectedProject ? getProductSystems(selectedProject) : [];
-  const totalAmount = selectedQuotation
+  const sourceTotalAmount = selectedQuotation
     ? selectedQuotation.contractTotal ?? calculateQuotationTotals(
         selectedQuotation.lines,
         selectedQuotation.discountPercent,
       ).grandTotal
     : 0;
+  const contractDiscountTotal =
+    sourceTotalAmount * (contractDiscountPercent / 100);
+  const totalAmount = Math.max(sourceTotalAmount - contractDiscountTotal, 0);
   const canGenerateContract =
     Boolean(selectedQuotation && selectedProject) &&
     canViewSalesPrices(role) &&
-    !selectedExistingContract;
+    (!selectedExistingContract || Boolean(editingContractId));
 
   useEffect(() => {
     if (!isRoleLoaded) {
@@ -294,11 +317,25 @@ export function ContractGenerator() {
             : "",
         );
 
-        const [contractsResponse, templateResponse, nextNumber] = await Promise.all([
+        const [
+          contractsResponse,
+          templateResponse,
+          nextNumber,
+          discountPolicies,
+        ] = await Promise.all([
           fetch("/api/contracts", { cache: "no-store" }),
           fetch("/api/contracts/template", { cache: "no-store" }),
           fetchNextContractNumber(t("contracts.nextNumberError")),
+          loadDiscountPolicies().catch(() => []),
         ]);
+        const nextDiscountLimit = discountLimitFromPolicies(
+          role,
+          discountPolicies,
+        );
+        setDiscountLimit(nextDiscountLimit);
+        setContractDiscountPercent((current) =>
+          clampDiscount(current, nextDiscountLimit),
+        );
 
         if (!contractsResponse.ok) {
           throw new Error(
@@ -354,6 +391,13 @@ export function ContractGenerator() {
               clients.find((client) => client.id === project.clientId)?.mobile ?? "",
             clientAddress: project.address,
             totalAmount: Number(contract.contract_value ?? 0),
+            sourceTotalAmount: Number(
+              contract.source_contract_value ?? contract.contract_value ?? 0,
+            ),
+            contractDiscountPercent: Number(
+              contract.contract_discount_percent ?? 0,
+            ),
+            contractDiscountTotal: Number(contract.contract_discount_total ?? 0),
             paymentTerms: legalTemplate.paymentTerms,
             warrantyTerms: legalTemplate.warrantyTerms,
             executionTerms: legalTemplate.executionTerms,
@@ -364,6 +408,12 @@ export function ContractGenerator() {
             salesEngineer: project.salesEngineer,
             preparedBy: contract.prepared_by_text ?? "",
             language: contract.language ?? language,
+            clientSignatureDataUrl: contract.client_signature_data_url ?? "",
+            clientSignedName: contract.client_signed_name ?? "",
+            clientSignedAt: contract.client_signed_at ?? "",
+            salesSignatureDataUrl: contract.sales_signature_data_url ?? "",
+            salesSignedName: contract.sales_signed_name ?? "",
+            salesSignedAt: contract.sales_signed_at ?? "",
           });
 
           return contracts;
@@ -381,6 +431,31 @@ export function ContractGenerator() {
     return () => window.clearTimeout(timer);
   }, [clients, defaultTemplate, isRoleLoaded, language, projects, role, t]);
 
+  function selectQuotation(nextQuotationNumber: string) {
+    setQuotationNumber(nextQuotationNumber);
+    setContractDiscountPercent(0);
+    setEditingContractId(null);
+  }
+
+  function editExistingContract(contract: ContractDraft) {
+    setEditingContractId(contract.id ?? null);
+    setContractNumber(contract.contractNumber);
+    setContractDate(contract.contractDate);
+    setPreparedBy(contract.preparedBy);
+    setNotes(contract.notes);
+    setContractDiscountPercent(
+      clampDiscount(contract.contractDiscountPercent ?? 0, discountLimit),
+    );
+    setContractTemplate({
+      paymentTerms: contract.paymentTerms,
+      warrantyTerms: contract.warrantyTerms,
+      executionTerms: contract.executionTerms,
+      contractTerms: contract.contractTerms,
+      firstPartyObligations: contract.firstPartyObligations,
+      secondPartyObligations: contract.secondPartyObligations,
+    });
+  }
+
   async function openPreview() {
     if (!selectedProject || !selectedQuotation) {
       return;
@@ -395,38 +470,51 @@ export function ContractGenerator() {
       return;
     }
 
-    setError("");
-    let nextContractNumber = contractNumber;
-
-    try {
-      nextContractNumber = await fetchNextContractNumber(
-        t("contracts.nextNumberError"),
-      );
-      setContractNumber(nextContractNumber);
-    } catch (numberError) {
-      setError(
-        friendlyDatabaseError(numberError, t("contracts.nextNumberError")),
-      );
+    if (contractDiscountPercent > discountLimit) {
+      setError(t("quotations.discountLimitError", { limit: discountLimit }));
       return;
     }
 
-    const response = await fetch("/api/contracts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contract_number: nextContractNumber,
-        project_id: selectedProject.id,
-        quotation_id: selectedQuotation.id,
-        client_id: selectedProject.clientId,
-        status: "Draft",
-        contract_value: totalAmount,
-        contract_date: contractDate,
-        ...payloadFromTemplate(contractTemplate),
-        prepared_by_text: preparedBy || null,
-        language,
-        notes,
-      }),
-    });
+    setError("");
+    let nextContractNumber = contractNumber;
+
+    if (!editingContractId) {
+      try {
+        nextContractNumber = await fetchNextContractNumber(
+          t("contracts.nextNumberError"),
+        );
+        setContractNumber(nextContractNumber);
+      } catch (numberError) {
+        setError(
+          friendlyDatabaseError(numberError, t("contracts.nextNumberError")),
+        );
+        return;
+      }
+    }
+
+    const response = await fetch(
+      editingContractId ? `/api/contracts/${editingContractId}` : "/api/contracts",
+      {
+        method: editingContractId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contract_number: nextContractNumber,
+          project_id: selectedProject.id,
+          quotation_id: selectedQuotation.id,
+          client_id: selectedProject.clientId,
+          status: "Draft",
+          contract_value: totalAmount,
+          source_contract_value: sourceTotalAmount,
+          contract_discount_percent: contractDiscountPercent,
+          contract_discount_total: contractDiscountTotal,
+          contract_date: contractDate,
+          ...payloadFromTemplate(contractTemplate),
+          prepared_by_text: preparedBy || null,
+          language,
+          notes,
+        }),
+      },
+    );
 
     if (!response.ok) {
       setError(
@@ -462,6 +550,9 @@ export function ContractGenerator() {
       clientPhone,
       clientAddress,
       totalAmount,
+      sourceTotalAmount,
+      contractDiscountPercent,
+      contractDiscountTotal,
       paymentTerms: contractTemplate.paymentTerms,
       warrantyTerms: contractTemplate.warrantyTerms,
       executionTerms: contractTemplate.executionTerms,
@@ -472,9 +563,16 @@ export function ContractGenerator() {
       salesEngineer: selectedProject.salesEngineer,
       preparedBy,
       language,
+      clientSignatureDataUrl: "",
+      clientSignedName: selectedProject.client,
+      clientSignedAt: "",
+      salesSignatureDataUrl: "",
+      salesSignedName: selectedProject.salesEngineer || preparedBy,
+      salesSignedAt: "",
     };
 
     window.localStorage.setItem(contractStorageKey, JSON.stringify(draft));
+    setEditingContractId(null);
     router.push("/contracts/preview");
   }
 
@@ -551,7 +649,7 @@ export function ContractGenerator() {
               </span>
               <select
                 value={quotationNumber}
-                onChange={(event) => setQuotationNumber(event.target.value)}
+                onChange={(event) => selectQuotation(event.target.value)}
                 className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-info-surface"
               >
                 <option value="">Choose a quotation...</option>
@@ -593,7 +691,7 @@ export function ContractGenerator() {
                       return (
                         <tr
                           key={quotation.id ?? quotation.quotationNumber}
-                          onClick={() => setQuotationNumber(quotation.quotationNumber)}
+                          onClick={() => selectQuotation(quotation.quotationNumber)}
                           className={`cursor-pointer transition ${
                             isSelected
                               ? "bg-info-surface"
@@ -633,7 +731,12 @@ export function ContractGenerator() {
               <SummaryItem label="Client Name" value={term(selectedProject.client)} />
               <SummaryItem label="Project Name" value={term(selectedProject.projectName)} />
               <SummaryItem label="Quotation Number" value={selectedQuotation.quotationNumber} />
-              <SummaryItem label="Total Amount" value={formatCurrency(totalAmount)} />
+              <SummaryItem label="Quotation Total" value={formatCurrency(sourceTotalAmount)} />
+              <SummaryItem
+                label="Contract Discount"
+                value={`${contractDiscountPercent}% (${formatCurrency(contractDiscountTotal)})`}
+              />
+              <SummaryItem label="Contract Value" value={formatCurrency(totalAmount)} />
               <SummaryItem
                 label="Opening Count"
                 value={selectedProject.structuralOpenings.length}
@@ -653,6 +756,27 @@ export function ContractGenerator() {
               <SummaryItem label="Client Phone" value={clientPhone || t("common.notAdded")} />
             </div>
 
+            <label className="mt-5 block max-w-sm">
+              <span className="text-sm font-bold text-muted-strong">
+                {t("contracts.contractDiscountPercent")}
+              </span>
+              <span className="mt-1 block text-xs font-semibold text-muted">
+                {t("quotations.discountLimitNotice", { limit: discountLimit })}
+              </span>
+              <input
+                type="number"
+                min="0"
+                max={discountLimit}
+                value={contractDiscountPercent}
+                onChange={(event) =>
+                  setContractDiscountPercent(
+                    clampDiscount(Number(event.target.value), discountLimit),
+                  )
+                }
+                className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-info-surface"
+              />
+            </label>
+
             {selectedExistingContract ? (
               <div className="mt-5 rounded-lg border border-info-text bg-info-surface p-4">
                 <p className="text-sm font-bold text-info-text">
@@ -671,7 +795,7 @@ export function ContractGenerator() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => openExistingContract(selectedExistingContract)}
+                    onClick={() => editExistingContract(selectedExistingContract)}
                     className="h-10 rounded-md border border-border bg-surface px-4 text-sm font-bold text-muted-strong"
                   >
                     Edit Contract
@@ -783,10 +907,14 @@ export function ContractGenerator() {
                   disabled={!canGenerateContract}
                   className="h-11 rounded-md bg-primary px-5 text-sm font-bold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
                 >
-                  Generate Contract from Selected Quotation
+                  {editingContractId
+                    ? "Update Contract"
+                    : "Generate Contract from Selected Quotation"}
                 </button>
                 <p className="mt-3 text-sm leading-6 text-muted">
-                  {selectedExistingContract
+                  {editingContractId
+                    ? "Update the selected contract with the current discount and terms."
+                    : selectedExistingContract
                     ? "This quotation already has a contract. Use View, Edit, or Delete above."
                     : t("contracts.previewDescription")}
                 </p>

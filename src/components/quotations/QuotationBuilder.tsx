@@ -28,6 +28,10 @@ import {
   productPriceForSystem,
   type ProductPrice,
 } from "@/lib/pricing/productPricing";
+import {
+  discountLimitFromPolicies,
+  loadDiscountPolicies,
+} from "@/lib/pricing/discountPolicy";
 
 function createQuotationLines(
   projectId: string,
@@ -44,6 +48,8 @@ function createQuotationLines(
     ...opening,
     unitPrice: productPriceForSystem(opening.productSystem, products),
     discountPercent: 0,
+    lineType: "base",
+    isDiscountable: true,
   }));
 }
 
@@ -101,12 +107,15 @@ async function saveQuotation(payload: {
     room: string | null;
     width: number;
     height: number;
+    solid_panel_height: number;
     quantity: number;
     product_system: string | null;
     glass_type: string | null;
     aluminum_color: string | null;
     unit_price: number;
     discount_percent: number;
+    line_type: "base" | "addon" | "accessory";
+    is_discountable: boolean;
     notes: string | null;
   }>;
 }) {
@@ -157,13 +166,15 @@ export function QuotationBuilder() {
   const [clientRepresentative, setClientRepresentative] = useState("");
   const [savedQuotations, setSavedQuotations] = useState<QuotationDraft[]>([]);
   const [productPrices, setProductPrices] = useState<ProductPrice[]>([]);
+  const [discountLimit, setDiscountLimit] = useState(() =>
+    discountLimitForRole(role),
+  );
   const [editingQuotationId, setEditingQuotationId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<QuotationDraft | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [lines, setLines] = useState<QuotationLine[]>(() =>
     createQuotationLines(initialProjectId, projects, []),
   );
-  const discountLimit = discountLimitForRole(role);
   const selectedProject = projects.find((project) => project.id === projectId);
   const hasClients = clients.length > 0;
   const hasProjects = projects.length > 0;
@@ -212,6 +223,23 @@ export function QuotationBuilder() {
     return products;
   }, []);
 
+  const refreshDiscountPolicies = useCallback(async () => {
+    const policies = await loadDiscountPolicies();
+    const nextLimit = discountLimitFromPolicies(role, policies);
+
+    setDiscountLimit(nextLimit);
+    setDiscountPercent((current) => clampDiscount(current, nextLimit));
+    setLines((currentLines) =>
+      currentLines.map((line) => ({
+        ...line,
+        discountPercent:
+          (line.isDiscountable ?? line.lineType === "base")
+            ? clampDiscount(line.discountPercent, nextLimit)
+            : 0,
+      })),
+    );
+  }, [role]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (editingQuotationId) {
@@ -239,6 +267,7 @@ export function QuotationBuilder() {
           refreshSavedQuotations(),
           refreshNextQuotationNumber(),
           refreshProductPrices().catch(() => []),
+          refreshDiscountPolicies().catch(() => undefined),
         ]);
 
         if (!editingQuotationId) {
@@ -259,6 +288,7 @@ export function QuotationBuilder() {
     editingQuotationId,
     projectId,
     projects,
+    refreshDiscountPolicies,
     refreshNextQuotationNumber,
     refreshProductPrices,
     refreshSavedQuotations,
@@ -277,13 +307,62 @@ export function QuotationBuilder() {
               ...line,
               [key]:
                 key === "discountPercent"
-                  ? clampDiscount(value, discountLimit)
+                  ? (line.isDiscountable ?? line.lineType === "base")
+                    ? clampDiscount(value, discountLimit)
+                    : 0
                   : Number.isFinite(value)
                     ? value
                     : 0,
             }
           : line,
       ),
+    );
+  }
+
+  function updateScopeLine(
+    lineId: string,
+    key: "openingCode" | "productSystem" | "notes",
+    value: string,
+  ) {
+    setLines((currentLines) =>
+      currentLines.map((line) =>
+        line.id === lineId ? { ...line, [key]: value } : line,
+      ),
+    );
+  }
+
+  function addScopeLine(lineType: "addon" | "accessory") {
+    const id =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${lineType}-${Date.now()}`;
+
+    setLines((currentLines) => [
+      ...currentLines,
+      {
+        id,
+        floor: "Project description",
+        room: lineType === "addon" ? "Add-on" : "Accessory",
+        openingCode: lineType === "addon" ? "ADD-ON" : "ACC",
+        width: 100,
+        height: 100,
+        solidPanelHeight: 0,
+        quantity: 1,
+        productSystem: "",
+        glassType: "",
+        aluminumColor: "",
+        notes: "",
+        unitPrice: 0,
+        discountPercent: 0,
+        lineType,
+        isDiscountable: false,
+      },
+    ]);
+  }
+
+  function removeScopeLine(lineId: string) {
+    setLines((currentLines) =>
+      currentLines.filter((line) => line.id !== lineId || line.lineType === "base"),
     );
   }
 
@@ -320,10 +399,18 @@ export function QuotationBuilder() {
       setPreparedBy(latestQuotation.preparedBy);
       setClientRepresentative(latestQuotation.clientRepresentative);
       setLines(
-        latestQuotation.lines.map((line) => ({
-          ...line,
-          discountPercent: clampDiscount(line.discountPercent, discountLimit),
-        })),
+        latestQuotation.lines.map((line) => {
+          const isDiscountable =
+            line.isDiscountable ??
+            !["addon", "accessory"].includes(line.lineType ?? "base");
+
+          return {
+            ...line,
+            discountPercent: isDiscountable
+              ? clampDiscount(line.discountPercent, discountLimit)
+              : 0,
+          };
+        }),
       );
       setEditingQuotationId(latestQuotation.id ?? null);
       window.requestAnimationFrame(() => {
@@ -387,12 +474,20 @@ export function QuotationBuilder() {
           room: line.room || null,
           width: line.width,
           height: line.height,
+          solid_panel_height: line.solidPanelHeight ?? 0,
           quantity: line.quantity,
           product_system: line.productSystem || null,
           glass_type: line.glassType || null,
           aluminum_color: line.aluminumColor || null,
           unit_price: line.unitPrice,
-          discount_percent: line.discountPercent,
+          discount_percent:
+            (line.isDiscountable ?? line.lineType === "base")
+              ? line.discountPercent
+              : 0,
+          line_type: line.lineType ?? "base",
+          is_discountable:
+            line.isDiscountable ??
+            !["addon", "accessory"].includes(line.lineType ?? "base"),
           notes: line.notes || null,
         })),
       });
@@ -699,41 +794,98 @@ export function QuotationBuilder() {
       ) : null}
 
       <SectionCard title={t("quotations.openingsAndPricing")}>
+        <div className="mb-4 flex flex-col gap-3 rounded-lg border border-blue-100 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-[var(--alumex-blue)]">
+              Detailed measurement extras
+            </p>
+            <p className="mt-1 text-sm text-blue-700">
+              Add-ons and accessories increase the contract value and are not discountable.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => addScopeLine("addon")}
+              className="h-10 rounded-md bg-primary px-3 text-sm font-bold text-white"
+            >
+              Add add-on
+            </button>
+            <button
+              type="button"
+              onClick={() => addScopeLine("accessory")}
+              className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-bold text-[var(--alumex-blue)]"
+            >
+              Add accessory
+            </button>
+          </div>
+        </div>
+
         <div className="hidden overflow-hidden rounded-lg border border-slate-200 xl:block">
           <div className="overflow-x-auto">
-            <table className="min-w-[1360px] divide-y divide-slate-200 text-left text-sm">
+            <table className="min-w-[1540px] divide-y divide-slate-200 text-left text-sm">
               <caption className="sr-only">
                 {t("quotations.openingsAndPricing")}
               </caption>
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-3 py-3">{t("projects.openings.fields.openingCode")}</th>
+                  <th className="px-3 py-3">Type</th>
                   <th className="px-3 py-3">{t("common.location")}</th>
                   <th className="px-3 py-3">{t("common.system")}</th>
                   <th className="px-3 py-3">{t("quotations.glass")}</th>
                   <th className="px-3 py-3">{t("projects.openings.fields.width")}</th>
                   <th className="px-3 py-3">{t("projects.openings.fields.height")}</th>
+                  <th className="px-3 py-3">{t("projects.openings.fields.solidPanelHeight")}</th>
                   <th className="px-3 py-3">{t("projects.openings.fields.quantity")}</th>
                   <th className="px-3 py-3">{t("common.areaSqm")}</th>
                   <th className="px-3 py-3">{t("quotations.unitPricePerSqm")}</th>
                   <th className="px-3 py-3">{t("common.discount")}</th>
                   <th className="px-3 py-3">{t("quotations.lineTotal")}</th>
+                  <th className="px-3 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {lines.map((line) => {
                   const lineTotal = calculateLineTotal(line);
+                  const isBaseLine = (line.lineType ?? "base") === "base";
 
                   return (
                     <tr key={line.id}>
                       <td className="px-3 py-4 font-bold text-slate-950">
-                        {line.openingCode}
+                        {isBaseLine ? (
+                          line.openingCode
+                        ) : (
+                          <input
+                            value={line.openingCode}
+                            onChange={(event) =>
+                              updateScopeLine(line.id, "openingCode", event.target.value)
+                            }
+                            className="h-9 w-28 rounded-md border border-slate-300 px-2 text-sm"
+                          />
+                        )}
+                      </td>
+                      <td className="px-3 py-4">
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold uppercase text-slate-600">
+                          {line.lineType ?? "base"}
+                        </span>
                       </td>
                       <td className="px-3 py-4 text-slate-700">
                         {term(line.floor)} - {term(line.room)}
                       </td>
                       <td className="px-3 py-4 text-slate-700">
-                        {term(line.productSystem)}
+                        {isBaseLine ? (
+                          term(line.productSystem)
+                        ) : (
+                          <input
+                            value={line.productSystem}
+                            onChange={(event) =>
+                              updateScopeLine(line.id, "productSystem", event.target.value)
+                            }
+                            placeholder="Description"
+                            className="h-9 w-44 rounded-md border border-slate-300 px-2 text-sm"
+                          />
+                        )}
                       </td>
                       <td className="px-3 py-4 text-slate-700">
                         {term(line.glassType)}
@@ -743,6 +895,9 @@ export function QuotationBuilder() {
                       </td>
                       <td className="px-3 py-4 text-slate-700">
                         {t("common.cmValue", { value: line.height })}
+                      </td>
+                      <td className="px-3 py-4 text-slate-700">
+                        {t("common.cmValue", { value: line.solidPanelHeight ?? 0 })}
                       </td>
                       <td className="px-3 py-4 text-slate-700">
                         {line.quantity}
@@ -771,6 +926,7 @@ export function QuotationBuilder() {
                           min="0"
                           max={discountLimit}
                           value={line.discountPercent}
+                          disabled={!lineTotal.isDiscountable}
                           onChange={(event) =>
                             updateLine(
                               line.id,
@@ -778,11 +934,27 @@ export function QuotationBuilder() {
                               Number(event.target.value),
                             )
                           }
-                          className="h-9 w-24 rounded-md border border-slate-300 px-2 text-sm"
+                          className="h-9 w-24 rounded-md border border-slate-300 px-2 text-sm disabled:bg-slate-100 disabled:text-slate-400"
                         />
+                        {!lineTotal.isDiscountable ? (
+                          <p className="mt-1 text-[11px] font-bold uppercase text-slate-500">
+                            No discount
+                          </p>
+                        ) : null}
                       </td>
                       <td className="px-3 py-4 font-bold text-[var(--alumex-blue)]">
                         {formatCurrency(lineTotal.net)}
+                      </td>
+                      <td className="px-3 py-4">
+                        {!isBaseLine ? (
+                          <button
+                            type="button"
+                            onClick={() => removeScopeLine(line.id)}
+                            className="h-9 rounded-md border border-danger-text px-2 text-xs font-bold text-danger-text"
+                          >
+                            Remove
+                          </button>
+                        ) : null}
                       </td>
                     </tr>
                   );
@@ -795,6 +967,7 @@ export function QuotationBuilder() {
         <div className="grid gap-4 xl:hidden">
           {lines.map((line) => {
             const lineTotal = calculateLineTotal(line);
+            const isBaseLine = (line.lineType ?? "base") === "base";
 
             return (
               <article
@@ -809,12 +982,29 @@ export function QuotationBuilder() {
                     <h3 className="mt-1 text-base font-bold text-slate-950">
                       {line.openingCode}
                     </h3>
+                    <p className="mt-1 text-xs font-bold uppercase text-slate-500">
+                      {line.lineType ?? "base"}
+                    </p>
                   </div>
                   <p className="rounded-md bg-blue-50 px-3 py-2 text-sm font-bold text-[var(--alumex-blue)]">
                     {formatCurrency(lineTotal.net)}
                   </p>
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {!isBaseLine ? (
+                    <label className="sm:col-span-2">
+                      <span className="text-xs font-bold uppercase text-slate-500">
+                        Add-on / accessory description
+                      </span>
+                      <input
+                        value={line.productSystem}
+                        onChange={(event) =>
+                          updateScopeLine(line.id, "productSystem", event.target.value)
+                        }
+                        className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                      />
+                    </label>
+                  ) : null}
                   <label>
                     <span className="text-xs font-bold uppercase text-slate-500">
                       {t("quotations.unitPricePerSqm")}
@@ -842,6 +1032,7 @@ export function QuotationBuilder() {
                       min="0"
                       max={discountLimit}
                       value={line.discountPercent}
+                      disabled={!lineTotal.isDiscountable}
                       onChange={(event) =>
                         updateLine(
                           line.id,
@@ -849,8 +1040,13 @@ export function QuotationBuilder() {
                           Number(event.target.value),
                         )
                       }
-                      className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                      className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm disabled:bg-slate-100 disabled:text-slate-400"
                     />
+                    {!lineTotal.isDiscountable ? (
+                      <p className="mt-1 text-xs font-bold text-slate-500">
+                        Add-ons and accessories are not discountable.
+                      </p>
+                    ) : null}
                   </label>
                 </div>
                 <p className="mt-3 text-sm text-slate-600">
@@ -860,6 +1056,19 @@ export function QuotationBuilder() {
                   {line.quantity} -{" "}
                   {t("common.areaValue", { value: lineTotal.area.toFixed(2) })}
                 </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {t("projects.openings.fields.solidPanelHeight")}:{" "}
+                  {t("common.cmValue", { value: line.solidPanelHeight ?? 0 })}
+                </p>
+                {!isBaseLine ? (
+                  <button
+                    type="button"
+                    onClick={() => removeScopeLine(line.id)}
+                    className="mt-3 h-10 w-full rounded-md border border-danger-text text-sm font-bold text-danger-text"
+                  >
+                    Remove
+                  </button>
+                ) : null}
               </article>
             );
           })}
@@ -926,6 +1135,18 @@ export function QuotationBuilder() {
               <span className="text-slate-500">{t("common.lineDiscounts")}</span>
               <span className="font-bold text-red-700">
                 -{formatCurrency(totals.lineDiscountTotal)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Discountable subtotal</span>
+              <span className="font-bold text-slate-950">
+                {formatCurrency(totals.discountableSubtotal)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Add-ons/accessories</span>
+              <span className="font-bold text-slate-950">
+                {formatCurrency(totals.nonDiscountableSubtotal)}
               </span>
             </div>
             <label className="block">

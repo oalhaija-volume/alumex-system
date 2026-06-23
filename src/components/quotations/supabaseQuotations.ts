@@ -21,12 +21,15 @@ type QuotationItemRow = {
   room: string | null;
   width: number | string;
   height: number | string;
+  solid_panel_height?: number | string | null;
   quantity: number;
   product_system: string | null;
   glass_type: string | null;
   aluminum_color: string | null;
   unit_price: number | string;
   discount_percent: number | string;
+  line_type?: "base" | "addon" | "accessory" | null;
+  is_discountable?: boolean | null;
   notes: string | null;
 };
 
@@ -42,13 +45,18 @@ function mapLine(item: QuotationItemRow): QuotationLine {
     openingCode: item.opening_code,
     width: numberValue(item.width),
     height: numberValue(item.height),
+    solidPanelHeight: numberValue(item.solid_panel_height),
     quantity: item.quantity,
     productSystem: item.product_system ?? "",
     glassType: item.glass_type ?? "",
     aluminumColor: item.aluminum_color ?? "",
     notes: item.notes ?? "",
     unitPrice: numberValue(item.unit_price),
-    discountPercent: numberValue(item.discount_percent),
+    discountPercent: item.is_discountable === false ? 0 : numberValue(item.discount_percent),
+    lineType: item.line_type ?? "base",
+    isDiscountable:
+      item.is_discountable ??
+      !["addon", "accessory"].includes(item.line_type ?? "base"),
   };
 }
 

@@ -26,7 +26,7 @@ export function ProductionLoginForm() {
   const redirectTo = searchParams.get("redirectTo") ?? "/dashboard";
   const hasMissingConfiguration =
     searchParams.get("configuration") === "missing";
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(
     hasMissingConfiguration ? supabaseConfigError : "",
@@ -40,8 +40,29 @@ export function ProductionLoginForm() {
 
     try {
       const supabase = createClient();
+      const resolveResponse = await fetch("/api/auth/resolve-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username }),
+      });
+
+      if (!resolveResponse.ok) {
+        const body = (await resolveResponse.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        setError(body?.error ?? t("auth.loginError"));
+        return;
+      }
+
+      const resolved = (await resolveResponse.json()) as { email?: string };
+
+      if (!resolved.email) {
+        setError(t("auth.loginError"));
+        return;
+      }
+
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
+        email: resolved.email,
         password,
       });
 
@@ -83,14 +104,15 @@ export function ProductionLoginForm() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <label className="block">
           <span className="text-sm font-bold text-muted-strong">
-            {t("auth.email")}
+            {t("auth.username")}
           </span>
           <input
-            type="email"
+            type="text"
             required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder={t("auth.emailPlaceholder")}
+            autoComplete="username"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder={t("auth.usernamePlaceholder")}
             className="mt-2 h-12 w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground outline-none transition placeholder:text-muted focus:border-primary focus:ring-4 focus:ring-info-surface"
           />
         </label>
@@ -101,6 +123,7 @@ export function ProductionLoginForm() {
           <input
             type="password"
             required
+            autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             placeholder={t("auth.passwordPlaceholder")}

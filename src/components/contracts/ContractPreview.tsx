@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { PdfDownloadButton } from "@/components/pdf/PdfDownloadButton";
+import { SignaturePad } from "@/components/contracts/SignaturePad";
 import {
   contractStorageKey,
   getProductSystems,
@@ -19,6 +20,14 @@ import { canViewFinanceValues, canViewSalesPrices } from "@/lib/auth/roles";
 import { messagesByLocale, type Locale, type Messages } from "@/lib/i18n";
 
 const scheduleRowsPerPage = 9;
+
+async function readApiError(response: Response, fallback: string) {
+  const body = (await response.json().catch(() => null)) as {
+    error?: string;
+  } | null;
+
+  return body?.error ?? fallback;
+}
 
 function Logo() {
   return (
@@ -414,6 +423,7 @@ function SchedulePage({
                 <th className="p-1.5 text-start">{t("contracts.opening")}</th>
                 <th className="p-1.5 text-start">{t("projects.openings.fields.width")}</th>
                 <th className="p-1.5 text-start">{t("projects.openings.fields.height")}</th>
+                <th className="p-1.5 text-start">{t("projects.openings.fields.solidPanelHeight")}</th>
                 <th className="p-1.5 text-start">{t("projects.openings.fields.quantity")}</th>
                 <th className="p-1.5 text-start">{t("common.areaSqm")}</th>
                 <th className="p-1.5 text-start">{t("common.system")}</th>
@@ -435,6 +445,7 @@ function SchedulePage({
                     <td className="p-1.5 font-semibold text-slate-950">{line.openingCode}</td>
                     <td className="p-1.5">{line.width}</td>
                     <td className="p-1.5">{line.height}</td>
+                    <td className="p-1.5">{line.solidPanelHeight ?? 0}</td>
                     <td className="p-1.5">{line.quantity}</td>
                     <td className="p-1.5">{lineTotal.area.toFixed(2)}</td>
                     <td className="p-1.5">{term(line.productSystem)}</td>
@@ -541,7 +552,25 @@ function SignaturePage({
   page: number;
   totalPages: number;
 }) {
-  const { t, term } = useContractDocumentI18n(isArabic ? "ar" : "en");
+  const { formatDate, t, term } = useContractDocumentI18n(isArabic ? "ar" : "en");
+  const signatureRows = [
+    {
+      label: t("contracts.clientRepresentative"),
+      name: draft.clientSignedName || term(draft.project.client),
+      signatureDataUrl: draft.clientSignatureDataUrl,
+      signedAt: draft.clientSignedAt,
+    },
+    {
+      label: t("contracts.alumexRepresentative"),
+      name: draft.preparedBy,
+    },
+    {
+      label: t("contracts.salesEngineer"),
+      name: draft.salesSignedName || term(draft.salesEngineer),
+      signatureDataUrl: draft.salesSignatureDataUrl,
+      signedAt: draft.salesSignedAt,
+    },
+  ];
 
   return (
     <PageShell
@@ -563,20 +592,30 @@ function SignaturePage({
         </LegalSection>
 
         <div className="mt-auto grid gap-8">
-          {[
-            [t("contracts.clientRepresentative"), term(draft.project.client)],
-            [t("contracts.alumexRepresentative"), draft.preparedBy],
-            [t("contracts.salesEngineer"), term(draft.salesEngineer)],
-          ].map(([label, name]) => (
-            <div key={label} className="grid gap-3 rounded-md border border-slate-200 p-4 md:grid-cols-[1fr_1fr] md:items-end">
+          {signatureRows.map((row) => (
+            <div key={row.label} className="grid gap-3 rounded-md border border-slate-200 p-4 md:grid-cols-[1fr_1fr] md:items-end">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  {label}
+                  {row.label}
                 </p>
-                <p className="mt-2 text-sm font-bold text-slate-950">{name}</p>
+                <p className="mt-2 text-sm font-bold text-slate-950">{row.name}</p>
+                {row.signedAt ? (
+                  <p className="mt-1 text-[10px] font-semibold text-slate-500">
+                    Signed digitally: {formatDate(row.signedAt)}
+                  </p>
+                ) : null}
               </div>
               <div>
-                <div className="h-16 border-b border-slate-400" />
+                <div className="flex h-16 items-end border-b border-slate-400">
+                  {row.signatureDataUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={row.signatureDataUrl}
+                      alt={`${row.label} signature`}
+                      className="max-h-16 max-w-full object-contain"
+                    />
+                  ) : null}
+                </div>
                 <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                   {t("common.signature")}
                 </p>
@@ -593,6 +632,13 @@ export function ContractPreview() {
   const { t } = useI18n();
   const { role } = useCurrentRole();
   const [draft, setDraft] = useState<ContractDraft | null>(null);
+  const [clientSignedName, setClientSignedName] = useState("");
+  const [clientSignatureDataUrl, setClientSignatureDataUrl] = useState("");
+  const [salesSignedName, setSalesSignedName] = useState("");
+  const [salesSignatureDataUrl, setSalesSignatureDataUrl] = useState("");
+  const [signatureError, setSignatureError] = useState("");
+  const [signatureNotice, setSignatureNotice] = useState("");
+  const [isSavingSignatures, setIsSavingSignatures] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -600,7 +646,16 @@ export function ContractPreview() {
       const storedDraft = window.localStorage.getItem(contractStorageKey);
 
       if (storedDraft) {
-        setDraft(JSON.parse(storedDraft) as ContractDraft);
+        const nextDraft = JSON.parse(storedDraft) as ContractDraft;
+        setDraft(nextDraft);
+        setClientSignedName(nextDraft.clientSignedName || nextDraft.project.client);
+        setClientSignatureDataUrl(nextDraft.clientSignatureDataUrl ?? "");
+        setSalesSignedName(
+          nextDraft.salesSignedName ||
+            nextDraft.salesEngineer ||
+            nextDraft.preparedBy,
+        );
+        setSalesSignatureDataUrl(nextDraft.salesSignatureDataUrl ?? "");
       }
       setIsLoading(false);
     }, 0);
@@ -625,6 +680,68 @@ export function ContractPreview() {
     () => chunkRows(lines, scheduleRowsPerPage),
     [lines],
   );
+
+  async function saveSignatures() {
+    if (!draft?.id) {
+      setSignatureError("Generate and save the contract before signing.");
+      return;
+    }
+
+    if (!clientSignatureDataUrl || !salesSignatureDataUrl) {
+      setSignatureError("Client and sales signatures are required.");
+      return;
+    }
+
+    setSignatureError("");
+    setSignatureNotice("");
+    setIsSavingSignatures(true);
+
+    const signedAt = new Date().toISOString();
+    const nextDraft: ContractDraft = {
+      ...draft,
+      clientSignatureDataUrl,
+      clientSignedName: clientSignedName.trim() || draft.project.client,
+      clientSignedAt: draft.clientSignedAt || signedAt,
+      salesSignatureDataUrl,
+      salesSignedName:
+        salesSignedName.trim() || draft.salesEngineer || draft.preparedBy,
+      salesSignedAt: draft.salesSignedAt || signedAt,
+    };
+
+    try {
+      const response = await fetch(`/api/contracts/${draft.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save-signatures",
+          client_signature_data_url: nextDraft.clientSignatureDataUrl,
+          client_signed_name: nextDraft.clientSignedName,
+          client_signed_at: nextDraft.clientSignedAt,
+          sales_signature_data_url: nextDraft.salesSignatureDataUrl,
+          sales_signed_name: nextDraft.salesSignedName,
+          sales_signed_at: nextDraft.salesSignedAt,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          await readApiError(response, "Unable to save contract signatures."),
+        );
+      }
+
+      setDraft(nextDraft);
+      window.localStorage.setItem(contractStorageKey, JSON.stringify(nextDraft));
+      setSignatureNotice("Signatures saved to the contract.");
+    } catch (saveError) {
+      setSignatureError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Unable to save contract signatures.",
+      );
+    } finally {
+      setIsSavingSignatures(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -692,6 +809,68 @@ export function ContractPreview() {
           />
         </div>
       </div>
+
+      <section className="no-print mx-auto mb-6 w-full max-w-5xl rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wide text-[var(--alumex-red)]">
+              Contract Signing
+            </p>
+            <h2 className="mt-1 text-lg font-bold text-slate-950">
+              Client and Sales Signatures
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Review the generated contract first, then capture both signatures on the sales iPad.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void saveSignatures()}
+            disabled={
+              isSavingSignatures ||
+              !clientSignatureDataUrl ||
+              !salesSignatureDataUrl
+            }
+            className="h-11 rounded-md bg-[var(--alumex-blue)] px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+          >
+            {isSavingSignatures ? "Saving..." : "Save signatures to contract"}
+          </button>
+        </div>
+
+        {signatureError ? (
+          <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+            {signatureError}
+          </p>
+        ) : null}
+        {signatureNotice ? (
+          <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+            {signatureNotice}
+          </p>
+        ) : null}
+
+        <div className="mt-4 grid gap-6">
+          <SignaturePad
+            signerName={clientSignedName}
+            value={clientSignatureDataUrl}
+            onChange={setClientSignatureDataUrl}
+            onSignerNameChange={setClientSignedName}
+            signerLabel="Client signer name"
+            signerPlaceholder="Client full name"
+            ariaLabel="Client digital signature pad"
+            emptyMessage="Ask the client to sign inside the box."
+          />
+          <SignaturePad
+            signerName={salesSignedName}
+            value={salesSignatureDataUrl}
+            onChange={setSalesSignatureDataUrl}
+            onSignerNameChange={setSalesSignedName}
+            signerLabel="Sales signer name"
+            signerPlaceholder="Sales representative name"
+            ariaLabel="Sales digital signature pad"
+            emptyMessage="Ask the sales representative to sign inside the box."
+          />
+        </div>
+      </section>
 
       <article
         id="contract-pdf"

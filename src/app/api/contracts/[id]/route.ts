@@ -6,6 +6,7 @@ import {
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
 import { friendlyDatabaseError } from "@/lib/friendlyErrors";
+import { discountLimitForRoleFromSettings } from "@/lib/pricing/discountPolicyServer";
 
 type SupabaseError = {
   code?: string;
@@ -90,8 +91,46 @@ function contractErrorResponse(
   );
 }
 
+function isMissingSignatureColumnError(error: unknown) {
+  const details = getSupabaseErrorDetails(error);
+  const message = details.message ?? "";
+  const combinedMessage = [
+    details.message,
+    details.details,
+    details.hint,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const hasSignatureColumnName =
+    combinedMessage.includes("client_signature_data_url") ||
+    combinedMessage.includes("client_signed_name") ||
+    combinedMessage.includes("client_signed_at") ||
+    combinedMessage.includes("sales_signature_data_url") ||
+    combinedMessage.includes("sales_signed_name") ||
+    combinedMessage.includes("sales_signed_at") ||
+    combinedMessage.includes("signed_by_sales_user_id");
+
+  return (
+    hasSignatureColumnName &&
+    (details.code === "42703" ||
+      details.code === "PGRST204" ||
+      message.toLowerCase().includes("schema cache"))
+  );
+}
+
+function isMissingColumnError(error: unknown) {
+  const details = getSupabaseErrorDetails(error);
+
+  return details.code === "42703" || details.code === "PGRST204";
+}
+
 function textValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function numberValue(value: unknown) {
+  const number = Number(value ?? 0);
+  return Number.isFinite(number) ? number : 0;
 }
 
 function normalizeContractNumber(value: unknown) {
@@ -102,7 +141,13 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const authCheck = await requireRole(["Admin"]);
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const isSignatureUpdate = body?.action === "save-signatures";
+  const authCheck = await requireRole(
+    isSignatureUpdate
+      ? ["Admin", "Sales Manager", "Sales Rep"]
+      : ["Admin", "Sales Manager", "Sales Rep", "Branch Manager"],
+  );
 
   if (!authCheck.ok) {
     return NextResponse.json(
@@ -119,7 +164,6 @@ export async function PATCH(
   }
 
   const { id } = await context.params;
-  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
 
   if (!body) {
     return NextResponse.json(
@@ -129,6 +173,76 @@ export async function PATCH(
   }
 
   const admin = createAdminClient();
+
+  if (!isSignatureUpdate && body.contract_discount_percent !== undefined) {
+    const discountLimit = await discountLimitForRoleFromSettings(
+      authCheck.role,
+      admin,
+    );
+    const contractDiscountPercent = numberValue(body.contract_discount_percent);
+
+    if (contractDiscountPercent > discountLimit) {
+      return NextResponse.json(
+        {
+          error: `${authCheck.role ?? "This role"} can add a maximum discount of ${discountLimit}%.`,
+        },
+        { status: 400 },
+      );
+    }
+  }
+
+  if (isSignatureUpdate) {
+    const now = new Date().toISOString();
+    const clientSignatureDataUrl = textValue(body.client_signature_data_url);
+    const salesSignatureDataUrl = textValue(body.sales_signature_data_url);
+
+    if (!clientSignatureDataUrl || !salesSignatureDataUrl) {
+      return NextResponse.json(
+        { error: "Client and sales signatures are required." },
+        { status: 400 },
+      );
+    }
+
+    const { data, error } = await admin
+      .from("contracts")
+      .update({
+        client_signature_data_url: clientSignatureDataUrl,
+        client_signed_name: textValue(body.client_signed_name) || null,
+        client_signed_at: textValue(body.client_signed_at) || now,
+        sales_signature_data_url: salesSignatureDataUrl,
+        sales_signed_name: textValue(body.sales_signed_name) || null,
+        sales_signed_at: textValue(body.sales_signed_at) || now,
+        signed_by_sales_user_id: authCheck.user.id,
+      })
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      if (isMissingSignatureColumnError(error)) {
+        return NextResponse.json(
+          {
+            error:
+              "Signature columns are missing in Supabase. Apply migration 20260616170000_contract_digital_signature.sql, then try again.",
+          },
+          { status: 409 },
+        );
+      }
+
+      logContractSupabaseError("/api/contracts/[id]", "update", error);
+      return contractErrorResponse(error, contractError(error), 500);
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        { error: "Contract was not found." },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({ contract: data });
+  }
+
   const normalizedContractNumber = normalizeContractNumber(body.contract_number);
 
   if (!normalizedContractNumber) {
@@ -168,31 +282,78 @@ export async function PATCH(
     );
   }
 
+  const updatePayload = {
+    contract_number: textValue(body.contract_number),
+    project_id: body.project_id,
+    quotation_id: body.quotation_id ?? null,
+    client_id: body.client_id,
+    status: body.status,
+    contract_value: body.contract_value,
+    source_contract_value:
+      body.source_contract_value ?? body.contract_value ?? 0,
+    contract_discount_percent: numberValue(body.contract_discount_percent),
+    contract_discount_total: body.contract_discount_total ?? 0,
+    contract_date: body.contract_date ?? null,
+    payment_terms: body.payment_terms ?? null,
+    warranty_terms: body.warranty_terms ?? null,
+    execution_terms: body.execution_terms ?? null,
+    contract_terms: body.contract_terms ?? null,
+    first_party_obligations: body.first_party_obligations ?? null,
+    second_party_obligations: body.second_party_obligations ?? null,
+    prepared_by_text: body.prepared_by_text ?? null,
+    language: body.language,
+    notes: body.notes ?? null,
+  };
+  const fallbackUpdatePayload = {
+    contract_number: updatePayload.contract_number,
+    project_id: updatePayload.project_id,
+    quotation_id: updatePayload.quotation_id,
+    client_id: updatePayload.client_id,
+    status: updatePayload.status,
+    contract_value: updatePayload.contract_value,
+    contract_date: updatePayload.contract_date,
+    payment_terms: updatePayload.payment_terms,
+    warranty_terms: updatePayload.warranty_terms,
+    execution_terms: updatePayload.execution_terms,
+    contract_terms: updatePayload.contract_terms,
+    first_party_obligations: updatePayload.first_party_obligations,
+    second_party_obligations: updatePayload.second_party_obligations,
+    prepared_by_text: updatePayload.prepared_by_text,
+    language: updatePayload.language,
+    notes: updatePayload.notes,
+  };
+
   const { data, error } = await admin
     .from("contracts")
-    .update({
-      contract_number: textValue(body.contract_number),
-      project_id: body.project_id,
-      quotation_id: body.quotation_id ?? null,
-      client_id: body.client_id,
-      status: body.status,
-      contract_value: body.contract_value,
-      contract_date: body.contract_date ?? null,
-      payment_terms: body.payment_terms ?? null,
-      warranty_terms: body.warranty_terms ?? null,
-      execution_terms: body.execution_terms ?? null,
-      contract_terms: body.contract_terms ?? null,
-      first_party_obligations: body.first_party_obligations ?? null,
-      second_party_obligations: body.second_party_obligations ?? null,
-      prepared_by_text: body.prepared_by_text ?? null,
-      language: body.language,
-      notes: body.notes ?? null,
-    })
+    .update(updatePayload)
     .eq("id", id)
     .select("id")
     .maybeSingle();
 
   if (error) {
+    if (isMissingColumnError(error)) {
+      const { data: fallbackData, error: fallbackError } = await admin
+        .from("contracts")
+        .update(fallbackUpdatePayload)
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
+
+      if (!fallbackError) {
+        if (!fallbackData) {
+          return NextResponse.json(
+            { error: "Contract was not found." },
+            { status: 404 },
+          );
+        }
+
+        return NextResponse.json({ contract: fallbackData });
+      }
+
+      logContractSupabaseError("/api/contracts/[id]", "update", fallbackError);
+      return contractErrorResponse(fallbackError, contractError(fallbackError), 500);
+    }
+
     logContractSupabaseError("/api/contracts/[id]", "update", error);
     return contractErrorResponse(error, contractError(error), 500);
   }

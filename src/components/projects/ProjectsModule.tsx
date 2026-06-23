@@ -124,7 +124,14 @@ function ProjectCard({
 }
 
 export function ProjectsModule() {
-  const { projects, createProject, updateProject, deleteProjects } = useProjects();
+  const {
+    projects,
+    error: projectsLoadError,
+    warning: projectsLoadWarning,
+    createProject,
+    updateProject,
+    deleteProjects,
+  } = useProjects();
   const { isAdmin } = useCurrentRole();
   const { t, term } = useI18n();
   const [search, setSearch] = useState("");
@@ -291,6 +298,16 @@ export function ProjectsModule() {
       {error ? (
         <p className="rounded-md border border-border bg-danger-surface px-3 py-2 text-sm font-semibold text-danger-text">
           {error}
+        </p>
+      ) : null}
+      {projectsLoadError ? (
+        <p className="rounded-md border border-border bg-danger-surface px-3 py-2 text-sm font-semibold text-danger-text">
+          {projectsLoadError}
+        </p>
+      ) : null}
+      {projectsLoadWarning ? (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+          {projectsLoadWarning}
         </p>
       ) : null}
       {notice ? (

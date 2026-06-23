@@ -1,4 +1,7 @@
 import type { AppRole } from "@/lib/auth/roles";
+import { defaultDiscountLimitForRole } from "@/lib/pricing/discountPolicy";
+
+export { clampDiscount } from "@/lib/pricing/discountPolicy";
 
 export type ProductPrice = {
   id?: string;
@@ -44,27 +47,7 @@ export function productPriceForSystem(
 }
 
 export function discountLimitForRole(role: AppRole | null) {
-  if (role === "Sales Rep") {
-    return 2;
-  }
-
-  if (role === "Sales Manager") {
-    return 4;
-  }
-
-  if (role === "Branch Manager") {
-    return 6;
-  }
-
-  return 100;
-}
-
-export function clampDiscount(value: number, limit: number) {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-
-  return Math.min(Math.max(value, 0), limit);
+  return defaultDiscountLimitForRole(role);
 }
 
 export async function loadProductPrices(): Promise<ProductPrice[]> {

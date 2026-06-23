@@ -13,6 +13,8 @@ type Vehicle = {
   updated_at: string;
 };
 
+const vehiclesChangedEvent = "alumex:vehicles-changed";
+
 async function readError(response: Response, fallback: string) {
   const body = (await response.json().catch(() => null)) as {
     error?: string;
@@ -22,7 +24,7 @@ async function readError(response: Response, fallback: string) {
 }
 
 export function VehiclesSettings() {
-  const { t, formatDate } = useI18n();
+  const { t } = useI18n();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [vehicleName, setVehicleName] = useState("");
   const [cubicSize, setCubicSize] = useState("");
@@ -48,7 +50,7 @@ export function VehiclesSettings() {
     return (await response.json()) as Vehicle[];
   }, [t]);
 
-  async function loadVehicles() {
+  const loadVehicles = useCallback(async () => {
     setError("");
     setIsLoading(true);
 
@@ -61,11 +63,15 @@ export function VehiclesSettings() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [fetchVehicles, t]);
 
   useEffect(() => {
-    loadVehicles();
-  }, []);
+    const timer = window.setTimeout(() => {
+      void loadVehicles();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [loadVehicles]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -92,6 +98,7 @@ export function VehiclesSettings() {
       }
 
       await loadVehicles();
+      window.dispatchEvent(new Event(vehiclesChangedEvent));
       setVehicleName("");
       setCubicSize("");
       setPlateNumber("");
@@ -124,6 +131,7 @@ export function VehiclesSettings() {
       }
 
       await loadVehicles();
+      window.dispatchEvent(new Event(vehiclesChangedEvent));
       setDeleteTarget(null);
       setNotice(t("settings.deleteSuccess"));
     } catch (deleteError) {
@@ -289,7 +297,7 @@ export function VehiclesSettings() {
           <div className="bg-white rounded-lg p-6 max-w-sm">
             <h3 className="text-lg font-semibold mb-2">Delete Vehicle</h3>
             <p className="text-gray-600 mb-4">
-              Are you sure you want to delete "{deleteTarget.vehicle_name}"?
+              Are you sure you want to delete &quot;{deleteTarget.vehicle_name}&quot;?
             </p>
             <div className="flex gap-2 justify-end">
               <button

@@ -255,8 +255,9 @@ function DetailsPage({
                 <th className="w-[11%] px-1 py-2">{t("common.location")}</th>
                 <th className="w-[12%] px-1 py-2">{t("common.system")}</th>
                 <th className="w-[10%] px-1 py-2">{t("quotations.glass")}</th>
-                <th className="w-[8%] px-1 py-2">{t("projects.openings.fields.width")}</th>
-                <th className="w-[8%] px-1 py-2">{t("projects.openings.fields.height")}</th>
+                <th className="w-[7%] px-1 py-2">{t("projects.openings.fields.width")}</th>
+                <th className="w-[7%] px-1 py-2">{t("projects.openings.fields.height")}</th>
+                <th className="w-[7%] px-1 py-2">{t("projects.openings.fields.solidPanelHeight")}</th>
                 <th className="w-[5%] px-1 py-2">{t("projects.openings.fields.quantity")}</th>
                 <th className="w-[8%] px-1 py-2">{t("common.areaSqm")}</th>
                 {showSalesPrices ? (
@@ -294,6 +295,9 @@ function DetailsPage({
                     </td>
                     <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
                       {line.height}
+                    </td>
+                    <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
+                      {line.solidPanelHeight ?? 0}
                     </td>
                     <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
                       {line.quantity}

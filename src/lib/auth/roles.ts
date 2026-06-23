@@ -8,9 +8,16 @@ export type AppRole =
   | "Project Engineer"
   | "Site Engineer"
   | "Auditor"
+  | "Audit Team"
   | "Branch Manager"
+  | "Factory"
+  | "Glass Department"
   | "Delivery Head"
-  | "Installation Head";
+  | "Delivery Team"
+  | "Installation Head"
+  | "Installation Team"
+  | "Quality Control"
+  | "HR";
 
 export const appRoles: AppRole[] = [
   "Admin",
@@ -22,9 +29,16 @@ export const appRoles: AppRole[] = [
   "Project Engineer",
   "Site Engineer",
   "Auditor",
+  "Audit Team",
   "Branch Manager",
+  "Factory",
+  "Glass Department",
   "Delivery Head",
+  "Delivery Team",
   "Installation Head",
+  "Installation Team",
+  "Quality Control",
+  "HR",
 ];
 
 export const salesPriceRoles: AppRole[] = [
@@ -48,6 +62,18 @@ export function isAppRole(value: unknown): value is AppRole {
 export function normalizeAppRole(role: string | null | undefined): AppRole | null {
   if (role === "Sales User") {
     return "Sales Rep";
+  }
+
+  if (role === "Finance") {
+    return "Finance / Accountant";
+  }
+
+  if (role === "Sales Engineer") {
+    return "Sales Rep";
+  }
+
+  if (role === "Audit Team") {
+    return "Auditor";
   }
 
   return isAppRole(role) ? role : null;

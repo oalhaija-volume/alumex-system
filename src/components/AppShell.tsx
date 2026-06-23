@@ -4,12 +4,13 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BrandMark } from "@/components/BrandMark";
+import { PasswordChangePrompt } from "@/components/auth/PasswordChangePrompt";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { navItems } from "@/data/ui";
-import { canAccessRoute } from "@/lib/auth/permissions";
+import { canAccessRouteWithOverrides } from "@/lib/auth/permissions";
 
 const ProductionAuthStatus = dynamic(
   () =>
@@ -54,10 +55,10 @@ function NavLink({
     return (
       <Link
         href={href}
-        className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-md px-2 py-2 text-[11px] font-bold ${
+        className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-bold transition ${
           isActive
-            ? "bg-info-surface text-primary"
-            : "text-muted hover:bg-surface-muted hover:text-foreground"
+            ? "bg-material-primary-container text-material-on-primary-container"
+            : "text-muted hover:bg-material-surface-container hover:text-foreground"
         }`}
       >
         <span
@@ -72,16 +73,16 @@ function NavLink({
   return (
     <Link
       href={href}
-      className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-bold transition ${
+      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition ${
         isActive
-          ? "bg-primary text-white shadow-sm"
-          : "text-muted hover:bg-surface-muted hover:text-foreground"
+          ? "bg-material-primary-container text-material-on-primary-container shadow-[var(--md-elevation-1)]"
+          : "text-muted hover:bg-material-surface-container hover:text-foreground"
       }`}
     >
       <span
         aria-hidden="true"
         className={`h-2 w-2 rounded-full ${
-          isActive ? "bg-white/15" : "bg-surface-muted"
+          isActive ? "bg-material-primary" : "bg-material-outline-variant"
         }`}
       />
       {label}
@@ -101,22 +102,27 @@ function ShellLogoutButton({
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { direction, formatDate, t } = useI18n();
-  const { isLoaded: isRoleLoaded, role } = useCurrentRole();
+  const { isLoaded: isRoleLoaded, pageAccess, role } = useCurrentRole();
   const isRtl = direction === "rtl";
 
   const visibleNavItems = isRoleLoaded
-    ? navItems.filter((item) => canAccessRoute(item.href, role))
+    ? navItems.filter((item) =>
+        canAccessRouteWithOverrides(item.href, role, pageAccess),
+      )
     : navItems;
 
   return (
     <div className="min-h-screen max-w-[100vw] overflow-x-hidden bg-background text-foreground">
+      <PasswordChangePrompt />
       <aside
-        className={`fixed inset-y-0 z-30 hidden w-72 border-border bg-surface px-5 py-5 lg:block ${
+        className={`fixed inset-y-0 z-30 hidden w-72 border-material-outline-variant bg-material-surface-container-low px-4 py-4 lg:block ${
           isRtl ? "right-0 border-l" : "left-0 border-r"
         }`}
       >
-        <BrandMark />
-        <nav className="mt-8 space-y-1">
+        <div className="rounded-lg bg-material-surface-container px-3 py-3 shadow-[var(--md-elevation-1)]">
+          <BrandMark />
+        </div>
+        <nav className="mt-5 space-y-1">
           {visibleNavItems.map((item) => (
             <NavLink key={item.href} {...item} />
           ))}
@@ -124,19 +130,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="absolute bottom-5 left-5 right-5 space-y-3">
           <ShellAuthStatus />
           <ShellLogoutButton
-            className="h-10 w-full rounded-md bg-foreground px-4 text-sm font-bold text-background"
+            className="h-10 w-full rounded-md bg-material-primary px-4 text-sm font-bold text-material-on-primary shadow-[var(--md-elevation-1)]"
           />
         </div>
       </aside>
 
-      <header className="sticky top-0 z-20 max-w-[100vw] overflow-x-hidden border-b border-border bg-surface/95 px-4 py-3 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-20 max-w-[100vw] overflow-x-hidden border-b border-material-outline-variant bg-material-surface-container-low/95 px-4 py-3 shadow-[var(--md-elevation-1)] backdrop-blur lg:hidden">
         <div className="flex items-center justify-between gap-3">
           <BrandMark />
           <div className="flex min-w-0 items-center gap-2">
             <LanguageSwitcher compact />
             <ThemeToggle compact />
             <ShellLogoutButton
-              className="rounded-md border border-border px-3 py-2 text-xs font-bold text-muted-strong"
+              className="rounded-md border border-material-outline-variant px-3 py-2 text-xs font-bold text-muted-strong"
             />
           </div>
         </div>
@@ -147,7 +153,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           isRtl ? "lg:mr-72" : "lg:ml-72"
         }`}
       >
-        <div className="hidden max-w-full overflow-x-hidden border-b border-border bg-surface px-8 py-4 lg:block">
+        <div className="hidden max-w-full overflow-x-hidden border-b border-material-outline-variant bg-material-surface-container-low px-8 py-4 shadow-[var(--md-elevation-1)] lg:block">
           <div className={`flex min-w-0 items-center justify-between gap-4 ${isRtl ? "flex-row-reverse" : ""}`}>
             <div className="min-w-0">
               <p className="text-sm font-bold text-foreground">
@@ -160,11 +166,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className={`flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 ${isRtl ? "flex-row-reverse" : ""}`}>
               <LanguageSwitcher />
               <ThemeToggle />
-              <div className="h-10 rounded-md border border-border bg-surface-muted px-4 text-sm font-semibold leading-10 text-muted">
+              <div className="h-10 rounded-md border border-material-outline-variant bg-material-surface-container px-4 text-sm font-semibold leading-10 text-muted">
                 {formatDate(new Date())}
               </div>
               <ShellLogoutButton
-                className="h-10 rounded-md bg-foreground px-4 text-sm font-bold leading-10 text-background"
+                className="h-10 rounded-md bg-material-primary px-4 text-sm font-bold leading-10 text-material-on-primary shadow-[var(--md-elevation-1)]"
               />
             </div>
           </div>
@@ -174,7 +180,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-30 max-w-[100vw] overflow-x-hidden border-t border-border bg-surface px-2 py-2 shadow-[0_-10px_25px_rgba(15,23,42,0.08)] lg:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-30 max-w-[100vw] overflow-x-hidden border-t border-material-outline-variant bg-material-surface-container-low px-2 py-2 shadow-[var(--md-elevation-2)] lg:hidden">
         <div className="flex gap-1">
           {visibleNavItems.map((item) => (
             <NavLink key={item.href} compact {...item} />

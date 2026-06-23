@@ -17,40 +17,72 @@ create table public.delivery_vehicles (
   vehicle_id uuid not null references public.vehicles(id) on delete restrict,
   driver_id uuid references public.drivers(id) on delete set null,
   cubic_space_used numeric(10, 2) not null default 0,
-  cubic_space_available numeric(10, 2) generated always as (
-    (select cubic_size from vehicles where id = delivery_vehicles.vehicle_id) - cubic_space_used
-  ) stored,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+-- Add a computed view for cubic_space_available (easier than generated column)
+create view public.delivery_vehicles_with_capacity as
+select 
+  dv.*,
+  (v.cubic_size - dv.cubic_space_used) as cubic_space_available,
+  v.cubic_size as vehicle_cubic_size
+from public.delivery_vehicles dv
+join public.vehicles v on v.id = dv.vehicle_id;
+
 -- Add RLS policies for delivery_assignments
 alter table public.delivery_assignments enable row level security;
 
-create policy "Authenticated users can view delivery assignments"
+create policy "delivery_assignments_select_all"
   on public.delivery_assignments
   for select
   to authenticated
   using (true);
 
-create policy "Admin and Delivery Head can manage delivery assignments"
+create policy "delivery_assignments_admin_insert"
   on public.delivery_assignments
-  for all
+  for insert
+  to authenticated
+  with check (
+    is_admin() or
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid()
+      and role = 'Delivery Head'
+    )
+  );
+
+create policy "delivery_assignments_admin_update"
+  on public.delivery_assignments
+  for update
   to authenticated
   using (
-    is_admin() or 
+    is_admin() or
     exists (
-      select 1 from profiles 
-      where id = auth.uid() 
+      select 1 from public.profiles
+      where id = auth.uid()
       and role = 'Delivery Head'
     )
   )
   with check (
-    is_admin() or 
+    is_admin() or
     exists (
-      select 1 from profiles 
-      where id = auth.uid() 
+      select 1 from public.profiles
+      where id = auth.uid()
+      and role = 'Delivery Head'
+    )
+  );
+
+create policy "delivery_assignments_admin_delete"
+  on public.delivery_assignments
+  for delete
+  to authenticated
+  using (
+    is_admin() or
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid()
       and role = 'Delivery Head'
     )
   );
@@ -58,29 +90,55 @@ create policy "Admin and Delivery Head can manage delivery assignments"
 -- Add RLS policies for delivery_vehicles
 alter table public.delivery_vehicles enable row level security;
 
-create policy "Authenticated users can view delivery vehicles"
+create policy "delivery_vehicles_select_all"
   on public.delivery_vehicles
   for select
   to authenticated
   using (true);
 
-create policy "Admin and Delivery Head can manage delivery vehicles"
+create policy "delivery_vehicles_admin_insert"
   on public.delivery_vehicles
-  for all
+  for insert
+  to authenticated
+  with check (
+    is_admin() or
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid()
+      and role = 'Delivery Head'
+    )
+  );
+
+create policy "delivery_vehicles_admin_update"
+  on public.delivery_vehicles
+  for update
   to authenticated
   using (
-    is_admin() or 
+    is_admin() or
     exists (
-      select 1 from profiles 
-      where id = auth.uid() 
+      select 1 from public.profiles
+      where id = auth.uid()
       and role = 'Delivery Head'
     )
   )
   with check (
-    is_admin() or 
+    is_admin() or
     exists (
-      select 1 from profiles 
-      where id = auth.uid() 
+      select 1 from public.profiles
+      where id = auth.uid()
+      and role = 'Delivery Head'
+    )
+  );
+
+create policy "delivery_vehicles_admin_delete"
+  on public.delivery_vehicles
+  for delete
+  to authenticated
+  using (
+    is_admin() or
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid()
       and role = 'Delivery Head'
     )
   );

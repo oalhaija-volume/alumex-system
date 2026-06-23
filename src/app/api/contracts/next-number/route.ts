@@ -12,6 +12,7 @@ const contractRoles = [
   "Admin",
   "Sales Manager",
   "Sales Rep",
+  "Branch Manager",
   "Finance / Accountant",
 ] as const;
 
@@ -85,8 +86,10 @@ export async function GET() {
     );
   }
 
-  const year = new Date().getFullYear();
-  const prefix = `CT-${year}-`;
+  const date = new Date();
+  const prefix = `CT-${date.getFullYear()}${(date.getMonth() + 1)
+    .toString()
+    .padStart(2, "0")}-`;
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("contracts")
@@ -116,6 +119,6 @@ export async function GET() {
     );
 
   return NextResponse.json({
-    contractNumber: generateNextContractNumber({ contractNumbers, year }),
+    contractNumber: generateNextContractNumber({ contractNumbers, date }),
   });
 }

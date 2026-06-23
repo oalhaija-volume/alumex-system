@@ -39,50 +39,86 @@ create table public.installation_teams (
 -- Add RLS policies for vehicles
 alter table public.vehicles enable row level security;
 
-create policy "Admin can manage vehicles"
-  on public.vehicles
-  for all
-  to authenticated
-  using (is_admin())
-  with check (is_admin());
-
-create policy "Anyone can view vehicles"
+create policy "vehicles_select_all"
   on public.vehicles
   for select
   to authenticated
   using (true);
+
+create policy "vehicles_admin_insert_update_delete"
+  on public.vehicles
+  for insert
+  to authenticated
+  with check (is_admin());
+
+create policy "vehicles_admin_update"
+  on public.vehicles
+  for update
+  to authenticated
+  using (is_admin())
+  with check (is_admin());
+
+create policy "vehicles_admin_delete"
+  on public.vehicles
+  for delete
+  to authenticated
+  using (is_admin());
 
 -- Add RLS policies for drivers
 alter table public.drivers enable row level security;
 
-create policy "Admin can manage drivers"
-  on public.drivers
-  for all
-  to authenticated
-  using (is_admin())
-  with check (is_admin());
-
-create policy "Anyone can view drivers"
+create policy "drivers_select_all"
   on public.drivers
   for select
   to authenticated
   using (true);
+
+create policy "drivers_admin_insert"
+  on public.drivers
+  for insert
+  to authenticated
+  with check (is_admin());
+
+create policy "drivers_admin_update"
+  on public.drivers
+  for update
+  to authenticated
+  using (is_admin())
+  with check (is_admin());
+
+create policy "drivers_admin_delete"
+  on public.drivers
+  for delete
+  to authenticated
+  using (is_admin());
 
 -- Add RLS policies for installation_teams
 alter table public.installation_teams enable row level security;
 
-create policy "Admin can manage installation teams"
-  on public.installation_teams
-  for all
-  to authenticated
-  using (is_admin())
-  with check (is_admin());
-
-create policy "Anyone can view installation teams"
+create policy "installation_teams_select_all"
   on public.installation_teams
   for select
   to authenticated
   using (true);
+
+create policy "installation_teams_admin_insert"
+  on public.installation_teams
+  for insert
+  to authenticated
+  with check (is_admin());
+
+create policy "installation_teams_admin_update"
+  on public.installation_teams
+  for update
+  to authenticated
+  using (is_admin())
+  with check (is_admin());
+
+create policy "installation_teams_admin_delete"
+  on public.installation_teams
+  for delete
+  to authenticated
+  using (is_admin());
 
 -- Add to activity_entity_type enum if not exists
 alter type public.activity_entity_type add value 'vehicle' if not exists;

@@ -1,8 +1,5 @@
 import type { AppRole } from "@/lib/auth/roles";
-import {
-  canViewFinanceValues,
-  canViewSalesPrices,
-} from "@/lib/auth/roles";
+import { canViewFinanceValues } from "@/lib/auth/roles";
 import {
   projectWorkflowStatuses,
   type ProjectWorkflowStatus,
@@ -38,6 +35,7 @@ export const workflowStages: WorkflowStage[] = [
 
 export const workflowStatusLabels: Record<ProjectWorkflowStatus, string> = {
   sales_client_created: "Preparing Quotation",
+  sales_opportunity_created: "Opportunity",
   sales_quotation_created: "Awaiting Contract",
   sales_contract_created: "Awaiting Finance Approval",
   finance_down_payment_pending: "Waiting For Down Payment",
@@ -58,16 +56,22 @@ export const workflowStatusLabels: Record<ProjectWorkflowStatus, string> = {
   sent_to_factory: "Sent To Factory",
   factory_in_progress: "In Production",
   factory_completed: "Production Completed",
+  glass_production: "Glass Production",
+  assembly: "Assembly",
   final_payment_requested: "Waiting Final Payment",
   final_payment_received: "Ready For Delivery",
   delivery_pending: "Waiting Delivery",
   delivered: "Delivered To Site",
   installation_in_progress: "Installation In Progress",
   installation_completed: "Installation Completed",
+  quality_control: "Quality Control",
+  project_handover: "Project Handover",
+  closed: "Closed",
 };
 
 export const workflowStatusStages: Record<ProjectWorkflowStatus, WorkflowStage> = {
   sales_client_created: "Sales",
+  sales_opportunity_created: "Sales",
   sales_quotation_created: "Sales",
   sales_contract_created: "Finance",
   finance_down_payment_pending: "Finance",
@@ -88,16 +92,22 @@ export const workflowStatusStages: Record<ProjectWorkflowStatus, WorkflowStage> 
   sent_to_factory: "Factory",
   factory_in_progress: "Factory",
   factory_completed: "Final Payment",
+  glass_production: "Factory",
+  assembly: "Factory",
   final_payment_requested: "Final Payment",
   final_payment_received: "Delivery",
   delivery_pending: "Delivery",
   delivered: "Installation",
   installation_in_progress: "Installation",
   installation_completed: "Installation",
+  quality_control: "Installation",
+  project_handover: "Installation",
+  closed: "Installation",
 };
 
 export const workflowNextActions: Record<ProjectWorkflowStatus, string> = {
   sales_client_created: "Sales creates quotation",
+  sales_opportunity_created: "Sales qualifies opportunity",
   sales_quotation_created: "Sales creates contract",
   sales_contract_created: "Finance confirms down payment",
   finance_down_payment_pending: "Finance confirms payment or exception",
@@ -118,12 +128,17 @@ export const workflowNextActions: Record<ProjectWorkflowStatus, string> = {
   sent_to_factory: "Factory progress is tracked",
   factory_in_progress: "Factory marks completion outside user access",
   factory_completed: "Finance requests final payment",
+  glass_production: "Glass production is tracked",
+  assembly: "Assembly is tracked",
   final_payment_requested: "Finance confirms final payment",
   final_payment_received: "Delivery head prepares delivery",
   delivery_pending: "Delivery head confirms delivery",
   delivered: "Project manager starts installation",
   installation_in_progress: "Project manager marks completion",
   installation_completed: "No further action required",
+  quality_control: "QC inspects installation",
+  project_handover: "Project handover is confirmed",
+  closed: "Project is closed",
 };
 
 export function workflowStatusLabel(status: ProjectWorkflowStatus) {
@@ -145,12 +160,8 @@ export function isWorkflowStatus(value: unknown): value is ProjectWorkflowStatus
 export function commercialVisibilityForRole(
   role: AppRole | null,
 ): CommercialVisibility {
-  if (canViewSalesPrices(role)) {
-    return "full";
-  }
-
   if (canViewFinanceValues(role)) {
-    return "finance";
+    return "full";
   }
 
   return "hidden";

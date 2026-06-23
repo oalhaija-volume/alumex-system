@@ -83,6 +83,12 @@ export function ProjectDetails() {
         >
           {t("projects.backToProjects")}
         </Link>
+        <a
+          href="#structural-openings"
+          className="inline-flex h-11 items-center rounded-md border border-material-outline-variant bg-material-primary-container px-4 text-sm font-bold text-material-on-primary-container"
+        >
+          {t("projects.openings.title")}
+        </a>
         {activeProject.structuralOpenings.length > 0 ? (
           <Link
             href={`/quotations?projectId=${activeProject.id}`}
@@ -135,47 +141,54 @@ export function ProjectDetails() {
         </SectionCard>
       </section>
 
-      <StructuralOpenings
-        openings={activeProject.structuralOpenings}
-        onAdd={(opening) => {
-          void addOpening(activeProject.id, opening).catch((openingError) =>
-            setError(
-              openingError instanceof Error
-                ? openingError.message
-                : t("projects.openings.saveError"),
-            ),
-          );
-        }}
-        onUpdate={(openingId, opening) => {
-          void updateOpening(activeProject.id, openingId, opening).catch(
-            (openingError) =>
+      <div id="structural-openings" className="scroll-mt-24">
+        <StructuralOpenings
+          openings={activeProject.structuralOpenings}
+          onAdd={async (opening) => {
+            try {
+              await addOpening(activeProject.id, opening);
+            } catch (openingError) {
               setError(
                 openingError instanceof Error
                   ? openingError.message
                   : t("projects.openings.saveError"),
-              ),
-          );
-        }}
-        onDelete={(openingId) => {
-          void deleteOpening(activeProject.id, openingId).catch((openingError) =>
-            setError(
-              openingError instanceof Error
-                ? openingError.message
-                : t("projects.openings.deleteError"),
-            ),
-          );
-        }}
-        onDuplicate={(openingId) => {
-          void duplicateOpening(activeProject.id, openingId).catch(
-            (openingError) =>
+              );
+              throw openingError;
+            }
+          }}
+          onUpdate={async (openingId, opening) => {
+            try {
+              await updateOpening(activeProject.id, openingId, opening);
+            } catch (openingError) {
               setError(
                 openingError instanceof Error
                   ? openingError.message
                   : t("projects.openings.saveError"),
+              );
+              throw openingError;
+            }
+          }}
+          onDelete={(openingId) => {
+            void deleteOpening(activeProject.id, openingId).catch((openingError) =>
+              setError(
+                openingError instanceof Error
+                  ? openingError.message
+                  : t("projects.openings.deleteError"),
               ),
-          );
-        }}
-      />
+            );
+          }}
+          onDuplicate={(openingId) => {
+            void duplicateOpening(activeProject.id, openingId).catch(
+              (openingError) =>
+                setError(
+                  openingError instanceof Error
+                    ? openingError.message
+                    : t("projects.openings.saveError"),
+                ),
+            );
+          }}
+        />
+      </div>
     </div>
   );
 }

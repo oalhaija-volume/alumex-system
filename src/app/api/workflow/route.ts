@@ -71,11 +71,17 @@ type OpeningRow = {
   width: number | string;
   height: number | string;
   solid_panel_height?: number | string | null;
+  fixed_height?: number | string | null;
   quantity: number;
   area_sqm: number | string;
   product_system: string | null;
   glass_type: string | null;
   aluminum_color: string | null;
+  shape?: string | null;
+  opening_type?: string | null;
+  bottom_frame?: string | null;
+  opening_direction?: string | null;
+  glass_color?: string | null;
   notes: string | null;
 };
 
@@ -227,11 +233,17 @@ type WorkflowProject = {
     width: number;
     height: number;
     solidPanelHeight: number;
+    fixedHeight: number;
     quantity: number;
     areaSqm: number;
     productSystem: string;
     glassType: string;
     aluminumColor: string;
+    shape: string;
+    openingType: string;
+    bottomFrame: string;
+    openingDirection: string;
+    glassColor: string;
     notes: string;
   }>;
   commercial: WorkflowCommercial;
@@ -505,6 +517,44 @@ async function loadAuditReviewRows(admin: ReturnType<typeof createAdminClient>) 
   }
 
   throw result.error;
+}
+
+async function loadOpeningRows(admin: ReturnType<typeof createAdminClient>) {
+  const extendedResult = await admin
+    .from("openings")
+    .select("id, project_id, floor, room, opening_code, width, height, solid_panel_height, fixed_height, quantity, area_sqm, product_system, glass_type, aluminum_color, shape, opening_type, bottom_frame, opening_direction, glass_color, notes");
+
+  if (!extendedResult.error) {
+    return (extendedResult.data ?? []) as OpeningRow[];
+  }
+
+  const message = extendedResult.error.message?.toLowerCase() ?? "";
+  if (
+    !message.includes("fixed_height") &&
+    !message.includes("shape") &&
+    !message.includes("opening_type") &&
+    !message.includes("bottom_frame") &&
+    !message.includes("opening_direction") &&
+    !message.includes("glass_color") &&
+    !message.includes("schema cache")
+  ) {
+    throw extendedResult.error;
+  }
+
+  console.warn(
+    "[api/workflow] site engineer opening detail columns are missing; using legacy openings fallback",
+    extendedResult.error,
+  );
+
+  const fallbackResult = await admin
+    .from("openings")
+    .select("id, project_id, floor, room, opening_code, width, height, solid_panel_height, quantity, area_sqm, product_system, glass_type, aluminum_color, notes");
+
+  if (fallbackResult.error) {
+    throw fallbackResult.error;
+  }
+
+  return (fallbackResult.data ?? []) as OpeningRow[];
 }
 
 function finalPaymentStatus(status: ProjectWorkflowStatus) {
@@ -869,7 +919,7 @@ export async function GET(request: Request) {
       projects,
       { data: clients, error: clientsError },
       { data: profiles, error: profilesError },
-      { data: openings, error: openingsError },
+      openings,
       { data: quotations, error: quotationsError },
       quotationItemsResult,
       { data: contracts, error: contractsError },
@@ -884,9 +934,7 @@ export async function GET(request: Request) {
       admin
         .from("profiles")
         .select("id, email, full_name, role, is_active, status"),
-      admin
-        .from("openings")
-        .select("id, project_id, floor, room, opening_code, width, height, solid_panel_height, quantity, area_sqm, product_system, glass_type, aluminum_color, notes"),
+      loadOpeningRows(admin),
       admin
         .from("quotations")
         .select("id, quotation_number, project_id, status, subtotal, line_discount_total, quotation_discount_total, grand_total, created_at")
@@ -908,7 +956,6 @@ export async function GET(request: Request) {
     const firstError =
       clientsError ??
       profilesError ??
-      openingsError ??
       quotationsError ??
       quotationItemsResult.error ??
       contractsError;
@@ -1051,11 +1098,17 @@ export async function GET(request: Request) {
           width: numberValue(opening.width),
           height: numberValue(opening.height),
           solidPanelHeight: numberValue(opening.solid_panel_height),
+          fixedHeight: numberValue(opening.fixed_height),
           quantity: opening.quantity,
           areaSqm: numberValue(opening.area_sqm),
           productSystem: opening.product_system ?? "",
           glassType: opening.glass_type ?? "",
           aluminumColor: opening.aluminum_color ?? "",
+          shape: opening.shape ?? "",
+          openingType: opening.opening_type ?? opening.product_system ?? "",
+          bottomFrame: opening.bottom_frame ?? "",
+          openingDirection: opening.opening_direction ?? "",
+          glassColor: opening.glass_color ?? opening.aluminum_color ?? "",
           notes: opening.notes ?? "",
         })),
         commercial: {

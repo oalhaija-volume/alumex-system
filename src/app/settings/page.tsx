@@ -1,5 +1,6 @@
 "use client";
 
+import { AppDataProviders } from "@/components/AppDataProviders";
 import { AppShell } from "@/components/AppShell";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { PageHeader } from "@/components/PageHeader";
@@ -54,7 +55,9 @@ export default function SettingsPage() {
           <UsersSettings />
         </SectionCard>
         <SectionCard title={t("settings.productPricing")}>
-          <ProductPricingSettings />
+          <AppDataProviders>
+            <ProductPricingSettings />
+          </AppDataProviders>
         </SectionCard>
         <SectionCard title={t("settings.openingDropdowns")}>
           <OpeningDropdownSettings />

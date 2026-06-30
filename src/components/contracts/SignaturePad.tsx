@@ -33,11 +33,11 @@ export function SignaturePad({
   value,
   onChange,
   onSignerNameChange,
-  signerLabel = "Client signer name",
-  signerPlaceholder = "Client full name",
-  helpText = "Use the sales iPad in landscape mode for the cleanest signature.",
-  ariaLabel = "Digital signature pad",
-  emptyMessage = "Ask the signer to sign inside the box.",
+  signerLabel = "اسم الموقع",
+  signerPlaceholder = "الاسم الكامل",
+  helpText = "استخدم الجهاز بوضع أفقي للحصول على توقيع أوضح.",
+  ariaLabel = "لوحة التوقيع الرقمي",
+  emptyMessage = "اطلب من الموقع التوقيع داخل المربع.",
 }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastPointRef = useRef<Point | null>(null);
@@ -180,14 +180,14 @@ export function SignaturePad({
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-semibold text-muted">
-            {value ? "Signature captured" : emptyMessage}
+            {value ? "تم أخذ التوقيع" : emptyMessage}
           </p>
           <button
             type="button"
             onClick={clearSignature}
             className="h-10 rounded-md border border-border bg-surface px-4 text-sm font-bold text-muted-strong"
           >
-            Clear signature
+            مسح التوقيع
           </button>
         </div>
       </div>

@@ -363,7 +363,7 @@ textarea {
   height: 297mm;
   min-height: 297mm;
   max-width: none;
-  padding: 18mm 16mm;
+  padding: 11mm 12mm;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -578,10 +578,25 @@ textarea {
     height: 297mm !important;
     min-height: 297mm !important;
     max-width: none !important;
-    padding: 18mm 16mm !important;
+    padding: 11mm 12mm !important;
     margin: 0 auto !important;
+    overflow: hidden !important;
     box-shadow: none !important;
     page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .pdf-page {
+    height: 297mm !important;
+    min-height: 297mm !important;
+    overflow: hidden !important;
+  }
+
+  .contract-print-page-body {
+    min-height: 0 !important;
+    overflow: hidden !important;
   }
 
   .print-page {

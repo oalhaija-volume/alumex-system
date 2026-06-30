@@ -43,11 +43,17 @@ type OpeningRow = {
   width: number | string;
   height: number | string;
   solid_panel_height?: number | string | null;
+  fixed_height?: number | string | null;
   quantity: number | string;
   area_sqm?: number | string | null;
   product_system: string | null;
   glass_type: string | null;
   aluminum_color: string | null;
+  shape?: string | null;
+  opening_type?: string | null;
+  bottom_frame?: string | null;
+  opening_direction?: string | null;
+  glass_color?: string | null;
   notes: string | null;
   created_at: string;
 };
@@ -59,11 +65,19 @@ type OpeningPayload = {
   openingCode?: unknown;
   width?: unknown;
   height?: unknown;
+  length?: unknown;
   solidPanelHeight?: unknown;
+  fixedHeight?: unknown;
   quantity?: unknown;
   productSystem?: unknown;
   glassType?: unknown;
   aluminumColor?: unknown;
+  shape?: unknown;
+  type?: unknown;
+  openingType?: unknown;
+  bottomFrame?: unknown;
+  openingDirection?: unknown;
+  glassColor?: unknown;
   notes?: unknown;
 };
 
@@ -88,47 +102,66 @@ function mapOpening(opening: OpeningRow) {
     openingCode: opening.opening_code,
     width: Number(opening.width) || 0,
     height: Number(opening.height) || 0,
+    length: Number(opening.height) || 0,
     solidPanelHeight: Number(opening.solid_panel_height) || 0,
+    fixedHeight: Number(opening.fixed_height) || 0,
     quantity: Number(opening.quantity) || 1,
     areaSqm: Number(opening.area_sqm) || 0,
     productSystem: opening.product_system ?? "",
     glassType: opening.glass_type ?? "",
     aluminumColor: opening.aluminum_color ?? "",
+    shape: opening.shape ?? "",
+    type: opening.opening_type ?? opening.product_system ?? "",
+    openingType: opening.opening_type ?? opening.product_system ?? "",
+    bottomFrame: opening.bottom_frame ?? "",
+    openingDirection: opening.opening_direction ?? "",
+    glassColor: opening.glass_color ?? opening.aluminum_color ?? "",
     notes: opening.notes ?? "",
   };
 }
 
 function normalizeOpeningPayload(body: OpeningPayload) {
+  const length = numberValue(body.length ?? body.height);
+  const openingType = textValue(body.openingType ?? body.type);
+  const glassColor = textValue(body.glassColor ?? body.aluminumColor);
   const opening = {
     floor: textValue(body.floor),
     room: textValue(body.room),
     opening_code: textValue(body.openingCode),
     width: numberValue(body.width),
-    height: numberValue(body.height),
+    height: length,
     solid_panel_height: Math.min(
       Math.max(numberValue(body.solidPanelHeight), 0),
-      numberValue(body.height),
+      length,
     ),
+    fixed_height: Math.min(Math.max(numberValue(body.fixedHeight), 0), length),
     quantity: Math.max(1, Math.round(numberValue(body.quantity) || 1)),
-    product_system: textValue(body.productSystem),
-    glass_type: textValue(body.glassType),
-    aluminum_color: textValue(body.aluminumColor),
+    product_system: textValue(body.productSystem) || openingType,
+    glass_type: textValue(body.glassType) || openingType,
+    aluminum_color: textValue(body.aluminumColor) || glassColor,
+    shape: textValue(body.shape),
+    opening_type: openingType,
+    bottom_frame: textValue(body.bottomFrame),
+    opening_direction: textValue(body.openingDirection),
+    glass_color: glassColor,
     notes: textValue(body.notes),
   };
 
   if (
-    !opening.opening_code ||
+    !opening.floor ||
+    !opening.room ||
     opening.width <= 0 ||
     opening.height <= 0 ||
-    opening.quantity <= 0 ||
-    !opening.product_system ||
-    !opening.glass_type ||
-    !opening.aluminum_color
+    !opening.shape ||
+    !opening.opening_type ||
+    !opening.bottom_frame ||
+    !opening.opening_direction ||
+    !opening.glass_color
   ) {
     return {
       ok: false as const,
       error:
-        "Opening code, width, height, quantity, product system, glass type, and aluminum color are required.",
+        "Floor, room, width, length, shape, type, bottom frame, opening direction, and glass color are required.",
     };
   }
 
@@ -228,6 +261,36 @@ async function loadProjectForUser(projectId: string) {
 }
 
 async function loadOpenings(admin: ReturnType<typeof createAdminClient>, projectId: string) {
+  const extendedResult = await admin
+    .from("openings")
+    .select(
+      "id, project_id, floor, room, opening_code, width, height, solid_panel_height, fixed_height, quantity, area_sqm, product_system, glass_type, aluminum_color, shape, opening_type, bottom_frame, opening_direction, glass_color, notes, created_at",
+    )
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+
+  if (!extendedResult.error) {
+    return ((extendedResult.data ?? []) as OpeningRow[]).map(mapOpening);
+  }
+
+  const message = extendedResult.error.message?.toLowerCase() ?? "";
+  if (
+    !message.includes("fixed_height") &&
+    !message.includes("shape") &&
+    !message.includes("opening_type") &&
+    !message.includes("bottom_frame") &&
+    !message.includes("opening_direction") &&
+    !message.includes("glass_color") &&
+    !message.includes("schema cache")
+  ) {
+    throw extendedResult.error;
+  }
+
+  console.warn(
+    "[api/site-measurements] site engineer opening detail columns are missing; using legacy openings fallback",
+    extendedResult.error,
+  );
+
   const { data, error } = await admin
     .from("openings")
     .select(
@@ -317,7 +380,7 @@ export async function POST(
       created_by: loaded.authCheck.user.id,
     })
     .select(
-      "id, project_id, floor, room, opening_code, width, height, solid_panel_height, quantity, area_sqm, product_system, glass_type, aluminum_color, notes, created_at",
+      "id, project_id, floor, room, opening_code, width, height, solid_panel_height, fixed_height, quantity, area_sqm, product_system, glass_type, aluminum_color, shape, opening_type, bottom_frame, opening_direction, glass_color, notes, created_at",
     )
     .single();
 
@@ -355,7 +418,7 @@ export async function PATCH(
     .eq("id", openingId)
     .eq("project_id", projectId)
     .select(
-      "id, project_id, floor, room, opening_code, width, height, solid_panel_height, quantity, area_sqm, product_system, glass_type, aluminum_color, notes, created_at",
+      "id, project_id, floor, room, opening_code, width, height, solid_panel_height, fixed_height, quantity, area_sqm, product_system, glass_type, aluminum_color, shape, opening_type, bottom_frame, opening_direction, glass_color, notes, created_at",
     )
     .maybeSingle();
 

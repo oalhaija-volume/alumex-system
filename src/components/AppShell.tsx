@@ -55,6 +55,7 @@ function NavLink({
     return (
       <Link
         href={href}
+        prefetch={false}
         className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-bold transition ${
           isActive
             ? "bg-material-primary-container text-material-on-primary-container"
@@ -73,6 +74,7 @@ function NavLink({
   return (
     <Link
       href={href}
+      prefetch={false}
       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition ${
         isActive
           ? "bg-material-primary-container text-material-on-primary-container shadow-[var(--md-elevation-1)]"

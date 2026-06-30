@@ -1,10 +1,13 @@
+import { AppDataProviders } from "@/components/AppDataProviders";
 import { AppShell } from "@/components/AppShell";
 import { CommercialWorkspace } from "@/components/commercial/CommercialWorkspace";
 
 export default function CommercialPage() {
   return (
-    <AppShell>
-      <CommercialWorkspace />
-    </AppShell>
+    <AppDataProviders>
+      <AppShell>
+        <CommercialWorkspace />
+      </AppShell>
+    </AppDataProviders>
   );
 }

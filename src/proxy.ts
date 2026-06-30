@@ -9,9 +9,25 @@ import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { createProxyClient } from "@/lib/supabase/proxy";
 
 const publicRoutes = ["/login", "/auth/callback"];
+const supabaseAuthCookiePattern = /^sb-.+-auth-token(?:\.\d+)?$/;
 
 function isPublicRoute(pathname: string) {
   return publicRoutes.some((route) => pathname.startsWith(route));
+}
+
+function isInvalidRefreshTokenError(error: { message?: string } | null) {
+  return error?.message?.toLowerCase().includes("invalid refresh token") === true;
+}
+
+function clearSupabaseAuthCookies(request: NextRequest, response: NextResponse) {
+  request.cookies
+    .getAll()
+    .filter((cookie) => supabaseAuthCookiePattern.test(cookie.name))
+    .forEach((cookie) => {
+      response.cookies.delete(cookie.name);
+    });
+
+  return response;
 }
 
 export async function proxy(request: NextRequest) {
@@ -31,7 +47,21 @@ export async function proxy(request: NextRequest) {
   const { supabase, response } = createProxyClient(request);
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
+
+  if (isInvalidRefreshTokenError(userError)) {
+    if (isPublicRoute(pathname)) {
+      return clearSupabaseAuthCookies(request, response);
+    }
+
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("redirectTo", pathname);
+    return clearSupabaseAuthCookies(
+      request,
+      NextResponse.redirect(loginUrl),
+    );
+  }
 
   if (isPublicRoute(pathname)) {
     if (!user || pathname !== "/login") {
@@ -64,11 +94,21 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, is_active, status")
-    .eq("id", user.id)
-    .single();
+  const isAdminEmail = user.email?.toLowerCase() === "admin@alumex.com";
+  const [profileResult, pageAccessResult] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("role, is_active, status")
+      .eq("id", user.id)
+      .single(),
+    isAdminEmail
+      ? Promise.resolve({ data: [] })
+      : supabase
+          .from("employee_page_access")
+          .select("route_path, can_access")
+          .eq("user_id", user.id),
+  ]);
+  const { data: profile } = profileResult;
   const profileData = profile as unknown as {
     role: AppRole | "Sales User" | null;
     is_active?: boolean | null;
@@ -79,7 +119,7 @@ export async function proxy(request: NextRequest) {
   const role =
     isInactive
       ? null
-      : user.email?.toLowerCase() === "admin@alumex.com"
+      : isAdminEmail
         ? "Admin"
       : normalizeAppRole(profileData?.role);
 
@@ -87,13 +127,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL(defaultRouteForRole(role), request.url));
   }
 
-  const { data: pageAccess } =
-    role && role !== "Admin"
-      ? await supabase
-          .from("employee_page_access")
-          .select("route_path, can_access")
-          .eq("user_id", user.id)
-      : { data: [] };
+  const pageAccess = role && role !== "Admin" ? pageAccessResult.data : [];
 
   if (!canAccessRouteWithOverrides(pathname, role, pageAccess ?? [])) {
     return NextResponse.redirect(new URL("/unauthorized", request.url));

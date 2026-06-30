@@ -1,5 +1,10 @@
+import { AppDataProviders } from "@/components/AppDataProviders";
 import { DashboardView } from "@/components/views/DashboardView";
 
 export default function Home() {
-  return <DashboardView />;
+  return (
+    <AppDataProviders>
+      <DashboardView />
+    </AppDataProviders>
+  );
 }

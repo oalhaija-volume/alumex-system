@@ -56,11 +56,18 @@ type WorkflowProject = {
     room: string;
     width: number;
     height: number;
+    solidPanelHeight: number;
+    fixedHeight: number;
     quantity: number;
     areaSqm: number;
     productSystem: string;
     glassType: string;
     aluminumColor: string;
+    shape: string;
+    openingType: string;
+    bottomFrame: string;
+    openingDirection: string;
+    glassColor: string;
     notes: string;
   }>;
   commercial: {
@@ -2016,16 +2023,19 @@ function ProjectDetail({
         {project.openings.length ? (
           <div className="overflow-hidden rounded-lg border border-border">
             <div className="overflow-x-auto">
-              <table className="min-w-[920px] divide-y divide-border text-left text-sm">
+              <table className="min-w-[1180px] divide-y divide-border text-left text-sm">
                 <thead className="bg-surface-muted text-xs font-bold uppercase tracking-wide text-muted">
                   <tr>
                     <th className="px-3 py-3">Opening</th>
                     <th className="px-3 py-3">Location</th>
                     <th className="px-3 py-3">Dimensions</th>
-                    <th className="px-3 py-3">Quantity</th>
-                    <th className="px-3 py-3">System</th>
-                    <th className="px-3 py-3">Glass</th>
-                    <th className="px-3 py-3">Color</th>
+                    <th className="px-3 py-3">Shape</th>
+                    <th className="px-3 py-3">Type</th>
+                    <th className="px-3 py-3">Bottom frame</th>
+                    <th className="px-3 py-3">Opening direction</th>
+                    <th className="px-3 py-3">Glass color</th>
+                    <th className="px-3 py-3">Solid panel height</th>
+                    <th className="px-3 py-3">Fixed height</th>
                     <th className="px-3 py-3">Notes</th>
                   </tr>
                 </thead>
@@ -2043,16 +2053,25 @@ function ProjectDetail({
                         {opening.width} x {opening.height}
                       </td>
                       <td className="px-3 py-3 text-muted-strong">
-                        {opening.quantity}
+                        {opening.shape || t("common.notAdded")}
                       </td>
                       <td className="px-3 py-3 text-muted-strong">
-                        {opening.productSystem || t("common.notAdded")}
+                        {opening.openingType || opening.productSystem || t("common.notAdded")}
                       </td>
                       <td className="px-3 py-3 text-muted-strong">
-                        {opening.glassType || t("common.notAdded")}
+                        {opening.bottomFrame || t("common.notAdded")}
                       </td>
                       <td className="px-3 py-3 text-muted-strong">
-                        {opening.aluminumColor || t("common.notAdded")}
+                        {opening.openingDirection || t("common.notAdded")}
+                      </td>
+                      <td className="px-3 py-3 text-muted-strong">
+                        {opening.glassColor || opening.aluminumColor || t("common.notAdded")}
+                      </td>
+                      <td className="px-3 py-3 text-muted-strong">
+                        {opening.solidPanelHeight}
+                      </td>
+                      <td className="px-3 py-3 text-muted-strong">
+                        {opening.fixedHeight}
                       </td>
                       <td className="px-3 py-3 text-muted-strong">
                         {opening.notes || t("common.notAdded")}

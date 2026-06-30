@@ -161,7 +161,7 @@ function SummaryItem({
         {label}
       </p>
       <p className="mt-2 text-sm font-bold leading-6 text-foreground">
-        {value || "Not added"}
+        {value || "غير مضاف"}
       </p>
     </div>
   );
@@ -238,7 +238,7 @@ function payloadFromTemplate(template: ContractTemplate) {
 export function ContractGenerator() {
   const router = useRouter();
   const { formatCurrency, t, term } = useI18n();
-  const { isAdmin, isLoaded: isRoleLoaded, role } = useCurrentRole();
+  const { isLoaded: isRoleLoaded, role } = useCurrentRole();
   const { clients } = useClients();
   const { projects } = useProjects();
   const defaultTemplate: ContractTemplate = useMemo(
@@ -292,6 +292,7 @@ export function ContractGenerator() {
     Boolean(selectedQuotation && selectedProject) &&
     canViewSalesPrices(role) &&
     (!selectedExistingContract || Boolean(editingContractId));
+  const canDeleteContracts = canViewSalesPrices(role);
 
   useEffect(() => {
     if (!isRoleLoaded) {
@@ -601,6 +602,18 @@ export function ContractGenerator() {
       setSavedContracts((contracts) =>
         contracts.filter((contract) => contract.id !== deleteTarget.id),
       );
+      if (editingContractId === deleteTarget.id) {
+        setEditingContractId(null);
+      }
+      if (selectedExistingContract?.id === deleteTarget.id) {
+        const nextNumber = await fetchNextContractNumber(
+          t("contracts.nextNumberError"),
+        ).catch(() => "");
+
+        if (nextNumber) {
+          setContractNumber(nextNumber);
+        }
+      }
       setDeleteTarget(null);
     } catch (deleteError) {
       setError(
@@ -645,14 +658,14 @@ export function ContractGenerator() {
           <div className="space-y-4">
             <label className="block">
               <span className="text-sm font-bold text-muted-strong">
-                Select saved quotation
+                اختر عرض سعر محفوظ
               </span>
               <select
                 value={quotationNumber}
                 onChange={(event) => selectQuotation(event.target.value)}
                 className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-info-surface"
               >
-                <option value="">Choose a quotation...</option>
+                <option value="">اختر عرض سعر...</option>
                 {savedQuotations.map((quotation) => (
                   <option
                     key={quotation.id ?? quotation.quotationNumber}
@@ -670,11 +683,11 @@ export function ContractGenerator() {
                 <table className="min-w-[920px] w-full divide-y divide-border text-left text-sm">
                   <thead className="bg-surface-muted text-xs font-bold uppercase tracking-wide text-muted">
                     <tr>
-                      <th className="px-3 py-3">Quotation Number</th>
-                      <th className="px-3 py-3">Client</th>
-                      <th className="px-3 py-3">Project</th>
-                      <th className="px-3 py-3">Total Amount</th>
-                      <th className="px-3 py-3">Status</th>
+                      <th className="px-3 py-3">رقم عرض السعر</th>
+                      <th className="px-3 py-3">العميل</th>
+                      <th className="px-3 py-3">المشروع</th>
+                      <th className="px-3 py-3">المبلغ الإجمالي</th>
+                      <th className="px-3 py-3">الحالة</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -711,7 +724,7 @@ export function ContractGenerator() {
                             {formatCurrency(quotationTotal)}
                           </td>
                           <td className="px-3 py-3 text-muted-strong">
-                            {quotation.quotationStatus ?? "Saved"}
+                            {term(quotation.quotationStatus ?? "Saved")}
                           </td>
                         </tr>
                       );
@@ -726,23 +739,23 @@ export function ContractGenerator() {
 
       {selectedProject && selectedQuotation ? (
         <>
-          <StepCard step={2} title="Review Contract Source">
+          <StepCard step={2} title="مراجعة مصدر العقد">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <SummaryItem label="Client Name" value={term(selectedProject.client)} />
-              <SummaryItem label="Project Name" value={term(selectedProject.projectName)} />
-              <SummaryItem label="Quotation Number" value={selectedQuotation.quotationNumber} />
-              <SummaryItem label="Quotation Total" value={formatCurrency(sourceTotalAmount)} />
+              <SummaryItem label="اسم العميل" value={term(selectedProject.client)} />
+              <SummaryItem label="اسم المشروع" value={term(selectedProject.projectName)} />
+              <SummaryItem label="رقم عرض السعر" value={selectedQuotation.quotationNumber} />
+              <SummaryItem label="إجمالي عرض السعر" value={formatCurrency(sourceTotalAmount)} />
               <SummaryItem
-                label="Contract Discount"
+                label="خصم العقد"
                 value={`${contractDiscountPercent}% (${formatCurrency(contractDiscountTotal)})`}
               />
-              <SummaryItem label="Contract Value" value={formatCurrency(totalAmount)} />
+              <SummaryItem label="قيمة العقد" value={formatCurrency(totalAmount)} />
               <SummaryItem
-                label="Opening Count"
+                label="عدد الفتحات"
                 value={selectedProject.structuralOpenings.length}
               />
               <SummaryItem
-                label="Product Systems"
+                label="أنظمة المنتجات"
                 value={
                   productSystems.length > 0
                     ? productSystems.map((system) => term(system)).join(", ")
@@ -750,10 +763,10 @@ export function ContractGenerator() {
                 }
               />
               <SummaryItem
-                label="Sales Engineer"
+                label="مهندس المبيعات"
                 value={term(selectedProject.salesEngineer)}
               />
-              <SummaryItem label="Client Phone" value={clientPhone || t("common.notAdded")} />
+              <SummaryItem label="هاتف العميل" value={clientPhone || t("common.notAdded")} />
             </div>
 
             <label className="mt-5 block max-w-sm">
@@ -780,10 +793,10 @@ export function ContractGenerator() {
             {selectedExistingContract ? (
               <div className="mt-5 rounded-lg border border-info-text bg-info-surface p-4">
                 <p className="text-sm font-bold text-info-text">
-                  Existing contract found
+                  يوجد عقد محفوظ
                 </p>
                 <p className="mt-1 text-sm text-info-text">
-                  {selectedExistingContract.contractNumber} already exists for this quotation.
+                  العقد رقم {selectedExistingContract.contractNumber} موجود مسبقا لعرض السعر هذا.
                 </p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
@@ -791,22 +804,22 @@ export function ContractGenerator() {
                     onClick={() => openExistingContract(selectedExistingContract)}
                     className="h-10 rounded-md bg-primary px-4 text-sm font-bold text-white"
                   >
-                    View Contract
+                    عرض العقد
                   </button>
                   <button
                     type="button"
                     onClick={() => editExistingContract(selectedExistingContract)}
                     className="h-10 rounded-md border border-border bg-surface px-4 text-sm font-bold text-muted-strong"
                   >
-                    Edit Contract
+                    تعديل العقد
                   </button>
-                  {isAdmin ? (
+                  {canDeleteContracts ? (
                     <button
                       type="button"
                       onClick={() => setDeleteTarget(selectedExistingContract)}
                       className="h-10 rounded-md border border-danger-text bg-transparent px-4 text-sm font-bold text-danger-text transition hover:bg-danger-text hover:text-white"
                     >
-                      Delete Contract
+                      حذف العقد
                     </button>
                   ) : null}
                 </div>
@@ -816,11 +829,11 @@ export function ContractGenerator() {
 
           {canViewSalesPrices(role) ? (
             <>
-              <StepCard step={3} title="Contract Details">
+              <StepCard step={3} title="تفاصيل العقد">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <label>
                     <span className="text-sm font-bold text-muted-strong">
-                      Auto-generated contract number
+                      رقم العقد المولد تلقائيا
                     </span>
                     <input
                       value={contractNumber}
@@ -830,7 +843,7 @@ export function ContractGenerator() {
                   </label>
                   <label>
                     <span className="text-sm font-bold text-muted-strong">
-                      Date
+                      التاريخ
                     </span>
                     <input
                       type="date"
@@ -841,7 +854,7 @@ export function ContractGenerator() {
                   </label>
                   <div>
                     <span className="text-sm font-bold text-muted-strong">
-                      Language
+                      اللغة
                     </span>
                     <p className="mt-2 flex h-11 items-center rounded-md border border-border bg-surface-muted px-3 text-sm font-semibold text-foreground">
                       {t("contracts.arabicRtl")}
@@ -849,7 +862,7 @@ export function ContractGenerator() {
                   </div>
                   <label>
                     <span className="text-sm font-bold text-muted-strong">
-                      Prepared by
+                      أعده
                     </span>
                     <input
                       value={preparedBy}
@@ -900,7 +913,7 @@ export function ContractGenerator() {
                 </div>
               </SectionCard>
 
-              <StepCard step={4} title="Generate Contract">
+              <StepCard step={4} title="إنشاء العقد">
                 <button
                   type="button"
                   onClick={openPreview}
@@ -908,14 +921,14 @@ export function ContractGenerator() {
                   className="h-11 rounded-md bg-primary px-5 text-sm font-bold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
                 >
                   {editingContractId
-                    ? "Update Contract"
-                    : "Generate Contract from Selected Quotation"}
+                    ? "تحديث العقد"
+                    : "إنشاء العقد من عرض السعر المحدد"}
                 </button>
                 <p className="mt-3 text-sm leading-6 text-muted">
                   {editingContractId
-                    ? "Update the selected contract with the current discount and terms."
+                    ? "تحديث العقد المحدد بالخصم والشروط الحالية."
                     : selectedExistingContract
-                    ? "This quotation already has a contract. Use View, Edit, or Delete above."
+                    ? "يوجد عقد محفوظ لهذا العرض. استخدم العرض أو التعديل أو الحذف أعلاه."
                     : t("contracts.previewDescription")}
                 </p>
               </StepCard>

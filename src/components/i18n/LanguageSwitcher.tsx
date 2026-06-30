@@ -10,24 +10,25 @@ const languages: Array<{ value: Locale; labelKey: string }> = [
 
 export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
   const { locale, setLocale, t } = useI18n();
+  const currentLanguage = languages.find((language) => language.value === locale);
+  const nextLocale: Locale = locale === "en" ? "ar" : "en";
+  const nextLanguage = languages.find((language) => language.value === nextLocale);
 
   return (
-    <label className="inline-flex items-center">
+    <div className="inline-flex items-center">
       <span className="sr-only">{t("language.label")}</span>
-      <select
-        value={locale}
-        onChange={(event) => setLocale(event.target.value as Locale)}
-        aria-label={t("language.label")}
-        className={`rounded-md border border-border bg-surface font-bold text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-4 focus:ring-info-surface ${
-          compact ? "h-9 max-w-28 px-2 text-xs" : "h-10 max-w-36 px-3 text-sm"
+      <button
+        type="button"
+        onClick={() => setLocale(nextLocale)}
+        aria-label={`${t("language.label")}: ${t(
+          currentLanguage?.labelKey ?? "language.english",
+        )}. ${t(nextLanguage?.labelKey ?? "language.arabic")}`}
+        className={`rounded-md border border-border bg-surface font-bold text-foreground shadow-sm outline-none transition hover:border-primary hover:bg-material-surface-container focus:border-primary focus:ring-4 focus:ring-info-surface ${
+          compact ? "h-9 min-w-20 px-3 text-xs" : "h-10 min-w-28 px-4 text-sm"
         }`}
       >
-        {languages.map((language) => (
-          <option key={language.value} value={language.value}>
-            {t(language.labelKey)}
-          </option>
-        ))}
-      </select>
-    </label>
+        {t(currentLanguage?.labelKey ?? "language.english")}
+      </button>
+    </div>
   );
 }

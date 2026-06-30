@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdminUser, requireRole } from "@/lib/auth/adminServer";
+import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   hasSupabaseServiceRoleKey,
@@ -372,12 +372,12 @@ export async function DELETE(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const adminCheck = await requireAdminUser();
+  const authCheck = await requireRole(["Admin", "Sales Manager", "Sales Rep"]);
 
-  if (!adminCheck.ok) {
+  if (!authCheck.ok) {
     return NextResponse.json(
-      { error: adminCheck.error },
-      { status: adminCheck.status },
+      { error: authCheck.error },
+      { status: authCheck.status },
     );
   }
 

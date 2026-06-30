@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import { I18nProvider } from "@/components/i18n/I18nProvider";
-import { ClientsProvider } from "@/components/clients/ClientsProvider";
-import { ProjectsProvider } from "@/components/projects/ProjectsProvider";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { localeInitScript } from "@/lib/i18n";
 import { themeInitScript } from "@/lib/theme";
@@ -49,11 +47,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: themeInitScript }}
         />
         <I18nProvider>
-          <ThemeProvider>
-            <ClientsProvider>
-              <ProjectsProvider>{children}</ProjectsProvider>
-            </ClientsProvider>
-          </ThemeProvider>
+          <ThemeProvider>{children}</ThemeProvider>
         </I18nProvider>
       </body>
     </html>

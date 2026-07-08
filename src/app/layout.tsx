@@ -19,8 +19,26 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  applicationName: enMessages.app.title,
   title: enMessages.app.title,
   description: enMessages.app.description,
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: enMessages.app.title,
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/alumex-icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/alumex-icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/alumex-icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/logos/AlumexLogo.svg", type: "image/svg+xml" },
+    ],
+    apple: [
+      { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
 };
 
 export default function RootLayout({

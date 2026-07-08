@@ -10,6 +10,8 @@ import { createProxyClient } from "@/lib/supabase/proxy";
 
 const publicRoutes = ["/login", "/auth/callback"];
 const supabaseAuthCookiePattern = /^sb-.+-auth-token(?:\.\d+)?$/;
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function isPublicRoute(pathname: string) {
   return publicRoutes.some((route) => pathname.startsWith(route));
@@ -28,6 +30,14 @@ function clearSupabaseAuthCookies(request: NextRequest, response: NextResponse) 
     });
 
   return response;
+}
+
+function measurementProjectIdFromPath(pathname: string) {
+  const [, section, projectId] = pathname.split("/");
+
+  return section === "site-measurements" && uuidPattern.test(projectId ?? "")
+    ? projectId
+    : null;
 }
 
 export async function proxy(request: NextRequest) {
@@ -128,6 +138,31 @@ export async function proxy(request: NextRequest) {
   }
 
   const pageAccess = role && role !== "Admin" ? pageAccessResult.data : [];
+  const measurementProjectId = measurementProjectIdFromPath(pathname);
+
+  if (
+    measurementProjectId &&
+    (role === "Project Engineer" || role === "Site Engineer")
+  ) {
+    const { data: assignedProject } = await supabase
+      .from("projects")
+      .select("project_engineer_id, site_engineer_id")
+      .eq("id", measurementProjectId)
+      .maybeSingle();
+    const projectAssignment = assignedProject as {
+      project_engineer_id: string | null;
+      site_engineer_id: string | null;
+    } | null;
+    const canOpenAssignedMeasurement =
+      (role === "Project Engineer" &&
+        projectAssignment?.project_engineer_id === user.id) ||
+      (role === "Site Engineer" &&
+        projectAssignment?.site_engineer_id === user.id);
+
+    if (canOpenAssignedMeasurement) {
+      return response;
+    }
+  }
 
   if (!canAccessRouteWithOverrides(pathname, role, pageAccess ?? [])) {
     return NextResponse.redirect(new URL("/unauthorized", request.url));
@@ -137,5 +172,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };

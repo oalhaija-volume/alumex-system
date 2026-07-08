@@ -5,15 +5,16 @@ export default function SiteMeasurementsQueuePage() {
   return (
     <AppShell>
       <WorkflowModule
-        queueTitle="Site Measurements"
-        queueDescription="Open assigned projects, capture structural openings on site, and complete detailed measurements."
+        queueTitle="Site Engineer Measurements"
+        queueDescription="Select an assigned project and enter detailed opening measurements."
+        queueTarget="measurements"
+        showSummaryCards={false}
         focusStatuses={[
           "site_engineer_assigned",
           "measurement_pending",
-          "project_description_draft",
         ]}
-        emptyTitle="No site measurement assignments"
-        emptyDescription="No projects are currently assigned for site measurement."
+        emptyTitle="No measurement assignments"
+        emptyDescription="No projects are currently assigned to you for site measurement."
       />
     </AppShell>
   );

@@ -143,7 +143,9 @@ type WorkflowModuleProps = {
   queueTitle?: string;
   queueDescription?: string;
   focusStatuses?: ProjectWorkflowStatus[];
+  showSummaryCards?: boolean;
   showProjectStatusCards?: boolean;
+  queueTarget?: "workflow" | "measurements";
   emptyTitle?: string;
   emptyDescription?: string;
   detailEyebrow?: string;
@@ -807,7 +809,22 @@ function OverallProjectStatus({ project }: { project: WorkflowProject }) {
   );
 }
 
-function QueueTable({ projects }: { projects: WorkflowProject[] }) {
+function queueProjectHref(
+  project: WorkflowProject,
+  target: "workflow" | "measurements",
+) {
+  return target === "measurements"
+    ? `/site-measurements/${project.id}`
+    : `/workflow/${project.id}`;
+}
+
+function QueueTable({
+  projects,
+  target,
+}: {
+  projects: WorkflowProject[];
+  target: "workflow" | "measurements";
+}) {
   const { t } = useI18n();
   const router = useRouter();
 
@@ -835,11 +852,11 @@ function QueueTable({ projects }: { projects: WorkflowProject[] }) {
               <tr
                 key={project.id}
                 tabIndex={0}
-                onClick={() => router.push(`/workflow/${project.id}`)}
+                onClick={() => router.push(queueProjectHref(project, target))}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    router.push(`/workflow/${project.id}`);
+                    router.push(queueProjectHref(project, target));
                   }
                 }}
                 className="cursor-pointer bg-surface transition hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-primary"
@@ -876,11 +893,11 @@ function QueueTable({ projects }: { projects: WorkflowProject[] }) {
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      router.push(`/workflow/${project.id}`);
+                      router.push(queueProjectHref(project, target));
                     }}
                     className="h-9 rounded-md bg-primary px-3 text-xs font-bold text-white"
                   >
-                    Details
+                    {target === "measurements" ? "Measure" : "Details"}
                   </button>
                 </td>
               </tr>
@@ -892,15 +909,22 @@ function QueueTable({ projects }: { projects: WorkflowProject[] }) {
   );
 }
 
-function QueueCards({ projects }: { projects: WorkflowProject[] }) {
+function QueueCards({
+  projects,
+  target,
+}: {
+  projects: WorkflowProject[];
+  target: "workflow" | "measurements";
+}) {
   const { t } = useI18n();
+  const isMeasurementQueue = target === "measurements";
 
   return (
     <div className="grid gap-3 lg:hidden">
       {projects.map((project) => (
         <Link
           key={project.id}
-          href={`/workflow/${project.id}`}
+          href={queueProjectHref(project, target)}
           className="rounded-lg border border-border bg-surface p-4 shadow-sm"
         >
           <div className="flex items-start justify-between gap-3">
@@ -919,24 +943,32 @@ function QueueCards({ projects }: { projects: WorkflowProject[] }) {
               <OverallStatusBlock project={project} compact />
             </div>
           </div>
-          <p className="mt-3 text-sm font-semibold text-foreground">
-            {project.nextRequiredAction}
-          </p>
+          {isMeasurementQueue ? null : (
+            <p className="mt-3 text-sm font-semibold text-foreground">
+              {project.nextRequiredAction}
+            </p>
+          )}
           <dl className="mt-3 grid gap-2 sm:grid-cols-2">
             <InfoCell
-              label="Current stage"
-              value={workflowStageForStatus(project.workflowStatus)}
+              label={isMeasurementQueue ? "Measurement status" : "Current stage"}
+              value={
+                isMeasurementQueue
+                  ? project.workflowStatusLabel
+                  : workflowStageForStatus(project.workflowStatus)
+              }
             />
             <InfoCell
               label="Assigned to"
               value={assignmentOwner(project) || t("common.notAdded")}
             />
           </dl>
-          <div className="mt-3">
-            <StageStrip status={project.workflowStatus} compact />
-          </div>
+          {isMeasurementQueue ? null : (
+            <div className="mt-3">
+              <StageStrip status={project.workflowStatus} compact />
+            </div>
+          )}
           <span className="mt-3 inline-flex h-9 items-center rounded-md bg-primary px-3 text-xs font-bold text-white">
-            Details
+            {isMeasurementQueue ? "Open measurement wizard" : "Details"}
           </span>
         </Link>
       ))}
@@ -2164,7 +2196,9 @@ export function WorkflowModule({
   queueTitle,
   queueDescription,
   focusStatuses,
+  showSummaryCards = true,
   showProjectStatusCards = false,
+  queueTarget = "workflow",
   emptyTitle,
   emptyDescription,
   detailEyebrow = "Projects",
@@ -2379,7 +2413,7 @@ export function WorkflowModule({
         )
       ) : visibleProjects.length ? (
         <>
-          <SummaryCards projects={visibleProjects} />
+          {showSummaryCards ? <SummaryCards projects={visibleProjects} /> : null}
           {showProjectStatusCards ? (
             <ProjectStatusCards
               projects={visibleProjects}
@@ -2389,9 +2423,9 @@ export function WorkflowModule({
             />
           ) : null}
           <div className="hidden lg:block">
-            <QueueTable projects={visibleProjects} />
+            <QueueTable projects={visibleProjects} target={queueTarget} />
           </div>
-          <QueueCards projects={visibleProjects} />
+          <QueueCards projects={visibleProjects} target={queueTarget} />
         </>
       ) : (
         <SectionCard title={emptyTitle ?? "No workflow projects"}>

@@ -115,6 +115,7 @@ const shapeOptions = ["Rectangle", "Arched", "Triangle", "Circle", "Custom"];
 const typeOptions = ["Window", "Door", "Sliding", "Fixed", "Curtain Wall", "Skylight"];
 const bottomFrameOptions = ["With bottom frame", "Without bottom frame", "Low threshold", "Flush"];
 const openingDirectionOptions = ["Left", "Right", "Inside", "Outside", "Sliding left", "Sliding right", "Fixed"];
+const mobileWizardSteps = ["Location", "Dimensions", "Details", "Review"];
 
 function calculateArea(opening: Pick<OpeningDraft, "width" | "height" | "quantity">) {
   return Math.max((opening.width / 100) * (opening.height / 100) * opening.quantity, 1);
@@ -240,6 +241,7 @@ export function SiteMeasurementModule() {
     openingRows(1, 0),
   );
   const [wizardIndex, setWizardIndex] = useState(0);
+  const [mobileWizardStep, setMobileWizardStep] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -300,6 +302,7 @@ export function SiteMeasurementModule() {
     );
     setNewOpenings(openingRows(1, loadedOpenings.length));
     setWizardIndex(0);
+    setMobileWizardStep(0);
     setIsLoading(false);
   }, [projectId]);
 
@@ -449,6 +452,7 @@ export function SiteMeasurementModule() {
       setOpenings((current) => [...current, ...savedOpenings]);
       setNewOpenings(openingRows(1, nextCount));
       setWizardIndex(0);
+      setMobileWizardStep(0);
       setMessage(
         savedOpenings.length === 1
           ? "Opening saved."
@@ -543,24 +547,47 @@ export function SiteMeasurementModule() {
     setError("");
   }
 
-  function addWizardOpening() {
+  function canContinueMobileStep(opening: OpeningDraft, step: number) {
+    const normalized = normalizeDraft(opening);
+
+    if (step === 0) {
+      return Boolean(normalized.floor && normalized.room && normalized.openingCode);
+    }
+
+    if (step === 1) {
+      return normalized.width > 0 && normalized.height > 0 && normalized.quantity > 0;
+    }
+
+    if (step === 2) {
+      return Boolean(
+        normalized.shape &&
+          normalized.openingType &&
+          normalized.bottomFrame &&
+          normalized.openingDirection &&
+          normalized.glassColor,
+      );
+    }
+
+    return isOpeningValid(normalized);
+  }
+
+  function goToNextMobileStep(opening: OpeningDraft) {
     setError("");
     setMessage("");
 
-    const currentOpening = normalizeDraft(newOpenings[wizardIndex] ?? emptyOpening);
-    if (!isOpeningValid(currentOpening)) {
-      setError("Complete the current opening details before adding the next opening.");
+    if (!canContinueMobileStep(opening, mobileWizardStep)) {
+      setError("Complete this step before continuing.");
       return;
     }
 
-    setNewOpenings((currentOpenings) => [
-      ...currentOpenings,
-      {
-        ...emptyOpening,
-        openingCode: `W-${String(openings.length + currentOpenings.length + 1).padStart(2, "0")}`,
-      },
-    ]);
-    setWizardIndex((currentIndex) => currentIndex + 1);
+    setMobileWizardStep((currentStep) =>
+      Math.min(currentStep + 1, mobileWizardSteps.length - 1),
+    );
+  }
+
+  function goToPreviousMobileStep() {
+    setError("");
+    setMobileWizardStep((currentStep) => Math.max(currentStep - 1, 0));
   }
 
   if (isLoading) {
@@ -953,6 +980,7 @@ export function SiteMeasurementModule() {
                   onClick={() => {
                     setNewOpenings(openingRows(1, openings.length));
                     setWizardIndex(0);
+                    setMobileWizardStep(0);
                   }}
                   disabled={!isEditable || isSaving}
                   className="material-button-outlined min-h-11 px-3"
@@ -1185,275 +1213,286 @@ export function SiteMeasurementModule() {
                         {opening.openingCode || "New structural opening"}
                       </p>
                     </div>
+                    <span className="material-status">
+                      {calculateArea(opening).toFixed(2)} m2
+                    </span>
                   </div>
 
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {textFields.map((field) => (
-                      <label key={field.key} className="block">
-                        <span className="material-label">
-                          {field.label}
-                          {field.required ? " *" : ""}
-                        </span>
-                        <input
-                          value={String(opening[field.key])}
-                          onChange={(event) =>
-                            updateNewOpening(index, field.key, event.target.value)
+                  <div className="mt-4 grid grid-cols-4 gap-1">
+                    {mobileWizardSteps.map((step, stepIndex) => (
+                      <button
+                        key={step}
+                        type="button"
+                        onClick={() => {
+                          if (stepIndex <= mobileWizardStep) {
+                            setMobileWizardStep(stepIndex);
                           }
-                          placeholder={field.placeholder}
+                        }}
+                        className={`min-h-10 rounded-md px-1 text-[10px] font-black ${
+                          stepIndex === mobileWizardStep
+                            ? "bg-material-primary text-material-on-primary"
+                            : stepIndex < mobileWizardStep
+                              ? "bg-material-primary-container text-material-on-primary-container"
+                              : "bg-material-surface-container text-muted"
+                        }`}
+                      >
+                        {stepIndex + 1}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs font-bold uppercase text-muted">
+                    {mobileWizardSteps[mobileWizardStep]}
+                  </p>
+
+                  {mobileWizardStep === 0 ? (
+                    <div className="mt-4 grid gap-3">
+                      {textFields.map((field) => (
+                        <label key={field.key} className="block">
+                          <span className="material-label">
+                            {field.label}
+                            {field.required ? " *" : ""}
+                          </span>
+                          <input
+                            value={String(opening[field.key])}
+                            onChange={(event) =>
+                              updateNewOpening(index, field.key, event.target.value)
+                            }
+                            placeholder={field.placeholder}
+                            disabled={!isEditable}
+                            className="material-field mt-2 min-h-12"
+                          />
+                        </label>
+                      ))}
+
+                      <label className="block">
+                        <span className="material-label">Room *</span>
+                        <select
+                          value={opening.room}
+                          onChange={(event) =>
+                            updateNewOpening(index, "room", event.target.value)
+                          }
+                          disabled={!isEditable}
+                          className="material-field mt-2 min-h-12"
+                        >
+                          <option value="">Select room</option>
+                          {optionLabels(roomOptions, opening.room).map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  ) : null}
+
+                  {mobileWizardStep === 1 ? (
+                    <div className="mt-4 grid gap-3">
+                      {numberFields.map((field) => (
+                        <label key={field.key} className="block">
+                          <span className="material-label">{field.label}</span>
+                          <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container-low">
+                            <input
+                              type="number"
+                              min="0"
+                              inputMode="decimal"
+                              step={field.step}
+                              value={opening[field.key]}
+                              onChange={(event) =>
+                                updateNewOpening(index, field.key, event.target.value)
+                              }
+                              disabled={!isEditable}
+                              className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
+                            />
+                            <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
+                              {field.suffix}
+                            </span>
+                          </div>
+                        </label>
+                      ))}
+
+                      <label className="block">
+                        <span className="material-label">Quantity</span>
+                        <input
+                          type="number"
+                          min="1"
+                          inputMode="numeric"
+                          step="1"
+                          value={opening.quantity}
+                          onChange={(event) =>
+                            updateNewOpening(index, "quantity", event.target.value)
+                          }
                           disabled={!isEditable}
                           className="material-field mt-2 min-h-12"
                         />
                       </label>
-                    ))}
 
-                    <label className="block">
-                      <span className="material-label">Room</span>
-                      <select
-                        value={opening.room}
-                        onChange={(event) =>
-                          updateNewOpening(index, "room", event.target.value)
-                        }
-                        disabled={!isEditable}
-                        className="material-field mt-2 min-h-12"
-                      >
-                        <option value="">Select room</option>
-                        {optionLabels(roomOptions, opening.room).map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                      {measurementNumberFields.map((field) => (
+                        <label key={field.key} className="block">
+                          <span className="material-label">{field.label}</span>
+                          <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container-low">
+                            <input
+                              type="number"
+                              min="0"
+                              max={opening.height}
+                              inputMode="decimal"
+                              step={field.step}
+                              value={opening[field.key]}
+                              onChange={(event) =>
+                                updateNewOpening(index, field.key, event.target.value)
+                              }
+                              disabled={!isEditable}
+                              className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
+                            />
+                            <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
+                              {field.suffix}
+                            </span>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
 
-                    {numberFields.map((field) => (
-                      <label key={field.key} className="block">
-                        <span className="material-label">{field.label}</span>
-                        <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container-low">
-                          <input
-                            type="number"
-                            min="0"
-                            inputMode="decimal"
-                            step={field.step}
-                            value={opening[field.key]}
-                            onChange={(event) =>
-                              updateNewOpening(index, field.key, event.target.value)
-                            }
-                            disabled={!isEditable}
-                            className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
-                          />
-                          <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
-                            {field.suffix}
-                          </span>
-                        </div>
-                      </label>
-                    ))}
-
-                    <label className="block">
-                      <span className="material-label">Quantity</span>
-                      <input
-                        type="number"
-                        min="1"
-                        inputMode="numeric"
-                        step="1"
-                        value={opening.quantity}
-                        onChange={(event) =>
-                          updateNewOpening(index, "quantity", event.target.value)
-                        }
-                        disabled={!isEditable}
-                        className="material-field mt-2 min-h-12"
-                      />
-                    </label>
-
-                    <label className="block">
-                      <span className="material-label">Shape *</span>
-                      <select
-                        value={opening.shape}
-                        onChange={(event) =>
-                          updateNewOpening(index, "shape", event.target.value)
-                        }
-                        disabled={!isEditable}
-                        className="material-field mt-2 min-h-12"
-                      >
-                        <option value="">Select shape</option>
-                        {optionLabels(
-                          shapeOptions.map((label, optionIndex) => ({
-                            category: "room" as const,
-                            label,
-                            sort_order: optionIndex + 1,
-                            is_active: true,
-                          })),
-                          opening.shape,
-                        ).map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="block">
-                      <span className="material-label">Type *</span>
-                      <select
-                        value={opening.openingType || opening.type}
-                        onChange={(event) =>
-                          updateNewOpening(index, "openingType", event.target.value)
-                        }
-                        disabled={!isEditable}
-                        className="material-field mt-2 min-h-12"
-                      >
-                        <option value="">Select type</option>
-                        {optionLabels(
-                          typeOptions.map((label, optionIndex) => ({
-                            category: "room" as const,
-                            label,
-                            sort_order: optionIndex + 1,
-                            is_active: true,
-                          })),
-                          opening.openingType || opening.type,
-                        ).map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="block">
-                      <span className="material-label">Bottom frame *</span>
-                      <select
-                        value={opening.bottomFrame}
-                        onChange={(event) =>
-                          updateNewOpening(index, "bottomFrame", event.target.value)
-                        }
-                        disabled={!isEditable}
-                        className="material-field mt-2 min-h-12"
-                      >
-                        <option value="">Select bottom frame</option>
-                        {optionLabels(
-                          bottomFrameOptions.map((label, optionIndex) => ({
-                            category: "room" as const,
-                            label,
-                            sort_order: optionIndex + 1,
-                            is_active: true,
-                          })),
-                          opening.bottomFrame,
-                        ).map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="block">
-                      <span className="material-label">Opening direction *</span>
-                      <select
-                        value={opening.openingDirection}
-                        onChange={(event) =>
-                          updateNewOpening(index, "openingDirection", event.target.value)
-                        }
-                        disabled={!isEditable}
-                        className="material-field mt-2 min-h-12"
-                      >
-                        <option value="">Select direction</option>
-                        {optionLabels(
-                          openingDirectionOptions.map((label, optionIndex) => ({
-                            category: "room" as const,
-                            label,
-                            sort_order: optionIndex + 1,
-                            is_active: true,
-                          })),
-                          opening.openingDirection,
-                        ).map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="block">
-                      <span className="material-label">Glass color *</span>
-                      <select
-                        value={opening.glassColor}
-                        onChange={(event) =>
-                          updateNewOpening(index, "glassColor", event.target.value)
-                        }
-                        disabled={!isEditable}
-                        className="material-field mt-2 min-h-12"
-                      >
-                        <option value="">Select color</option>
-                        {optionLabels(glassColorOptions, opening.glassColor).map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    {measurementNumberFields.map((field) => (
-                      <label key={field.key} className="block">
-                        <span className="material-label">{field.label}</span>
-                      <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container-low">
-                        <input
-                          type="number"
-                          min="0"
-                          max={opening.height}
-                          inputMode="decimal"
-                          step={field.step}
-                          value={opening[field.key]}
+                  {mobileWizardStep === 2 ? (
+                    <div className="mt-4 grid gap-3">
+                      <label className="block">
+                        <span className="material-label">Shape *</span>
+                        <select
+                          value={opening.shape}
                           onChange={(event) =>
-                            updateNewOpening(index, field.key, event.target.value)
+                            updateNewOpening(index, "shape", event.target.value)
                           }
                           disabled={!isEditable}
-                          className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
-                        />
-                        <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
-                          {field.suffix}
-                        </span>
-                      </div>
+                          className="material-field mt-2 min-h-12"
+                        >
+                          <option value="">Select shape</option>
+                          {shapeOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
                       </label>
-                    ))}
 
-                    <label className="block sm:col-span-2">
-                      <span className="material-label">Site notes</span>
-                      <textarea
-                        value={opening.notes}
-                        onChange={(event) =>
-                          updateNewOpening(index, "notes", event.target.value)
-                        }
-                        rows={2}
-                        disabled={!isEditable}
-                        className="material-field mt-2 min-h-20 py-3"
-                        placeholder="Threshold, side clearance, wall condition, access notes"
-                      />
-                    </label>
-                  </div>
+                      {[
+                        ["openingType", "Type *", "Select type", typeOptions, opening.openingType || opening.type],
+                        ["bottomFrame", "Bottom frame *", "Select bottom frame", bottomFrameOptions, opening.bottomFrame],
+                        ["openingDirection", "Opening direction *", "Select direction", openingDirectionOptions, opening.openingDirection],
+                      ].map(([key, label, placeholder, options, value]) => (
+                        <label key={String(key)} className="block">
+                          <span className="material-label">{String(label)}</span>
+                          <select
+                            value={String(value)}
+                            onChange={(event) =>
+                              updateNewOpening(
+                                index,
+                                key as keyof OpeningDraft,
+                                event.target.value,
+                              )
+                            }
+                            disabled={!isEditable}
+                            className="material-field mt-2 min-h-12"
+                          >
+                            <option value="">{String(placeholder)}</option>
+                            {(options as string[]).map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
 
-                  <div className="mt-3 material-card p-3 shadow-none">
-                    <p className="text-xs font-bold uppercase text-muted">Area estimate</p>
-                    <p className="mt-1 text-xl font-bold text-foreground">
-                      {calculateArea(opening).toFixed(2)} m2
-                    </p>
-                  </div>
+                      <label className="block">
+                        <span className="material-label">Glass color *</span>
+                        <select
+                          value={opening.glassColor}
+                          onChange={(event) =>
+                            updateNewOpening(index, "glassColor", event.target.value)
+                          }
+                          disabled={!isEditable}
+                          className="material-field mt-2 min-h-12"
+                        >
+                          <option value="">Select color</option>
+                          {optionLabels(glassColorOptions, opening.glassColor).map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  ) : null}
+
+                  {mobileWizardStep === 3 ? (
+                    <div className="mt-4 grid gap-3">
+                      <div className="material-card p-3 shadow-none">
+                        <p className="text-xs font-bold uppercase text-muted">Review</p>
+                        <p className="mt-2 text-sm font-bold text-foreground">
+                          {[opening.openingCode, opening.floor, opening.room]
+                            .filter(Boolean)
+                            .join(" - ") || "Opening details"}
+                        </p>
+                        <p className="mt-1 text-sm text-muted-strong">
+                          {opening.width} x {opening.height} cm, Qty {opening.quantity}
+                        </p>
+                        <p className="mt-1 text-sm text-muted-strong">
+                          {[opening.shape, opening.openingType || opening.type, opening.glassColor]
+                            .filter(Boolean)
+                            .join(" - ") || "Specifications not complete"}
+                        </p>
+                        <p className="mt-2 text-xl font-bold text-foreground">
+                          {calculateArea(opening).toFixed(2)} m2
+                        </p>
+                      </div>
+
+                      <label className="block">
+                        <span className="material-label">Site notes</span>
+                        <textarea
+                          value={opening.notes}
+                          onChange={(event) =>
+                            updateNewOpening(index, "notes", event.target.value)
+                          }
+                          rows={3}
+                          disabled={!isEditable}
+                          className="material-field mt-2 min-h-24 py-3"
+                          placeholder="Threshold, side clearance, wall condition, access notes"
+                        />
+                      </label>
+                    </div>
+                  ) : null}
 
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => setWizardIndex((currentIndex) => Math.max(currentIndex - 1, 0))}
-                      disabled={wizardIndex === 0 || isSaving}
+                      onClick={
+                        mobileWizardStep === 0
+                          ? () => setWizardIndex((currentIndex) => Math.max(currentIndex - 1, 0))
+                          : goToPreviousMobileStep
+                      }
+                      disabled={(mobileWizardStep === 0 && wizardIndex === 0) || isSaving}
                       className="material-button-outlined min-h-11"
                     >
                       Back
                     </button>
-                    <button
-                      type="button"
-                      onClick={addWizardOpening}
-                      disabled={!isEditable || isSaving}
-                      className="material-button-tonal min-h-11"
-                    >
-                      Next opening
-                    </button>
+                    {mobileWizardStep < mobileWizardSteps.length - 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => goToNextMobileStep(opening)}
+                        disabled={!isEditable || isSaving}
+                        className="material-button-tonal min-h-11"
+                      >
+                        Next
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void saveNewOpenings()}
+                        disabled={!isEditable || isSaving}
+                        className="material-button-filled min-h-11"
+                      >
+                        {isSaving ? "Saving..." : "Save opening"}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1568,22 +1607,18 @@ export function SiteMeasurementModule() {
         )}
       </section>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-material-outline-variant bg-material-surface-container-low p-3 shadow-[var(--md-elevation-2)] sm:hidden">
-        <button
-          type="button"
-          onClick={() =>
-            void (editingId ? saveEditedOpening() : saveNewOpenings())
-          }
-          disabled={!isEditable || isSaving}
-          className="material-button-filled min-h-12 w-full"
-        >
-          {isSaving
-            ? "Saving..."
-            : editingId
-              ? "Save opening"
-              : "Finish and list openings"}
-        </button>
-      </div>
+      {editingId ? (
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-material-outline-variant bg-material-surface-container-low p-3 shadow-[var(--md-elevation-2)] sm:hidden">
+          <button
+            type="button"
+            onClick={() => void saveEditedOpening()}
+            disabled={!isEditable || isSaving}
+            className="material-button-filled min-h-12 w-full"
+          >
+            {isSaving ? "Saving..." : "Save opening"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -42,7 +42,7 @@ const routePermissions: Array<{
   { prefix: "/operations-manager", roles: ["Admin", "Operations Manager"] },
   { prefix: "/project-manager", roles: ["Admin", "Project Manager"] },
   { prefix: "/project-engineer", roles: ["Admin", "Project Engineer"] },
-  { prefix: "/site-measurements", roles: ["Admin", "Site Engineer"] },
+  { prefix: "/site-measurements", roles: ["Admin", "Project Engineer", "Site Engineer"] },
   { prefix: "/quality-control", roles: ["Admin", "Quality Control"] },
   { prefix: "/aluminum-factory", roles: ["Admin", "Factory", "Glass Department"] },
   { prefix: "/delivery", roles: ["Admin", "Delivery Head", "Delivery Team"] },

@@ -227,42 +227,107 @@ function StageStrip({
 }) {
   const currentStage = workflowStageForStatus(status);
   const currentIndex = workflowStages.indexOf(currentStage);
+  const completedCount = completedStageCount(status);
+  const progressPercent = Math.round(
+    (completedCount / workflowStages.length) * 100,
+  );
+  const previousStage =
+    currentIndex > 0 ? workflowStages[currentIndex - 1] : null;
+  const nextStage = workflowStages[currentIndex + 1] ?? null;
 
   return (
-    <ol
-      className={
-        compact
-          ? "grid min-w-[760px] grid-cols-11 gap-1"
-          : "grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6"
-      }
-    >
-      {workflowStages.map((stage, index) => {
-        const isComplete = index < currentIndex;
-        const isCurrent = index === currentIndex;
+    <>
+      <div className={compact ? "grid gap-3 sm:hidden" : "hidden"}>
+        <div className="rounded-lg border border-border bg-surface-muted p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-muted">
+              Project stages
+            </p>
+            <p className="text-xs font-black text-foreground">
+              {completedCount}/{workflowStages.length}
+            </p>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-material-surface-container">
+            <div
+              className="h-full rounded-full bg-material-primary"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs font-semibold text-muted">
+            {progressPercent}% complete
+          </p>
+        </div>
 
-        return (
-          <li
-            key={stage}
-            className={`rounded-lg border ${
-              compact ? "px-2 py-2" : "px-3 py-3"
-            } ${
-              isCurrent
-                ? "border-primary bg-info-surface text-info-text"
-                : isComplete
-                  ? "border-border bg-success-surface text-success-text"
-                  : "border-border bg-surface-muted text-muted-strong"
-            }`}
-          >
-            <p className="text-xs font-bold uppercase tracking-wide">
-              {isCurrent ? "Current" : isComplete ? "Completed" : "Pending"}
-            </p>
-            <p className={`${compact ? "mt-1 text-xs" : "mt-1 text-sm"} font-bold`}>
-              {stage}
-            </p>
+        <ol className="grid gap-2">
+          {previousStage ? (
+            <li className="flex gap-3 rounded-lg border border-success-text/30 bg-success-surface p-3 text-success-text">
+              <span className="mt-1 h-3 w-3 shrink-0 rounded-full bg-current" />
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-wide">
+                  Completed
+                </p>
+                <p className="mt-1 text-sm font-bold">{previousStage}</p>
+              </div>
+            </li>
+          ) : null}
+          <li className="flex gap-3 rounded-lg border border-primary bg-info-surface p-3 text-info-text">
+            <span className="mt-1 h-3 w-3 shrink-0 rounded-full bg-current" />
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-wide">
+                Current stage
+              </p>
+              <p className="mt-1 text-base font-black">{currentStage}</p>
+            </div>
           </li>
-        );
-      })}
-    </ol>
+          {nextStage ? (
+            <li className="flex gap-3 rounded-lg border border-border bg-surface p-3 text-muted-strong">
+              <span className="mt-1 h-3 w-3 shrink-0 rounded-full bg-current" />
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-wide">
+                  Next stage
+                </p>
+                <p className="mt-1 text-sm font-bold">{nextStage}</p>
+              </div>
+            </li>
+          ) : null}
+        </ol>
+      </div>
+
+      <ol
+        className={
+          compact
+            ? "hidden min-w-[760px] grid-cols-11 gap-1 sm:grid"
+            : "grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6"
+        }
+      >
+        {workflowStages.map((stage, index) => {
+          const isComplete = index < currentIndex;
+          const isCurrent = index === currentIndex;
+
+          return (
+            <li
+              key={stage}
+              className={`rounded-lg border ${
+                compact ? "px-2 py-2" : "px-3 py-3"
+              } ${
+                isCurrent
+                  ? "border-primary bg-info-surface text-info-text"
+                  : isComplete
+                    ? "border-border bg-success-surface text-success-text"
+                    : "border-border bg-surface-muted text-muted-strong"
+              }`}
+            >
+              <p className="text-xs font-bold uppercase tracking-wide">
+                {isCurrent ? "Current" : isComplete ? "Completed" : "Pending"}
+              </p>
+              <p className={`${compact ? "mt-1 text-xs" : "mt-1 text-sm"} font-bold`}>
+                {stage}
+              </p>
+            </li>
+          );
+        })}
+      </ol>
+    </>
   );
 }
 
@@ -867,7 +932,7 @@ function QueueCards({ projects }: { projects: WorkflowProject[] }) {
               value={assignmentOwner(project) || t("common.notAdded")}
             />
           </dl>
-          <div className="mt-3 overflow-x-auto">
+          <div className="mt-3">
             <StageStrip status={project.workflowStatus} compact />
           </div>
           <span className="mt-3 inline-flex h-9 items-center rounded-md bg-primary px-3 text-xs font-bold text-white">

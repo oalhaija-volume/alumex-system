@@ -570,7 +570,6 @@
     "areaEstimate": "Area estimate",
     "saving": "Saving...",
     "saveOpening": "Save opening",
-    "entryModeDescription": "Mobile captures one opening at a time. Desktop uses a sales-style grid with site details.",
     "addRows": "Add rows",
     "clear": "Clear",
     "openingProgress": "Opening {index} of {total}",

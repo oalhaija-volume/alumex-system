@@ -572,7 +572,6 @@
     "areaEstimate": "تقدير المساحة",
     "saving": "جاري الحفظ...",
     "saveOpening": "حفظ الفتحة",
-    "entryModeDescription": "في الهاتف يتم إدخال فتحة واحدة في كل مرة. في سطح المكتب يظهر جدول تفصيلي لبيانات الموقع.",
     "addRows": "إضافة صفوف",
     "clear": "مسح",
     "openingProgress": "الفتحة {index} من {total}",

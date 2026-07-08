@@ -952,11 +952,7 @@ export function SiteMeasurementModule() {
           </>
         ) : (
           <>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-semibold text-muted-strong">
-                {t("measurements.entryModeDescription")}
-              </p>
-              <div className="hidden grid-cols-2 gap-2 sm:flex">
+            <div className="mt-4 hidden justify-end gap-2 sm:flex">
                 <button
                   type="button"
                   onClick={() =>
@@ -982,7 +978,6 @@ export function SiteMeasurementModule() {
                 >
                   {t("measurements.clear")}
                 </button>
-              </div>
             </div>
 
             <div className="mt-4 hidden overflow-hidden rounded-lg border border-material-outline-variant sm:block">

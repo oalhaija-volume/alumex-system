@@ -150,6 +150,7 @@ function normalizeOpeningPayload(body: OpeningPayload) {
   if (
     !opening.floor ||
     !opening.room ||
+    !opening.opening_code ||
     opening.width <= 0 ||
     opening.height <= 0 ||
     !opening.shape ||
@@ -161,7 +162,7 @@ function normalizeOpeningPayload(body: OpeningPayload) {
     return {
       ok: false as const,
       error:
-        "Floor, room, width, length, shape, type, bottom frame, opening direction, and glass color are required.",
+        "Floor, room, opening code, width, length, shape, type, bottom frame, opening direction, and glass color are required.",
     };
   }
 

@@ -21,6 +21,7 @@ import {
   loadSupabaseQuotations,
 } from "@/components/quotations/supabaseQuotations";
 import type { Project } from "@/data/ui";
+import { canViewSalesPrices } from "@/lib/auth/roles";
 import {
   clampDiscount,
   discountLimitForRole,
@@ -144,7 +145,7 @@ export function QuotationBuilder() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { formatCurrency, t, term } = useI18n();
-  const { isAdmin, role } = useCurrentRole();
+  const { role } = useCurrentRole();
   const { clients } = useClients();
   const { projects } = useProjects();
   const builderFormRef = useRef<HTMLDivElement | null>(null);
@@ -188,6 +189,7 @@ export function QuotationBuilder() {
     : undefined;
   const isEditingExistingQuotation = Boolean(editingQuotationId);
   const canShowBuilder = canCreateQuotation || isEditingExistingQuotation;
+  const canDeleteQuotations = canViewSalesPrices(role);
   const displayedQuotationNumber =
     isEditingExistingQuotation
       ? quotationNumber
@@ -601,13 +603,13 @@ export function QuotationBuilder() {
                     >
                       {t("quotations.editQuotation")}
                     </button>
-                  {isAdmin ? (
+                  {canDeleteQuotations ? (
                     <button
                       type="button"
                       onClick={() => setDeleteTarget(quotation)}
                       className="h-10 rounded-md border border-danger-text bg-transparent px-3 text-sm font-bold text-danger-text transition hover:bg-danger-text hover:text-white"
                     >
-                      {t("common.delete")}
+                      {t("quotations.deleteQuotation")}
                     </button>
                   ) : null}
                   </div>
@@ -737,7 +739,7 @@ export function QuotationBuilder() {
               >
                 {t("quotations.editQuotation")}
               </button>
-              {isAdmin ? (
+              {canDeleteQuotations ? (
                 <button
                   type="button"
                   onClick={() => setDeleteTarget(existingProjectQuotation)}
@@ -1204,6 +1206,9 @@ export function QuotationBuilder() {
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-strong">
               {t("quotations.deleteConfirm")}
+            </p>
+            <p className="mt-2 rounded-md border border-border bg-surface-muted px-3 py-2 text-sm font-bold text-foreground">
+              {deleteTarget.quotationNumber} - {term(deleteTarget.project.client)}
             </p>
             <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button

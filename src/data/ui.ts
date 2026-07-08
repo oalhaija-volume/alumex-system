@@ -63,6 +63,7 @@ export const navItems: NavItem[] = [
   { labelKey: "nav.dashboard", href: "/dashboard", icon: "D" },
   { labelKey: "nav.clients", href: "/clients", icon: "C" },
   { labelKey: "nav.projects", href: "/projects", icon: "P" },
+  { labelKey: "nav.quotations", href: "/quotations", icon: "Q" },
   { labelKey: "nav.commercial", href: "/commercial", icon: "Q" },
   { labelKey: "nav.operationsManager", href: "/operations-manager", icon: "O" },
   { labelKey: "nav.projectManager", href: "/project-manager", icon: "M" },

@@ -580,7 +580,7 @@ export function SiteMeasurementModule() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 pb-28 sm:pb-4">
+    <div className="mx-auto w-full space-y-4 pb-28 sm:pb-4">
       <div className="material-card p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
@@ -740,6 +740,20 @@ export function SiteMeasurementModule() {
                   </div>
                 </label>
               ))}
+
+              <label className="block">
+                <span className="material-label">Quantity</span>
+                <input
+                  type="number"
+                  min="1"
+                  inputMode="numeric"
+                  step="1"
+                  value={draft.quantity}
+                  onChange={(event) => updateDraft("quantity", event.target.value)}
+                  disabled={!isEditable}
+                  className="material-field mt-2 min-h-12"
+                />
+              </label>
 
               <label className="block">
                 <span className="material-label">Shape *</span>
@@ -918,7 +932,7 @@ export function SiteMeasurementModule() {
           <>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm font-semibold text-muted-strong">
-                Add openings one by one on mobile, or use the desktop table for faster entry.
+                Mobile captures one opening at a time. Desktop uses a sales-style grid with site details.
               </p>
               <div className="hidden grid-cols-2 gap-2 sm:flex">
                 <button
@@ -950,14 +964,16 @@ export function SiteMeasurementModule() {
 
             <div className="mt-4 hidden overflow-hidden rounded-lg border border-material-outline-variant sm:block">
               <div className="overflow-x-auto">
-                <table className="min-w-[1320px] divide-y divide-material-outline-variant text-left text-sm">
+                <table className="min-w-[1720px] table-fixed divide-y divide-material-outline-variant text-left text-sm">
                   <thead className="bg-material-surface-container-lowest text-xs font-bold uppercase text-muted">
                     <tr>
                       {[
                         "Floor",
                         "Room",
+                        "Opening code",
                         "Width",
                         "Length",
+                        "Qty",
                         "Shape",
                         "Type",
                         "Bottom frame",
@@ -966,6 +982,7 @@ export function SiteMeasurementModule() {
                         "Solid panel height",
                         "Fixed height",
                         "Notes",
+                        "Area",
                         "Actions",
                       ].map((heading) => (
                         <th key={heading} className="px-2 py-3">
@@ -1004,6 +1021,16 @@ export function SiteMeasurementModule() {
                             ))}
                           </select>
                         </td>
+                        <td className="w-32 px-2 py-2">
+                          <input
+                            value={opening.openingCode}
+                            onChange={(event) =>
+                              updateNewOpening(index, "openingCode", event.target.value)
+                            }
+                            disabled={!isEditable}
+                            className="material-field h-10 px-2"
+                          />
+                        </td>
                         {numberFields.map((field) => (
                           <td key={field.key} className="w-28 px-2 py-2">
                             <input
@@ -1019,6 +1046,19 @@ export function SiteMeasurementModule() {
                             />
                           </td>
                         ))}
+                        <td className="w-24 px-2 py-2">
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={opening.quantity}
+                            onChange={(event) =>
+                              updateNewOpening(index, "quantity", event.target.value)
+                            }
+                            disabled={!isEditable}
+                            className="material-field h-10 px-2"
+                          />
+                        </td>
                         {[
                           ["shape", "Select shape", shapeOptions, opening.shape],
                           [
@@ -1103,6 +1143,9 @@ export function SiteMeasurementModule() {
                             disabled={!isEditable}
                             className="material-field h-10 px-2"
                           />
+                        </td>
+                        <td className="w-28 bg-material-primary-container px-2 py-2 text-sm font-bold text-material-on-primary-container">
+                          {calculateArea(opening).toFixed(2)} m2
                         </td>
                         <td className="w-28 px-2 py-2">
                           <button
@@ -1204,6 +1247,22 @@ export function SiteMeasurementModule() {
                         </div>
                       </label>
                     ))}
+
+                    <label className="block">
+                      <span className="material-label">Quantity</span>
+                      <input
+                        type="number"
+                        min="1"
+                        inputMode="numeric"
+                        step="1"
+                        value={opening.quantity}
+                        onChange={(event) =>
+                          updateNewOpening(index, "quantity", event.target.value)
+                        }
+                        disabled={!isEditable}
+                        className="material-field mt-2 min-h-12"
+                      />
+                    </label>
 
                     <label className="block">
                       <span className="material-label">Shape *</span>
@@ -1393,7 +1452,7 @@ export function SiteMeasurementModule() {
                       disabled={!isEditable || isSaving}
                       className="material-button-tonal min-h-11"
                     >
-                      Add another
+                      Next opening
                     </button>
                   </div>
                 </div>

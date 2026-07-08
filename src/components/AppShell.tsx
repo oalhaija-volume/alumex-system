@@ -105,7 +105,9 @@ function ShellLogoutButton({
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { direction, formatDate, t } = useI18n();
   const { isLoaded: isRoleLoaded, pageAccess, role } = useCurrentRole();
+  const pathname = usePathname();
   const isRtl = direction === "rtl";
+  const isWideWorkspace = pathname.startsWith("/site-measurements");
 
   const visibleNavItems = isRoleLoaded
     ? navItems.filter((item) =>
@@ -177,7 +179,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-        <div className="mx-auto w-full max-w-7xl overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+        <div
+          className={`mx-auto w-full overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-8 ${
+            isWideWorkspace ? "max-w-none" : "max-w-7xl"
+          }`}
+        >
           {children}
         </div>
       </main>

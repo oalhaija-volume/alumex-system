@@ -20,7 +20,7 @@ import { canViewFinanceValues, canViewSalesPrices } from "@/lib/auth/roles";
 import { messagesByLocale, type Locale, type Messages } from "@/lib/i18n";
 
 const scheduleRowsPerPage = 14;
-const legalPageWeightLimit = 14;
+const legalPageWeightLimit = 28;
 
 async function readApiError(response: Response, fallback: string) {
   const body = (await response.json().catch(() => null)) as {
@@ -97,7 +97,7 @@ function splitParagraphs(text: string) {
 }
 
 function getParagraphPrintWeight(paragraph: string) {
-  return Math.max(1, Math.ceil(paragraph.length / 150));
+  return Math.max(1, Math.ceil(paragraph.length / 230));
 }
 
 function packLegalSections(
@@ -126,7 +126,7 @@ function packLegalSections(
 
   sections.forEach((section) => {
     const paragraphs = splitParagraphs(section.text);
-    let partIndex = 1;
+    let blockIndex = 1;
 
     paragraphs.forEach((paragraph) => {
       const paragraphWeight = getParagraphPrintWeight(paragraph);
@@ -136,14 +136,19 @@ function packLegalSections(
         pushPage();
       }
 
-      const title = partIndex === 1 ? section.title : `${section.title} (${partIndex})`;
-      currentSections.push({
-        key: `${section.key}-${partIndex}`,
-        title,
-        text: paragraph,
-      });
+      const previousSection = currentSections[currentSections.length - 1];
+
+      if (previousSection?.key.startsWith(`${section.key}-`)) {
+        previousSection.text = `${previousSection.text}\n\n${paragraph}`;
+      } else {
+        currentSections.push({
+          key: `${section.key}-${blockIndex}`,
+          title: section.title,
+          text: paragraph,
+        });
+        blockIndex += 1;
+      }
       currentWeight += paragraphWeight + 1;
-      partIndex += 1;
     });
   });
 
@@ -301,6 +306,26 @@ function LegalSection({
         {children}
       </div>
     </section>
+  );
+}
+
+function LegalTextStack({ sections }: { sections: LegalPrintSection[] }) {
+  return (
+    <div className="rounded-md border border-slate-200 px-3 py-2.5">
+      {sections.map((section, index) => (
+        <section
+          key={section.key}
+          className={index === 0 ? "pb-2" : "border-t border-slate-100 py-2"}
+        >
+          <h2 className="text-[11px] font-black text-[var(--alumex-blue)]">
+            {section.title}
+          </h2>
+          <p className="mt-1 whitespace-pre-wrap text-[10.5px] leading-[1.65] text-slate-700">
+            {section.text}
+          </p>
+        </section>
+      ))}
+    </div>
   );
 }
 
@@ -508,13 +533,7 @@ function ContractBodyTextPage({
       totalPages={totalPages}
       isArabic={isArabic}
     >
-      <div className="grid gap-2.5">
-        {legalPage.sections.map((section) => (
-          <LegalSection key={section.key} title={section.title} compact>
-            <p className="whitespace-pre-wrap">{section.text}</p>
-          </LegalSection>
-        ))}
-      </div>
+      <LegalTextStack sections={legalPage.sections} />
     </PageShell>
   );
 }
@@ -679,13 +698,7 @@ function LegalStackPage({
       totalPages={totalPages}
       isArabic={isArabic}
     >
-      <div className="grid gap-2.5">
-        {legalPage.sections.map((section) => (
-          <LegalSection key={section.key} title={section.title} compact>
-            <p className="whitespace-pre-wrap">{section.text}</p>
-          </LegalSection>
-        ))}
-      </div>
+      <LegalTextStack sections={legalPage.sections} />
     </PageShell>
   );
 }

@@ -13,17 +13,31 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#0b5cad",
     icons: [
       {
-        src: "/icons/alumex-icon-192.png",
+        src: "/icons/alumex-symbol-192.png",
         sizes: "192x192",
         type: "image/png",
+        purpose: "any",
       },
       {
-        src: "/icons/alumex-icon-512.png",
+        src: "/icons/alumex-symbol-512.png",
         sizes: "512x512",
         type: "image/png",
+        purpose: "any",
       },
       {
-        src: "/icons/apple-touch-icon.png",
+        src: "/icons/alumex-symbol-192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "maskable",
+      },
+      {
+        src: "/icons/alumex-symbol-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
+      },
+      {
+        src: "/icons/alumex-symbol-180.png",
         sizes: "180x180",
         type: "image/png",
       },

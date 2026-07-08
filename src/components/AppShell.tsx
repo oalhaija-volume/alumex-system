@@ -141,7 +141,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <header className="sticky top-0 z-20 max-w-[100vw] overflow-x-hidden border-b border-material-outline-variant bg-material-surface-container-low/95 px-4 py-3 shadow-[var(--md-elevation-1)] backdrop-blur lg:hidden">
         <div className="flex items-center justify-between gap-3">
-          <BrandMark />
+          <Link
+            href="/dashboard"
+            prefetch={false}
+            aria-label="Alumex dashboard"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-material-surface-container"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logos/AlumexIcon.svg"
+              alt=""
+              className="h-8 w-8 object-contain"
+            />
+          </Link>
           <div className="flex min-w-0 items-center gap-2">
             <LanguageSwitcher compact />
             <ThemeToggle compact />

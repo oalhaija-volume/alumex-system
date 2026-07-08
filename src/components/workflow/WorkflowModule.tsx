@@ -208,10 +208,12 @@ function InfoCell({
   label: string;
   value: string | number | null | undefined;
 }) {
+  const { term } = useI18n();
+
   return (
     <div className="rounded-lg border border-border bg-surface-muted p-3">
       <dt className="text-xs font-bold uppercase tracking-wide text-muted">
-        {label}
+        {term(label)}
       </dt>
       <dd className="mt-1 text-sm font-semibold leading-6 text-foreground">
         <EmptyValue value={value} />
@@ -227,6 +229,7 @@ function StageStrip({
   status: ProjectWorkflowStatus;
   compact?: boolean;
 }) {
+  const { t, term } = useI18n();
   const currentStage = workflowStageForStatus(status);
   const currentIndex = workflowStages.indexOf(currentStage);
   const completedCount = completedStageCount(status);
@@ -243,7 +246,7 @@ function StageStrip({
         <div className="rounded-lg border border-border bg-surface-muted p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-bold uppercase tracking-wide text-muted">
-              Project stages
+              {t("workflow.projectStages")}
             </p>
             <p className="text-xs font-black text-foreground">
               {completedCount}/{workflowStages.length}
@@ -256,7 +259,7 @@ function StageStrip({
             />
           </div>
           <p className="mt-2 text-xs font-semibold text-muted">
-            {progressPercent}% complete
+            {t("workflow.percentComplete", { percent: progressPercent })}
           </p>
         </div>
 
@@ -266,9 +269,9 @@ function StageStrip({
               <span className="mt-1 h-3 w-3 shrink-0 rounded-full bg-current" />
               <div>
                 <p className="text-[11px] font-black uppercase tracking-wide">
-                  Completed
+                  {term("Completed")}
                 </p>
-                <p className="mt-1 text-sm font-bold">{previousStage}</p>
+                <p className="mt-1 text-sm font-bold">{term(previousStage)}</p>
               </div>
             </li>
           ) : null}
@@ -276,9 +279,9 @@ function StageStrip({
             <span className="mt-1 h-3 w-3 shrink-0 rounded-full bg-current" />
             <div>
               <p className="text-[11px] font-black uppercase tracking-wide">
-                Current stage
+                {t("workflow.currentStage")}
               </p>
-              <p className="mt-1 text-base font-black">{currentStage}</p>
+              <p className="mt-1 text-base font-black">{term(currentStage)}</p>
             </div>
           </li>
           {nextStage ? (
@@ -286,9 +289,9 @@ function StageStrip({
               <span className="mt-1 h-3 w-3 shrink-0 rounded-full bg-current" />
               <div>
                 <p className="text-[11px] font-black uppercase tracking-wide">
-                  Next stage
+                  {t("workflow.nextStage")}
                 </p>
-                <p className="mt-1 text-sm font-bold">{nextStage}</p>
+                <p className="mt-1 text-sm font-bold">{term(nextStage)}</p>
               </div>
             </li>
           ) : null}
@@ -320,10 +323,14 @@ function StageStrip({
               }`}
             >
               <p className="text-xs font-bold uppercase tracking-wide">
-                {isCurrent ? "Current" : isComplete ? "Completed" : "Pending"}
+                {isCurrent
+                  ? t("workflow.current")
+                  : isComplete
+                    ? term("Completed")
+                    : t("common.pending")}
               </p>
               <p className={`${compact ? "mt-1 text-xs" : "mt-1 text-sm"} font-bold`}>
-                {stage}
+                {term(stage)}
               </p>
             </li>
           );
@@ -334,6 +341,7 @@ function StageStrip({
 }
 
 function SummaryCards({ projects }: { projects: WorkflowProject[] }) {
+  const { term } = useI18n();
   const summaries: Array<{
     label: string;
     value: number;
@@ -383,7 +391,7 @@ function SummaryCards({ projects }: { projects: WorkflowProject[] }) {
           className="rounded-lg border border-border bg-surface p-4 shadow-sm"
         >
           <p className="text-xs font-bold uppercase tracking-wide text-muted">
-            {summary.label}
+            {term(summary.label)}
           </p>
           <p className="mt-2 text-2xl font-bold text-foreground">
             {summary.value}
@@ -477,6 +485,8 @@ function OverallStatusBlock({
   project: WorkflowProject;
   compact?: boolean;
 }) {
+  const { term } = useI18n();
+
   return (
     <div className="min-w-0 space-y-1">
       <StatusPill status={stageState(project)} />
@@ -485,7 +495,7 @@ function OverallStatusBlock({
           compact ? "text-xs" : "text-sm"
         }`}
       >
-        {project.workflowStatusLabel}
+        {term(project.workflowStatusLabel)}
       </p>
     </div>
   );
@@ -579,13 +589,13 @@ function QuickAssignmentSelect({
             disabled={isSaving || !selectedUserId}
             className="h-10 rounded-md bg-primary px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isSaving ? t("common.loading") : "Assign"}
+            {isSaving ? t("common.loading") : t("workflow.assign")}
           </button>
         </div>
       </label>
       {!users.length ? (
         <p className="mt-2 text-xs font-semibold text-muted">
-          No active users are available for this role.
+          {t("workflow.noActiveUsersForRole")}
         </p>
       ) : null}
       {error ? (
@@ -613,7 +623,7 @@ function ProjectStatusCards({
   const { t, term } = useI18n();
 
   return (
-    <SectionCard title="Project status cards">
+    <SectionCard title={t("workflow.projectStatusCards")}>
       <div className="grid gap-4 lg:grid-cols-2">
         {projects.map((project) => {
           const currentStage = workflowStageForStatus(project.workflowStatus);
@@ -653,56 +663,59 @@ function ProjectStatusCards({
               <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-md border border-border bg-surface p-3">
                   <p className="text-xs font-bold uppercase tracking-wide text-muted">
-                    Current stage
+                    {t("workflow.currentStage")}
                   </p>
                   <p className="mt-1 text-sm font-bold text-foreground">
-                    {currentStage}
+                    {term(currentStage)}
                   </p>
                 </div>
                 <div className="rounded-md border border-border bg-surface p-3">
                   <p className="text-xs font-bold uppercase tracking-wide text-muted">
-                    Assigned to
+                    {t("workflow.assignedTo")}
                   </p>
                   <p className="mt-1 text-sm font-bold text-foreground">
-                    {owner || t("common.notAdded")}
+                    {owner ? term(owner) : t("common.notAdded")}
                   </p>
                 </div>
                 <div className="rounded-md border border-border bg-surface p-3">
                   <p className="text-xs font-bold uppercase tracking-wide text-muted">
-                    Next stage
+                    {t("workflow.nextStage")}
                   </p>
                   <p className="mt-1 text-sm font-bold text-foreground">
-                    {nextStageForStatus(project.workflowStatus)}
+                    {term(nextStageForStatus(project.workflowStatus))}
                   </p>
                 </div>
                 <div className="rounded-md border border-border bg-surface p-3">
                   <p className="text-xs font-bold uppercase tracking-wide text-muted">
-                    Progress
+                    {t("workflow.progress")}
                   </p>
                   <p className="mt-1 text-sm font-bold text-foreground">
-                    {completedCount}/{workflowStages.length} stages complete
+                    {t("workflow.stagesComplete", {
+                      completed: completedCount,
+                      total: workflowStages.length,
+                    })}
                   </p>
                 </div>
               </div>
 
               <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
                 <p className="rounded-md bg-surface px-3 py-2 font-semibold text-muted-strong">
-                  PM: {project.assignments.projectManager || t("common.notAdded")}
+                  {t("workflow.pm")}: {project.assignments.projectManager || t("common.notAdded")}
                 </p>
                 <p className="rounded-md bg-surface px-3 py-2 font-semibold text-muted-strong">
-                  PE: {project.assignments.projectEngineer || t("common.notAdded")}
+                  {t("workflow.pe")}: {project.assignments.projectEngineer || t("common.notAdded")}
                 </p>
                 <p className="rounded-md bg-surface px-3 py-2 font-semibold text-muted-strong">
-                  Site: {project.assignments.siteEngineer || t("common.notAdded")}
+                  {t("workflow.site")}: {project.assignments.siteEngineer || t("common.notAdded")}
                 </p>
               </div>
 
               <div className="mt-4 border-t border-border pt-3">
                 <p className="text-xs font-bold uppercase tracking-wide text-muted">
-                  Next action
+                  {t("workflow.nextAction")}
                 </p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
-                  {project.nextRequiredAction}
+                  {term(project.nextRequiredAction)}
                 </p>
               </div>
 
@@ -710,11 +723,11 @@ function ProjectStatusCards({
                 <QuickAssignmentSelect
                   key={`project-manager-${project.assignments.projectManagerId}`}
                   project={project}
-                  label="Assign Project Manager"
+                  label={t("workflow.assignProjectManager")}
                   users={assignableUsers.projectManagers}
                   assignmentType="projectManager"
-                  emptyError="Select a project manager first."
-                  fallbackError="Unable to assign project manager."
+                  emptyError={t("workflow.selectProjectManager")}
+                  fallbackError={t("workflow.assignProjectManagerError")}
                   onAssigned={onAssigned}
                 />
               ) : null}
@@ -723,11 +736,11 @@ function ProjectStatusCards({
                 <QuickAssignmentSelect
                   key={`project-engineer-${project.assignments.projectEngineerId}`}
                   project={project}
-                  label="Assign Project Engineer"
+                  label={t("workflow.assignProjectEngineer")}
                   users={assignableUsers.projectEngineers}
                   assignmentType="projectEngineer"
-                  emptyError="Select a project engineer first."
-                  fallbackError="Unable to assign project engineer."
+                  emptyError={t("workflow.selectProjectEngineer")}
+                  fallbackError={t("workflow.assignProjectEngineerError")}
                   onAssigned={onAssigned}
                 />
               ) : null}
@@ -736,11 +749,11 @@ function ProjectStatusCards({
                 <QuickAssignmentSelect
                   key={`site-engineer-${project.assignments.siteEngineerId}`}
                   project={project}
-                  label="Assign Site Engineer"
+                  label={t("workflow.assignSiteEngineer")}
                   users={assignableUsers.siteEngineers}
                   assignmentType="siteEngineer"
-                  emptyError="Select a site engineer first."
-                  fallbackError="Unable to assign site engineer."
+                  emptyError={t("workflow.selectSiteEngineer")}
+                  fallbackError={t("workflow.assignSiteEngineerError")}
                   onAssigned={onAssigned}
                 />
               ) : null}
@@ -749,7 +762,7 @@ function ProjectStatusCards({
                 href={`/workflow/${project.id}`}
                 className="mt-4 inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-bold text-white"
               >
-                Details
+                {t("common.details")}
               </Link>
               {[
                 "site_engineer_assigned",
@@ -760,7 +773,7 @@ function ProjectStatusCards({
                   href={`/site-measurements/${project.id}`}
                   className="ml-2 mt-4 inline-flex h-10 items-center rounded-md bg-material-primary-container px-4 text-sm font-bold text-material-on-primary-container"
                 >
-                  Measurements
+                  {t("nav.siteMeasurements")}
                 </Link>
               ) : null}
             </article>
@@ -772,37 +785,40 @@ function ProjectStatusCards({
 }
 
 function OverallProjectStatus({ project }: { project: WorkflowProject }) {
-  const { t } = useI18n();
+  const { t, term } = useI18n();
   const currentStage = workflowStageForStatus(project.workflowStatus);
   const completedCount = completedStageCount(project.workflowStatus);
   const owner = assignmentOwner(project);
 
   return (
-    <SectionCard title="Project overall status">
+    <SectionCard title={t("workflow.projectOverallStatus")}>
       <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
         <div className="rounded-lg border border-border bg-surface-muted p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-muted">
-            Overall status
+            {t("workflow.overallStatus")}
           </p>
           <div className="mt-3 flex flex-wrap items-start gap-3">
             <OverallStatusBlock project={project} />
             <span className="rounded-md border border-border bg-surface px-3 py-1 text-sm font-bold text-muted-strong">
-              {currentStage}
+              {term(currentStage)}
             </span>
           </div>
           <p className="mt-3 text-sm font-semibold text-foreground">
-            {project.nextRequiredAction}
+            {term(project.nextRequiredAction)}
           </p>
         </div>
 
         <dl className="grid gap-3 sm:grid-cols-2">
-          <InfoCell label="Assigned to" value={owner || t("common.notAdded")} />
-          <InfoCell label="Next stage" value={nextStageForStatus(project.workflowStatus)} />
+          <InfoCell label={t("workflow.assignedTo")} value={owner ? term(owner) : t("common.notAdded")} />
+          <InfoCell label={t("workflow.nextStage")} value={term(nextStageForStatus(project.workflowStatus))} />
           <InfoCell
-            label="Workflow progress"
-            value={`${completedCount}/${workflowStages.length} stages complete`}
+            label={t("workflow.workflowProgress")}
+            value={t("workflow.stagesComplete", {
+              completed: completedCount,
+              total: workflowStages.length,
+            })}
           />
-          <InfoCell label="Project status" value={project.projectStatus} />
+          <InfoCell label={t("workflow.projectStatus")} value={term(project.projectStatus)} />
         </dl>
       </div>
     </SectionCard>
@@ -825,25 +841,25 @@ function QueueTable({
   projects: WorkflowProject[];
   target: "workflow" | "measurements";
 }) {
-  const { t } = useI18n();
+  const { t, term } = useI18n();
   const router = useRouter();
 
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-sm">
       <div className="overflow-x-auto">
         <table className="min-w-[1240px] table-fixed divide-y divide-border text-left text-sm">
-          <caption className="sr-only">Workflow queue</caption>
+          <caption className="sr-only">{t("workflow.queue")}</caption>
           <thead className="bg-surface-muted text-xs font-bold uppercase tracking-wide text-muted">
             <tr>
               <th className="w-[10%] px-3 py-3">{t("projects.fields.projectNumber")}</th>
               <th className="w-[14%] px-3 py-3">{t("projects.fields.projectName")}</th>
               <th className="w-[12%] px-3 py-3">{t("projects.fields.client")}</th>
-              <th className="w-[12%] px-3 py-3">Stage</th>
-              <th className="w-[18%] px-3 py-3">Overall status</th>
-              <th className="w-[10%] px-3 py-3">Project manager</th>
-              <th className="w-[10%] px-3 py-3">Project engineer</th>
-              <th className="w-[10%] px-3 py-3">Site engineer</th>
-              <th className="w-[14%] px-3 py-3">Next action</th>
+              <th className="w-[12%] px-3 py-3">{t("workflow.stage")}</th>
+              <th className="w-[18%] px-3 py-3">{t("workflow.overallStatus")}</th>
+              <th className="w-[10%] px-3 py-3">{t("workflow.projectManager")}</th>
+              <th className="w-[10%] px-3 py-3">{t("workflow.projectEngineer")}</th>
+              <th className="w-[10%] px-3 py-3">{t("workflow.siteEngineer")}</th>
+              <th className="w-[14%] px-3 py-3">{t("workflow.nextAction")}</th>
               <th className="w-[8%] px-3 py-3">{t("common.actions")}</th>
             </tr>
           </thead>
@@ -871,7 +887,7 @@ function QueueTable({
                   {project.client.name || t("common.notAdded")}
                 </td>
                 <td className="truncate px-3 py-4 font-semibold text-muted-strong">
-                  {workflowStageForStatus(project.workflowStatus)}
+                  {term(workflowStageForStatus(project.workflowStatus))}
                 </td>
                 <td className="px-3 py-4">
                   <OverallStatusBlock project={project} compact />
@@ -886,7 +902,7 @@ function QueueTable({
                   {project.assignments.siteEngineer || t("common.notAdded")}
                 </td>
                 <td className="px-3 py-4 text-muted-strong">
-                  {project.nextRequiredAction}
+                  {term(project.nextRequiredAction)}
                 </td>
                 <td className="px-3 py-4">
                   <button
@@ -897,7 +913,7 @@ function QueueTable({
                     }}
                     className="h-9 rounded-md bg-primary px-3 text-xs font-bold text-white"
                   >
-                    {target === "measurements" ? "Measure" : "Details"}
+                    {target === "measurements" ? t("workflow.measure") : t("common.details")}
                   </button>
                 </td>
               </tr>
@@ -916,7 +932,7 @@ function QueueCards({
   projects: WorkflowProject[];
   target: "workflow" | "measurements";
 }) {
-  const { t } = useI18n();
+  const { t, term } = useI18n();
   const isMeasurementQueue = target === "measurements";
 
   return (
@@ -945,21 +961,21 @@ function QueueCards({
           </div>
           {isMeasurementQueue ? null : (
             <p className="mt-3 text-sm font-semibold text-foreground">
-              {project.nextRequiredAction}
+              {term(project.nextRequiredAction)}
             </p>
           )}
           <dl className="mt-3 grid gap-2 sm:grid-cols-2">
             <InfoCell
-              label={isMeasurementQueue ? "Measurement status" : "Current stage"}
+              label={isMeasurementQueue ? t("workflow.measurementStatus") : t("workflow.currentStage")}
               value={
                 isMeasurementQueue
-                  ? project.workflowStatusLabel
-                  : workflowStageForStatus(project.workflowStatus)
+                  ? term(project.workflowStatusLabel)
+                  : term(workflowStageForStatus(project.workflowStatus))
               }
             />
             <InfoCell
-              label="Assigned to"
-              value={assignmentOwner(project) || t("common.notAdded")}
+              label={t("workflow.assignedTo")}
+              value={assignmentOwner(project) ? term(assignmentOwner(project)) : t("common.notAdded")}
             />
           </dl>
           {isMeasurementQueue ? null : (
@@ -968,7 +984,7 @@ function QueueCards({
             </div>
           )}
           <span className="mt-3 inline-flex h-9 items-center rounded-md bg-primary px-3 text-xs font-bold text-white">
-            {isMeasurementQueue ? "Open measurement wizard" : "Details"}
+            {isMeasurementQueue ? t("workflow.openMeasurementWizard") : t("common.details")}
           </span>
         </Link>
       ))}
@@ -977,7 +993,7 @@ function QueueCards({
 }
 
 function CommercialPanel({ project }: { project: WorkflowProject }) {
-  const { formatCurrency, t } = useI18n();
+  const { formatCurrency, t, term } = useI18n();
   const { commercial } = project;
 
   if (commercial.visibility === "hidden") {
@@ -986,7 +1002,7 @@ function CommercialPanel({ project }: { project: WorkflowProject }) {
 
   if (commercial.visibility === "finance") {
     return (
-      <SectionCard title="Finance summary">
+      <SectionCard title={term("Finance summary")}>
         {commercial.contract ? (
           <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <InfoCell
@@ -1020,7 +1036,7 @@ function CommercialPanel({ project }: { project: WorkflowProject }) {
   }
 
   return (
-    <SectionCard title="Commercial summary">
+    <SectionCard title={term("Commercial summary")}>
       <div className="space-y-4">
         <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <InfoCell
@@ -1063,12 +1079,12 @@ function CommercialPanel({ project }: { project: WorkflowProject }) {
               <table className="min-w-[780px] divide-y divide-border text-left text-sm">
                 <thead className="bg-surface-muted text-xs font-bold uppercase tracking-wide text-muted">
                   <tr>
-                    <th className="px-3 py-3">Opening</th>
-                    <th className="px-3 py-3">System</th>
-                    <th className="px-3 py-3">Area</th>
-                    <th className="px-3 py-3">Unit price</th>
-                    <th className="px-3 py-3">Discount</th>
-                    <th className="px-3 py-3">Net total</th>
+                    <th className="px-3 py-3">{term("Opening")}</th>
+                    <th className="px-3 py-3">{term("System")}</th>
+                    <th className="px-3 py-3">{term("Area")}</th>
+                    <th className="px-3 py-3">{term("Unit price")}</th>
+                    <th className="px-3 py-3">{term("Discount")}</th>
+                    <th className="px-3 py-3">{term("Net total")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -1117,7 +1133,7 @@ function FinancePanel({
     exceptionReason?: string,
   ) => Promise<void>;
 }) {
-  const { formatCurrency, t } = useI18n();
+  const { formatCurrency, t, term } = useI18n();
   const [receivedAmount, setReceivedAmount] = useState(
     project.commercial.contract?.downPaymentReceived ||
       project.commercial.contract?.downPaymentRequired ||
@@ -1159,7 +1175,7 @@ function FinancePanel({
       setError(
         financeError instanceof Error
           ? financeError.message
-          : "Unable to save finance update.",
+          : t("workflow.financeUpdateError"),
       );
     } finally {
       setIsSaving(null);
@@ -1167,7 +1183,7 @@ function FinancePanel({
   }
 
   return (
-    <SectionCard title="Finance Panel">
+    <SectionCard title={term("Finance Panel")}>
       {contract ? (
         <div className="space-y-4">
           <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1198,7 +1214,7 @@ function FinancePanel({
             <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto_auto]">
               <label>
                 <span className="text-xs font-bold uppercase tracking-wide text-muted">
-                  Down payment received amount
+                  {term("Down payment received amount")}
                 </span>
                 <input
                   type="number"
@@ -1210,7 +1226,7 @@ function FinancePanel({
               </label>
               <label>
                 <span className="text-xs font-bold uppercase tracking-wide text-muted">
-                  Exception note
+                  {term("Exception note")}
                 </span>
                 <input
                   type="text"
@@ -1227,7 +1243,7 @@ function FinancePanel({
               >
                 {isSaving === "confirmDownPayment"
                   ? t("common.loading")
-                  : "Confirm Down Payment"}
+                  : term("Confirm Down Payment")}
               </button>
               <button
                 type="button"
@@ -1237,7 +1253,7 @@ function FinancePanel({
               >
                 {isSaving === "markPaymentException"
                   ? t("common.loading")
-                  : "Mark Payment Exception"}
+                  : term("Mark Payment Exception")}
               </button>
             </div>
           ) : null}
@@ -1252,7 +1268,7 @@ function FinancePanel({
               >
                 {isSaving === "startFinanceFinalCheck"
                   ? t("common.loading")
-                  : "Start Finance Final Check"}
+                  : term("Start Finance Final Check")}
               </button>
             ) : null}
             {canCompleteFinanceCheck ? (
@@ -1264,7 +1280,7 @@ function FinancePanel({
               >
                 {isSaving === "completeFinanceCheck"
                   ? t("common.loading")
-                  : "Finance Check Completed"}
+                  : term("Finance Check Completed")}
               </button>
             ) : null}
             {canRequestFinalPayment ? (
@@ -1276,7 +1292,7 @@ function FinancePanel({
               >
                 {isSaving === "requestFinalPayment"
                   ? t("common.loading")
-                  : "Request Final Payment"}
+                  : term("Request Final Payment")}
               </button>
             ) : null}
             {canConfirmFinalPayment ? (
@@ -1288,7 +1304,7 @@ function FinancePanel({
               >
                 {isSaving === "confirmFinalPayment"
                   ? t("common.loading")
-                  : "Confirm Final Payment Received"}
+                  : term("Confirm Final Payment Received")}
               </button>
             ) : null}
           </div>
@@ -1301,7 +1317,7 @@ function FinancePanel({
         </div>
       ) : (
         <p className="text-sm font-semibold text-muted">
-          A contract is required before finance approval.
+          {t("workflow.contractRequiredForFinance")}
         </p>
       )}
     </SectionCard>
@@ -1321,14 +1337,14 @@ function AssignmentSelect({
   assignmentType: AssignmentType;
   onAssigned: (assignmentType: AssignmentType, assigneeId: string) => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { t, term } = useI18n();
   const [selectedUserId, setSelectedUserId] = useState(value);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
 
   async function handleAssign() {
     if (!selectedUserId) {
-      setError("Select a user first.");
+      setError(t("workflow.selectUserFirst"));
       return;
     }
 
@@ -1341,7 +1357,7 @@ function AssignmentSelect({
       setError(
         assignmentError instanceof Error
           ? assignmentError.message
-          : "Unable to save assignment.",
+          : t("workflow.assignmentSaveError"),
       );
     } finally {
       setIsSaving(false);
@@ -1351,7 +1367,7 @@ function AssignmentSelect({
   return (
     <div className="rounded-lg border border-border bg-surface-muted p-3">
       <label className="block text-xs font-bold uppercase tracking-wide text-muted">
-        {label}
+        {term(label)}
       </label>
       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
         <select
@@ -1372,7 +1388,7 @@ function AssignmentSelect({
           disabled={isSaving || !selectedUserId}
           className="h-10 rounded-md bg-primary px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isSaving ? t("common.loading") : "Assign"}
+          {isSaving ? t("common.loading") : t("workflow.assign")}
         </button>
       </div>
       {error ? (
@@ -1393,6 +1409,7 @@ function AssignmentPanel({
   assignableUsers: AssignableUsers;
   onAssigned: (assignmentType: AssignmentType, assigneeId: string) => Promise<void>;
 }) {
+  const { term } = useI18n();
   const canAssignProjectManager =
     (role === "Admin" || role === "Operations Manager") &&
     [
@@ -1416,7 +1433,7 @@ function AssignmentPanel({
   }
 
   return (
-    <SectionCard title="Assignment Panel">
+    <SectionCard title={term("Assignment Panel")}>
       <div className="grid gap-3 xl:grid-cols-3">
         {canAssignProjectManager ? (
           <AssignmentSelect
@@ -1479,7 +1496,7 @@ function ProjectDescriptionPanel({
     auditComments?: string,
   ) => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { t, term } = useI18n();
   const [description, setDescription] = useState<ProjectDescriptionDraft>(
     project.projectDescription ?? blankProjectDescription(),
   );
@@ -1542,7 +1559,7 @@ function ProjectDescriptionPanel({
       setError(
         actionError instanceof Error
           ? actionError.message
-          : "Unable to save workflow action.",
+          : t("workflow.workflowActionError"),
       );
     } finally {
       setIsSaving(null);
@@ -1567,7 +1584,7 @@ function ProjectDescriptionPanel({
   ];
 
   return (
-    <SectionCard title="Project Description & Audit">
+    <SectionCard title={term("Project Description & Audit")}>
       <div className="space-y-4">
         {canStartMeasurement ? (
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -1579,14 +1596,14 @@ function ProjectDescriptionPanel({
             >
               {isSaving === "startMeasurement"
                 ? t("common.loading")
-                : "Start Detailed Measurement"}
+                : term("Start Detailed Measurement")}
             </button>
             {role === "Site Engineer" ? (
               <Link
                 href={`/site-measurements/${project.id}`}
                 className="material-button-tonal"
               >
-                Mobile measurement page
+                {term("Mobile measurement page")}
               </Link>
             ) : null}
           </div>
@@ -1602,14 +1619,14 @@ function ProjectDescriptionPanel({
             >
               {isSaving === "completeMeasurement"
                 ? t("common.loading")
-                : "Detailed Measurement Completed"}
+                : term("Detailed Measurement Completed")}
             </button>
             {role === "Site Engineer" ? (
               <Link
                 href={`/site-measurements/${project.id}`}
                 className="material-button-tonal"
               >
-                Mobile measurement page
+                {term("Mobile measurement page")}
               </Link>
             ) : null}
           </div>
@@ -1619,7 +1636,7 @@ function ProjectDescriptionPanel({
           {fields.map((field) => (
             <label key={field.key} className="block">
               <span className="text-xs font-bold uppercase tracking-wide text-muted">
-                {field.label}
+                {term(field.label)}
               </span>
               <textarea
                 value={description[field.key]}
@@ -1637,7 +1654,7 @@ function ProjectDescriptionPanel({
         {project.latestAuditReview ? (
           <div className="rounded-lg border border-border bg-surface-muted p-3">
             <p className="text-xs font-bold uppercase tracking-wide text-muted">
-              Latest audit review
+              {term("Latest audit review")}
             </p>
             <p className="mt-1 text-sm font-bold text-foreground">
               {project.latestAuditReview.decision}
@@ -1658,7 +1675,7 @@ function ProjectDescriptionPanel({
             >
               {isSaving === "saveProjectDescription"
                 ? t("common.loading")
-                : "Save Description"}
+                : term("Save Description")}
             </button>
             {canSendToAudit ? (
               <button
@@ -1669,7 +1686,7 @@ function ProjectDescriptionPanel({
               >
                 {isSaving === "sendDescriptionToAudit"
                   ? t("common.loading")
-                  : "Send To Audit"}
+                  : term("Send To Audit")}
               </button>
             ) : null}
           </div>
@@ -1679,7 +1696,7 @@ function ProjectDescriptionPanel({
           <div className="space-y-3 rounded-lg border border-border bg-surface-muted p-3">
             <label className="block">
               <span className="text-xs font-bold uppercase tracking-wide text-muted">
-                Audit comments
+                {term("Audit comments")}
               </span>
               <textarea
                 value={auditComments}
@@ -1695,7 +1712,7 @@ function ProjectDescriptionPanel({
                 disabled={Boolean(isSaving)}
                 className="rounded-md bg-primary px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isSaving === "approveAudit" ? t("common.loading") : "Approve"}
+                {isSaving === "approveAudit" ? t("common.loading") : term("Approve")}
               </button>
               <button
                 type="button"
@@ -1705,7 +1722,7 @@ function ProjectDescriptionPanel({
               >
                 {isSaving === "rejectAudit"
                   ? t("common.loading")
-                  : "Reject with Comments"}
+                  : term("Reject with Comments")}
               </button>
             </div>
           </div>
@@ -1734,7 +1751,7 @@ function BranchFactoryPanel({
     auditComments?: string,
   ) => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { t, term } = useI18n();
   const [isSaving, setIsSaving] = useState<WorkflowAction | null>(null);
   const [error, setError] = useState("");
   const canBranchApprove =
@@ -1771,7 +1788,7 @@ function BranchFactoryPanel({
       setError(
         actionError instanceof Error
           ? actionError.message
-          : "Unable to save workflow action.",
+          : t("workflow.workflowActionError"),
       );
     } finally {
       setIsSaving(null);
@@ -1779,7 +1796,7 @@ function BranchFactoryPanel({
   }
 
   return (
-    <SectionCard title="Branch Approval & Factory">
+    <SectionCard title={term("Branch Approval & Factory")}>
       <div className="space-y-4">
         <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <InfoCell label="Current stage" value={project.workflowStatusLabel} />
@@ -1788,7 +1805,7 @@ function BranchFactoryPanel({
             label="Project engineer"
             value={project.assignments.projectEngineer}
           />
-          <InfoCell label="Factory access" value="Tracked by system users only" />
+          <InfoCell label="Factory access" value={term("Tracked by system users only")} />
         </dl>
 
         <div className="flex flex-wrap gap-2">
@@ -1801,7 +1818,7 @@ function BranchFactoryPanel({
             >
               {isSaving === "approveForFactory"
                 ? t("common.loading")
-                : "Approve Sending To Factory"}
+                : term("Approve Sending To Factory")}
             </button>
           ) : null}
           {canMarkSentToFactory ? (
@@ -1813,7 +1830,7 @@ function BranchFactoryPanel({
             >
               {isSaving === "markSentToFactory"
                 ? t("common.loading")
-                : "Sent to Factory"}
+                : term("Sent to Factory")}
             </button>
           ) : null}
           {canMarkFactoryInProgress ? (
@@ -1825,7 +1842,7 @@ function BranchFactoryPanel({
             >
               {isSaving === "markFactoryInProgress"
                 ? t("common.loading")
-                : "Factory In Progress"}
+                : term("Factory In Progress")}
             </button>
           ) : null}
           {canMarkFactoryCompleted ? (
@@ -1837,7 +1854,7 @@ function BranchFactoryPanel({
             >
               {isSaving === "markFactoryCompleted"
                 ? t("common.loading")
-                : "Factory Completed"}
+                : term("Factory Completed")}
             </button>
           ) : null}
         </div>
@@ -1865,7 +1882,7 @@ function DeliveryInstallationPanel({
     auditComments?: string,
   ) => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { t, term } = useI18n();
   const [isSaving, setIsSaving] = useState<WorkflowAction | null>(null);
   const [error, setError] = useState("");
   const canPrepareDelivery =
@@ -1902,7 +1919,7 @@ function DeliveryInstallationPanel({
       setError(
         actionError instanceof Error
           ? actionError.message
-          : "Unable to save workflow action.",
+          : t("workflow.workflowActionError"),
       );
     } finally {
       setIsSaving(null);
@@ -1910,7 +1927,7 @@ function DeliveryInstallationPanel({
   }
 
   return (
-    <SectionCard title="Delivery & Installation">
+    <SectionCard title={term("Delivery & Installation")}>
       <div className="space-y-4">
         <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <InfoCell label="Current stage" value={project.workflowStatusLabel} />
@@ -1919,7 +1936,7 @@ function DeliveryInstallationPanel({
             label="Project manager"
             value={project.assignments.projectManager}
           />
-          <InfoCell label="Team access" value="Updated by heads/managers only" />
+          <InfoCell label="Team access" value={term("Updated by heads/managers only")} />
         </dl>
 
         <div className="flex flex-wrap gap-2">
@@ -1932,7 +1949,7 @@ function DeliveryInstallationPanel({
             >
               {isSaving === "markDeliveryPending"
                 ? t("common.loading")
-                : "Prepare Delivery"}
+                : term("Prepare Delivery")}
             </button>
           ) : null}
           {canMarkDelivered ? (
@@ -1944,7 +1961,7 @@ function DeliveryInstallationPanel({
             >
               {isSaving === "markDelivered"
                 ? t("common.loading")
-                : "Delivered"}
+                : term("Delivered")}
             </button>
           ) : null}
           {canStartInstallation ? (
@@ -1956,7 +1973,7 @@ function DeliveryInstallationPanel({
             >
               {isSaving === "markInstallationInProgress"
                 ? t("common.loading")
-                : "Installation In Progress"}
+                : term("Installation In Progress")}
             </button>
           ) : null}
           {canCompleteInstallation ? (
@@ -1968,7 +1985,7 @@ function DeliveryInstallationPanel({
             >
               {isSaving === "markInstallationCompleted"
                 ? t("common.loading")
-                : "Installation Completed"}
+                : term("Installation Completed")}
             </button>
           ) : null}
         </div>
@@ -2008,7 +2025,7 @@ function ProjectDetail({
     auditComments?: string,
   ) => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { t, term } = useI18n();
 
   return (
     <div className="space-y-6">
@@ -2024,7 +2041,7 @@ function ProjectDetail({
       <OverallProjectStatus project={project} />
 
       <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-        <SectionCard title="Project overview">
+        <SectionCard title={term("Project overview")}>
           <dl className="grid gap-3 sm:grid-cols-2">
             <InfoCell label="Project number" value={project.projectNumber} />
             <InfoCell label="Project name" value={project.projectName} />
@@ -2039,7 +2056,7 @@ function ProjectDetail({
           </dl>
         </SectionCard>
 
-        <SectionCard title="Assignments">
+        <SectionCard title={term("Assignments")}>
           <dl className="grid gap-3 sm:grid-cols-2">
             <InfoCell label="Sales engineer" value={project.assignments.salesEngineer} />
             <InfoCell label="Project manager" value={project.assignments.projectManager} />
@@ -2050,7 +2067,7 @@ function ProjectDetail({
         </SectionCard>
       </section>
 
-      <SectionCard title="Project location">
+      <SectionCard title={term("Project location")}>
         <div className="grid gap-4 lg:grid-cols-[0.75fr_1.25fr]">
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
             <InfoCell label="Address" value={project.address || project.client.address} />
@@ -2058,7 +2075,7 @@ function ProjectDetail({
             <InfoCell label="Longitude" value={project.locationLongitude} />
             <InfoCell
               label="Geofence radius"
-              value={`${project.geofenceRadiusMeters} meters`}
+              value={t("workflow.metersValue", { value: project.geofenceRadiusMeters })}
             />
           </dl>
           <ProjectLocationPicker
@@ -2071,14 +2088,14 @@ function ProjectDetail({
         </div>
       </SectionCard>
 
-      <SectionCard title="Status tracker">
+      <SectionCard title={term("Status tracker")}>
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <StatusPill status={project.workflowStatusLabel} />
           <span className="rounded-md border border-border bg-surface-muted px-3 py-1 text-sm font-bold text-muted-strong">
-            {workflowStageForStatus(project.workflowStatus)}
+            {term(workflowStageForStatus(project.workflowStatus))}
           </span>
           <p className="text-sm font-semibold text-muted-strong">
-            {project.nextRequiredAction}
+            {term(project.nextRequiredAction)}
           </p>
         </div>
         <StageStrip status={project.workflowStatus} />
@@ -2116,24 +2133,24 @@ function ProjectDetail({
         onWorkflowAction={onWorkflowAction}
       />
 
-      <SectionCard title="Technical information">
+      <SectionCard title={term("Technical information")}>
         {project.openings.length ? (
           <div className="overflow-hidden rounded-lg border border-border">
             <div className="overflow-x-auto">
               <table className="min-w-[1180px] divide-y divide-border text-left text-sm">
                 <thead className="bg-surface-muted text-xs font-bold uppercase tracking-wide text-muted">
                   <tr>
-                    <th className="px-3 py-3">Opening</th>
-                    <th className="px-3 py-3">Location</th>
-                    <th className="px-3 py-3">Dimensions</th>
-                    <th className="px-3 py-3">Shape</th>
-                    <th className="px-3 py-3">Type</th>
-                    <th className="px-3 py-3">Bottom frame</th>
-                    <th className="px-3 py-3">Opening direction</th>
-                    <th className="px-3 py-3">Glass color</th>
-                    <th className="px-3 py-3">Solid panel height</th>
-                    <th className="px-3 py-3">Fixed height</th>
-                    <th className="px-3 py-3">Notes</th>
+                    <th className="px-3 py-3">{term("Opening")}</th>
+                    <th className="px-3 py-3">{term("Location")}</th>
+                    <th className="px-3 py-3">{term("Dimensions")}</th>
+                    <th className="px-3 py-3">{term("Shape")}</th>
+                    <th className="px-3 py-3">{term("Type")}</th>
+                    <th className="px-3 py-3">{term("Bottom frame")}</th>
+                    <th className="px-3 py-3">{term("Opening direction")}</th>
+                    <th className="px-3 py-3">{term("Glass color")}</th>
+                    <th className="px-3 py-3">{term("Solid panel height")}</th>
+                    <th className="px-3 py-3">{term("Fixed height")}</th>
+                    <th className="px-3 py-3">{term("Notes")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -2147,22 +2164,26 @@ function ProjectDetail({
                           t("common.notAdded")}
                       </td>
                       <td className="px-3 py-3 text-muted-strong">
-                        {opening.width} x {opening.height}
+                        {t("workflow.dimensionsValue", { width: opening.width, height: opening.height })}
                       </td>
                       <td className="px-3 py-3 text-muted-strong">
-                        {opening.shape || t("common.notAdded")}
+                        {opening.shape ? term(opening.shape) : t("common.notAdded")}
                       </td>
                       <td className="px-3 py-3 text-muted-strong">
-                        {opening.openingType || opening.productSystem || t("common.notAdded")}
+                        {opening.openingType || opening.productSystem
+                          ? term(opening.openingType || opening.productSystem)
+                          : t("common.notAdded")}
                       </td>
                       <td className="px-3 py-3 text-muted-strong">
-                        {opening.bottomFrame || t("common.notAdded")}
+                        {opening.bottomFrame ? term(opening.bottomFrame) : t("common.notAdded")}
                       </td>
                       <td className="px-3 py-3 text-muted-strong">
-                        {opening.openingDirection || t("common.notAdded")}
+                        {opening.openingDirection ? term(opening.openingDirection) : t("common.notAdded")}
                       </td>
                       <td className="px-3 py-3 text-muted-strong">
-                        {opening.glassColor || opening.aluminumColor || t("common.notAdded")}
+                        {opening.glassColor || opening.aluminumColor
+                          ? term(opening.glassColor || opening.aluminumColor)
+                          : t("common.notAdded")}
                       </td>
                       <td className="px-3 py-3 text-muted-strong">
                         {opening.solidPanelHeight}
@@ -2230,7 +2251,7 @@ export function WorkflowModule({
       const body = (await response.json().catch(() => null)) as WorkflowResponse | null;
 
       if (!response.ok) {
-        throw new Error(body?.error ?? "Unable to load workflow.");
+        throw new Error(body?.error ?? t("workflow.loadError"));
       }
 
       setRole(body?.role ?? "");
@@ -2242,13 +2263,13 @@ export function WorkflowModule({
       setProjects(body?.projects ?? []);
       setProject(body?.project ?? null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load workflow.");
+      setError(loadError instanceof Error ? loadError.message : t("workflow.loadError"));
       setProjects([]);
       setProject(null);
     } finally {
       setIsLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -2277,7 +2298,7 @@ export function WorkflowModule({
     } | null;
 
     if (!response.ok) {
-      throw new Error(body?.error ?? "Unable to save assignment.");
+      throw new Error(body?.error ?? t("workflow.assignmentSaveError"));
     }
 
     await loadWorkflow();
@@ -2318,7 +2339,7 @@ export function WorkflowModule({
     } | null;
 
     if (!response.ok) {
-      throw new Error(body?.error ?? "Unable to save finance update.");
+      throw new Error(body?.error ?? t("workflow.financeUpdateError"));
     }
 
     await loadWorkflow();
@@ -2348,7 +2369,7 @@ export function WorkflowModule({
     } | null;
 
     if (!response.ok) {
-      throw new Error(body?.error ?? "Unable to save workflow action.");
+      throw new Error(body?.error ?? t("workflow.workflowActionError"));
     }
 
     await loadWorkflow();
@@ -2367,19 +2388,21 @@ export function WorkflowModule({
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={projectId ? detailEyebrow : "Workflow"}
+        eyebrow={projectId ? term(detailEyebrow) : term("Workflow")}
         title={
           projectId
             ? project
               ? term(project.projectName)
-              : detailFallbackTitle
-            : queueTitle ?? "Workflow queue"
+              : term(detailFallbackTitle)
+            : term(queueTitle ?? "Workflow queue")
         }
         description={
           projectId
-            ? detailDescription
-            : queueDescription ??
-              "Track projects from sales handoff through delivery and installation."
+            ? term(detailDescription)
+            : term(
+                queueDescription ??
+                  "Track projects from sales handoff through delivery and installation.",
+              )
         }
       />
 
@@ -2391,7 +2414,7 @@ export function WorkflowModule({
 
       {isLoading ? (
         <SectionCard title={t("common.loading")}>
-          <p className="text-sm font-semibold text-muted">Loading workflow...</p>
+          <p className="text-sm font-semibold text-muted">{t("workflow.loading")}</p>
         </SectionCard>
       ) : projectId ? (
         project ? (
@@ -2405,9 +2428,9 @@ export function WorkflowModule({
             onWorkflowAction={updateWorkflowAction}
           />
         ) : (
-          <SectionCard title="Project not found">
+          <SectionCard title={t("workflow.projectNotFound")}>
             <p className="text-sm font-semibold text-muted">
-              This project is not available in your workflow queue.
+              {t("workflow.projectNotAvailable")}
             </p>
           </SectionCard>
         )
@@ -2428,9 +2451,9 @@ export function WorkflowModule({
           <QueueCards projects={visibleProjects} target={queueTarget} />
         </>
       ) : (
-        <SectionCard title={emptyTitle ?? "No workflow projects"}>
+        <SectionCard title={term(emptyTitle ?? "No workflow projects")}>
           <p className="text-sm font-semibold text-muted">
-            {emptyDescription ?? "No projects are currently available for your role."}
+            {term(emptyDescription ?? "No projects are currently available for your role.")}
           </p>
         </SectionCard>
       )}

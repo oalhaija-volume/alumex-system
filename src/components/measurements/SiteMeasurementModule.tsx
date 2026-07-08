@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import {
   defaultOpeningDropdownOptions,
   loadOpeningDropdownOptions,
@@ -205,13 +206,6 @@ function isOpeningValid(opening: OpeningDraft) {
   );
 }
 
-function workflowLabel(status: string) {
-  return status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function nextOpeningCode(openings: MeasurementOpening[]) {
   return `W-${String(openings.length + 1).padStart(2, "0")}`;
 }
@@ -232,6 +226,7 @@ function optionLabels(options: OpeningDropdownOption[], currentValue: string) {
 }
 
 export function SiteMeasurementModule() {
+  const { t, term } = useI18n();
   const params = useParams<{ projectId: string }>();
   const projectId = params.projectId;
   const [project, setProject] = useState<MeasurementProject | null>(null);
@@ -289,7 +284,7 @@ export function SiteMeasurementModule() {
       | null;
 
     if (!response.ok) {
-      throw new Error(body?.error ?? "Unable to load measurements.");
+      throw new Error(body?.error ?? t("measurements.loadError"));
     }
 
     setProject(body?.project ?? null);
@@ -304,7 +299,7 @@ export function SiteMeasurementModule() {
     setWizardIndex(0);
     setMobileWizardStep(0);
     setIsLoading(false);
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -312,14 +307,14 @@ export function SiteMeasurementModule() {
         setError(
           loadError instanceof Error
             ? loadError.message
-            : "Unable to load measurements.",
+            : t("measurements.loadError"),
         );
         setIsLoading(false);
       });
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [loadMeasurements]);
+  }, [loadMeasurements, t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -385,20 +380,20 @@ export function SiteMeasurementModule() {
         | null;
 
       if (!response.ok) {
-        throw new Error(body?.error ?? "Unable to update measurement workflow.");
+        throw new Error(body?.error ?? t("measurements.workflowUpdateError"));
       }
 
       await loadMeasurements();
       setMessage(
         workflowAction === "startMeasurement"
-          ? "Detailed measurement is now open for site entry."
-          : "Detailed measurements are completed and ready for project description.",
+          ? t("measurements.startSuccess")
+          : t("measurements.completeSuccess"),
       );
     } catch (actionError) {
       setError(
         actionError instanceof Error
           ? actionError.message
-          : "Unable to update measurement workflow.",
+          : t("measurements.workflowUpdateError"),
       );
     } finally {
       setWorkflowSaving(null);
@@ -416,7 +411,7 @@ export function SiteMeasurementModule() {
       | null;
 
     if (!response.ok || !body?.opening) {
-      throw new Error(body?.error ?? "Unable to save opening.");
+      throw new Error(body?.error ?? t("measurements.saveOpeningError"));
     }
 
     return body.opening;
@@ -431,12 +426,12 @@ export function SiteMeasurementModule() {
       .map(normalizeDraft);
 
     if (normalizedOpenings.length === 0) {
-      setError("Add at least one structural opening before saving.");
+      setError(t("measurements.addOpeningBeforeSaving"));
       return;
     }
 
     if (normalizedOpenings.some((opening) => !isOpeningValid(opening))) {
-      setError("Complete the required opening details before saving.");
+      setError(t("measurements.completeRequiredDetails"));
       return;
     }
 
@@ -455,11 +450,11 @@ export function SiteMeasurementModule() {
       setMobileWizardStep(0);
       setMessage(
         savedOpenings.length === 1
-          ? "Opening saved."
-          : `${savedOpenings.length} openings saved.`,
+          ? t("measurements.openingSaved")
+          : t("measurements.openingsSaved", { count: savedOpenings.length }),
       );
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to save opening.");
+      setError(saveError instanceof Error ? saveError.message : t("measurements.saveOpeningError"));
     } finally {
       setIsSaving(false);
     }
@@ -475,7 +470,7 @@ export function SiteMeasurementModule() {
 
     const normalized = normalizeDraft(draft);
     if (!isOpeningValid(normalized)) {
-      setError("Complete the required opening details before saving.");
+      setError(t("measurements.completeRequiredDetails"));
       return;
     }
 
@@ -490,9 +485,9 @@ export function SiteMeasurementModule() {
       );
       setDraft(emptyOpening);
       setEditingId(null);
-      setMessage("Opening updated.");
+      setMessage(t("measurements.openingUpdated"));
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to save opening.");
+      setError(saveError instanceof Error ? saveError.message : t("measurements.saveOpeningError"));
     } finally {
       setIsSaving(false);
     }
@@ -513,7 +508,7 @@ export function SiteMeasurementModule() {
         | null;
 
       if (!response.ok) {
-        throw new Error(body?.error ?? "Unable to delete opening.");
+        throw new Error(body?.error ?? t("measurements.deleteOpeningError"));
       }
 
       setOpenings((current) => current.filter((opening) => opening.id !== openingId));
@@ -521,12 +516,12 @@ export function SiteMeasurementModule() {
         setEditingId(null);
         setDraft(emptyOpening);
       }
-      setMessage("Opening removed.");
+      setMessage(t("measurements.openingRemoved"));
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
           ? deleteError.message
-          : "Unable to delete opening.",
+          : t("measurements.deleteOpeningError"),
       );
     } finally {
       setIsSaving(false);
@@ -576,7 +571,7 @@ export function SiteMeasurementModule() {
     setMessage("");
 
     if (!canContinueMobileStep(opening, mobileWizardStep)) {
-      setError("Complete this step before continuing.");
+      setError(t("measurements.completeStep"));
       return;
     }
 
@@ -593,7 +588,7 @@ export function SiteMeasurementModule() {
   if (isLoading) {
     return (
       <div className="material-card p-5">
-        <p className="text-sm font-bold text-muted-strong">Loading measurements...</p>
+        <p className="text-sm font-bold text-muted-strong">{t("measurements.loading")}</p>
       </div>
     );
   }
@@ -601,7 +596,7 @@ export function SiteMeasurementModule() {
   if (!project) {
     return (
       <div className="material-alert-error">
-        {error || "Measurement project was not found."}
+        {error || t("measurements.projectNotFound")}
       </div>
     );
   }
@@ -618,28 +613,28 @@ export function SiteMeasurementModule() {
               {project.projectName}
             </h1>
             <p className="mt-2 text-sm font-semibold text-muted-strong">
-              {project.client.name || "Client not added"}
+              {project.client.name || t("common.notAdded")}
             </p>
             {project.address ? (
               <p className="mt-1 text-sm text-muted">{project.address}</p>
             ) : null}
           </div>
           <span className="material-status self-start">
-            {workflowLabel(project.workflowStatus)}
+            {term(project.workflowStatus)}
           </span>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2">
           <div className="material-card-muted p-3">
-            <p className="text-xs font-bold uppercase text-muted">Openings</p>
+            <p className="text-xs font-bold uppercase text-muted">{t("measurements.openings")}</p>
             <p className="mt-1 text-2xl font-bold text-foreground">
               {openings.length}
             </p>
           </div>
           <div className="material-card-muted p-3">
-            <p className="text-xs font-bold uppercase text-muted">Billable area</p>
+            <p className="text-xs font-bold uppercase text-muted">{t("measurements.billableArea")}</p>
             <p className="mt-1 text-2xl font-bold text-foreground">
-              {totalArea.toFixed(2)} m2
+              {t("common.areaValue", { value: totalArea.toFixed(2) })}
             </p>
           </div>
         </div>
@@ -653,8 +648,8 @@ export function SiteMeasurementModule() {
               className="material-button-filled min-h-12 w-full sm:w-auto"
             >
               {workflowSaving === "startMeasurement"
-                ? "Starting..."
-                : "Start site measurement"}
+                ? t("measurements.starting")
+                : t("measurements.startSiteMeasurement")}
             </button>
           ) : null}
           {canComplete ? (
@@ -665,15 +660,15 @@ export function SiteMeasurementModule() {
               className="material-button-filled min-h-12 w-full sm:w-auto"
             >
               {workflowSaving === "completeMeasurement"
-                ? "Completing..."
-                : "Complete measurements"}
+                ? t("measurements.completing")
+                : t("measurements.completeMeasurements")}
             </button>
           ) : null}
           <Link
             href={`/workflow/${project.id}`}
             className="material-button-tonal min-h-12 w-full sm:w-auto"
           >
-            Workflow details
+            {t("measurements.workflowDetails")}
           </Link>
         </div>
       </div>
@@ -685,10 +680,10 @@ export function SiteMeasurementModule() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase text-muted">
-              {editingId ? "Edit opening" : "New openings"}
+              {editingId ? t("measurements.editOpening") : t("measurements.newOpenings")}
             </p>
             <h2 className="mt-1 text-lg font-bold text-foreground">
-              Structural openings
+              {t("measurements.structuralOpenings")}
             </h2>
           </div>
           {editingId ? (
@@ -697,16 +692,16 @@ export function SiteMeasurementModule() {
               onClick={cancelEdit}
               className="material-button-outlined h-11 px-3"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           ) : null}
         </div>
 
         {canStart ? (
           <div className="mt-4 rounded-lg border border-material-outline-variant bg-material-primary-container p-4 text-material-on-primary-container">
-            <p className="text-sm font-bold">Project received by site engineer.</p>
+            <p className="text-sm font-bold">{t("measurements.receivedBySiteEngineer")}</p>
             <p className="mt-1 text-sm">
-              Start the site measurement to unlock structural opening entry.
+              {t("measurements.startToUnlock")}
             </p>
           </div>
         ) : null}
@@ -717,13 +712,13 @@ export function SiteMeasurementModule() {
               {textFields.map((field) => (
                 <label key={field.key} className="block">
                   <span className="material-label">
-                    {field.label}
+                    {term(field.label)}
                     {field.required ? " *" : ""}
                   </span>
                   <input
                     value={String(draft[field.key])}
                     onChange={(event) => updateDraft(field.key, event.target.value)}
-                    placeholder={field.placeholder}
+                    placeholder={term(field.placeholder)}
                     disabled={!isEditable}
                     className="material-field mt-2 min-h-12"
                   />
@@ -731,17 +726,17 @@ export function SiteMeasurementModule() {
               ))}
 
               <label className="block">
-                <span className="material-label">Room</span>
+                <span className="material-label">{term("Room")}</span>
                 <select
                   value={draft.room}
                   onChange={(event) => updateDraft("room", event.target.value)}
                   disabled={!isEditable}
                   className="material-field mt-2 min-h-12"
                 >
-                  <option value="">Select room</option>
+                  <option value="">{t("measurements.selectRoom")}</option>
                   {optionLabels(roomOptions, draft.room).map((option) => (
                     <option key={option} value={option}>
-                      {option}
+                      {term(option)}
                     </option>
                   ))}
                 </select>
@@ -749,7 +744,7 @@ export function SiteMeasurementModule() {
 
               {numberFields.map((field) => (
                 <label key={field.key} className="block">
-                  <span className="material-label">{field.label}</span>
+                  <span className="material-label">{term(field.label)}</span>
                   <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container">
                     <input
                       type="number"
@@ -762,14 +757,14 @@ export function SiteMeasurementModule() {
                       className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
                     />
                     <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
-                      {field.suffix}
+                      {term(field.suffix)}
                     </span>
                   </div>
                 </label>
               ))}
 
               <label className="block">
-                <span className="material-label">Quantity</span>
+                <span className="material-label">{term("Quantity")}</span>
                 <input
                   type="number"
                   min="1"
@@ -783,14 +778,14 @@ export function SiteMeasurementModule() {
               </label>
 
               <label className="block">
-                <span className="material-label">Shape *</span>
+                <span className="material-label">{term("Shape")} *</span>
                 <select
                   value={draft.shape}
                   onChange={(event) => updateDraft("shape", event.target.value)}
                   disabled={!isEditable}
                   className="material-field mt-2 min-h-12"
                 >
-                  <option value="">Select shape</option>
+                  <option value="">{t("measurements.selectShape")}</option>
                   {optionLabels(
                     shapeOptions.map((label, index) => ({
                       category: "room" as const,
@@ -801,21 +796,21 @@ export function SiteMeasurementModule() {
                     draft.shape,
                   ).map((option) => (
                     <option key={option} value={option}>
-                      {option}
+                      {term(option)}
                     </option>
                   ))}
                 </select>
               </label>
 
               <label className="block">
-                <span className="material-label">Type *</span>
+                <span className="material-label">{term("Type")} *</span>
                 <select
                   value={draft.openingType || draft.type}
                   onChange={(event) => updateDraft("openingType", event.target.value)}
                   disabled={!isEditable}
                   className="material-field mt-2 min-h-12"
                 >
-                  <option value="">Select type</option>
+                  <option value="">{t("measurements.selectType")}</option>
                   {optionLabels(
                     typeOptions.map((label, index) => ({
                       category: "room" as const,
@@ -826,21 +821,21 @@ export function SiteMeasurementModule() {
                     draft.openingType || draft.type,
                   ).map((option) => (
                     <option key={option} value={option}>
-                      {option}
+                      {term(option)}
                     </option>
                   ))}
                 </select>
               </label>
 
               <label className="block">
-                <span className="material-label">Bottom frame *</span>
+                <span className="material-label">{term("Bottom frame")} *</span>
                 <select
                   value={draft.bottomFrame}
                   onChange={(event) => updateDraft("bottomFrame", event.target.value)}
                   disabled={!isEditable}
                   className="material-field mt-2 min-h-12"
                 >
-                  <option value="">Select bottom frame</option>
+                  <option value="">{t("measurements.selectBottomFrame")}</option>
                   {optionLabels(
                     bottomFrameOptions.map((label, index) => ({
                       category: "room" as const,
@@ -851,14 +846,14 @@ export function SiteMeasurementModule() {
                     draft.bottomFrame,
                   ).map((option) => (
                     <option key={option} value={option}>
-                      {option}
+                      {term(option)}
                     </option>
                   ))}
                 </select>
               </label>
 
               <label className="block">
-                <span className="material-label">Opening direction *</span>
+                <span className="material-label">{term("Opening direction")} *</span>
                 <select
                   value={draft.openingDirection}
                   onChange={(event) =>
@@ -867,7 +862,7 @@ export function SiteMeasurementModule() {
                   disabled={!isEditable}
                   className="material-field mt-2 min-h-12"
                 >
-                  <option value="">Select direction</option>
+                  <option value="">{t("measurements.selectDirection")}</option>
                   {optionLabels(
                     openingDirectionOptions.map((label, index) => ({
                       category: "room" as const,
@@ -878,24 +873,24 @@ export function SiteMeasurementModule() {
                     draft.openingDirection,
                   ).map((option) => (
                     <option key={option} value={option}>
-                      {option}
+                      {term(option)}
                     </option>
                   ))}
                 </select>
               </label>
 
               <label className="block">
-                <span className="material-label">Glass color *</span>
+                <span className="material-label">{term("Glass color")} *</span>
                 <select
                   value={draft.glassColor}
                   onChange={(event) => updateDraft("glassColor", event.target.value)}
                   disabled={!isEditable}
                   className="material-field mt-2 min-h-12"
                 >
-                  <option value="">Select color</option>
+                  <option value="">{t("measurements.selectColor")}</option>
                   {optionLabels(glassColorOptions, draft.glassColor).map((option) => (
                     <option key={option} value={option}>
-                      {option}
+                      {term(option)}
                     </option>
                   ))}
                 </select>
@@ -903,7 +898,7 @@ export function SiteMeasurementModule() {
 
               {measurementNumberFields.map((field) => (
                 <label key={field.key} className="block">
-                  <span className="material-label">{field.label}</span>
+                  <span className="material-label">{term(field.label)}</span>
                 <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container">
                   <input
                     type="number"
@@ -919,30 +914,30 @@ export function SiteMeasurementModule() {
                     className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
                   />
                   <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
-                    {field.suffix}
+                    {term(field.suffix)}
                   </span>
                 </div>
                 </label>
               ))}
 
               <label className="block sm:col-span-2">
-                <span className="material-label">Site notes</span>
+                <span className="material-label">{t("measurements.siteNotes")}</span>
                 <textarea
                   value={draft.notes}
                   onChange={(event) => updateDraft("notes", event.target.value)}
                   rows={3}
                   disabled={!isEditable}
                   className="material-field mt-2 min-h-24 py-3"
-                  placeholder="Threshold, side clearance, wall condition, access notes"
+                  placeholder={t("measurements.siteNotesPlaceholder")}
                 />
               </label>
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
               <div className="material-card-muted p-3">
-                <p className="text-xs font-bold uppercase text-muted">Area estimate</p>
+                <p className="text-xs font-bold uppercase text-muted">{t("measurements.areaEstimate")}</p>
                 <p className="mt-1 text-2xl font-bold text-foreground">
-                  {calculateArea(draft).toFixed(2)} m2
+                  {t("common.areaValue", { value: calculateArea(draft).toFixed(2) })}
                 </p>
               </div>
               <button
@@ -951,7 +946,7 @@ export function SiteMeasurementModule() {
                 disabled={!isEditable || isSaving}
                 className="material-button-filled min-h-12 w-full sm:w-auto"
               >
-                {isSaving ? "Saving..." : "Save opening"}
+                {isSaving ? t("measurements.saving") : t("measurements.saveOpening")}
               </button>
             </div>
           </>
@@ -959,7 +954,7 @@ export function SiteMeasurementModule() {
           <>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm font-semibold text-muted-strong">
-                Mobile captures one opening at a time. Desktop uses a sales-style grid with site details.
+                {t("measurements.entryModeDescription")}
               </p>
               <div className="hidden grid-cols-2 gap-2 sm:flex">
                 <button
@@ -973,7 +968,7 @@ export function SiteMeasurementModule() {
                   disabled={!isEditable || isSaving}
                   className="material-button-tonal min-h-11 px-3"
                 >
-                  Add rows
+                  {t("measurements.addRows")}
                 </button>
                 <button
                   type="button"
@@ -985,7 +980,7 @@ export function SiteMeasurementModule() {
                   disabled={!isEditable || isSaving}
                   className="material-button-outlined min-h-11 px-3"
                 >
-                  Clear
+                  {t("measurements.clear")}
                 </button>
               </div>
             </div>
@@ -1014,7 +1009,7 @@ export function SiteMeasurementModule() {
                         "Actions",
                       ].map((heading) => (
                         <th key={heading} className="px-2 py-3">
-                          {heading}
+                          {term(heading)}
                         </th>
                       ))}
                     </tr>
@@ -1041,10 +1036,10 @@ export function SiteMeasurementModule() {
                             disabled={!isEditable}
                             className="material-field h-10 px-2"
                           >
-                            <option value="">Select room</option>
+                            <option value="">{t("measurements.selectRoom")}</option>
                             {optionLabels(roomOptions, opening.room).map((option) => (
                               <option key={option} value={option}>
-                                {option}
+                                {term(option)}
                               </option>
                             ))}
                           </select>
@@ -1088,22 +1083,22 @@ export function SiteMeasurementModule() {
                           />
                         </td>
                         {[
-                          ["shape", "Select shape", shapeOptions, opening.shape],
+                          ["shape", t("measurements.selectShape"), shapeOptions, opening.shape],
                           [
                             "openingType",
-                            "Select type",
+                            t("measurements.selectType"),
                             typeOptions,
                             opening.openingType || opening.type,
                           ],
                           [
                             "bottomFrame",
-                            "Select bottom frame",
+                            t("measurements.selectBottomFrame"),
                             bottomFrameOptions,
                             opening.bottomFrame,
                           ],
                           [
                             "openingDirection",
-                            "Select direction",
+                            t("measurements.selectDirection"),
                             openingDirectionOptions,
                             opening.openingDirection,
                           ],
@@ -1124,7 +1119,7 @@ export function SiteMeasurementModule() {
                               <option value="">{String(placeholder)}</option>
                               {(options as string[]).map((option) => (
                                 <option key={option} value={option}>
-                                  {option}
+                                  {term(option)}
                                 </option>
                               ))}
                             </select>
@@ -1139,10 +1134,10 @@ export function SiteMeasurementModule() {
                             disabled={!isEditable}
                             className="material-field h-10 px-2"
                           >
-                            <option value="">Select color</option>
+                            <option value="">{t("measurements.selectColor")}</option>
                             {optionLabels(glassColorOptions, opening.glassColor).map((option) => (
                               <option key={option} value={option}>
-                                {option}
+                                {term(option)}
                               </option>
                             ))}
                           </select>
@@ -1173,7 +1168,7 @@ export function SiteMeasurementModule() {
                           />
                         </td>
                         <td className="w-28 bg-material-primary-container px-2 py-2 text-sm font-bold text-material-on-primary-container">
-                          {calculateArea(opening).toFixed(2)} m2
+                          {t("common.areaValue", { value: calculateArea(opening).toFixed(2) })}
                         </td>
                         <td className="w-28 px-2 py-2">
                           <button
@@ -1186,7 +1181,7 @@ export function SiteMeasurementModule() {
                             disabled={!isEditable || isSaving || newOpenings.length === 1}
                             className="material-button-outlined h-10 px-3"
                           >
-                            Delete
+                            {t("common.delete")}
                           </button>
                         </td>
                       </tr>
@@ -1207,14 +1202,17 @@ export function SiteMeasurementModule() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-bold uppercase text-muted">
-                        Opening {index + 1} of {newOpenings.length}
+                        {t("measurements.openingProgress", {
+                          index: index + 1,
+                          total: newOpenings.length,
+                        })}
                       </p>
                       <p className="mt-1 text-sm font-bold text-foreground">
-                        {opening.openingCode || "New structural opening"}
+                        {opening.openingCode || t("measurements.newStructuralOpening")}
                       </p>
                     </div>
                     <span className="material-status">
-                      {calculateArea(opening).toFixed(2)} m2
+                      {t("common.areaValue", { value: calculateArea(opening).toFixed(2) })}
                     </span>
                   </div>
 
@@ -1241,7 +1239,7 @@ export function SiteMeasurementModule() {
                     ))}
                   </div>
                   <p className="mt-2 text-xs font-bold uppercase text-muted">
-                    {mobileWizardSteps[mobileWizardStep]}
+                    {term(mobileWizardSteps[mobileWizardStep])}
                   </p>
 
                   {mobileWizardStep === 0 ? (
@@ -1249,7 +1247,7 @@ export function SiteMeasurementModule() {
                       {textFields.map((field) => (
                         <label key={field.key} className="block">
                           <span className="material-label">
-                            {field.label}
+                            {term(field.label)}
                             {field.required ? " *" : ""}
                           </span>
                           <input
@@ -1257,7 +1255,7 @@ export function SiteMeasurementModule() {
                             onChange={(event) =>
                               updateNewOpening(index, field.key, event.target.value)
                             }
-                            placeholder={field.placeholder}
+                            placeholder={term(field.placeholder)}
                             disabled={!isEditable}
                             className="material-field mt-2 min-h-12"
                           />
@@ -1265,7 +1263,7 @@ export function SiteMeasurementModule() {
                       ))}
 
                       <label className="block">
-                        <span className="material-label">Room *</span>
+                        <span className="material-label">{term("Room")} *</span>
                         <select
                           value={opening.room}
                           onChange={(event) =>
@@ -1274,10 +1272,10 @@ export function SiteMeasurementModule() {
                           disabled={!isEditable}
                           className="material-field mt-2 min-h-12"
                         >
-                          <option value="">Select room</option>
+                          <option value="">{t("measurements.selectRoom")}</option>
                           {optionLabels(roomOptions, opening.room).map((option) => (
                             <option key={option} value={option}>
-                              {option}
+                              {term(option)}
                             </option>
                           ))}
                         </select>
@@ -1289,7 +1287,7 @@ export function SiteMeasurementModule() {
                     <div className="mt-4 grid gap-3">
                       {numberFields.map((field) => (
                         <label key={field.key} className="block">
-                          <span className="material-label">{field.label}</span>
+                          <span className="material-label">{term(field.label)}</span>
                           <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container-low">
                             <input
                               type="number"
@@ -1304,14 +1302,14 @@ export function SiteMeasurementModule() {
                               className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
                             />
                             <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
-                              {field.suffix}
+                              {term(field.suffix)}
                             </span>
                           </div>
                         </label>
                       ))}
 
                       <label className="block">
-                        <span className="material-label">Quantity</span>
+                        <span className="material-label">{term("Quantity")}</span>
                         <input
                           type="number"
                           min="1"
@@ -1328,7 +1326,7 @@ export function SiteMeasurementModule() {
 
                       {measurementNumberFields.map((field) => (
                         <label key={field.key} className="block">
-                          <span className="material-label">{field.label}</span>
+                          <span className="material-label">{term(field.label)}</span>
                           <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container-low">
                             <input
                               type="number"
@@ -1344,7 +1342,7 @@ export function SiteMeasurementModule() {
                               className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
                             />
                             <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
-                              {field.suffix}
+                              {term(field.suffix)}
                             </span>
                           </div>
                         </label>
@@ -1355,7 +1353,7 @@ export function SiteMeasurementModule() {
                   {mobileWizardStep === 2 ? (
                     <div className="mt-4 grid gap-3">
                       <label className="block">
-                        <span className="material-label">Shape *</span>
+                        <span className="material-label">{term("Shape")} *</span>
                         <select
                           value={opening.shape}
                           onChange={(event) =>
@@ -1364,19 +1362,19 @@ export function SiteMeasurementModule() {
                           disabled={!isEditable}
                           className="material-field mt-2 min-h-12"
                         >
-                          <option value="">Select shape</option>
+                          <option value="">{t("measurements.selectShape")}</option>
                           {shapeOptions.map((option) => (
                             <option key={option} value={option}>
-                              {option}
+                              {term(option)}
                             </option>
                           ))}
                         </select>
                       </label>
 
                       {[
-                        ["openingType", "Type *", "Select type", typeOptions, opening.openingType || opening.type],
-                        ["bottomFrame", "Bottom frame *", "Select bottom frame", bottomFrameOptions, opening.bottomFrame],
-                        ["openingDirection", "Opening direction *", "Select direction", openingDirectionOptions, opening.openingDirection],
+                        ["openingType", `${term("Type")} *`, t("measurements.selectType"), typeOptions, opening.openingType || opening.type],
+                        ["bottomFrame", `${term("Bottom frame")} *`, t("measurements.selectBottomFrame"), bottomFrameOptions, opening.bottomFrame],
+                        ["openingDirection", `${term("Opening direction")} *`, t("measurements.selectDirection"), openingDirectionOptions, opening.openingDirection],
                       ].map(([key, label, placeholder, options, value]) => (
                         <label key={String(key)} className="block">
                           <span className="material-label">{String(label)}</span>
@@ -1395,7 +1393,7 @@ export function SiteMeasurementModule() {
                             <option value="">{String(placeholder)}</option>
                             {(options as string[]).map((option) => (
                               <option key={option} value={option}>
-                                {option}
+                                {term(option)}
                               </option>
                             ))}
                           </select>
@@ -1403,7 +1401,7 @@ export function SiteMeasurementModule() {
                       ))}
 
                       <label className="block">
-                        <span className="material-label">Glass color *</span>
+                        <span className="material-label">{term("Glass color")} *</span>
                         <select
                           value={opening.glassColor}
                           onChange={(event) =>
@@ -1412,10 +1410,10 @@ export function SiteMeasurementModule() {
                           disabled={!isEditable}
                           className="material-field mt-2 min-h-12"
                         >
-                          <option value="">Select color</option>
+                          <option value="">{t("measurements.selectColor")}</option>
                           {optionLabels(glassColorOptions, opening.glassColor).map((option) => (
                             <option key={option} value={option}>
-                              {option}
+                              {term(option)}
                             </option>
                           ))}
                         </select>
@@ -1426,27 +1424,32 @@ export function SiteMeasurementModule() {
                   {mobileWizardStep === 3 ? (
                     <div className="mt-4 grid gap-3">
                       <div className="material-card p-3 shadow-none">
-                        <p className="text-xs font-bold uppercase text-muted">Review</p>
+                        <p className="text-xs font-bold uppercase text-muted">{term("Review")}</p>
                         <p className="mt-2 text-sm font-bold text-foreground">
                           {[opening.openingCode, opening.floor, opening.room]
                             .filter(Boolean)
-                            .join(" - ") || "Opening details"}
+                            .join(" - ") || t("measurements.openingDetails")}
                         </p>
                         <p className="mt-1 text-sm text-muted-strong">
-                          {opening.width} x {opening.height} cm, Qty {opening.quantity}
+                          {t("measurements.dimensionSummary", {
+                            width: opening.width,
+                            height: opening.height,
+                            quantity: opening.quantity,
+                          })}
                         </p>
                         <p className="mt-1 text-sm text-muted-strong">
                           {[opening.shape, opening.openingType || opening.type, opening.glassColor]
                             .filter(Boolean)
-                            .join(" - ") || "Specifications not complete"}
+                            .map((value) => term(value))
+                            .join(" - ") || t("measurements.specificationsIncomplete")}
                         </p>
                         <p className="mt-2 text-xl font-bold text-foreground">
-                          {calculateArea(opening).toFixed(2)} m2
+                          {t("common.areaValue", { value: calculateArea(opening).toFixed(2) })}
                         </p>
                       </div>
 
                       <label className="block">
-                        <span className="material-label">Site notes</span>
+                        <span className="material-label">{t("measurements.siteNotes")}</span>
                         <textarea
                           value={opening.notes}
                           onChange={(event) =>
@@ -1455,7 +1458,7 @@ export function SiteMeasurementModule() {
                           rows={3}
                           disabled={!isEditable}
                           className="material-field mt-2 min-h-24 py-3"
-                          placeholder="Threshold, side clearance, wall condition, access notes"
+                          placeholder={t("measurements.siteNotesPlaceholder")}
                         />
                       </label>
                     </div>
@@ -1472,7 +1475,7 @@ export function SiteMeasurementModule() {
                       disabled={(mobileWizardStep === 0 && wizardIndex === 0) || isSaving}
                       className="material-button-outlined min-h-11"
                     >
-                      Back
+                      {t("common.back")}
                     </button>
                     {mobileWizardStep < mobileWizardSteps.length - 1 ? (
                       <button
@@ -1481,7 +1484,7 @@ export function SiteMeasurementModule() {
                         disabled={!isEditable || isSaving}
                         className="material-button-tonal min-h-11"
                       >
-                        Next
+                        {t("measurements.next")}
                       </button>
                     ) : (
                       <button
@@ -1490,7 +1493,7 @@ export function SiteMeasurementModule() {
                         disabled={!isEditable || isSaving}
                         className="material-button-filled min-h-11"
                       >
-                        {isSaving ? "Saving..." : "Save opening"}
+                        {isSaving ? t("measurements.saving") : t("measurements.saveOpening")}
                       </button>
                     )}
                   </div>
@@ -1504,22 +1507,22 @@ export function SiteMeasurementModule() {
               disabled={!isEditable || isSaving}
               className="material-button-filled mt-4 hidden min-h-12 w-full sm:block"
             >
-              {isSaving ? "Saving..." : "Save structural openings"}
+              {isSaving ? t("measurements.saving") : t("measurements.saveStructuralOpenings")}
             </button>
           </>
         )}
 
         {!isEditable ? (
           <p className="mt-3 text-sm font-semibold text-muted">
-            Start site measurement before entering structural openings.
+            {t("measurements.startBeforeEntering")}
           </p>
         ) : null}
       </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-bold text-foreground">Saved openings</h2>
-          <span className="material-status">{openings.length} total</span>
+          <h2 className="text-base font-bold text-foreground">{t("measurements.savedOpenings")}</h2>
+          <span className="material-status">{t("measurements.totalOpenings", { count: openings.length })}</span>
         </div>
 
         {openings.length ? (
@@ -1528,48 +1531,48 @@ export function SiteMeasurementModule() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-xs font-bold uppercase text-muted">
-                    Opening {index + 1}
+                    {t("measurements.openingNumber", { index: index + 1 })}
                   </p>
                   <h3 className="mt-1 text-lg font-bold text-foreground">
                     {opening.openingCode}
                   </h3>
                   <p className="mt-1 text-sm font-semibold text-muted-strong">
                     {[opening.floor, opening.room].filter(Boolean).join(" - ") ||
-                      "Location not added"}
+                      t("measurements.locationNotAdded")}
                   </p>
                 </div>
                 <span className="material-status">
-                  {calculateArea(opening).toFixed(2)} m2
+                  {t("common.areaValue", { value: calculateArea(opening).toFixed(2) })}
                 </span>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
                 <div className="material-card-muted p-2">
-                  <p className="text-[11px] font-bold uppercase text-muted">W</p>
-                  <p className="text-sm font-bold text-foreground">{opening.width} cm</p>
+                  <p className="text-[11px] font-bold uppercase text-muted">{term("Width")}</p>
+                  <p className="text-sm font-bold text-foreground">{t("common.cmValue", { value: opening.width })}</p>
                 </div>
                 <div className="material-card-muted p-2">
-                  <p className="text-[11px] font-bold uppercase text-muted">Length</p>
-                  <p className="text-sm font-bold text-foreground">{opening.height} cm</p>
+                  <p className="text-[11px] font-bold uppercase text-muted">{term("Length")}</p>
+                  <p className="text-sm font-bold text-foreground">{t("common.cmValue", { value: opening.height })}</p>
                 </div>
                 <div className="material-card-muted p-2">
-                  <p className="text-[11px] font-bold uppercase text-muted">Solid panel</p>
+                  <p className="text-[11px] font-bold uppercase text-muted">{term("Solid panel height")}</p>
                   <p className="text-sm font-bold text-foreground">
-                    {opening.solidPanelHeight} cm
+                    {t("common.cmValue", { value: opening.solidPanelHeight })}
                   </p>
                 </div>
                 <div className="material-card-muted p-2">
-                  <p className="text-[11px] font-bold uppercase text-muted">Fixed height</p>
-                  <p className="text-sm font-bold text-foreground">{opening.fixedHeight} cm</p>
+                  <p className="text-[11px] font-bold uppercase text-muted">{term("Fixed height")}</p>
+                  <p className="text-sm font-bold text-foreground">{t("common.cmValue", { value: opening.fixedHeight })}</p>
                 </div>
               </div>
 
               <div className="mt-3 text-sm font-semibold text-muted-strong">
-                <p>{opening.shape || "Shape not added"}</p>
-                <p>{opening.openingType || opening.type || "Type not added"}</p>
-                <p>{opening.bottomFrame || "Bottom frame not added"}</p>
-                <p>{opening.openingDirection || "Opening direction not added"}</p>
-                <p>{opening.glassColor || "Glass color not added"}</p>
+                <p>{opening.shape ? term(opening.shape) : t("measurements.shapeNotAdded")}</p>
+                <p>{opening.openingType || opening.type ? term(opening.openingType || opening.type) : t("measurements.typeNotAdded")}</p>
+                <p>{opening.bottomFrame ? term(opening.bottomFrame) : t("measurements.bottomFrameNotAdded")}</p>
+                <p>{opening.openingDirection ? term(opening.openingDirection) : t("measurements.openingDirectionNotAdded")}</p>
+                <p>{opening.glassColor ? term(opening.glassColor) : t("measurements.glassColorNotAdded")}</p>
                 {opening.notes ? (
                   <p className="mt-2 font-normal text-muted">{opening.notes}</p>
                 ) : null}
@@ -1582,7 +1585,7 @@ export function SiteMeasurementModule() {
                   disabled={!isEditable || isSaving}
                   className="material-button-tonal"
                 >
-                  Edit
+                  {t("common.edit")}
                 </button>
                 <button
                   type="button"
@@ -1590,7 +1593,7 @@ export function SiteMeasurementModule() {
                   disabled={!isEditable || isSaving}
                   className="material-button-danger"
                 >
-                  Delete
+                  {t("common.delete")}
                 </button>
               </div>
             </article>
@@ -1598,10 +1601,10 @@ export function SiteMeasurementModule() {
         ) : (
           <div className="material-card-muted p-5 text-center">
             <p className="text-sm font-bold text-foreground">
-              No structural openings saved yet.
+              {t("measurements.noSavedOpenings")}
             </p>
             <p className="mt-1 text-sm text-muted">
-              Add structural openings after starting detailed measurement.
+              {t("measurements.noSavedOpeningsDescription")}
             </p>
           </div>
         )}
@@ -1615,7 +1618,7 @@ export function SiteMeasurementModule() {
             disabled={!isEditable || isSaving}
             className="material-button-filled min-h-12 w-full"
           >
-            {isSaving ? "Saving..." : "Save opening"}
+            {isSaving ? t("measurements.saving") : t("measurements.saveOpening")}
           </button>
         </div>
       ) : null}

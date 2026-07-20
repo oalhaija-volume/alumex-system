@@ -28,7 +28,7 @@ type QuotationItemRow = {
   aluminum_color: string | null;
   unit_price: number | string;
   discount_percent: number | string;
-  line_type?: "base" | "addon" | "accessory" | null;
+  line_type?: "base" | "service" | "addon" | "accessory" | null;
   is_discountable?: boolean | null;
   notes: string | null;
 };

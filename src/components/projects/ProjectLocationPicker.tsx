@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { MouseEvent } from "react";
+import type { FormEvent, MouseEvent } from "react";
 
 const tileSize = 256;
 const defaultLocation = {
@@ -15,6 +15,13 @@ type Tile = {
   y: number;
   left: number;
   top: number;
+};
+
+type LocationSearchResult = {
+  id: string;
+  label: string;
+  latitude: number;
+  longitude: number;
 };
 
 function clampLatitude(latitude: number) {
@@ -63,6 +70,19 @@ export function ProjectLocationPicker({
   onChange,
   onRadiusChange,
   readOnly = false,
+  enableSearch = false,
+  showGeofence = true,
+  title = "Map location",
+  editableDescription = "Click the map to place the exact project pin and set the check-in geofence.",
+  readOnlyDescription = "Pinned project location and check-in geofence.",
+  mapAriaLabel = "Project map location picker",
+  searchLabel = "Search for a location",
+  searchPlaceholder = "Search by place, street, or address",
+  searchButtonLabel = "Search",
+  searchingLabel = "Searching...",
+  noResultsLabel = "No matching locations found.",
+  searchErrorLabel = "Unable to search locations.",
+  onSearchSelect,
 }: {
   latitude?: number | null;
   longitude?: number | null;
@@ -70,6 +90,19 @@ export function ProjectLocationPicker({
   onChange: (location: { latitude: number | null; longitude: number | null }) => void;
   onRadiusChange?: (radius: number) => void;
   readOnly?: boolean;
+  enableSearch?: boolean;
+  showGeofence?: boolean;
+  title?: string;
+  editableDescription?: string;
+  readOnlyDescription?: string;
+  mapAriaLabel?: string;
+  searchLabel?: string;
+  searchPlaceholder?: string;
+  searchButtonLabel?: string;
+  searchingLabel?: string;
+  noResultsLabel?: string;
+  searchErrorLabel?: string;
+  onSearchSelect?: (address: string) => void;
 }) {
   const hasPin =
     typeof latitude === "number" &&
@@ -77,6 +110,10 @@ export function ProjectLocationPicker({
     typeof longitude === "number" &&
     Number.isFinite(longitude);
   const [zoom, setZoom] = useState(14);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<LocationSearchResult[]>([]);
+  const [searchError, setSearchError] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
   const [center, setCenter] = useState({
     latitude: hasPin ? latitude : defaultLocation.latitude,
     longitude: hasPin ? longitude : defaultLocation.longitude,
@@ -148,15 +185,59 @@ export function ProjectLocationPicker({
     });
   }
 
+  async function searchLocation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = searchQuery.trim();
+
+    if (query.length < 3 || isSearching) {
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchError("");
+
+    try {
+      const response = await fetch(
+        `/api/location-search?q=${encodeURIComponent(query)}`,
+      );
+      const body = (await response.json().catch(() => null)) as
+        | { results?: LocationSearchResult[]; error?: string }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(body?.error ?? searchErrorLabel);
+      }
+
+      const nextResults = body?.results ?? [];
+      setSearchResults(nextResults);
+      if (nextResults.length === 0) {
+        setSearchError(noResultsLabel);
+      }
+    } catch (error) {
+      setSearchResults([]);
+      setSearchError(
+        error instanceof Error ? error.message : searchErrorLabel,
+      );
+    } finally {
+      setIsSearching(false);
+    }
+  }
+
+  function selectSearchResult(result: LocationSearchResult) {
+    setPin(result.latitude, result.longitude);
+    setSearchQuery(result.label);
+    setSearchResults([]);
+    setSearchError("");
+    onSearchSelect?.(result.label);
+  }
+
   return (
     <div className="rounded-lg border border-border bg-surface-muted p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-foreground">Map location</p>
+          <p className="text-sm font-bold text-foreground">{title}</p>
           <p className="mt-1 text-xs font-semibold text-muted">
-            {readOnly
-              ? "Pinned project location and check-in geofence."
-              : "Click the map to place the exact project pin and set the check-in geofence."}
+            {readOnly ? readOnlyDescription : editableDescription}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -188,11 +269,68 @@ export function ProjectLocationPicker({
         </div>
       </div>
 
+      {enableSearch && !readOnly ? (
+        <div className="relative mt-3">
+          <form
+            onSubmit={searchLocation}
+            className="flex flex-col gap-2 sm:flex-row"
+          >
+            <label className="min-w-0 flex-1">
+              <span className="sr-only">{searchLabel}</span>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value);
+                  setSearchError("");
+                }}
+                placeholder={searchPlaceholder}
+                minLength={3}
+                className="h-11 w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground outline-none transition placeholder:text-muted focus:border-primary focus:ring-4 focus:ring-info-surface"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={isSearching || searchQuery.trim().length < 3}
+              className="h-11 rounded-md bg-primary px-4 text-sm font-bold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
+            >
+              {isSearching ? searchingLabel : searchButtonLabel}
+            </button>
+          </form>
+          {searchError ? (
+            <p
+              className="mt-2 text-xs font-semibold text-danger-text"
+              role="status"
+            >
+              {searchError}
+            </p>
+          ) : null}
+          {searchResults.length > 0 ? (
+            <ul className="mt-2 overflow-hidden rounded-md border border-border bg-surface shadow-sm">
+              {searchResults.map((result) => (
+                <li
+                  key={result.id}
+                  className="border-b border-border last:border-b-0"
+                >
+                  <button
+                    type="button"
+                    onClick={() => selectSearchResult(result)}
+                    className="w-full px-3 py-3 text-start text-sm font-semibold leading-5 text-foreground transition hover:bg-info-surface"
+                  >
+                    {result.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
       <button
         type="button"
         onClick={handleMapClick}
         className="relative mt-3 h-80 w-full overflow-hidden rounded-md border border-border bg-surface text-left"
-        aria-label="Project map location picker"
+        aria-label={mapAriaLabel}
       >
         {tiles.map((tile) => (
           // OpenStreetMap tiles are externally served map fragments; next/image optimization is not useful here.
@@ -211,13 +349,15 @@ export function ProjectLocationPicker({
         ))}
         {hasPin ? (
           <>
-            <span
-              className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-primary/15"
-              style={{
-                width: `${radiusPixels * 2}px`,
-                height: `${radiusPixels * 2}px`,
-              }}
-            />
+            {showGeofence ? (
+              <span
+                className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-primary/15"
+                style={{
+                  width: `${radiusPixels * 2}px`,
+                  height: `${radiusPixels * 2}px`,
+                }}
+              />
+            ) : null}
             <span className="absolute left-1/2 top-1/2 z-20 h-8 w-8 -translate-x-1/2 -translate-y-full rounded-full border-4 border-white bg-danger-text shadow-lg">
               <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-danger-text" />
             </span>
@@ -249,19 +389,34 @@ export function ProjectLocationPicker({
           </button>
         ) : null}
       </div>
-      <div className="mt-3 rounded-md border border-border bg-surface px-3 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className="min-w-0 flex-1">
-            <span className="text-xs font-bold uppercase tracking-wide text-muted">
-              Geofence radius
-            </span>
-            {readOnly ? (
-              <p className="mt-1 text-sm font-bold text-foreground">
-                {radiusMeters} meters
-              </p>
-            ) : (
+      {showGeofence ? (
+        <div className="mt-3 rounded-md border border-border bg-surface px-3 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label className="min-w-0 flex-1">
+              <span className="text-xs font-bold uppercase tracking-wide text-muted">
+                Geofence radius
+              </span>
+              {readOnly ? (
+                <p className="mt-1 text-sm font-bold text-foreground">
+                  {radiusMeters} meters
+                </p>
+              ) : (
+                <input
+                  type="range"
+                  min={25}
+                  max={1000}
+                  step={25}
+                  value={radiusMeters}
+                  onChange={(event) =>
+                    onRadiusChange?.(Number(event.target.value))
+                  }
+                  className="mt-2 w-full"
+                />
+              )}
+            </label>
+            {!readOnly ? (
               <input
-                type="range"
+                type="number"
                 min={25}
                 max={1000}
                 step={25}
@@ -269,27 +424,16 @@ export function ProjectLocationPicker({
                 onChange={(event) =>
                   onRadiusChange?.(Number(event.target.value))
                 }
-                className="mt-2 w-full"
+                className="h-10 w-28 rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground"
+                aria-label="Geofence radius in meters"
               />
-            )}
-          </label>
-          {!readOnly ? (
-            <input
-              type="number"
-              min={25}
-              max={1000}
-              step={25}
-              value={radiusMeters}
-              onChange={(event) => onRadiusChange?.(Number(event.target.value))}
-              className="h-10 w-28 rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground"
-              aria-label="Geofence radius in meters"
-            />
-          ) : null}
+            ) : null}
+          </div>
+          <p className="mt-2 text-xs font-semibold text-muted">
+            Future installation check-ins can be accepted only inside this radius.
+          </p>
         </div>
-        <p className="mt-2 text-xs font-semibold text-muted">
-          Future installation check-ins can be accepted only inside this radius.
-        </p>
-      </div>
+      ) : null}
     </div>
   );
 }

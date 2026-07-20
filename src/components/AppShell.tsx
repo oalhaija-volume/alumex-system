@@ -11,6 +11,9 @@ import { useI18n } from "@/components/i18n/I18nProvider";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { navItems } from "@/data/ui";
 import { canAccessRouteWithOverrides } from "@/lib/auth/permissions";
+import {
+  activeNavigationHrefs,
+} from "@/lib/systemScope";
 
 const ProductionAuthStatus = dynamic(
   () =>
@@ -27,6 +30,11 @@ const ProductionLogoutButton = dynamic(
     ),
   { ssr: false },
 );
+
+const activeNavItems = activeNavigationHrefs.flatMap((href) => {
+  const item = navItems.find((navItem) => navItem.href === href);
+  return item ? [item] : [];
+});
 
 type LogoutButtonProps = {
   className: string;
@@ -110,10 +118,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isWideWorkspace = pathname.startsWith("/site-measurements");
 
   const visibleNavItems = isRoleLoaded
-    ? navItems.filter((item) =>
+    ? activeNavItems.filter((item) =>
         canAccessRouteWithOverrides(item.href, role, pageAccess),
       )
-    : navItems;
+    : activeNavItems;
 
   return (
     <div className="min-h-screen max-w-[100vw] overflow-x-hidden bg-background text-foreground">

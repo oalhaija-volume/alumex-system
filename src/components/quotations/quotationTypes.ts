@@ -3,7 +3,7 @@ import type { Project, StructuralOpening } from "@/data/ui";
 export type QuotationLine = StructuralOpening & {
   unitPrice: number;
   discountPercent: number;
-  lineType?: "base" | "addon" | "accessory";
+  lineType?: "base" | "service" | "addon" | "accessory";
   isDiscountable?: boolean;
 };
 
@@ -32,15 +32,25 @@ export type QuotationTotals = {
 
 export const quotationStorageKey = "alumex-current-quotation";
 
+export function pricingUnitForLine(line: Pick<QuotationLine, "notes">) {
+  return line.notes.match(/(?:^|;\s*)Pricing unit:\s*([^;]+)/i)?.[1]?.trim() ?? null;
+}
+
 export function calculateArea(opening: {
   width: number;
   height: number;
   quantity: number;
+  lineType?: "base" | "service" | "addon" | "accessory";
 }) {
   const widthMeters = opening.width / 100;
   const heightMeters = opening.height / 100;
 
-  return Math.max(widthMeters * heightMeters * opening.quantity, 1);
+  const minimum =
+    opening.lineType && opening.lineType !== "base"
+      ? 0.01
+      : 1;
+
+  return Math.max(widthMeters * heightMeters * opening.quantity, minimum);
 }
 
 export function calculateLineTotal(line: QuotationLine) {

@@ -4,6 +4,7 @@ import {
   projectWorkflowStatuses,
   type ProjectWorkflowStatus,
 } from "@/lib/workflow/statuses";
+import { postOperationsWorkflowEnabled } from "@/lib/systemScope";
 
 export type CommercialVisibility = "full" | "finance" | "hidden";
 export type WorkflowStage =
@@ -19,7 +20,7 @@ export type WorkflowStage =
   | "Delivery"
   | "Installation";
 
-export const workflowStages: WorkflowStage[] = [
+export const fullWorkflowStages: WorkflowStage[] = [
   "Sales",
   "Finance",
   "Operations",
@@ -31,6 +32,16 @@ export const workflowStages: WorkflowStage[] = [
   "Final Payment",
   "Delivery",
   "Installation",
+];
+
+export const workflowStages: WorkflowStage[] = postOperationsWorkflowEnabled
+  ? fullWorkflowStages
+  : fullWorkflowStages.slice(0, 3);
+
+export const operationsEndpointStatuses: ProjectWorkflowStatus[] = [
+  "finance_down_payment_confirmed",
+  "finance_payment_exception",
+  "operations_manager_review",
 ];
 
 export const workflowStatusLabels: Record<ProjectWorkflowStatus, string> = {
@@ -146,6 +157,10 @@ export function workflowStatusLabel(status: ProjectWorkflowStatus) {
 }
 
 export function workflowNextAction(status: ProjectWorkflowStatus) {
+  if (!postOperationsWorkflowEnabled && operationsEndpointStatuses.includes(status)) {
+    return "Workflow paused at Operations Manager";
+  }
+
   return workflowNextActions[status] ?? "Review project";
 }
 

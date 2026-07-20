@@ -117,7 +117,9 @@ function integerValue(value: unknown) {
 }
 
 function lineTypeValue(value: unknown) {
-  return value === "addon" || value === "accessory" ? value : "base";
+  return value === "service" || value === "addon" || value === "accessory"
+    ? value
+    : "base";
 }
 
 function booleanValue(value: unknown, fallback: boolean) {

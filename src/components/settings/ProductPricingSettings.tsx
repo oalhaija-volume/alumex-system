@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import {
   loadProductPrices,
+  productCatalogCategories,
+  productCatalogKind,
+  productsForCatalog,
   type ProductPrice,
 } from "@/lib/pricing/productPricing";
 
@@ -18,7 +21,7 @@ type ProductDraft = {
 
 const emptyProduct: ProductDraft = {
   product_name: "",
-  category: "",
+  category: "aluminum_section",
   unit: "sqm",
   unit_price: 0,
   is_active: true,
@@ -61,6 +64,14 @@ export function ProductPricingSettings() {
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const aluminumSectionCount = productsForCatalog(
+    products as ProductPrice[],
+    "aluminum_section",
+  ).length;
+  const serviceCount = productsForCatalog(
+    products as ProductPrice[],
+    "service",
+  ).length;
 
   const loadProducts = useCallback(async () => {
     setError("");
@@ -117,6 +128,18 @@ export function ProductPricingSettings() {
       ...currentProduct,
       [key]:
         key === "unit_price" ? Math.max(Number(value) || 0, 0) : value,
+    }));
+  }
+
+  function updateNewProductCategory(category: string) {
+    const catalogCategory = productCatalogCategories.find(
+      (item) => item.value === category,
+    );
+
+    setNewProduct((currentProduct) => ({
+      ...currentProduct,
+      category,
+      unit: catalogCategory?.defaultUnit ?? currentProduct.unit,
     }));
   }
 
@@ -182,6 +205,31 @@ export function ProductPricingSettings() {
         {t("settings.productPricingDescription")}
       </p>
 
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-border bg-surface-muted p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-muted">
+            {t("settings.aluminumSections")}
+          </p>
+          <p className="mt-2 text-2xl font-bold text-foreground">
+            {aluminumSectionCount}
+          </p>
+          <p className="mt-1 text-sm text-muted-strong">
+            {t("settings.aluminumSectionsHelp")}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-surface-muted p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-muted">
+            {t("settings.services")}
+          </p>
+          <p className="mt-2 text-2xl font-bold text-foreground">
+            {serviceCount}
+          </p>
+          <p className="mt-1 text-sm text-muted-strong">
+            {t("settings.servicesHelp")}
+          </p>
+        </div>
+      </div>
+
       {error ? (
         <p className="rounded-md border border-border bg-danger-surface px-3 py-2 text-sm font-semibold text-danger-text">
           {error}
@@ -211,13 +259,17 @@ export function ProductPricingSettings() {
           <span className="text-xs font-bold uppercase tracking-wide text-muted">
             {t("settings.productCategory")}
           </span>
-          <input
+          <select
             value={newProduct.category}
-            onChange={(event) =>
-              updateNewProduct("category", event.target.value)
-            }
+            onChange={(event) => updateNewProductCategory(event.target.value)}
             className="mt-2 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
-          />
+          >
+            {productCatalogCategories.map((category) => (
+              <option key={category.value} value={category.value}>
+                {t(category.labelKey)}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           <span className="text-xs font-bold uppercase tracking-wide text-muted">
@@ -290,13 +342,19 @@ export function ProductPricingSettings() {
                         />
                       </td>
                       <td className="px-3 py-3">
-                        <input
-                          value={product.category}
+                        <select
+                          value={productCatalogKind(product.category)}
                           onChange={(event) =>
                             updateProduct(index, "category", event.target.value)
                           }
                           className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
-                        />
+                        >
+                          {productCatalogCategories.map((category) => (
+                            <option key={category.value} value={category.value}>
+                              {t(category.labelKey)}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="px-3 py-3">
                         <input
@@ -362,14 +420,19 @@ export function ProductPricingSettings() {
                   className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground"
                 />
                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                  <input
-                    value={product.category}
+                  <select
+                    value={productCatalogKind(product.category)}
                     onChange={(event) =>
                       updateProduct(index, "category", event.target.value)
                     }
-                    placeholder={t("settings.productCategory")}
                     className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
-                  />
+                  >
+                    {productCatalogCategories.map((category) => (
+                      <option key={category.value} value={category.value}>
+                        {t(category.labelKey)}
+                      </option>
+                    ))}
+                  </select>
                   <input
                     value={product.unit}
                     onChange={(event) =>

@@ -9,6 +9,7 @@ import { canViewSalesPrices } from "@/lib/auth/roles";
 import {
   calculateLineTotal,
   calculateQuotationTotals,
+  pricingUnitForLine,
   quotationStorageKey,
   type QuotationDraft,
 } from "@/components/quotations/quotationTypes";
@@ -259,7 +260,7 @@ function DetailsPage({
                 <th className="w-[7%] px-1 py-2">{t("projects.openings.fields.height")}</th>
                 <th className="w-[7%] px-1 py-2">{t("projects.openings.fields.solidPanelHeight")}</th>
                 <th className="w-[5%] px-1 py-2">{t("projects.openings.fields.quantity")}</th>
-                <th className="w-[8%] px-1 py-2">{t("common.areaSqm")}</th>
+                <th className="w-[8%] px-1 py-2">{t("quotations.billableBasis")}</th>
                 {showSalesPrices ? (
                   <>
                     <th className="w-[11%] px-1 py-2">{t("quotations.unitPricePerSqm")}</th>
@@ -272,6 +273,8 @@ function DetailsPage({
             <tbody>
               {draft.lines.map((line, index) => {
                 const lineTotal = calculateLineTotal(line);
+                const isBaseLine = (line.lineType ?? "base") === "base";
+                const pricingUnit = pricingUnitForLine(line);
 
                 return (
                   <tr
@@ -291,19 +294,19 @@ function DetailsPage({
                       {term(line.glassType)}
                     </td>
                     <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
-                      {line.width}
+                      {isBaseLine ? line.width : "—"}
                     </td>
                     <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
-                      {line.height}
+                      {isBaseLine ? line.height : "—"}
                     </td>
                     <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
-                      {line.solidPanelHeight ?? 0}
+                      {isBaseLine ? line.solidPanelHeight ?? 0 : "—"}
                     </td>
                     <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
-                      {line.quantity}
+                      {pricingUnit ? lineTotal.area.toFixed(2) : line.quantity}
                     </td>
                     <td className="border-t border-slate-200 px-1 py-1.5 text-slate-700">
-                      {lineTotal.area.toFixed(2)}
+                      {lineTotal.area.toFixed(2)} {pricingUnit ?? "sqm"}
                     </td>
                     {showSalesPrices ? (
                       <>

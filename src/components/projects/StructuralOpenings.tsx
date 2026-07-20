@@ -11,6 +11,10 @@ import {
   type OpeningDropdownOption,
   type OpeningOptionCategory,
 } from "@/lib/openings/dropdownOptions";
+import {
+  loadProductPrices,
+  productsForCatalog,
+} from "@/lib/pricing/productPricing";
 
 export type StructuralOpeningValues = Omit<StructuralOpening, "id">;
 
@@ -296,7 +300,33 @@ export function StructuralOpenings({
   useEffect(() => {
     const timer = window.setTimeout(async () => {
       try {
-        setDropdownOptions(await loadOpeningDropdownOptions());
+        const [loadedDropdownOptions, productPrices] = await Promise.all([
+          loadOpeningDropdownOptions(),
+          loadProductPrices().catch(() => []),
+        ]);
+        const existingSectionLabels = new Set(
+          loadedDropdownOptions
+            .filter((option) => option.category === "aluminum_section")
+            .map((option) => option.label.toLowerCase()),
+        );
+        const pricedSections = productsForCatalog(
+          productPrices,
+          "aluminum_section",
+          true,
+        ).flatMap((product, index) =>
+          existingSectionLabels.has(product.product_name.toLowerCase())
+            ? []
+            : [
+                {
+                  category: "aluminum_section" as const,
+                  label: product.product_name,
+                  sort_order: 1000 + index,
+                  is_active: true,
+                },
+              ],
+        );
+
+        setDropdownOptions([...loadedDropdownOptions, ...pricedSections]);
       } catch {
         setDropdownOptions(defaultOpeningDropdownOptions);
       }

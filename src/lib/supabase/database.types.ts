@@ -15,6 +15,7 @@ export type Database = {
         | "Sales Rep"
         | "Finance / Accountant"
         | "Operations Manager"
+        | "Procurement Engineer"
         | "Project Manager"
         | "Project Engineer"
         | "Site Engineer"
@@ -282,6 +283,47 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["product_price_settings"]["Insert"]>;
+      };
+      project_costings: {
+        Row: {
+          id: string;
+          project_id: string;
+          aluminum_system_name: string | null;
+          aluminum_system_cost: number;
+          installation_cost: number;
+          fabrication_cost: number;
+          glass_cost: number;
+          shipping_cost: number;
+          total_profit: number;
+          total_project_cost: number;
+          supplier_quotation_path: string | null;
+          supplier_quotation_name: string | null;
+          notes: string | null;
+          created_by: string | null;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          aluminum_system_name?: string | null;
+          aluminum_system_cost?: number;
+          installation_cost?: number;
+          fabrication_cost?: number;
+          glass_cost?: number;
+          shipping_cost?: number;
+          total_profit?: number;
+          total_project_cost?: number;
+          supplier_quotation_path?: string | null;
+          supplier_quotation_name?: string | null;
+          notes?: string | null;
+          created_by?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["project_costings"]["Insert"]>;
       };
       employee_page_access: {
         Row: {

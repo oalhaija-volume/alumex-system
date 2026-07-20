@@ -3,6 +3,7 @@ import {
   routePathMatches,
   type EmployeePageAccess,
 } from "@/lib/auth/pageAccess";
+import { isActiveSystemRoute } from "@/lib/systemScope";
 
 export type { AppRole };
 
@@ -21,12 +22,6 @@ const salesWorkspaceRoles: AppRole[] = [
 const workflowDetailRoles: AppRole[] = [
   "Admin",
   "Operations Manager",
-  "Project Manager",
-  "Project Engineer",
-  "Auditor",
-  "Audit Team",
-  "Branch Manager",
-  "Quality Control",
 ];
 
 const routePermissions: Array<{
@@ -38,6 +33,8 @@ const routePermissions: Array<{
   { prefix: "/commercial", roles: salesWorkspaceRoles },
   { prefix: "/contracts", roles: [...salesWorkspaceRoles, "Finance / Accountant"] },
   { prefix: "/finance", roles: ["Admin", "Finance / Accountant"] },
+  { prefix: "/costing", roles: ["Admin", "Procurement Engineer"] },
+  { prefix: "/pricing", roles: ["Admin"] },
   { prefix: "/operation-manager", roles: ["Admin", "Operations Manager"] },
   { prefix: "/operations-manager", roles: ["Admin", "Operations Manager"] },
   { prefix: "/project-manager", roles: ["Admin", "Project Manager"] },
@@ -66,35 +63,29 @@ export function defaultRouteForRole(role: AppRole | null) {
       return "/finance";
     case "Operations Manager":
       return "/dashboard";
+    case "Procurement Engineer":
+      return "/costing";
     case "Project Manager":
-      return "/project-manager";
     case "Project Engineer":
-      return "/project-engineer";
     case "Site Engineer":
-      return "/site-measurements";
     case "Delivery Head":
     case "Delivery Team":
-      return "/delivery";
     case "Installation Head":
     case "Installation Team":
-      return "/installation";
     case "Quality Control":
-      return "/quality-control";
     case "Factory":
     case "Glass Department":
-      return "/aluminum-factory";
     case "HR":
-      return "/hr";
     case "Auditor":
     case "Audit Team":
-      return "/workflow";
+      return "/unauthorized";
     default:
       return "/unauthorized";
   }
 }
 
 export function canAccessRoute(pathname: string, role: AppRole | null) {
-  if (!role) {
+  if (!role || !isActiveSystemRoute(pathname)) {
     return false;
   }
 
@@ -114,6 +105,10 @@ export function canAccessRouteWithOverrides(
   role: AppRole | null,
   accessRows: Array<Pick<EmployeePageAccess, "route_path" | "can_access">>,
 ) {
+  if (!isActiveSystemRoute(pathname)) {
+    return false;
+  }
+
   if (role === "Admin") {
     return true;
   }

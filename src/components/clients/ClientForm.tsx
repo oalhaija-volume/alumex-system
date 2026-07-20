@@ -3,9 +3,14 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
+import { ProjectLocationPicker } from "@/components/projects/ProjectLocationPicker";
 import type { Client } from "@/data/ui";
 
 export type ClientFormValues = Omit<Client, "id">;
+type ClientTextFieldKey = Exclude<
+  keyof ClientFormValues,
+  "locationLatitude" | "locationLongitude"
+>;
 
 const emptyClient: ClientFormValues = {
   clientName: "",
@@ -16,10 +21,12 @@ const emptyClient: ClientFormValues = {
   city: "",
   email: "",
   notes: "",
+  locationLatitude: null,
+  locationLongitude: null,
 };
 
 const fields: Array<{
-  key: keyof ClientFormValues;
+  key: ClientTextFieldKey;
   label: string;
   type?: "email" | "tel" | "textarea";
   required?: boolean;
@@ -56,13 +63,15 @@ export function ClientForm({
           city: client.city,
           email: client.email,
           notes: client.notes,
+          locationLatitude: client.locationLatitude ?? null,
+          locationLongitude: client.locationLongitude ?? null,
         }
       : emptyClient,
   );
   const [error, setError] = useState("");
   const { t } = useI18n();
 
-  function updateValue(key: keyof ClientFormValues, value: string) {
+  function updateValue(key: ClientTextFieldKey, value: string) {
     setValues((currentValues) => ({
       ...currentValues,
       [key]: value,
@@ -87,6 +96,8 @@ export function ClientForm({
       city: values.city.trim(),
       email: values.email.trim(),
       notes: values.notes.trim(),
+      locationLatitude: values.locationLatitude ?? null,
+      locationLongitude: values.locationLongitude ?? null,
     });
   }
 
@@ -134,6 +145,35 @@ export function ClientForm({
           );
         })}
       </div>
+      <ProjectLocationPicker
+        latitude={values.locationLatitude}
+        longitude={values.locationLongitude}
+        onChange={(location) =>
+          setValues((currentValues) => ({
+            ...currentValues,
+            locationLatitude: location.latitude,
+            locationLongitude: location.longitude,
+          }))
+        }
+        enableSearch
+        showGeofence={false}
+        title={t("clients.location.title")}
+        editableDescription={t("clients.location.description")}
+        readOnlyDescription={t("clients.location.readOnlyDescription")}
+        mapAriaLabel={t("clients.location.mapAriaLabel")}
+        searchLabel={t("clients.location.searchLabel")}
+        searchPlaceholder={t("clients.location.searchPlaceholder")}
+        searchButtonLabel={t("common.search")}
+        searchingLabel={t("clients.location.searching")}
+        noResultsLabel={t("clients.location.noResults")}
+        searchErrorLabel={t("clients.location.searchError")}
+        onSearchSelect={(address) =>
+          setValues((currentValues) => ({
+            ...currentValues,
+            address,
+          }))
+        }
+      />
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <button
           type="button"

@@ -12,6 +12,7 @@ import { SectionCard } from "@/components/SectionCard";
 import {
   calculateLineTotal,
   calculateQuotationTotals,
+  pricingUnitForLine,
   quotationStorageKey,
   type QuotationDraft,
   type QuotationLine,
@@ -27,6 +28,7 @@ import {
   discountLimitForRole,
   loadProductPrices,
   productPriceForSystem,
+  productsForCatalog,
   type ProductPrice,
 } from "@/lib/pricing/productPricing";
 import {
@@ -115,7 +117,7 @@ async function saveQuotation(payload: {
     aluminum_color: string | null;
     unit_price: number;
     discount_percent: number;
-    line_type: "base" | "addon" | "accessory";
+    line_type: "base" | "service" | "addon" | "accessory";
     is_discountable: boolean;
     notes: string | null;
   }>;
@@ -167,6 +169,16 @@ export function QuotationBuilder() {
   const [clientRepresentative, setClientRepresentative] = useState("");
   const [savedQuotations, setSavedQuotations] = useState<QuotationDraft[]>([]);
   const [productPrices, setProductPrices] = useState<ProductPrice[]>([]);
+  const [selectedServiceName, setSelectedServiceName] = useState("");
+  const [selectedSystemName, setSelectedSystemName] = useState("");
+  const [customSystemName, setCustomSystemName] = useState("");
+  const [selectedVariantName, setSelectedVariantName] = useState("");
+  const [serviceSpecification, setServiceSpecification] = useState("");
+  const [serviceQuantity, setServiceQuantity] = useState(1);
+  const [selectedAddonName, setSelectedAddonName] = useState("");
+  const [addonTargetLineId, setAddonTargetLineId] = useState("");
+  const [addonSpecification, setAddonSpecification] = useState("");
+  const [addonQuantity, setAddonQuantity] = useState(1);
   const [discountLimit, setDiscountLimit] = useState(() =>
     discountLimitForRole(role),
   );
@@ -198,6 +210,46 @@ export function QuotationBuilder() {
     () => calculateQuotationTotals(lines, discountPercent),
     [lines, discountPercent],
   );
+  const servicePrices = useMemo(
+    () => productsForCatalog(productPrices, "service", true),
+    [productPrices],
+  );
+  const systemPrices = useMemo(
+    () => productsForCatalog(productPrices, "aluminum_system", true),
+    [productPrices],
+  );
+  const serviceVariants = useMemo(
+    () => productsForCatalog(productPrices, "service_variant", true),
+    [productPrices],
+  );
+  const claddingMaterials = useMemo(
+    () => productsForCatalog(productPrices, "cladding_material", true),
+    [productPrices],
+  );
+  const addonPrices = useMemo(
+    () => productsForCatalog(productPrices, "addon", true),
+    [productPrices],
+  );
+  const selectedService = servicePrices.find(
+    (service) => service.product_name === selectedServiceName,
+  );
+  const requiresAluminumSystem = [
+    "Windows & Doors",
+    "Curtain Wall",
+    "Skylight",
+  ].includes(selectedServiceName);
+  const availableVariants =
+    selectedServiceName === "Cladding"
+      ? claddingMaterials
+      : selectedServiceName === "Roller Shutters"
+        ? serviceVariants.filter((item) =>
+            item.product_name.startsWith("Roller Shutter -"),
+          )
+        : selectedServiceName === "Photocell Doors"
+          ? serviceVariants.filter((item) =>
+              item.product_name.startsWith("Photocell Door -"),
+            )
+          : [];
 
   const loadProject = useCallback((nextProjectId: string) => {
     setProjectId(nextProjectId);
@@ -333,6 +385,23 @@ export function QuotationBuilder() {
     );
   }
 
+  function updateScopeQuantity(lineId: string, quantity: number) {
+    setLines((currentLines) =>
+      currentLines.map((line) =>
+        line.id === lineId
+          ? pricingUnitForLine(line)
+            ? {
+                ...line,
+                width: 100,
+                height: Math.max(Number(quantity) || 1, 0.01) * 100,
+                quantity: 1,
+              }
+            : { ...line, quantity: Math.max(Math.round(Number(quantity) || 1), 1) }
+          : line,
+      ),
+    );
+  }
+
   function addScopeLine(lineType: "addon" | "accessory") {
     const id =
       typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -360,6 +429,153 @@ export function QuotationBuilder() {
         isDiscountable: false,
       },
     ]);
+  }
+
+  function addCatalogService() {
+    const service = selectedService;
+
+    if (!service) {
+      setError(t("quotations.selectServiceRequired"));
+      return;
+    }
+
+    const system = systemPrices.find(
+      (product) => product.product_name === selectedSystemName,
+    );
+    const variant = availableVariants.find(
+      (product) => product.product_name === selectedVariantName,
+    );
+    const needsVariant = availableVariants.length > 0;
+    const isOtherSystem = selectedSystemName === "Other System";
+
+    if (requiresAluminumSystem && !system) {
+      setError("Select the aluminum system for this service.");
+      return;
+    }
+
+    if (isOtherSystem && !customSystemName.trim()) {
+      setError("Enter the name of the other aluminum system.");
+      return;
+    }
+
+    if (needsVariant && !variant) {
+      setError("Select the service variant or cladding material.");
+      return;
+    }
+
+    if (
+      ["Frontek", "Natural Stone", "Swiss Pearl"].includes(
+        variant?.product_name ?? "",
+      ) &&
+      !serviceSpecification.trim()
+    ) {
+      setError("Enter the material model, type, or color.");
+      return;
+    }
+
+    const id =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `service-${Date.now()}`;
+
+    setLines((currentLines) => [
+      ...currentLines,
+      {
+        id,
+        floor: t("quotations.projectScope"),
+        room: t("settings.services"),
+        openingCode: "SRV",
+        width: 100,
+        height: Math.max(serviceQuantity, 0.01) * 100,
+        solidPanelHeight: 0,
+        quantity: 1,
+        productSystem: [
+          service.product_name,
+          system
+            ? isOtherSystem
+              ? customSystemName.trim()
+              : system.product_name
+            : "",
+          variant?.product_name ?? "",
+        ]
+          .filter(Boolean)
+          .join(" — "),
+        glassType: "",
+        aluminumColor: "",
+        notes: [
+          `Pricing unit: ${service.unit}`,
+          serviceSpecification.trim(),
+        ]
+          .filter(Boolean)
+          .join("; "),
+        unitPrice:
+          service.unit_price +
+          (system?.unit_price ?? 0) +
+          (variant?.unit_price ?? 0),
+        discountPercent: 0,
+        lineType: "service",
+        isDiscountable: true,
+      },
+    ]);
+    setSelectedServiceName("");
+    setSelectedSystemName("");
+    setCustomSystemName("");
+    setSelectedVariantName("");
+    setServiceSpecification("");
+    setServiceQuantity(1);
+    setError("");
+  }
+
+  function addCatalogAddon() {
+    const addon = addonPrices.find(
+      (product) => product.product_name === selectedAddonName,
+    );
+
+    if (!addon) {
+      setError("Select an add-on.");
+      return;
+    }
+    const targetLine = lines.find((line) => line.id === addonTargetLineId);
+
+    const id =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `addon-${Date.now()}`;
+
+    setLines((currentLines) => [
+      ...currentLines,
+      {
+        id,
+        floor: t("quotations.projectScope"),
+        room: "Add-on",
+        openingCode: "ADD-ON",
+        width: 100,
+        height: Math.max(addonQuantity, 0.01) * 100,
+        solidPanelHeight: 0,
+        quantity: 1,
+        productSystem: addon.product_name,
+        glassType: "",
+        aluminumColor: "",
+        notes: [
+          `Pricing unit: ${addon.unit}`,
+          targetLine
+            ? `Applied to: ${targetLine.openingCode} ${targetLine.productSystem}`
+            : "",
+          addonSpecification.trim(),
+        ]
+          .filter(Boolean)
+          .join("; "),
+        unitPrice: addon.unit_price,
+        discountPercent: 0,
+        lineType: "addon",
+        isDiscountable: false,
+      },
+    ]);
+    setSelectedAddonName("");
+    setAddonTargetLineId("");
+    setAddonSpecification("");
+    setAddonQuantity(1);
+    setError("");
   }
 
   function removeScopeLine(lineId: string) {
@@ -470,7 +686,7 @@ export function QuotationBuilder() {
         prepared_by_text: preparedBy || null,
         client_representative: clientRepresentative || null,
         items: lines.map((line) => ({
-          opening_id: line.id,
+          opening_id: (line.lineType ?? "base") === "base" ? line.id : "",
           opening_code: line.openingCode,
           floor: line.floor || null,
           room: line.room || null,
@@ -796,29 +1012,184 @@ export function QuotationBuilder() {
       ) : null}
 
       <SectionCard title={t("quotations.openingsAndPricing")}>
-        <div className="mb-4 flex flex-col gap-3 rounded-lg border border-blue-100 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-4 space-y-4 rounded-lg border border-blue-100 bg-blue-50 p-4">
           <div>
             <p className="text-sm font-bold text-[var(--alumex-blue)]">
-              Detailed measurement extras
+              {t("quotations.servicesAndExtras")}
             </p>
             <p className="mt-1 text-sm text-blue-700">
-              Add-ons and accessories increase the contract value and are not discountable.
+              {t("quotations.servicesAndExtrasDescription")}
             </p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <select
+                value={selectedServiceName}
+                onChange={(event) => {
+                  setSelectedServiceName(event.target.value);
+                  setSelectedSystemName("");
+                  setCustomSystemName("");
+                  setSelectedVariantName("");
+                  setServiceSpecification("");
+                }}
+                disabled={servicePrices.length === 0}
+                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:bg-surface-muted"
+              >
+                <option value="">
+                  {servicePrices.length === 0
+                    ? t("quotations.noServicesConfigured")
+                    : t("quotations.selectService")}
+                </option>
+                {servicePrices.map((service) => (
+                  <option key={service.id ?? service.product_name} value={service.product_name}>
+                    {service.product_name} — {formatCurrency(service.unit_price)} / {service.unit}
+                  </option>
+                ))}
+              </select>
+              {requiresAluminumSystem ? (
+                <select
+                  value={selectedSystemName}
+                  onChange={(event) => setSelectedSystemName(event.target.value)}
+                  className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+                >
+                  <option value="">Select aluminum system</option>
+                  {systemPrices.map((system) => (
+                    <option key={system.id ?? system.product_name} value={system.product_name}>
+                      {system.product_name} — {formatCurrency(system.unit_price)} / {system.unit}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              {requiresAluminumSystem && selectedSystemName === "Other System" ? (
+                <input
+                  value={customSystemName}
+                  onChange={(event) => setCustomSystemName(event.target.value)}
+                  placeholder="Enter system name"
+                  className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+                />
+              ) : null}
+              {availableVariants.length > 0 ? (
+                <select
+                  value={selectedVariantName}
+                  onChange={(event) => setSelectedVariantName(event.target.value)}
+                  className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+                >
+                  <option value="">
+                    {selectedServiceName === "Cladding"
+                      ? "Select cladding material"
+                      : "Select service type"}
+                  </option>
+                  {availableVariants.map((variant) => (
+                    <option key={variant.id ?? variant.product_name} value={variant.product_name}>
+                      {variant.product_name} — {formatCurrency(variant.unit_price)} / {variant.unit}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={serviceQuantity}
+                onChange={(event) => setServiceQuantity(Math.max(Number(event.target.value) || 1, 0.01))}
+                aria-label="Service billable quantity"
+                placeholder="Billable quantity"
+                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+              />
+              <input
+                value={serviceSpecification}
+                onChange={(event) => setServiceSpecification(event.target.value)}
+                placeholder={
+                  ["Frontek", "Natural Stone", "Swiss Pearl"].includes(selectedVariantName)
+                    ? "Required model, type, or color"
+                    : "Optional specification"
+                }
+                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+              />
+              <button
+                type="button"
+                onClick={addCatalogService}
+                disabled={servicePrices.length === 0 || !selectedServiceName}
+                className="h-10 rounded-md bg-primary px-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t("quotations.addService")}
+              </button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+
+          <div className="border-t border-blue-200 pt-4">
+            <p className="text-sm font-bold text-[var(--alumex-blue)]">Catalog add-ons</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Standard glass is included in the window or door price. Select upgraded glass
+              and other features here to add their configured price to the applicable item.
+            </p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <select
+                value={selectedAddonName}
+                onChange={(event) => setSelectedAddonName(event.target.value)}
+                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+              >
+                <option value="">Select add-on</option>
+                {addonPrices.map((addon) => (
+                  <option key={addon.id ?? addon.product_name} value={addon.product_name}>
+                    {addon.product_name} — {formatCurrency(addon.unit_price)} / {addon.unit}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={addonTargetLineId}
+                onChange={(event) => setAddonTargetLineId(event.target.value)}
+                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+              >
+                <option value="">Apply to whole project</option>
+                {lines
+                  .filter((line) =>
+                    ["base", "service"].includes(line.lineType ?? "base"),
+                  )
+                  .map((line) => (
+                    <option key={line.id} value={line.id}>
+                      {line.openingCode} — {line.productSystem}
+                    </option>
+                  ))}
+              </select>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={addonQuantity}
+                onChange={(event) => setAddonQuantity(Math.max(Number(event.target.value) || 1, 0.01))}
+                aria-label="Add-on billable quantity"
+                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+              />
+              <input
+                value={addonSpecification}
+                onChange={(event) => setAddonSpecification(event.target.value)}
+                placeholder="Optional add-on specification"
+                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+              />
+              <button
+                type="button"
+                onClick={addCatalogAddon}
+                disabled={!selectedAddonName}
+                className="h-10 rounded-md bg-primary px-3 text-sm font-bold text-white disabled:opacity-50"
+              >
+                Add selected add-on
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 border-t border-blue-200 pt-4">
             <button
               type="button"
               onClick={() => addScopeLine("addon")}
               className="h-10 rounded-md bg-primary px-3 text-sm font-bold text-white"
             >
-              Add add-on
+              {t("quotations.addCustomAddon")}
             </button>
             <button
               type="button"
               onClick={() => addScopeLine("accessory")}
               className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-bold text-[var(--alumex-blue)]"
             >
-              Add accessory
+              {t("quotations.addAccessory")}
             </button>
           </div>
         </div>
@@ -840,8 +1211,8 @@ export function QuotationBuilder() {
                   <th className="px-3 py-3">{t("projects.openings.fields.height")}</th>
                   <th className="px-3 py-3">{t("projects.openings.fields.solidPanelHeight")}</th>
                   <th className="px-3 py-3">{t("projects.openings.fields.quantity")}</th>
-                  <th className="px-3 py-3">{t("common.areaSqm")}</th>
-                  <th className="px-3 py-3">{t("quotations.unitPricePerSqm")}</th>
+                  <th className="px-3 py-3">{t("quotations.billableBasis")}</th>
+                  <th className="px-3 py-3">{t("settings.unitPrice")}</th>
                   <th className="px-3 py-3">{t("common.discount")}</th>
                   <th className="px-3 py-3">{t("quotations.lineTotal")}</th>
                   <th className="px-3 py-3">Actions</th>
@@ -851,6 +1222,7 @@ export function QuotationBuilder() {
                 {lines.map((line) => {
                   const lineTotal = calculateLineTotal(line);
                   const isBaseLine = (line.lineType ?? "base") === "base";
+                  const pricingUnit = pricingUnitForLine(line);
 
                   return (
                     <tr key={line.id}>
@@ -893,19 +1265,42 @@ export function QuotationBuilder() {
                         {term(line.glassType)}
                       </td>
                       <td className="px-3 py-4 text-slate-700">
-                        {t("common.cmValue", { value: line.width })}
+                        {isBaseLine
+                          ? t("common.cmValue", { value: line.width })
+                          : "—"}
                       </td>
                       <td className="px-3 py-4 text-slate-700">
-                        {t("common.cmValue", { value: line.height })}
+                        {isBaseLine
+                          ? t("common.cmValue", { value: line.height })
+                          : "—"}
                       </td>
                       <td className="px-3 py-4 text-slate-700">
-                        {t("common.cmValue", { value: line.solidPanelHeight ?? 0 })}
+                        {isBaseLine
+                          ? t("common.cmValue", {
+                              value: line.solidPanelHeight ?? 0,
+                            })
+                          : "—"}
                       </td>
                       <td className="px-3 py-4 text-slate-700">
-                        {line.quantity}
+                        {isBaseLine ? (
+                          line.quantity
+                        ) : (
+                          <input
+                            type="number"
+                            min={pricingUnit ? "0.01" : "1"}
+                            step={pricingUnit ? "0.01" : "1"}
+                            value={pricingUnit ? lineTotal.area : line.quantity}
+                            onChange={(event) =>
+                              updateScopeQuantity(line.id, Number(event.target.value))
+                            }
+                            className="h-9 w-20 rounded-md border border-slate-300 px-2 text-sm"
+                          />
+                        )}
                       </td>
                       <td className="px-3 py-4 font-semibold text-slate-950">
-                        {t("common.areaValue", { value: lineTotal.area.toFixed(2) })}
+                        {pricingUnit
+                          ? `${lineTotal.area.toFixed(2)} ${pricingUnit}`
+                          : t("common.areaValue", { value: lineTotal.area.toFixed(2) })}
                       </td>
                       <td className="px-3 py-4">
                         <input
@@ -970,6 +1365,7 @@ export function QuotationBuilder() {
           {lines.map((line) => {
             const lineTotal = calculateLineTotal(line);
             const isBaseLine = (line.lineType ?? "base") === "base";
+            const pricingUnit = pricingUnitForLine(line);
 
             return (
               <article
@@ -994,22 +1390,39 @@ export function QuotationBuilder() {
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   {!isBaseLine ? (
-                    <label className="sm:col-span-2">
-                      <span className="text-xs font-bold uppercase text-slate-500">
-                        Add-on / accessory description
-                      </span>
-                      <input
-                        value={line.productSystem}
-                        onChange={(event) =>
-                          updateScopeLine(line.id, "productSystem", event.target.value)
-                        }
-                        className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                      />
-                    </label>
+                    <>
+                      <label className="sm:col-span-2">
+                        <span className="text-xs font-bold uppercase text-slate-500">
+                          {t("quotations.scopeDescription")}
+                        </span>
+                        <input
+                          value={line.productSystem}
+                          onChange={(event) =>
+                            updateScopeLine(line.id, "productSystem", event.target.value)
+                          }
+                          className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                        />
+                      </label>
+                      <label>
+                        <span className="text-xs font-bold uppercase text-slate-500">
+                          {t("projects.openings.fields.quantity")}
+                        </span>
+                        <input
+                          type="number"
+                          min={pricingUnit ? "0.01" : "1"}
+                          step={pricingUnit ? "0.01" : "1"}
+                          value={pricingUnit ? lineTotal.area : line.quantity}
+                          onChange={(event) =>
+                            updateScopeQuantity(line.id, Number(event.target.value))
+                          }
+                          className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                        />
+                      </label>
+                    </>
                   ) : null}
                   <label>
                     <span className="text-xs font-bold uppercase text-slate-500">
-                      {t("quotations.unitPricePerSqm")}
+                      {t("settings.unitPrice")}
                     </span>
                     <input
                       type="number"
@@ -1051,17 +1464,31 @@ export function QuotationBuilder() {
                     ) : null}
                   </label>
                 </div>
-                <p className="mt-3 text-sm text-slate-600">
-                  {term(line.productSystem)} - {term(line.glassType)} -{" "}
-                  {t("common.cmValue", { value: line.width })} ×{" "}
-                  {t("common.cmValue", { value: line.height })} ×{" "}
-                  {line.quantity} -{" "}
-                  {t("common.areaValue", { value: lineTotal.area.toFixed(2) })}
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  {t("projects.openings.fields.solidPanelHeight")}:{" "}
-                  {t("common.cmValue", { value: line.solidPanelHeight ?? 0 })}
-                </p>
+                {isBaseLine ? (
+                  <p className="mt-3 text-sm text-slate-600">
+                    {term(line.productSystem)} - {term(line.glassType)} -{" "}
+                    {t("common.cmValue", { value: line.width })} ×{" "}
+                    {t("common.cmValue", { value: line.height })} ×{" "}
+                    {line.quantity} -{" "}
+                    {t("common.areaValue", { value: lineTotal.area.toFixed(2) })}
+                  </p>
+                ) : null}
+                {pricingUnit ? (
+                  <p className="mt-1 text-sm font-semibold text-slate-600">
+                    {t("quotations.billableBasis")}: {lineTotal.area.toFixed(2)} {pricingUnit}
+                  </p>
+                ) : null}
+                {!isBaseLine && line.notes ? (
+                  <p className="mt-1 text-sm text-slate-600">{line.notes}</p>
+                ) : null}
+                {isBaseLine ? (
+                  <p className="mt-1 text-sm text-slate-600">
+                    {t("projects.openings.fields.solidPanelHeight")}:{" "}
+                    {t("common.cmValue", {
+                      value: line.solidPanelHeight ?? 0,
+                    })}
+                  </p>
+                ) : null}
                 {!isBaseLine ? (
                   <button
                     type="button"

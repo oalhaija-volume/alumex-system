@@ -19,6 +19,7 @@ import {
 } from "@/lib/workflow/display";
 import type { ProjectWorkflowStatus } from "@/lib/workflow/statuses";
 import { friendlyDatabaseError } from "@/lib/friendlyErrors";
+import { postOperationsWorkflowEnabled } from "@/lib/systemScope";
 
 const seedAdminEmail = "admin@alumex.com";
 
@@ -1836,6 +1837,13 @@ export async function PATCH(request: Request) {
   } | null;
   const workflowAction = body?.workflowAction;
 
+  if (!postOperationsWorkflowEnabled && workflowAction) {
+    return NextResponse.json(
+      { error: "The workflow currently ends at Operations Manager." },
+      { status: 409 },
+    );
+  }
+
   if (
     body &&
     typeof body.projectId === "string" &&
@@ -1866,6 +1874,18 @@ export async function PATCH(request: Request) {
   const financeAction = body?.financeAction;
 
   if (
+    !postOperationsWorkflowEnabled &&
+    financeAction &&
+    financeAction !== "confirmDownPayment" &&
+    financeAction !== "markPaymentException"
+  ) {
+    return NextResponse.json(
+      { error: "Finance actions after Operations Manager are currently paused." },
+      { status: 409 },
+    );
+  }
+
+  if (
     body &&
     typeof body.projectId === "string" &&
     (financeAction === "confirmDownPayment" ||
@@ -1885,6 +1905,13 @@ export async function PATCH(request: Request) {
   }
 
   const assignmentType = body?.assignmentType;
+
+  if (!postOperationsWorkflowEnabled && assignmentType) {
+    return NextResponse.json(
+      { error: "The workflow currently ends at Operations Manager." },
+      { status: 409 },
+    );
+  }
   const config =
     assignmentType === "projectManager" ||
     assignmentType === "projectEngineer" ||

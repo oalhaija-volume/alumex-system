@@ -16,6 +16,8 @@ export type Client = {
   city: string;
   email: string;
   notes: string;
+  locationLatitude?: number | null;
+  locationLongitude?: number | null;
 };
 
 export type ProjectStatus =
@@ -66,6 +68,8 @@ export const navItems: NavItem[] = [
   { labelKey: "nav.quotations", href: "/quotations", icon: "Q" },
   { labelKey: "nav.commercial", href: "/commercial", icon: "Q" },
   { labelKey: "nav.operationsManager", href: "/operations-manager", icon: "O" },
+  { labelKey: "nav.costing", href: "/costing", icon: "C" },
+  { labelKey: "nav.pricing", href: "/pricing", icon: "P" },
   { labelKey: "nav.projectManager", href: "/project-manager", icon: "M" },
   { labelKey: "nav.projectEngineer", href: "/project-engineer", icon: "E" },
   { labelKey: "nav.siteMeasurements", href: "/site-measurements", icon: "S" },

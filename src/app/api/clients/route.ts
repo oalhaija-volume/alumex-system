@@ -23,6 +23,8 @@ type ClientPayload = {
   city?: unknown;
   email?: unknown;
   notes?: unknown;
+  location_latitude?: unknown;
+  location_longitude?: unknown;
 };
 
 type ExistingClient = {
@@ -49,6 +51,17 @@ function normalizePhone(value: string) {
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
+}
+
+function coordinateValue(value: unknown, minimum: number, maximum: number) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const coordinate = Number(value);
+  return Number.isFinite(coordinate) && coordinate >= minimum && coordinate <= maximum
+    ? coordinate
+    : null;
 }
 
 function duplicateClientDetail(match: DuplicateClientMatch) {
@@ -161,7 +174,7 @@ export async function GET() {
   const { data, error } = await admin
     .from("clients")
     .select(
-      "id, client_name, mobile, alternate_mobile, address, province, city, email, notes",
+      "id, client_name, mobile, alternate_mobile, address, province, city, email, notes, location_latitude, location_longitude",
     )
     .order("created_at", { ascending: false });
 
@@ -262,6 +275,8 @@ export async function POST(request: Request) {
       city: textValue(body.city) || null,
       email: normalizeEmail(email) || null,
       notes: textValue(body.notes) || null,
+      location_latitude: coordinateValue(body.location_latitude, -90, 90),
+      location_longitude: coordinateValue(body.location_longitude, -180, 180),
       created_by: authCheck.user.id,
     })
     .select("id")
@@ -374,6 +389,8 @@ export async function PATCH(request: Request) {
       city: textValue(body.city) || null,
       email: normalizeEmail(email) || null,
       notes: textValue(body.notes) || null,
+      location_latitude: coordinateValue(body.location_latitude, -90, 90),
+      location_longitude: coordinateValue(body.location_longitude, -180, 180),
     })
     .eq("id", body.id)
     .select("id")

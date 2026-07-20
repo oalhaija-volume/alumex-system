@@ -10,10 +10,12 @@ import { useI18n } from "@/components/i18n/I18nProvider";
 import { ProjectLocationPicker } from "@/components/projects/ProjectLocationPicker";
 import { type ProjectWorkflowStatus } from "@/lib/workflow/statuses";
 import {
+  operationsEndpointStatuses,
   workflowStageForStatus,
   workflowStages,
   type CommercialVisibility,
 } from "@/lib/workflow/display";
+import { postOperationsWorkflowEnabled } from "@/lib/systemScope";
 
 type WorkflowProject = {
   id: string;
@@ -403,6 +405,13 @@ function SummaryCards({ projects }: { projects: WorkflowProject[] }) {
 }
 
 function nextStageForStatus(status: ProjectWorkflowStatus) {
+  if (
+    !postOperationsWorkflowEnabled &&
+    operationsEndpointStatuses.includes(status)
+  ) {
+    return "Current endpoint";
+  }
+
   const currentStage = workflowStageForStatus(status);
   const currentIndex = workflowStages.indexOf(currentStage);
 
@@ -631,12 +640,15 @@ function ProjectStatusCards({
           const owner = assignmentOwner(project);
 
           const canAssignProjectManager =
+            postOperationsWorkflowEnabled &&
             (role === "Admin" || role === "Operations Manager") &&
             project.workflowStatus === "operations_manager_review";
           const canAssignProjectEngineer =
+            postOperationsWorkflowEnabled &&
             (role === "Admin" || role === "Project Manager") &&
             project.workflowStatus === "project_manager_assigned";
           const canAssignSiteEngineer =
+            postOperationsWorkflowEnabled &&
             (role === "Admin" || role === "Project Engineer") &&
             project.workflowStatus === "project_engineer_assigned";
 
@@ -1411,6 +1423,7 @@ function AssignmentPanel({
 }) {
   const { term } = useI18n();
   const canAssignProjectManager =
+    postOperationsWorkflowEnabled &&
     (role === "Admin" || role === "Operations Manager") &&
     [
       "finance_down_payment_confirmed",
@@ -1418,9 +1431,11 @@ function AssignmentPanel({
       "operations_manager_review",
     ].includes(project.workflowStatus);
   const canAssignProjectEngineer =
+    postOperationsWorkflowEnabled &&
     (role === "Admin" || role === "Project Manager") &&
     project.workflowStatus === "project_manager_assigned";
   const canAssignSiteEngineer =
+    postOperationsWorkflowEnabled &&
     (role === "Admin" || role === "Project Engineer") &&
     project.workflowStatus === "project_engineer_assigned";
 

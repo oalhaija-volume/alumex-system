@@ -8,13 +8,7 @@ import { StatusPill } from "@/components/StatusPill";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import type { ProjectWorkflowStatus } from "@/lib/workflow/statuses";
 
-type FinanceAction =
-  | "confirmDownPayment"
-  | "markPaymentException"
-  | "startFinanceFinalCheck"
-  | "requestFinalPayment"
-  | "confirmFinalPayment"
-  | "completeFinanceCheck";
+type FinanceAction = "confirmDownPayment" | "markPaymentException";
 
 type FinanceProject = {
   id: string;
@@ -68,30 +62,6 @@ function isWaitingOperationsAssignment(project: FinanceProject) {
     "finance_down_payment_confirmed",
     "finance_payment_exception",
     "operations_manager_review",
-  ].includes(project.workflowStatus);
-}
-
-function isWaitingFinanceCheck(project: FinanceProject) {
-  return [
-    "audit_approved",
-    "finance_final_check",
-  ].includes(project.workflowStatus);
-}
-
-function isWaitingFinalPayment(project: FinanceProject) {
-  return (
-    project.workflowStatus === "factory_completed" ||
-    project.workflowStatus === "final_payment_requested"
-  );
-}
-
-function isFullyPaid(project: FinanceProject) {
-  return [
-    "final_payment_received",
-    "delivery_pending",
-    "delivered",
-    "installation_in_progress",
-    "installation_completed",
   ].includes(project.workflowStatus);
 }
 
@@ -213,59 +183,6 @@ function FinanceActionControls({
             placeholder="Exception note"
           />
         </>
-      ) : null}
-
-      {project.workflowStatus === "factory_completed" ||
-      project.workflowStatus === "final_payment_requested" ? (
-        <button
-          type="button"
-          disabled={Boolean(savingAction)}
-          onClick={() => void runAction("requestFinalPayment")}
-          className="h-9 rounded-md bg-primary px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {savingAction === "requestFinalPayment"
-            ? t("common.loading")
-            : "Request Final Payment"}
-        </button>
-      ) : null}
-
-      {project.workflowStatus === "audit_approved" ? (
-        <button
-          type="button"
-          disabled={Boolean(savingAction)}
-          onClick={() => void runAction("startFinanceFinalCheck")}
-          className="h-9 rounded-md bg-primary px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {savingAction === "startFinanceFinalCheck"
-            ? t("common.loading")
-            : "Start Finance Check"}
-        </button>
-      ) : null}
-
-      {project.workflowStatus === "finance_final_check" ? (
-        <button
-          type="button"
-          disabled={Boolean(savingAction)}
-          onClick={() => void runAction("completeFinanceCheck")}
-          className="h-9 rounded-md bg-primary px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {savingAction === "completeFinanceCheck"
-            ? t("common.loading")
-            : "Finance Check Completed"}
-        </button>
-      ) : null}
-
-      {project.workflowStatus === "final_payment_requested" ? (
-        <button
-          type="button"
-          disabled={Boolean(savingAction)}
-          onClick={() => void runAction("confirmFinalPayment")}
-          className="h-9 rounded-md bg-primary px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {savingAction === "confirmFinalPayment"
-            ? t("common.loading")
-            : "Confirm Final Payment"}
-        </button>
       ) : null}
 
       {error ? (
@@ -415,10 +332,7 @@ export function FinanceModule() {
             project.commercial.contract &&
             (isWaitingDownPayment(project) ||
               isPaymentException(project) ||
-              isWaitingOperationsAssignment(project) ||
-              isWaitingFinanceCheck(project) ||
-              isWaitingFinalPayment(project) ||
-              isFullyPaid(project)),
+              isWaitingOperationsAssignment(project)),
         ),
       );
     } catch (loadError) {
@@ -485,21 +399,6 @@ export function FinanceModule() {
         title: "Waiting for Operations Assignment",
         projects: projects.filter(isWaitingOperationsAssignment),
       },
-      {
-        key: "finance-check",
-        title: "Waiting Finance Check",
-        projects: projects.filter(isWaitingFinanceCheck),
-      },
-      {
-        key: "final-payment",
-        title: "Waiting Final Payment",
-        projects: projects.filter(isWaitingFinalPayment),
-      },
-      {
-        key: "fully-paid",
-        title: "Paid / Ready For Delivery",
-        projects: projects.filter(isFullyPaid),
-      },
     ],
     [projects],
   );
@@ -509,7 +408,7 @@ export function FinanceModule() {
       <PageHeader
         eyebrow="Finance"
         title="Finance Dashboard"
-        description="Track down payments, exceptions, final payment requests, and fully paid projects without quotation pricing details."
+        description="Confirm down payments and payment exceptions, then hand projects to Operations Manager."
       />
 
       {role && role !== "Admin" && role !== "Finance / Accountant" ? (
@@ -524,7 +423,7 @@ export function FinanceModule() {
         </p>
       ) : null}
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-3">
         {buckets.map((bucket) => (
           <SummaryCard
             key={bucket.key}

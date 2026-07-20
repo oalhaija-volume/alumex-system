@@ -27,6 +27,7 @@ const productPriceRoles = [
   "Sales Manager",
   "Sales Rep",
   "Branch Manager",
+  "Procurement Engineer",
 ] as const;
 const productSelect =
   "id, product_name, category, unit, unit_price, is_active, created_at, updated_at";

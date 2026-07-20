@@ -37,6 +37,8 @@ type ClientRow = {
   city: string | null;
   email: string | null;
   notes: string | null;
+  location_latitude: number | string | null;
+  location_longitude: number | string | null;
 };
 
 async function readApiError(response: Response, fallback: string) {
@@ -58,6 +60,10 @@ function mapClient(row: ClientRow): Client {
     city: row.city ?? "",
     email: row.email ?? "",
     notes: row.notes ?? "",
+    locationLatitude:
+      row.location_latitude === null ? null : Number(row.location_latitude),
+    locationLongitude:
+      row.location_longitude === null ? null : Number(row.location_longitude),
   };
 }
 
@@ -71,6 +77,8 @@ function toClientInsert(client: ClientInput, userId?: string) {
     city: client.city || null,
     email: client.email || null,
     notes: client.notes || null,
+    location_latitude: client.locationLatitude ?? null,
+    location_longitude: client.locationLongitude ?? null,
     created_by: userId ?? null,
   };
 }
@@ -85,6 +93,8 @@ function toClientUpdate(client: ClientInput) {
     city: client.city || null,
     email: client.email || null,
     notes: client.notes || null,
+    location_latitude: client.locationLatitude ?? null,
+    location_longitude: client.locationLongitude ?? null,
   };
 }
 

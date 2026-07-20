@@ -4,6 +4,7 @@ export type AppRole =
   | "Sales Rep"
   | "Finance / Accountant"
   | "Operations Manager"
+  | "Procurement Engineer"
   | "Project Manager"
   | "Project Engineer"
   | "Site Engineer"
@@ -25,6 +26,7 @@ export const appRoles: AppRole[] = [
   "Sales Rep",
   "Finance / Accountant",
   "Operations Manager",
+  "Procurement Engineer",
   "Project Manager",
   "Project Engineer",
   "Site Engineer",

@@ -3,7 +3,6 @@ export const activeNavigationHrefs = [
   "/clients",
   "/projects",
   "/quotations",
-  "/pricing",
   "/settings",
   "/hr",
   "/commercial",
@@ -15,6 +14,7 @@ export const activeNavigationHrefs = [
 
 const supportingRoutePrefixes = [
   "/operation-manager",
+  "/pricing",
   "/workflow",
 ] as const;
 

@@ -70,7 +70,7 @@ async function fetchPageAccess() {
   return body.access ?? [];
 }
 
-export function HRModule() {
+export function HRModule({ embedded = false }: { embedded?: boolean }) {
   const { formatDate, t, term } = useI18n();
   const { isAdmin } = useCurrentRole();
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -219,11 +219,13 @@ export function HRModule() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="People"
-        title="HR"
-        description="Add employees, assign roles, and manage active access for the system."
-      />
+      {embedded ? null : (
+        <PageHeader
+          eyebrow="People"
+          title="HR"
+          description="Add employees, assign roles, and manage active access for the system."
+        />
+      )}
 
       {error ? (
         <p className="rounded-md border border-border bg-danger-surface px-3 py-2 text-sm font-semibold text-danger-text">

@@ -2,6 +2,7 @@
 
 import { AppDataProviders } from "@/components/AppDataProviders";
 import { AppShell } from "@/components/AppShell";
+import { HRModule } from "@/components/hr/HRModule";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { PageHeader } from "@/components/PageHeader";
 import { SectionCard } from "@/components/SectionCard";
@@ -9,7 +10,6 @@ import { ContractTemplateSettings } from "@/components/settings/ContractTemplate
 import { DiscountPolicySettings } from "@/components/settings/DiscountPolicySettings";
 import { ProductPricingSettings } from "@/components/settings/ProductPricingSettings";
 import { OpeningDropdownSettings } from "@/components/settings/OpeningDropdownSettings";
-import { UsersSettings } from "@/components/settings/UsersSettings";
 import { VehiclesSettings } from "@/components/settings/VehiclesSettings";
 import { DriversSettings } from "@/components/settings/DriversSettings";
 import { InstallationTeamsSettings } from "@/components/settings/InstallationTeamsSettings";
@@ -51,14 +51,12 @@ export default function SettingsPage() {
             ))}
           </div>
         </SectionCard>
-        <SectionCard title={t("settings.users")}>
-          <UsersSettings />
-        </SectionCard>
         <SectionCard title={t("settings.productPricing")}>
           <AppDataProviders>
             <ProductPricingSettings />
           </AppDataProviders>
         </SectionCard>
+        <HRModule embedded />
         <SectionCard title={t("settings.openingDropdowns")}>
           <OpeningDropdownSettings />
         </SectionCard>

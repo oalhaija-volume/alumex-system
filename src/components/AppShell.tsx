@@ -118,9 +118,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isWideWorkspace = pathname.startsWith("/site-measurements");
 
   const visibleNavItems = isRoleLoaded
-    ? activeNavItems.filter((item) =>
-        canAccessRouteWithOverrides(item.href, role, pageAccess),
-      )
+    ? activeNavItems.filter((item) => {
+        if (role === "Admin" && item.href === "/hr") {
+          return false;
+        }
+
+        return canAccessRouteWithOverrides(item.href, role, pageAccess);
+      })
     : activeNavItems;
 
   return (

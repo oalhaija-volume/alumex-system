@@ -472,8 +472,8 @@
   },
   "settings": {
     "eyebrow": "Workspace",
-    "title": "Settings",
-    "description": "Preview the configuration areas for company details, numbering, currency, and reminders.",
+    "title": "Administration",
+    "description": "Manage pricing, employees, roles, permissions, and system configuration from one workspace.",
     "generalSettings": "General settings",
     "companyProfile": "Company profile",
     "quotationNumbering": "Quotation numbering",

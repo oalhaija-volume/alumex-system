@@ -27,7 +27,9 @@ import {
   clampDiscount,
   discountLimitForRole,
   loadProductPrices,
+  normalizeProductName,
   productPriceForSystem,
+  productPricingSource,
   productsForCatalog,
   type ProductPrice,
 } from "@/lib/pricing/productPricing";
@@ -89,6 +91,37 @@ async function fetchNextQuotationNumber() {
   }
 
   return body.quotationNumber;
+}
+
+type ProjectCostingPrice = {
+  aluminumSystemName: string | null;
+  totalPrice: number;
+  updatedAt: string;
+};
+
+async function fetchProjectCostingPrice(projectId: string) {
+  if (!projectId) {
+    return null;
+  }
+
+  const response = await fetch(
+    `/api/quotations/costing-price?projectId=${encodeURIComponent(projectId)}`,
+    { cache: "no-store" },
+  );
+  const body = (await response.json().catch(() => null)) as {
+    costing?: ProjectCostingPrice | null;
+    error?: string;
+  } | null;
+
+  if (!response.ok) {
+    throw new Error(body?.error ?? "Unable to load the project costing price.");
+  }
+
+  return body?.costing ?? null;
+}
+
+function comparableSystemName(value: string) {
+  return normalizeProductName(value).replace(/\bsystem\b/g, "").trim();
 }
 
 async function saveQuotation(payload: {
@@ -169,6 +202,8 @@ export function QuotationBuilder() {
   const [clientRepresentative, setClientRepresentative] = useState("");
   const [savedQuotations, setSavedQuotations] = useState<QuotationDraft[]>([]);
   const [productPrices, setProductPrices] = useState<ProductPrice[]>([]);
+  const [projectCostingPrice, setProjectCostingPrice] =
+    useState<ProjectCostingPrice | null>(null);
   const [selectedServiceName, setSelectedServiceName] = useState("");
   const [selectedSystemName, setSelectedSystemName] = useState("");
   const [customSystemName, setCustomSystemName] = useState("");
@@ -232,6 +267,15 @@ export function QuotationBuilder() {
   );
   const selectedService = servicePrices.find(
     (service) => service.product_name === selectedServiceName,
+  );
+  const selectedSystem = systemPrices.find(
+    (system) => system.product_name === selectedSystemName,
+  );
+  const selectedSystemUsesCosting = selectedSystem
+    ? productPricingSource(selectedSystem) === "project_costing"
+    : false;
+  const selectedAddon = addonPrices.find(
+    (addon) => addon.product_name === selectedAddonName,
   );
   const requiresAluminumSystem = [
     "Windows & Doors",
@@ -317,12 +361,15 @@ export function QuotationBuilder() {
   useEffect(() => {
     const timer = window.setTimeout(async () => {
       try {
-        const [, , nextProducts] = await Promise.all([
+        const [, , nextProducts, , nextCostingPrice] = await Promise.all([
           refreshSavedQuotations(),
           refreshNextQuotationNumber(),
           refreshProductPrices().catch(() => []),
           refreshDiscountPolicies().catch(() => undefined),
+          fetchProjectCostingPrice(projectId).catch(() => null),
         ]);
+
+        setProjectCostingPrice(nextCostingPrice);
 
         if (!editingQuotationId) {
           setLines(createQuotationLines(projectId, projects, nextProducts));
@@ -439,14 +486,18 @@ export function QuotationBuilder() {
       return;
     }
 
-    const system = systemPrices.find(
-      (product) => product.product_name === selectedSystemName,
-    );
+    const system = selectedSystem;
     const variant = availableVariants.find(
       (product) => product.product_name === selectedVariantName,
     );
     const needsVariant = availableVariants.length > 0;
     const isOtherSystem = selectedSystemName === "Other System";
+    const usesProjectCosting = system
+      ? productPricingSource(system) === "project_costing"
+      : false;
+    const effectiveSystemName = isOtherSystem
+      ? customSystemName.trim()
+      : system?.product_name ?? "";
 
     if (requiresAluminumSystem && !system) {
       setError("Select the aluminum system for this service.");
@@ -455,6 +506,38 @@ export function QuotationBuilder() {
 
     if (isOtherSystem && !customSystemName.trim()) {
       setError("Enter the name of the other aluminum system.");
+      return;
+    }
+
+    if (
+      usesProjectCosting &&
+      (!projectCostingPrice || projectCostingPrice.totalPrice <= 0)
+    ) {
+      setError(
+        "This aluminum system must be priced through Project Costing. Save the project costing before adding it to the quotation.",
+      );
+      return;
+    }
+
+    if (
+      usesProjectCosting &&
+      lines.some((line) => line.notes.includes("Price source: Project costing"))
+    ) {
+      setError(
+        "This quotation already includes the project costing price. Remove that costing line before adding another.",
+      );
+      return;
+    }
+
+    if (
+      usesProjectCosting &&
+      projectCostingPrice?.aluminumSystemName &&
+      comparableSystemName(projectCostingPrice.aluminumSystemName) !==
+        comparableSystemName(effectiveSystemName)
+    ) {
+      setError(
+        `The saved costing is for ${projectCostingPrice.aluminumSystemName}. Update Project Costing for ${effectiveSystemName} before adding it.`,
+      );
       return;
     }
 
@@ -486,15 +569,15 @@ export function QuotationBuilder() {
         room: t("settings.services"),
         openingCode: "SRV",
         width: 100,
-        height: Math.max(serviceQuantity, 0.01) * 100,
+        height: usesProjectCosting
+          ? 100
+          : Math.max(serviceQuantity, 0.01) * 100,
         solidPanelHeight: 0,
         quantity: 1,
         productSystem: [
           service.product_name,
           system
-            ? isOtherSystem
-              ? customSystemName.trim()
-              : system.product_name
+            ? effectiveSystemName
             : "",
           variant?.product_name ?? "",
         ]
@@ -503,15 +586,17 @@ export function QuotationBuilder() {
         glassType: "",
         aluminumColor: "",
         notes: [
-          `Pricing unit: ${service.unit}`,
+          `Pricing unit: ${usesProjectCosting ? "project" : service.unit}`,
+          usesProjectCosting ? "Price source: Project costing" : "",
           serviceSpecification.trim(),
         ]
           .filter(Boolean)
           .join("; "),
-        unitPrice:
-          service.unit_price +
-          (system?.unit_price ?? 0) +
-          (variant?.unit_price ?? 0),
+        unitPrice: usesProjectCosting
+          ? projectCostingPrice?.totalPrice ?? 0
+          : service.unit_price +
+            (system?.unit_price ?? 0) +
+            (variant?.unit_price ?? 0),
         discountPercent: 0,
         lineType: "service",
         isDiscountable: true,
@@ -1053,7 +1138,9 @@ export function QuotationBuilder() {
                   <option value="">Select aluminum system</option>
                   {systemPrices.map((system) => (
                     <option key={system.id ?? system.product_name} value={system.product_name}>
-                      {system.product_name} — {formatCurrency(system.unit_price)} / {system.unit}
+                      {productPricingSource(system) === "project_costing"
+                        ? `${system.product_name} — Project costing`
+                        : `${system.product_name} — ${formatCurrency(system.unit_price)} / ${system.unit}`}
                     </option>
                   ))}
                 </select>
@@ -1088,11 +1175,12 @@ export function QuotationBuilder() {
                 type="number"
                 min="0.01"
                 step="0.01"
-                value={serviceQuantity}
+                value={selectedSystemUsesCosting ? 1 : serviceQuantity}
+                disabled={selectedSystemUsesCosting}
                 onChange={(event) => setServiceQuantity(Math.max(Number(event.target.value) || 1, 0.01))}
-                aria-label="Service billable quantity"
-                placeholder="Billable quantity"
-                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+                aria-label={selectedSystemUsesCosting ? "Project costing quantity" : "Service billable quantity"}
+                placeholder={selectedSystemUsesCosting ? "Priced per project" : "Billable quantity"}
+                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground disabled:bg-blue-100 disabled:text-blue-700"
               />
               <input
                 value={serviceSpecification}
@@ -1113,6 +1201,23 @@ export function QuotationBuilder() {
                 {t("quotations.addService")}
               </button>
             </div>
+            {selectedSystemUsesCosting ? (
+              <p className="mt-3 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800">
+                {projectCostingPrice && projectCostingPrice.totalPrice > 0 ? (
+                  <>
+                    Project costing price: {formatCurrency(projectCostingPrice.totalPrice)}.
+                  </>
+                ) : (
+                  <>
+                    No project costing price is available. An Admin or Procurement Engineer must save it in{" "}
+                    <Link href="/costing" className="font-bold underline">
+                      Project Costing
+                    </Link>
+                    .
+                  </>
+                )}
+              </p>
+            ) : null}
           </div>
 
           <div className="border-t border-blue-200 pt-4">
@@ -1156,7 +1261,16 @@ export function QuotationBuilder() {
                 step="0.01"
                 value={addonQuantity}
                 onChange={(event) => setAddonQuantity(Math.max(Number(event.target.value) || 1, 0.01))}
-                aria-label="Add-on billable quantity"
+                aria-label={
+                  selectedAddon?.unit === "meter"
+                    ? "Add-on length in meters"
+                    : "Add-on billable quantity"
+                }
+                placeholder={
+                  selectedAddon?.unit === "meter"
+                    ? "Length (m)"
+                    : "Billable quantity"
+                }
                 className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
               />
               <input

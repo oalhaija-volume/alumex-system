@@ -6,6 +6,7 @@ import {
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
 import { friendlyDatabaseError } from "@/lib/friendlyErrors";
+import { enforceProductPricingRules } from "@/lib/pricing/productPricing";
 
 type ProductPayload = {
   products?: unknown;
@@ -76,16 +77,21 @@ function mapProductPayload(products: unknown, userId: string) {
     const row = product as ProductItemPayload;
     const id = typeof row.id === "string" && uuidPattern.test(row.id) ? row.id : undefined;
     const productName = textValue(row.product_name);
-    const unit = textValue(row.unit) || "sqm";
-    const unitPrice = numberValue(row.unit_price);
+    const normalizedProduct = enforceProductPricingRules({
+      product_name: productName,
+      category: nullableText(row.category),
+      unit: textValue(row.unit) || "sqm",
+      unit_price: numberValue(row.unit_price),
+    });
 
-    if (productName && unit && unitPrice >= 0) {
+    if (
+      normalizedProduct.product_name &&
+      normalizedProduct.unit &&
+      normalizedProduct.unit_price >= 0
+    ) {
       items.push({
         ...(id ? { id } : {}),
-        product_name: productName,
-        category: nullableText(row.category),
-        unit,
-        unit_price: unitPrice,
+        ...normalizedProduct,
         is_active: row.is_active !== false,
         created_by: userId,
       });

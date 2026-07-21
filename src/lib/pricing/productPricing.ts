@@ -23,6 +23,8 @@ export type ProductCatalogKind =
   | "addon"
   | "other";
 
+export type ProductPricingSource = "catalog" | "project_costing";
+
 export const productCatalogCategories: Array<{
   value: ProductCatalogKind;
   labelKey: string;
@@ -131,6 +133,62 @@ export function normalizeProductName(value: string) {
   return value.trim().toLowerCase();
 }
 
+export function isGeorgianBarsName(value: string) {
+  const normalizedName = normalizeProductName(value);
+  return normalizedName === "georgian bars" || normalizedName === "georgien bars";
+}
+
+export function aluminumSystemPricingSource(
+  productName: string,
+): ProductPricingSource {
+  const normalizedName = normalizeProductName(productName);
+
+  return normalizedName.includes("alumex") || normalizedName.includes("the address")
+    ? "catalog"
+    : "project_costing";
+}
+
+export function productPricingSource(
+  product: Pick<ProductPrice, "product_name" | "category">,
+): ProductPricingSource {
+  return productCatalogKind(product.category) === "aluminum_system"
+    ? aluminumSystemPricingSource(product.product_name)
+    : "catalog";
+}
+
+export function enforceProductPricingRules<
+  T extends Pick<ProductPrice, "product_name" | "category" | "unit" | "unit_price">,
+>(product: T): T {
+  if (isGeorgianBarsName(product.product_name)) {
+    return {
+      ...product,
+      product_name: "Georgian Bars",
+      category: "addon",
+      unit: "meter",
+    };
+  }
+
+  if (productPricingSource(product) === "project_costing") {
+    return {
+      ...product,
+      unit: "project",
+      unit_price: 0,
+    };
+  }
+
+  if (
+    productCatalogKind(product.category) === "aluminum_system" &&
+    normalizeProductName(product.unit) === "project"
+  ) {
+    return {
+      ...product,
+      unit: "sqm",
+    };
+  }
+
+  return product;
+}
+
 export function productPriceForSystem(
   system: string,
   products: ProductPrice[],
@@ -162,5 +220,7 @@ export async function loadProductPrices(): Promise<ProductPrice[]> {
     throw new Error(body?.error ?? "Unable to load product prices.");
   }
 
-  return body?.products ?? [];
+  return (body?.products ?? []).map((product) =>
+    enforceProductPricingRules(product),
+  );
 }

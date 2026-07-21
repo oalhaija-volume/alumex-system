@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import {
+  enforceProductPricingRules,
+  isGeorgianBarsName,
   loadProductPrices,
   productCatalogCategories,
   productCatalogKind,
+  productPricingSource,
   productsForCatalog,
   type ProductPrice,
 } from "@/lib/pricing/productPricing";
@@ -28,14 +31,14 @@ const emptyProduct: ProductDraft = {
 };
 
 function mapProduct(product: ProductPrice): ProductDraft {
-  return {
+  return enforceProductPricingRules({
     id: product.id,
     product_name: product.product_name,
     category: product.category ?? "",
     unit: product.unit || "sqm",
     unit_price: Number(product.unit_price),
     is_active: product.is_active,
-  };
+  });
 }
 
 async function saveProductPrices(products: ProductDraft[]) {
@@ -72,6 +75,11 @@ export function ProductPricingSettings() {
     products as ProductPrice[],
     "service",
   ).length;
+  const normalizedNewProduct = enforceProductPricingRules(newProduct);
+  const newProductUsesCosting =
+    productPricingSource(normalizedNewProduct) === "project_costing";
+  const newProductHasLockedUnit =
+    newProductUsesCosting || isGeorgianBarsName(normalizedNewProduct.product_name);
 
   const loadProducts = useCallback(async () => {
     setError("");
@@ -108,13 +116,31 @@ export function ProductPricingSettings() {
     setProducts((currentProducts) =>
       currentProducts.map((product, productIndex) =>
         productIndex === index
-          ? {
+          ? enforceProductPricingRules({
               ...product,
               [key]:
                 key === "unit_price"
                   ? Math.max(Number(value) || 0, 0)
                   : value,
-            }
+            })
+          : product,
+      ),
+    );
+  }
+
+  function updateProductCategory(index: number, category: string) {
+    const catalogCategory = productCatalogCategories.find(
+      (item) => item.value === category,
+    );
+
+    setProducts((currentProducts) =>
+      currentProducts.map((product, productIndex) =>
+        productIndex === index
+          ? enforceProductPricingRules({
+              ...product,
+              category,
+              unit: catalogCategory?.defaultUnit ?? product.unit,
+            })
           : product,
       ),
     );
@@ -154,12 +180,12 @@ export function ProductPricingSettings() {
 
     setProducts((currentProducts) => [
       ...currentProducts,
-      {
+      enforceProductPricingRules({
         ...newProduct,
         product_name: newProduct.product_name.trim(),
         category: newProduct.category.trim(),
         unit: newProduct.unit.trim() || "sqm",
-      },
+      }),
     ]);
     setNewProduct(emptyProduct);
   }
@@ -170,10 +196,12 @@ export function ProductPricingSettings() {
 
     const validProducts = products
       .map((product) => ({
-        ...product,
-        product_name: product.product_name.trim(),
-        category: product.category.trim(),
-        unit: product.unit.trim() || "sqm",
+        ...enforceProductPricingRules({
+          ...product,
+          product_name: product.product_name.trim(),
+          category: product.category.trim(),
+          unit: product.unit.trim() || "sqm",
+        }),
       }))
       .filter((product) => product.product_name);
 
@@ -260,7 +288,7 @@ export function ProductPricingSettings() {
             {t("settings.productCategory")}
           </span>
           <select
-            value={newProduct.category}
+            value={productCatalogKind(normalizedNewProduct.category)}
             onChange={(event) => updateNewProductCategory(event.target.value)}
             className="mt-2 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
           >
@@ -276,9 +304,10 @@ export function ProductPricingSettings() {
             {t("settings.productUnit")}
           </span>
           <input
-            value={newProduct.unit}
+            value={normalizedNewProduct.unit}
+            disabled={newProductHasLockedUnit}
             onChange={(event) => updateNewProduct("unit", event.target.value)}
-            className="mt-2 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
+            className="mt-2 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground disabled:bg-surface-muted disabled:text-muted"
           />
         </label>
         <label>
@@ -288,12 +317,18 @@ export function ProductPricingSettings() {
           <input
             type="number"
             min="0"
-            value={newProduct.unit_price}
+            value={normalizedNewProduct.unit_price}
+            disabled={newProductUsesCosting}
             onChange={(event) =>
               updateNewProduct("unit_price", Number(event.target.value))
             }
-            className="mt-2 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
+            className="mt-2 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground disabled:bg-surface-muted disabled:text-muted"
           />
+          {newProductUsesCosting ? (
+            <span className="mt-1 block text-xs font-bold text-primary">
+              {t("settings.projectCostingSource")}
+            </span>
+          ) : null}
         </label>
         <button
           type="button"
@@ -345,7 +380,7 @@ export function ProductPricingSettings() {
                         <select
                           value={productCatalogKind(product.category)}
                           onChange={(event) =>
-                            updateProduct(index, "category", event.target.value)
+                            updateProductCategory(index, event.target.value)
                           }
                           className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
                         >
@@ -359,26 +394,36 @@ export function ProductPricingSettings() {
                       <td className="px-3 py-3">
                         <input
                           value={product.unit}
+                          disabled={
+                            productPricingSource(product) === "project_costing" ||
+                            isGeorgianBarsName(product.product_name)
+                          }
                           onChange={(event) =>
                             updateProduct(index, "unit", event.target.value)
                           }
-                          className="h-10 w-24 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
+                          className="h-10 w-24 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground disabled:bg-surface-muted disabled:text-muted"
                         />
                       </td>
                       <td className="px-3 py-3">
-                        <input
-                          type="number"
-                          min="0"
-                          value={product.unit_price}
-                          onChange={(event) =>
-                            updateProduct(
-                              index,
-                              "unit_price",
-                              Number(event.target.value),
-                            )
-                          }
-                          className="h-10 w-36 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
-                        />
+                        {productPricingSource(product) === "project_costing" ? (
+                          <span className="inline-flex rounded-full bg-info-surface px-3 py-1.5 text-xs font-bold text-info-text">
+                            {t("settings.projectCostingSource")}
+                          </span>
+                        ) : (
+                          <input
+                            type="number"
+                            min="0"
+                            value={product.unit_price}
+                            onChange={(event) =>
+                              updateProduct(
+                                index,
+                                "unit_price",
+                                Number(event.target.value),
+                              )
+                            }
+                            className="h-10 w-36 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
+                          />
+                        )}
                       </td>
                       <td className="px-3 py-3">
                         <label className="flex items-center gap-2 text-sm font-semibold text-muted-strong">
@@ -423,7 +468,7 @@ export function ProductPricingSettings() {
                   <select
                     value={productCatalogKind(product.category)}
                     onChange={(event) =>
-                      updateProduct(index, "category", event.target.value)
+                      updateProductCategory(index, event.target.value)
                     }
                     className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
                   >
@@ -435,28 +480,40 @@ export function ProductPricingSettings() {
                   </select>
                   <input
                     value={product.unit}
+                    disabled={
+                      productPricingSource(product) === "project_costing" ||
+                      isGeorgianBarsName(product.product_name)
+                    }
                     onChange={(event) =>
                       updateProduct(index, "unit", event.target.value)
                     }
-                    className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
+                    className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground disabled:bg-surface-muted disabled:text-muted"
                   />
-                  <input
-                    type="number"
-                    min="0"
-                    value={product.unit_price}
-                    onChange={(event) =>
-                      updateProduct(
-                        index,
-                        "unit_price",
-                        Number(event.target.value),
-                      )
-                    }
-                    className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
-                  />
+                  {productPricingSource(product) === "project_costing" ? (
+                    <div className="flex h-10 items-center rounded-md border border-border bg-info-surface px-3 text-xs font-bold text-info-text">
+                      {t("settings.projectCostingSource")}
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      min="0"
+                      value={product.unit_price}
+                      onChange={(event) =>
+                        updateProduct(
+                          index,
+                          "unit_price",
+                          Number(event.target.value),
+                        )
+                      }
+                      className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
+                    />
+                  )}
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <p className="text-sm font-bold text-primary">
-                    {formatCurrency(product.unit_price)} / {product.unit}
+                    {productPricingSource(product) === "project_costing"
+                      ? t("settings.projectCostingSource")
+                      : `${formatCurrency(product.unit_price)} / ${product.unit}`}
                   </p>
                   <label className="flex items-center gap-2 text-sm font-semibold text-muted-strong">
                     <input

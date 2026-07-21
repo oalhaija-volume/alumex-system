@@ -9,6 +9,8 @@ export const activeNavigationHrefs = [
   "/finance",
   "/operations-manager",
   "/costing",
+  "/hr",
+  "/settings",
 ] as const;
 
 const supportingRoutePrefixes = [

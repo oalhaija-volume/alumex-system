@@ -127,19 +127,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen max-w-[100vw] overflow-x-hidden bg-background text-foreground">
       <PasswordChangePrompt />
       <aside
-        className={`fixed inset-y-0 z-30 hidden w-72 border-material-outline-variant bg-material-surface-container-low px-4 py-4 lg:block ${
+        className={`fixed inset-y-0 z-30 hidden w-72 flex-col overflow-hidden border-material-outline-variant bg-material-surface-container-low px-4 py-4 lg:flex ${
           isRtl ? "right-0 border-l" : "left-0 border-r"
         }`}
       >
-        <div className="rounded-lg bg-material-surface-container px-3 py-3 shadow-[var(--md-elevation-1)]">
+        <div className="shrink-0 rounded-lg bg-material-surface-container px-3 py-3 shadow-[var(--md-elevation-1)]">
           <BrandMark />
         </div>
-        <nav className="mt-5 space-y-1">
+        <nav className="mt-5 min-h-0 flex-1 space-y-1 overflow-y-auto pb-2">
           {visibleNavItems.map((item) => (
             <NavLink key={item.href} {...item} />
           ))}
         </nav>
-        <div className="absolute bottom-5 left-5 right-5 space-y-3">
+        <div className="shrink-0 space-y-3 pt-3">
           <ShellAuthStatus />
           <ShellLogoutButton
             className="h-10 w-full rounded-md bg-material-primary px-4 text-sm font-bold text-material-on-primary shadow-[var(--md-elevation-1)]"

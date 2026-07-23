@@ -47,6 +47,14 @@ function numberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function requiresGlassDetails(productSystem: string | null) {
+  const normalizedSystem = productSystem?.trim().toLowerCase() ?? "";
+  return (
+    !normalizedSystem.includes("roller") &&
+    !normalizedSystem.includes("louver")
+  );
+}
+
 function normalizeOpening(body: OpeningPayload) {
   const opening = {
     floor: textValue(body.floor) || null,
@@ -64,6 +72,9 @@ function normalizeOpening(body: OpeningPayload) {
     aluminum_color: textValue(body.aluminumColor) || null,
     notes: textValue(body.notes) || null,
   };
+  const hasRequiredGlassDetails =
+    !requiresGlassDetails(opening.product_system) ||
+    Boolean(opening.glass_type && opening.aluminum_color);
 
   if (
     !opening.opening_code ||
@@ -71,13 +82,12 @@ function normalizeOpening(body: OpeningPayload) {
     opening.height <= 0 ||
     opening.quantity <= 0 ||
     !opening.product_system ||
-    !opening.glass_type ||
-    !opening.aluminum_color
+    !hasRequiredGlassDetails
   ) {
     return {
       ok: false as const,
       error:
-        "Opening code, width, height, quantity, product system, glass type, and aluminum color are required.",
+        "Opening code, width, height, quantity, and product system are required. Glass type and glass color are required for glazed systems.",
     };
   }
 

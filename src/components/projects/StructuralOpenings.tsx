@@ -18,6 +18,72 @@ import {
 
 export type StructuralOpeningValues = Omit<StructuralOpening, "id">;
 
+type OpeningFamilyKey =
+  | "sliding"
+  | "hinged"
+  | "curtainWall"
+  | "skylight"
+  | "rollerShutter"
+  | "swing"
+  | "photocell"
+  | "louver"
+  | "other";
+
+type OpeningFamily = {
+  key: OpeningFamilyKey;
+  productSystem: string;
+  labelKey: string;
+};
+
+const openingFamilies: OpeningFamily[] = [
+  {
+    key: "sliding",
+    productSystem: "Sliding",
+    labelKey: "projects.openings.families.sliding",
+  },
+  {
+    key: "hinged",
+    productSystem: "Hinged",
+    labelKey: "projects.openings.families.hinged",
+  },
+  {
+    key: "curtainWall",
+    productSystem: "Curtain Wall",
+    labelKey: "projects.openings.families.curtainWall",
+  },
+  {
+    key: "skylight",
+    productSystem: "Skylight",
+    labelKey: "projects.openings.families.skylight",
+  },
+  {
+    key: "rollerShutter",
+    productSystem: "Roller Shutters",
+    labelKey: "projects.openings.families.rollerShutter",
+  },
+  {
+    key: "swing",
+    productSystem: "A Swing Door",
+    labelKey: "projects.openings.families.swing",
+  },
+  {
+    key: "photocell",
+    productSystem: "Photocell Doors",
+    labelKey: "projects.openings.families.photocell",
+  },
+  {
+    key: "louver",
+    productSystem: "Louver",
+    labelKey: "projects.openings.families.louver",
+  },
+];
+
+const otherOpeningFamily: OpeningFamily = {
+  key: "other",
+  productSystem: "",
+  labelKey: "projects.openings.families.other",
+};
+
 const emptyOpening: StructuralOpeningValues = {
   floor: "",
   room: "",
@@ -155,32 +221,105 @@ function normalizeOpening(opening: StructuralOpeningValues) {
   };
 }
 
-function hasOpeningContent(opening: StructuralOpeningValues) {
+function hasOpeningContent(
+  opening: StructuralOpeningValues,
+  ignoreProductSystem = false,
+) {
   return Boolean(
     opening.floor.trim() ||
       opening.room.trim() ||
       opening.openingCode.trim() ||
-      opening.productSystem.trim() ||
+      (!ignoreProductSystem && opening.productSystem.trim()) ||
       opening.glassType.trim() ||
       opening.aluminumColor.trim() ||
-      opening.notes.trim(),
+      opening.notes.trim() ||
+      Number(opening.width) !== emptyOpening.width ||
+      Number(opening.height) !== emptyOpening.height ||
+      Number(opening.solidPanelHeight) !== emptyOpening.solidPanelHeight ||
+      Number(opening.quantity) !== emptyOpening.quantity,
+  );
+}
+
+function requiresGlassDetails(productSystem: string) {
+  const normalizedSystem = productSystem.trim().toLowerCase();
+  return (
+    !normalizedSystem.includes("roller") &&
+    !normalizedSystem.includes("louver")
   );
 }
 
 function isOpeningValid(opening: StructuralOpeningValues) {
+  const hasRequiredGlassDetails =
+    !requiresGlassDetails(opening.productSystem) ||
+    Boolean(opening.glassType && opening.aluminumColor);
+
   return Boolean(
     opening.openingCode &&
       opening.productSystem &&
-      opening.glassType &&
-      opening.aluminumColor &&
+      hasRequiredGlassDetails &&
       opening.width > 0 &&
       opening.height > 0 &&
       opening.quantity > 0,
   );
 }
 
-function rows(count: number) {
-  return Array.from({ length: count }, () => ({ ...emptyOpening }));
+function rows(count: number, productSystem = "") {
+  return Array.from({ length: count }, () => ({
+    ...emptyOpening,
+    productSystem,
+  }));
+}
+
+function createOpeningRowsByFamily() {
+  return {
+    sliding: rows(5, "Sliding"),
+    hinged: rows(5, "Hinged"),
+    curtainWall: rows(5, "Curtain Wall"),
+    skylight: rows(5, "Skylight"),
+    rollerShutter: rows(5, "Roller Shutters"),
+    swing: rows(5, "A Swing Door"),
+    photocell: rows(5, "Photocell Doors"),
+    louver: rows(5, "Louver"),
+    other: rows(5),
+  } satisfies Record<OpeningFamilyKey, StructuralOpeningValues[]>;
+}
+
+function openingFamilyKeyForSystem(productSystem: string): OpeningFamilyKey {
+  const normalizedSystem = productSystem.trim().toLowerCase();
+
+  if (normalizedSystem.includes("sliding")) {
+    return "sliding";
+  }
+
+  if (normalizedSystem.includes("hinge")) {
+    return "hinged";
+  }
+
+  if (normalizedSystem.includes("curtain")) {
+    return "curtainWall";
+  }
+
+  if (normalizedSystem.includes("skylight")) {
+    return "skylight";
+  }
+
+  if (normalizedSystem.includes("roller")) {
+    return "rollerShutter";
+  }
+
+  if (normalizedSystem.includes("swing")) {
+    return "swing";
+  }
+
+  if (normalizedSystem.includes("photocell")) {
+    return "photocell";
+  }
+
+  if (normalizedSystem.includes("louver")) {
+    return "louver";
+  }
+
+  return "other";
 }
 
 function optionLabels(
@@ -200,15 +339,17 @@ function OpeningCell({
   value,
   optionsByCategory,
   onChange,
+  disabled = false,
 }: {
   field: keyof StructuralOpeningValues;
   value: StructuralOpeningValues;
   optionsByCategory: Record<OpeningOptionCategory, OpeningDropdownOption[]>;
   onChange: (value: string | number) => void;
+  disabled?: boolean;
 }) {
   const { t } = useI18n();
   const commonClass =
-    "h-10 w-full rounded-none border-0 bg-transparent px-2 text-sm font-semibold text-slate-900 outline-none transition focus:bg-blue-50 focus:ring-2 focus:ring-inset focus:ring-[var(--alumex-blue)]";
+    "h-10 w-full rounded-none border-0 bg-transparent px-2 text-sm font-semibold text-slate-900 outline-none transition focus:bg-blue-50 focus:ring-2 focus:ring-inset focus:ring-[var(--alumex-blue)] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600";
   const dropdownCategory = dropdownFieldCategories[field];
 
   if (dropdownCategory) {
@@ -216,6 +357,7 @@ function OpeningCell({
       <select
         value={String(value[field])}
         onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
         className={commonClass}
       >
         <option value="">{t("projects.openings.selectOption")}</option>
@@ -240,6 +382,7 @@ function OpeningCell({
         step={field === "quantity" ? "1" : "0.01"}
         value={Number(value[field])}
         onChange={(event) => onChange(Number(event.target.value))}
+        disabled={disabled}
         className={commonClass}
       />
     );
@@ -249,6 +392,7 @@ function OpeningCell({
     <input
       value={String(value[field])}
       onChange={(event) => onChange(event.target.value)}
+      disabled={disabled}
       className={commonClass}
     />
   );
@@ -272,8 +416,10 @@ export function StructuralOpenings({
 }) {
   const { t, term } = useI18n();
   const [error, setError] = useState("");
-  const [newOpenings, setNewOpenings] = useState<StructuralOpeningValues[]>(
-    rows(5),
+  const [activeFamilyKey, setActiveFamilyKey] =
+    useState<OpeningFamilyKey>("sliding");
+  const [newOpeningsByFamily, setNewOpeningsByFamily] = useState(
+    createOpeningRowsByFamily,
   );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingOpening, setEditingOpening] =
@@ -286,6 +432,36 @@ export function StructuralOpenings({
     (sum, opening) => sum + calculateArea(opening),
     0,
   );
+  const openingsByFamily = useMemo(() => {
+    const groupedOpenings: Record<OpeningFamilyKey, StructuralOpening[]> = {
+      sliding: [],
+      hinged: [],
+      curtainWall: [],
+      skylight: [],
+      rollerShutter: [],
+      swing: [],
+      photocell: [],
+      louver: [],
+      other: [],
+    };
+
+    openings.forEach((opening) => {
+      groupedOpenings[openingFamilyKeyForSystem(opening.productSystem)].push(opening);
+    });
+
+    return groupedOpenings;
+  }, [openings]);
+  const activeFamily =
+    activeFamilyKey === "other"
+      ? otherOpeningFamily
+      : openingFamilies.find((family) => family.key === activeFamilyKey) ??
+        openingFamilies[0];
+  const newOpenings = newOpeningsByFamily[activeFamilyKey];
+  const activeOpenings = openingsByFamily[activeFamilyKey];
+  const displayedFamilies =
+    openingsByFamily.other.length > 0 || activeFamilyKey === "other"
+      ? [...openingFamilies, otherOpeningFamily]
+      : openingFamilies;
 
   const optionsByCategory = useMemo(
     () => ({
@@ -358,17 +534,21 @@ export function StructuralOpenings({
     field: keyof StructuralOpeningValues,
     value: string | number,
   ) {
-    setNewOpenings((currentOpenings) =>
-      currentOpenings.map((opening, openingIndex) =>
-        openingIndex === index ? { ...opening, [field]: value } : opening,
+    setNewOpeningsByFamily((currentRows) => ({
+      ...currentRows,
+      [activeFamilyKey]: currentRows[activeFamilyKey].map(
+        (opening, openingIndex) =>
+          openingIndex === index ? { ...opening, [field]: value } : opening,
       ),
-    );
+    }));
   }
 
   async function addOpeningRows() {
     setError("");
     const normalizedOpenings = newOpenings
-      .filter(hasOpeningContent)
+      .filter((opening) =>
+        hasOpeningContent(opening, activeFamily.key !== "other"),
+      )
       .map(normalizeOpening);
 
     if (normalizedOpenings.length === 0) {
@@ -387,7 +567,10 @@ export function StructuralOpenings({
       for (const opening of normalizedOpenings) {
         await onAdd(opening);
       }
-      setNewOpenings(rows(5));
+      setNewOpeningsByFamily((currentRows) => ({
+        ...currentRows,
+        [activeFamilyKey]: rows(5, activeFamily.productSystem),
+      }));
     } catch (saveError) {
       setError(
         saveError instanceof Error
@@ -441,11 +624,13 @@ export function StructuralOpenings({
     values,
     onCellChange,
     actions,
+    lockProductSystem,
   }: {
     rowId: string;
     values: StructuralOpeningValues;
     onCellChange: (field: keyof StructuralOpeningValues, value: string | number) => void;
     actions: ReactNode;
+    lockProductSystem: boolean;
   }) {
     return (
       <tr key={rowId} className="divide-x divide-slate-200">
@@ -478,6 +663,7 @@ export function StructuralOpenings({
                 value={values}
                 optionsByCategory={optionsByCategory}
                 onChange={(value) => onCellChange(field, value)}
+                disabled={field === "productSystem" && lockProductSystem}
               />
             </td>
           );
@@ -511,24 +697,96 @@ export function StructuralOpenings({
           </p>
         ) : null}
 
+        <section aria-labelledby="opening-family-heading">
+          <div>
+            <h3
+              id="opening-family-heading"
+              className="text-sm font-bold text-slate-950"
+            >
+              {t("projects.openings.familySelectorTitle")}
+            </h3>
+            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+              {t("projects.openings.familySelectorDescription")}
+            </p>
+          </div>
+          <div
+            role="tablist"
+            aria-label={t("projects.openings.familySelectorTitle")}
+            className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4"
+          >
+            {displayedFamilies.map((family) => {
+              const isActive = activeFamilyKey === family.key;
+              const familyOpenings = openingsByFamily[family.key];
+              const familyArea = familyOpenings.reduce(
+                (sum, opening) => sum + calculateArea(opening),
+                0,
+              );
+
+              return (
+                <button
+                  key={family.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => {
+                    setActiveFamilyKey(family.key);
+                    setEditingId(null);
+                    setError("");
+                  }}
+                  className={`min-h-20 rounded-lg border px-3 py-3 text-start transition ${
+                    isActive
+                      ? "border-[var(--alumex-blue)] bg-blue-50 shadow-sm ring-1 ring-[var(--alumex-blue)]"
+                      : "border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <span
+                    className={`block text-sm font-bold ${
+                      isActive
+                        ? "text-[var(--alumex-blue)]"
+                        : "text-slate-900"
+                    }`}
+                  >
+                    {t(family.labelKey)}
+                  </span>
+                  <span className="mt-1 block text-xs font-semibold text-slate-500">
+                    {t("projects.openings.familySummary", {
+                      count: familyOpenings.length,
+                      area: familyArea.toFixed(2),
+                    })}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
         <div className="rounded-lg border border-slate-200 bg-white">
           <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 md:flex-row md:items-center md:justify-between">
             <div>
               <h3 className="text-sm font-bold text-slate-950">
-                {t("projects.openings.salesSpreadsheet")}
+                {t("projects.openings.familySheet", {
+                  family: t(activeFamily.labelKey),
+                })}
               </h3>
               <p className="mt-1 text-xs font-semibold text-slate-500">
-                {t("projects.openings.salesSpreadsheetDescription")}
+                {activeFamily.key === "other"
+                  ? t("projects.openings.otherFamilySheetDescription")
+                  : t("projects.openings.familySheetDescription", {
+                      family: t(activeFamily.labelKey),
+                    })}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() =>
-                  setNewOpenings((currentOpenings) => [
-                    ...currentOpenings,
-                    ...rows(3),
-                  ])
+                  setNewOpeningsByFamily((currentRows) => ({
+                    ...currentRows,
+                    [activeFamilyKey]: [
+                      ...currentRows[activeFamilyKey],
+                      ...rows(3, activeFamily.productSystem),
+                    ],
+                  }))
                 }
                 className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-700"
               >
@@ -536,7 +794,12 @@ export function StructuralOpenings({
               </button>
               <button
                 type="button"
-                onClick={() => setNewOpenings(rows(5))}
+                onClick={() =>
+                  setNewOpeningsByFamily((currentRows) => ({
+                    ...currentRows,
+                    [activeFamilyKey]: rows(5, activeFamily.productSystem),
+                  }))
+                }
                 className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-700"
               >
                 {t("common.cancel")}
@@ -566,7 +829,7 @@ export function StructuralOpenings({
               <tbody className="divide-y divide-slate-200">
                 {newOpenings.map((opening, index) =>
                   renderEditableRow({
-                    rowId: `new-opening-${index}`,
+                    rowId: `new-opening-${activeFamilyKey}-${index}`,
                     values: opening,
                     onCellChange: (field, value) =>
                       updateNewOpening(index, field, value),
@@ -574,15 +837,19 @@ export function StructuralOpenings({
                       <button
                         type="button"
                         onClick={() =>
-                          setNewOpenings((currentOpenings) =>
-                            currentOpenings.filter((_, rowIndex) => rowIndex !== index),
-                          )
+                          setNewOpeningsByFamily((currentRows) => ({
+                            ...currentRows,
+                            [activeFamilyKey]: currentRows[activeFamilyKey].filter(
+                              (_, rowIndex) => rowIndex !== index,
+                            ),
+                          }))
                         }
                         className="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700"
                       >
                         {t("common.delete")}
                       </button>
                     ),
+                    lockProductSystem: activeFamily.key !== "other",
                   }),
                 )}
               </tbody>
@@ -593,7 +860,9 @@ export function StructuralOpenings({
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
             <h3 className="text-sm font-bold text-slate-950">
-              {t("projects.openings.savedOpenings")}
+              {t("projects.openings.savedFamilyOpenings", {
+                family: t(activeFamily.labelKey),
+              })}
             </h3>
           </div>
           <div className="overflow-x-auto">
@@ -609,7 +878,7 @@ export function StructuralOpenings({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {openings.map((opening) => {
+                {activeOpenings.map((opening) => {
                   const isEditing = editingId === opening.id;
                   const rowValues = isEditing ? editingOpening : opening;
 
@@ -640,6 +909,7 @@ export function StructuralOpenings({
                           </button>
                         </div>
                       ),
+                      lockProductSystem: activeFamily.key !== "other",
                     });
                   }
 
@@ -711,13 +981,15 @@ export function StructuralOpenings({
             </table>
           </div>
 
-          {openings.length === 0 ? (
+          {activeOpenings.length === 0 ? (
             <div className="border-t border-dashed border-slate-300 bg-white p-8 text-center">
               <p className="text-sm font-bold text-slate-950">
-                {t("projects.openings.noOpenings")}
+                {t("projects.openings.noFamilyOpenings", {
+                  family: t(activeFamily.labelKey),
+                })}
               </p>
               <p className="mt-2 text-sm text-slate-500">
-                {t("projects.openings.noOpeningsDescription")}
+                {t("projects.openings.noFamilyOpeningsDescription")}
               </p>
             </div>
           ) : null}

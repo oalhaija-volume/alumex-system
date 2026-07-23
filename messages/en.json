@@ -227,14 +227,20 @@
     "detailsDescription": "Review project scope, status, and structural openings.",
     "noProjectsFound": "No projects found",
     "noProjectsDescription": "Adjust the search or status filter, or create a new project.",
-    "validationRequired": "Client, project name, address, project type, and status are required.",
+    "validationRequired": "Client, project name, branch, address, project type, and status are required.",
     "projectNumberGenerated": "Generated automatically when saved",
+    "salesOwnerAutomatic": "Your logged-in sales account will be assigned automatically.",
+    "branches": {
+      "rasafa": "Rasafa",
+      "karkh": "Karkh"
+    },
     "fields": {
       "projectNumber": "Project Number",
       "projectName": "Project Name",
       "client": "Client",
       "address": "Address",
       "projectType": "Project Type",
+      "branch": "Branch",
       "salesEngineer": "Sales Engineer",
       "status": "Status",
       "type": "Type"

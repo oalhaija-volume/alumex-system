@@ -6,6 +6,7 @@ type QuotationRow = {
   quotation_number: string;
   project_id: string;
   quotation_discount_percent: number | string;
+  pricing_source: "catalog" | "project_costing";
   notes: string | null;
   prepared_by_text: string | null;
   client_representative: string | null;
@@ -98,6 +99,7 @@ export async function loadSupabaseQuotations(
         notes: quotation.notes ?? "",
         preparedBy: quotation.prepared_by_text ?? "",
         clientRepresentative: quotation.client_representative ?? "",
+        pricingSource: quotation.pricing_source,
         savedAt: quotation.created_at,
       });
 

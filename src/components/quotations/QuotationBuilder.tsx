@@ -806,6 +806,11 @@ export function QuotationBuilder() {
         notes,
         preparedBy,
         clientRepresentative,
+        pricingSource: lines.some((line) =>
+          line.notes.toLowerCase().includes("price source: project costing"),
+        )
+          ? "project_costing"
+          : "catalog",
         savedAt: quotation.created_at ?? new Date().toISOString(),
       };
 
@@ -887,6 +892,11 @@ export function QuotationBuilder() {
                     <p className="mt-1 text-xs text-muted">
                       {term(quotation.project.projectName)} -{" "}
                       {formatCurrency(quotationTotals.grandTotal)}
+                    </p>
+                    <p className="mt-1 text-xs font-bold text-primary">
+                      {quotation.pricingSource === "project_costing"
+                        ? "Costing-based quotation"
+                        : "Catalog quotation"}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">

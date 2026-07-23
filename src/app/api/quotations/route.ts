@@ -253,6 +253,14 @@ function mapItems(items: unknown) {
   });
 }
 
+function pricingSourceForItems(items: ReturnType<typeof mapItems>) {
+  return items.some((item) =>
+    (item.notes ?? "").toLowerCase().includes("price source: project costing"),
+  )
+    ? "project_costing"
+    : "catalog";
+}
+
 export async function GET() {
   const authCheck = await requireQuotationUser();
 
@@ -273,7 +281,7 @@ export async function GET() {
     admin
       .from("quotations")
       .select(
-        "id, quotation_number, project_id, quotation_discount_percent, notes, prepared_by_text, client_representative, created_at",
+        "id, quotation_number, project_id, quotation_discount_percent, pricing_source, notes, prepared_by_text, client_representative, created_at",
       )
       .order("created_at", { ascending: false }),
     admin
@@ -360,6 +368,7 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
+  const pricingSource = pricingSourceForItems(items);
   const discountLimit = await discountLimitForRoleFromSettings(
     authCheck.role,
     admin,
@@ -412,6 +421,19 @@ export async function POST(request: Request) {
     const { data, error } = rpcResult;
 
     if (!error && Array.isArray(data) && data[0]) {
+      const { error: sourceError } = await admin
+        .from("quotations")
+        .update({ pricing_source: pricingSource })
+        .eq("id", data[0].id);
+
+      if (sourceError) {
+        return quotationErrorResponse(
+          sourceError,
+          "Quotation was saved, but its pricing source could not be recorded.",
+          500,
+        );
+      }
+
       const { error: workflowError } = await admin
         .from("projects")
         .update({ workflow_status: "sales_quotation_created" })
@@ -489,6 +511,7 @@ export async function PATCH(request: Request) {
   }
 
   const admin = createAdminClient();
+  const pricingSource = pricingSourceForItems(items);
   const discountLimit = await discountLimitForRoleFromSettings(
     authCheck.role,
     admin,
@@ -538,7 +561,20 @@ export async function PATCH(request: Request) {
     );
   }
 
-  return NextResponse.json({ quotation });
+  const { error: sourceError } = await admin
+    .from("quotations")
+    .update({ pricing_source: pricingSource })
+    .eq("id", quotation.id);
+
+  if (sourceError) {
+    return quotationErrorResponse(
+      sourceError,
+      "Quotation was saved, but its pricing source could not be recorded.",
+      500,
+    );
+  }
+
+  return NextResponse.json({ quotation: { ...quotation, pricing_source: pricingSource } });
 }
 
 export async function DELETE(request: Request) {

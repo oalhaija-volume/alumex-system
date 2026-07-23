@@ -152,6 +152,7 @@ export type Database = {
           location_longitude: number | null;
           geofence_radius_meters: number | null;
           project_type: string | null;
+          branch: "Rasafa" | "Karkh" | null;
           sales_engineer_id: string | null;
           status: Database["public"]["Enums"]["project_status"];
           workflow_status: Database["public"]["Enums"]["project_workflow_status"];
@@ -173,6 +174,7 @@ export type Database = {
           location_longitude?: number | null;
           geofence_radius_meters?: number | null;
           project_type?: string | null;
+          branch?: "Rasafa" | "Karkh" | null;
           sales_engineer_id?: string | null;
           status?: Database["public"]["Enums"]["project_status"];
           workflow_status?: Database["public"]["Enums"]["project_workflow_status"];
@@ -299,6 +301,9 @@ export type Database = {
           supplier_quotation_path: string | null;
           supplier_quotation_name: string | null;
           notes: string | null;
+          handoff_status: "draft" | "sent_to_sales";
+          sent_to_sales_at: string | null;
+          sent_to_sales_by: string | null;
           created_by: string | null;
           updated_by: string | null;
           created_at: string;
@@ -318,6 +323,9 @@ export type Database = {
           supplier_quotation_path?: string | null;
           supplier_quotation_name?: string | null;
           notes?: string | null;
+          handoff_status?: "draft" | "sent_to_sales";
+          sent_to_sales_at?: string | null;
+          sent_to_sales_by?: string | null;
           created_by?: string | null;
           updated_by?: string | null;
           created_at?: string;
@@ -358,6 +366,7 @@ export type Database = {
           line_discount_total: number;
           quotation_discount_total: number;
           grand_total: number;
+          pricing_source: "catalog" | "project_costing";
           notes: string | null;
           prepared_by: string | null;
           prepared_by_text: string | null;
@@ -378,6 +387,7 @@ export type Database = {
           line_discount_total?: number;
           quotation_discount_total?: number;
           grand_total?: number;
+          pricing_source?: "catalog" | "project_costing";
           notes?: string | null;
           prepared_by?: string | null;
           prepared_by_text?: string | null;
@@ -449,6 +459,7 @@ export type Database = {
           client_id: string;
           status: Database["public"]["Enums"]["contract_status"];
           contract_value: number;
+          pricing_source: "catalog" | "project_costing";
           source_contract_value: number;
           contract_discount_percent: number;
           contract_discount_total: number;
@@ -484,6 +495,7 @@ export type Database = {
           client_id: string;
           status?: Database["public"]["Enums"]["contract_status"];
           contract_value?: number;
+          pricing_source?: "catalog" | "project_costing";
           source_contract_value?: number;
           contract_discount_percent?: number;
           contract_discount_total?: number;

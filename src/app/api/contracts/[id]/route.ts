@@ -289,6 +289,8 @@ export async function PATCH(
     client_id: body.client_id,
     status: body.status,
     contract_value: body.contract_value,
+    pricing_source:
+      body.pricing_source === "project_costing" ? "project_costing" : "catalog",
     source_contract_value:
       body.source_contract_value ?? body.contract_value ?? 0,
     contract_discount_percent: numberValue(body.contract_discount_percent),

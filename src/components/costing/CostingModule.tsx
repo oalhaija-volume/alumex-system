@@ -32,6 +32,8 @@ type CostingRow = {
   supplier_quotation_name: string | null;
   supplier_quotation_url?: string | null;
   notes: string | null;
+  handoff_status: "draft" | "sent_to_sales";
+  sent_to_sales_at: string | null;
   updated_at?: string;
 };
 
@@ -106,6 +108,7 @@ export function CostingModule() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const selectedProject = projects.find((project) => project.id === projectId);
   const selectedCosting = costings.find((costing) => costing.project_id === projectId);
   const systemOptions = useMemo(
@@ -261,6 +264,45 @@ export function CostingModule() {
     }
   }
 
+  async function sendToSales() {
+    if (!projectId || isSending) return;
+
+    setIsSending(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await fetch("/api/costing", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, action: "send-to-sales" }),
+      });
+      const body = (await response.json().catch(() => null)) as
+        | { costing?: CostingRow; error?: string }
+        | null;
+
+      if (!response.ok || !body?.costing) {
+        throw new Error(body?.error ?? "Unable to send costing to Sales.");
+      }
+
+      setCostings((current) => [
+        ...current.filter((row) => row.project_id !== projectId),
+        body.costing as CostingRow,
+      ]);
+      setNotice(
+        "Costing sent to Sales. They can now prepare a costing-based quotation and contract.",
+      );
+    } catch (sendError) {
+      setError(
+        sendError instanceof Error
+          ? sendError.message
+          : "Unable to send costing to Sales.",
+      );
+    } finally {
+      setIsSending(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -312,6 +354,21 @@ export function CostingModule() {
               </p>
             </div>
             <div className="rounded-lg border border-border bg-surface p-4">
+              <p className="text-xs font-bold uppercase text-muted">
+                Sales handoff
+              </p>
+              <p className="mt-2 text-sm font-bold text-foreground">
+                {selectedCosting?.handoff_status === "sent_to_sales"
+                  ? "Sent to Sales"
+                  : "Draft"}
+              </p>
+              {selectedCosting?.sent_to_sales_at ? (
+                <p className="mt-1 text-xs font-semibold text-muted">
+                  {new Date(selectedCosting.sent_to_sales_at).toLocaleString()}
+                </p>
+              ) : null}
+            </div>
+            <div className="rounded-lg border border-border bg-surface p-4 sm:col-span-3">
               <p className="text-xs font-bold uppercase text-muted">Recorded project total</p>
               <p className="mt-2 text-xl font-bold text-foreground">
                 {formatCurrency(draft.totalProjectCost)}
@@ -373,6 +430,23 @@ export function CostingModule() {
             >
               {isSaving ? "Saving..." : "Save costing"}
             </button>
+            <button
+              type="button"
+              onClick={() => void sendToSales()}
+              disabled={
+                isSending ||
+                !selectedCosting ||
+                !draft.aluminumSystemName.trim() ||
+                (draft.totalProjectCost <= 0 && calculatedTotal <= 0)
+              }
+              className="mt-3 h-11 rounded-md bg-primary px-5 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {isSending ? "Sending..." : "Send costing to Sales"}
+            </button>
+            <p className="mt-2 text-xs font-semibold text-muted">
+              Saving changes returns the costing to Draft. Send it again when the
+              final selling total is ready.
+            </p>
           </SectionCard>
 
           <SectionCard title="Supplier quotation">

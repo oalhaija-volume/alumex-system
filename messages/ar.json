@@ -229,14 +229,20 @@
     "detailsDescription": "راجع نطاق المشروع وحالته والفتحات الإنشائية.",
     "noProjectsFound": "لم يتم العثور على مشاريع",
     "noProjectsDescription": "عدّل البحث أو مرشح الحالة أو أنشئ مشروعا جديدا.",
-    "validationRequired": "العميل واسم المشروع والعنوان ونوع المشروع والحالة مطلوبة.",
+    "validationRequired": "العميل واسم المشروع والفرع والعنوان ونوع المشروع والحالة مطلوبة.",
     "projectNumberGenerated": "يتم إنشاؤه تلقائياً عند الحفظ",
+    "salesOwnerAutomatic": "سيتم تعيين حساب المبيعات الذي سجل الدخول تلقائياً.",
+    "branches": {
+      "rasafa": "الرصافة",
+      "karkh": "الكرخ"
+    },
     "fields": {
       "projectNumber": "رقم المشروع",
       "projectName": "اسم المشروع",
       "client": "العميل",
       "address": "العنوان",
       "projectType": "نوع المشروع",
+      "branch": "الفرع",
       "salesEngineer": "مهندس المبيعات",
       "status": "الحالة",
       "type": "النوع"

@@ -374,6 +374,18 @@ function CoverPage({
           />
           <InfoBox label={t("contracts.contractNumber")} value={draft.contractNumber} />
           <InfoBox label={t("quotations.quotationNumber")} value={draft.quotationNumber} />
+          <InfoBox
+            label={locale === "ar" ? "نوع العقد" : "Contract type"}
+            value={
+              draft.pricingSource === "project_costing"
+                ? locale === "ar"
+                  ? "عقد مبني على التكلفة"
+                  : "Costing-based contract"
+                : locale === "ar"
+                  ? "عقد من دليل الأسعار"
+                  : "Catalog contract"
+            }
+          />
           <InfoBox label={t("common.date")} value={formatDate(draft.contractDate)} />
           {showFinanceValues ? (
             <InfoBox

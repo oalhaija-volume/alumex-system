@@ -143,7 +143,8 @@ export function aluminumSystemPricingSource(
 ): ProductPricingSource {
   const normalizedName = normalizeProductName(productName);
 
-  return normalizedName.includes("alumex") || normalizedName.includes("the address")
+  return normalizedName.includes("alumex") &&
+    !normalizedName.includes("the address")
     ? "catalog"
     : "project_costing";
 }

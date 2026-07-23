@@ -20,6 +20,7 @@ type QuotationSourceRow = {
   project_id: string;
   client_id: string;
   grand_total: number | string;
+  pricing_source: "catalog" | "project_costing";
   created_at: string;
 };
 
@@ -127,7 +128,7 @@ export async function GET() {
     ] = await Promise.all([
       admin
         .from("quotations")
-        .select("id, quotation_number, project_id, client_id, grand_total, created_at")
+        .select("id, quotation_number, project_id, client_id, grand_total, pricing_source, created_at")
         .order("created_at", { ascending: false }),
       admin.from("projects").select("id, project_name"),
       admin.from("clients").select("id, client_name"),
@@ -155,6 +156,7 @@ export async function GET() {
         clientId: quotation.client_id,
         clientName: clientsById.get(quotation.client_id)?.client_name ?? "",
         contractTotal: numberValue(quotation.grand_total),
+        pricingSource: quotation.pricing_source,
       })),
     });
   } catch (error) {

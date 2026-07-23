@@ -18,7 +18,7 @@ const uuidPattern =
 const projectReadRoles = ["Admin", "Sales Manager", "Sales Rep", "Branch Manager"] as const;
 const projectWriteRoles = ["Admin", "Sales Manager", "Sales Rep", "Branch Manager"] as const;
 const fullProjectSelect =
-  "id, project_number, project_name, client_id, address, location_latitude, location_longitude, geofence_radius_meters, project_type, sales_engineer_id, status, clients(client_name)";
+  "id, project_number, project_name, client_id, address, location_latitude, location_longitude, geofence_radius_meters, project_type, branch, sales_engineer_id, status, clients(client_name)";
 const baseProjectSelect =
   "id, project_number, project_name, client_id, address, project_type, sales_engineer_id, status, clients(client_name)";
 const projectSelectWithoutClient =
@@ -188,11 +188,39 @@ export async function GET() {
 
   try {
     const admin = createAdminClient();
-    const [{ projects, warning: projectsWarning }, { openings, warning: openingsWarning }] =
-      await Promise.all([loadProjects(admin), loadOpenings(admin)]);
+    const [
+      { projects, warning: projectsWarning },
+      { openings, warning: openingsWarning },
+      profilesResult,
+    ] = await Promise.all([
+      loadProjects(admin),
+      loadOpenings(admin),
+      admin.from("profiles").select("id, full_name, email"),
+    ]);
+
+    if (profilesResult.error) {
+      throw profilesResult.error;
+    }
+
+    const salesNames = new Map(
+      (profilesResult.data ?? []).map((profile) => [
+        profile.id,
+        profile.full_name?.trim() || profile.email || "",
+      ]),
+    );
+    const projectsWithSalesOwners = projects.map((project) => ({
+      ...project,
+      branch: "branch" in project ? project.branch : null,
+      sales_engineer_name:
+        salesNames.get(
+          typeof project.sales_engineer_id === "string"
+            ? project.sales_engineer_id
+            : "",
+        ) ?? "",
+    }));
 
     return NextResponse.json({
-      projects,
+      projects: projectsWithSalesOwners,
       openings,
       warning:
         technicalErrorMessage(projectsWarning) ||
@@ -238,16 +266,20 @@ export async function POST(request: Request) {
     client_id,
     address,
     project_type,
-    sales_engineer_id,
     status,
     location_latitude,
     location_longitude,
     geofence_radius_meters,
+    branch,
   } = body;
 
-  if (!project_name || !client_id) {
+  if (
+    !project_name ||
+    !client_id ||
+    (branch !== "Rasafa" && branch !== "Karkh")
+  ) {
     return NextResponse.json(
-      { error: "Project name and client are required" },
+      { error: "Project name, client, and branch are required." },
       { status: 400 },
     );
   }
@@ -286,8 +318,8 @@ export async function POST(request: Request) {
           client_id,
           address: address || null,
           project_type: project_type || null,
-          sales_engineer_id:
-            sales_engineer_id || (authCheck.role === "Sales Rep" ? user.id : null),
+          branch,
+          sales_engineer_id: user.id,
           status: status || "Draft",
           location_latitude: location_latitude ?? null,
           location_longitude: location_longitude ?? null,
@@ -357,16 +389,20 @@ export async function PATCH(request: Request) {
     client_id,
     address,
     project_type,
-    sales_engineer_id,
     status,
     location_latitude,
     location_longitude,
     geofence_radius_meters,
+    branch,
   } = body;
 
-  if (!project_name || !client_id) {
+  if (
+    !project_name ||
+    !client_id ||
+    (branch !== "Rasafa" && branch !== "Karkh")
+  ) {
     return NextResponse.json(
-      { error: "Project name and client are required" },
+      { error: "Project name, client, and branch are required." },
       { status: 400 },
     );
   }
@@ -379,7 +415,7 @@ export async function PATCH(request: Request) {
       client_id,
       address: address || null,
       project_type: project_type || null,
-      sales_engineer_id: sales_engineer_id || null,
+      branch,
       status: status || "Draft",
       location_latitude: location_latitude ?? null,
       location_longitude: location_longitude ?? null,

@@ -28,6 +28,8 @@ export type ProjectStatus =
   | "Production"
   | "Completed";
 
+export type ProjectBranch = "Rasafa" | "Karkh";
+
 export type Project = {
   id: string;
   projectNumber: string;
@@ -39,6 +41,7 @@ export type Project = {
   locationLongitude?: number | null;
   geofenceRadiusMeters?: number | null;
   projectType: string;
+  branch: ProjectBranch | "";
   salesEngineerId?: string;
   salesEngineer: string;
   status: ProjectStatus;

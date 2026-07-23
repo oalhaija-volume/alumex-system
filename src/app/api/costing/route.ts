@@ -11,7 +11,7 @@ const costingRoles = ["Admin", "Procurement Engineer"] as const;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const costingSelect =
-  "id, project_id, aluminum_system_name, aluminum_system_cost, installation_cost, fabrication_cost, glass_cost, shipping_cost, total_profit, total_project_cost, supplier_quotation_path, supplier_quotation_name, notes, updated_at";
+  "id, project_id, aluminum_system_name, aluminum_system_cost, installation_cost, fabrication_cost, glass_cost, shipping_cost, total_profit, total_project_cost, supplier_quotation_path, supplier_quotation_name, notes, handoff_status, sent_to_sales_at, sent_to_sales_by, updated_at";
 const allowedQuotationExtensions = new Set([
   "pdf",
   "doc",
@@ -57,6 +57,9 @@ function costingValues(body: CostingPayload, userId: string) {
     total_profit: moneyValue(body.totalProfit),
     total_project_cost: moneyValue(body.totalProjectCost),
     notes: textValue(body.notes) || null,
+    handoff_status: "draft",
+    sent_to_sales_at: null,
+    sent_to_sales_by: null,
     updated_by: userId,
     updated_at: new Date().toISOString(),
   };
@@ -223,6 +226,90 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: friendlyDatabaseError(error, "Unable to attach quotation.") },
       { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ costing: data });
+}
+
+export async function PATCH(request: Request) {
+  const access = await requireCostingAccess();
+  if ("response" in access) return access.response;
+
+  const body = (await request.json().catch(() => null)) as {
+    projectId?: unknown;
+    action?: unknown;
+  } | null;
+  const projectId = textValue(body?.projectId);
+
+  if (
+    !uuidPattern.test(projectId) ||
+    body?.action !== "send-to-sales"
+  ) {
+    return NextResponse.json(
+      { error: "A valid costing handoff request is required." },
+      { status: 400 },
+    );
+  }
+
+  const admin = createAdminClient();
+  const { data: existing, error: loadError } = await admin
+    .from("project_costings")
+    .select(costingSelect)
+    .eq("project_id", projectId)
+    .maybeSingle();
+
+  if (loadError) {
+    return NextResponse.json(
+      { error: friendlyDatabaseError(loadError, "Unable to load project costing.") },
+      { status: 500 },
+    );
+  }
+
+  const calculatedTotal =
+    moneyValue(existing?.aluminum_system_cost) +
+    moneyValue(existing?.installation_cost) +
+    moneyValue(existing?.fabrication_cost) +
+    moneyValue(existing?.glass_cost) +
+    moneyValue(existing?.shipping_cost) +
+    moneyValue(existing?.total_profit);
+  const finalTotal = moneyValue(existing?.total_project_cost) || calculatedTotal;
+
+  if (!existing?.aluminum_system_name || finalTotal <= 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Save an aluminum system and a project total before sending costing to Sales.",
+      },
+      { status: 400 },
+    );
+  }
+
+  const sentAt = new Date().toISOString();
+  const { data, error } = await admin
+    .from("project_costings")
+    .update({
+      handoff_status: "sent_to_sales",
+      sent_to_sales_at: sentAt,
+      sent_to_sales_by: access.authCheck.user.id,
+      updated_by: access.authCheck.user.id,
+      updated_at: sentAt,
+    })
+    .eq("project_id", projectId)
+    .select(costingSelect)
+    .maybeSingle();
+
+  if (error) {
+    return NextResponse.json(
+      { error: friendlyDatabaseError(error, "Unable to send costing to Sales.") },
+      { status: 500 },
+    );
+  }
+
+  if (!data) {
+    return NextResponse.json(
+      { error: "Project costing was not found." },
+      { status: 404 },
     );
   }
 

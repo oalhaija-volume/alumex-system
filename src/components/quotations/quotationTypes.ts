@@ -16,6 +16,7 @@ export type QuotationDraft = {
   notes: string;
   preparedBy: string;
   clientRepresentative: string;
+  pricingSource?: "catalog" | "project_costing";
   savedAt?: string;
 };
 

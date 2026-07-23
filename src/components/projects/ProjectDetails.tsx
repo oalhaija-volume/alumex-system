@@ -17,6 +17,7 @@ const details: Array<[string, keyof ProjectFormValues]> = [
   ["projects.fields.client", "client"],
   ["projects.fields.address", "address"],
   ["projects.fields.projectType", "projectType"],
+  ["projects.fields.branch", "branch"],
   ["projects.fields.salesEngineer", "salesEngineer"],
   ["projects.fields.status", "status"],
 ];

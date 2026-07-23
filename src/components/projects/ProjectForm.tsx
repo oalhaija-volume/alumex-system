@@ -5,7 +5,12 @@ import { useState } from "react";
 import { useClients } from "@/components/clients/ClientsProvider";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { ProjectLocationPicker } from "@/components/projects/ProjectLocationPicker";
-import { projectStatuses, type Project, type ProjectStatus } from "@/data/ui";
+import {
+  projectStatuses,
+  type Project,
+  type ProjectBranch,
+  type ProjectStatus,
+} from "@/data/ui";
 
 export type ProjectFormValues = Omit<Project, "id" | "structuralOpenings">;
 type ProjectFormFieldKey = Exclude<
@@ -22,6 +27,7 @@ const emptyProject: ProjectFormValues = {
   locationLongitude: null,
   geofenceRadiusMeters: 100,
   projectType: "",
+  branch: "",
   salesEngineer: "",
   status: "Draft",
 };
@@ -35,7 +41,7 @@ const fields: Array<{
   { key: "projectName", label: "projects.fields.projectName", required: true },
   { key: "client", label: "projects.fields.client", required: true },
   { key: "projectType", label: "projects.fields.projectType", required: true },
-  { key: "salesEngineer", label: "projects.fields.salesEngineer" },
+  { key: "branch", label: "projects.fields.branch", type: "select", required: true },
   { key: "status", label: "projects.fields.status", type: "select", required: true },
   { key: "address", label: "projects.fields.address", type: "textarea", required: true },
 ];
@@ -60,6 +66,7 @@ export function ProjectForm({
           locationLongitude: project.locationLongitude ?? null,
           geofenceRadiusMeters: project.geofenceRadiusMeters ?? 100,
           projectType: project.projectType,
+          branch: project.branch,
           salesEngineer: project.salesEngineer,
           status: project.status,
         }
@@ -85,6 +92,7 @@ export function ProjectForm({
       !values.projectName.trim() ||
       !values.address.trim() ||
       !values.projectType.trim() ||
+      !values.branch ||
       !values.status
     ) {
       setError(t("projects.validationRequired"));
@@ -100,7 +108,8 @@ export function ProjectForm({
       locationLongitude: values.locationLongitude ?? null,
       geofenceRadiusMeters: values.geofenceRadiusMeters ?? 100,
       projectType: values.projectType.trim(),
-      salesEngineer: values.salesEngineer.trim(),
+      branch: values.branch,
+      salesEngineer: project?.salesEngineer ?? "",
       status: values.status,
     });
   }
@@ -159,6 +168,23 @@ export function ProjectForm({
                     </option>
                   ))}
                 </select>
+              ) : field.key === "branch" ? (
+                <select
+                  id={id}
+                  required
+                  value={values.branch}
+                  onChange={(event) =>
+                    setValues((currentValues) => ({
+                      ...currentValues,
+                      branch: event.target.value as ProjectBranch,
+                    }))
+                  }
+                  className={`${commonClasses} h-11`}
+                >
+                  <option value="">{t("projects.fields.branch")}</option>
+                  <option value="Rasafa">{t("projects.branches.rasafa")}</option>
+                  <option value="Karkh">{t("projects.branches.karkh")}</option>
+                </select>
               ) : field.type === "select" ? (
                 <select
                   id={id}
@@ -185,6 +211,14 @@ export function ProjectForm({
             </label>
           );
         })}
+      </div>
+      <div className="rounded-md border border-border bg-surface-muted px-3 py-3">
+        <p className="text-xs font-bold uppercase tracking-wide text-muted">
+          {t("projects.fields.salesEngineer")}
+        </p>
+        <p className="mt-1 text-sm font-semibold text-foreground">
+          {project?.salesEngineer || t("projects.salesOwnerAutomatic")}
+        </p>
       </div>
       <ProjectLocationPicker
         latitude={values.locationLatitude}

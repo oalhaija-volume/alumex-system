@@ -54,6 +54,7 @@ export async function GET(request: Request) {
       "aluminum_system_name, aluminum_system_cost, installation_cost, fabrication_cost, glass_cost, shipping_cost, total_profit, total_project_cost, updated_at",
     )
     .eq("project_id", projectId)
+    .eq("handoff_status", "sent_to_sales")
     .maybeSingle();
 
   if (error) {
@@ -86,6 +87,7 @@ export async function GET(request: Request) {
       aluminumSystemName: data.aluminum_system_name,
       totalPrice: recordedTotal > 0 ? recordedTotal : calculatedTotal,
       updatedAt: data.updated_at,
+      pricingSource: "project_costing",
     },
   });
 }

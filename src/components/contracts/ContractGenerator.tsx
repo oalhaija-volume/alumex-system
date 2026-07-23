@@ -45,6 +45,7 @@ type ContractRow = {
   project_id: string;
   quotation_id: string | null;
   contract_value: number | string;
+  pricing_source?: "catalog" | "project_costing";
   source_contract_value?: number | string | null;
   contract_discount_percent?: number | string | null;
   contract_discount_total?: number | string | null;
@@ -88,6 +89,7 @@ type ContractSourceRow = {
   clientId: string;
   clientName: string;
   contractTotal: number;
+  pricingSource: "catalog" | "project_costing";
   status?: string | null;
 };
 
@@ -204,6 +206,7 @@ async function loadContractSourceQuotations(
         preparedBy: project.salesEngineer,
         clientRepresentative: source.clientName,
         contractTotal: source.contractTotal,
+        pricingSource: source.pricingSource,
         quotationStatus: source.status ?? "Saved",
       });
 
@@ -392,6 +395,7 @@ export function ContractGenerator() {
               clients.find((client) => client.id === project.clientId)?.mobile ?? "",
             clientAddress: project.address,
             totalAmount: Number(contract.contract_value ?? 0),
+            pricingSource: contract.pricing_source ?? "catalog",
             sourceTotalAmount: Number(
               contract.source_contract_value ?? contract.contract_value ?? 0,
             ),
@@ -505,6 +509,7 @@ export function ContractGenerator() {
           client_id: selectedProject.clientId,
           status: "Draft",
           contract_value: totalAmount,
+          pricing_source: selectedQuotation.pricingSource ?? "catalog",
           source_contract_value: sourceTotalAmount,
           contract_discount_percent: contractDiscountPercent,
           contract_discount_total: contractDiscountTotal,
@@ -551,6 +556,7 @@ export function ContractGenerator() {
       clientPhone,
       clientAddress,
       totalAmount,
+      pricingSource: selectedQuotation.pricingSource ?? "catalog",
       sourceTotalAmount,
       contractDiscountPercent,
       contractDiscountTotal,
@@ -672,7 +678,10 @@ export function ContractGenerator() {
                     value={quotation.quotationNumber}
                   >
                     {quotation.quotationNumber} - {term(quotation.project.client)} -{" "}
-                    {term(quotation.project.projectName)}
+                    {term(quotation.project.projectName)} -{" "}
+                    {quotation.pricingSource === "project_costing"
+                      ? "Costing-based"
+                      : "Catalog"}
                   </option>
                 ))}
               </select>
@@ -724,7 +733,14 @@ export function ContractGenerator() {
                             {formatCurrency(quotationTotal)}
                           </td>
                           <td className="px-3 py-3 text-muted-strong">
-                            {term(quotation.quotationStatus ?? "Saved")}
+                            <span className="block">
+                              {term(quotation.quotationStatus ?? "Saved")}
+                            </span>
+                            <span className="mt-1 block text-xs font-bold text-primary">
+                              {quotation.pricingSource === "project_costing"
+                                ? "Costing-based quotation"
+                                : "Catalog quotation"}
+                            </span>
                           </td>
                         </tr>
                       );

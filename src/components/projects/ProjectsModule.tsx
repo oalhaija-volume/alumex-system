@@ -26,6 +26,7 @@ function matchesSearch(project: Project, search: string) {
     project.client,
     project.address,
     project.projectType,
+    project.branch,
     project.salesEngineer,
     project.status,
   ]
@@ -93,6 +94,12 @@ function ProjectCard({
             {t("projects.fields.salesEngineer")}:
           </span>{" "}
           {term(project.salesEngineer)}
+        </p>
+        <p>
+          <span className="font-bold text-slate-800">
+            {t("projects.fields.branch")}:
+          </span>{" "}
+          {term(project.branch)}
         </p>
       </div>
       <div className="mt-4 flex gap-2">
@@ -384,6 +391,7 @@ export function ProjectsModule() {
                 <th className="px-4 py-3">{t("projects.fields.projectName")}</th>
                 <th className="px-4 py-3">{t("projects.fields.client")}</th>
                 <th className="px-4 py-3">{t("projects.fields.projectType")}</th>
+                <th className="px-4 py-3">{t("projects.fields.branch")}</th>
                 <th className="px-4 py-3">{t("projects.fields.salesEngineer")}</th>
                 <th className="px-4 py-3">{t("projects.fields.status")}</th>
                 <th className="px-4 py-3">{t("common.actions")}</th>
@@ -414,6 +422,9 @@ export function ProjectsModule() {
                   </td>
                   <td className="px-4 py-4 text-slate-700">
                     {term(project.projectType)}
+                  </td>
+                  <td className="px-4 py-4 text-slate-700">
+                    {term(project.branch)}
                   </td>
                   <td className="px-4 py-4 text-slate-700">
                     {term(project.salesEngineer)}

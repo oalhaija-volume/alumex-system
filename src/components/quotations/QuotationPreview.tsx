@@ -183,6 +183,18 @@ function CoverPage({
           <Field label={t("contracts.clientName")} value={term(draft.project.client)} />
           <Field label={t("projects.fields.projectName")} value={term(draft.project.projectName)} />
           <Field label={t("quotations.quotationNumber")} value={draft.quotationNumber} />
+          <Field
+            label={locale === "ar" ? "نوع التسعير" : "Pricing source"}
+            value={
+              draft.pricingSource === "project_costing"
+                ? locale === "ar"
+                  ? "عرض سعر مبني على التكلفة"
+                  : "Costing-based quotation"
+                : locale === "ar"
+                  ? "عرض سعر من دليل الأسعار"
+                  : "Catalog quotation"
+            }
+          />
           <Field label={t("common.date")} value={formatDate(new Date())} />
           {showSalesPrices ? (
             <Field label={t("contracts.totalAmount")} value={formatIqd(grandTotal, locale)} />

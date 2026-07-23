@@ -14,6 +14,7 @@ export type ContractDraft = {
   clientPhone: string;
   clientAddress: string;
   totalAmount: number;
+  pricingSource?: "catalog" | "project_costing";
   sourceTotalAmount?: number;
   contractDiscountPercent?: number;
   contractDiscountTotal?: number;

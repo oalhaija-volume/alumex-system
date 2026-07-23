@@ -10,7 +10,12 @@ import {
 } from "react";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useClients } from "@/components/clients/ClientsProvider";
-import type { Project, ProjectStatus, StructuralOpening } from "@/data/ui";
+import type {
+  Project,
+  ProjectBranch,
+  ProjectStatus,
+  StructuralOpening,
+} from "@/data/ui";
 import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 
 type ProjectInput = Omit<Project, "id" | "structuralOpenings">;
@@ -48,7 +53,9 @@ type ProjectRow = {
   location_longitude: number | string | null;
   geofence_radius_meters: number | string | null;
   project_type: string | null;
+  branch: ProjectBranch | null;
   sales_engineer_id: string | null;
+  sales_engineer_name?: string | null;
   status: ProjectStatus;
   clients?: { client_name: string | null } | Array<{ client_name: string | null }> | null;
 };
@@ -146,8 +153,9 @@ function mapProject(
         ? 100
         : normalizeNumber(project.geofence_radius_meters),
     projectType: project.project_type ?? "",
+    branch: project.branch ?? "",
     salesEngineerId: project.sales_engineer_id ?? undefined,
-    salesEngineer: "",
+    salesEngineer: project.sales_engineer_name ?? "",
     status: project.status,
     structuralOpenings: openingsByProject.get(project.id) ?? [],
   };
@@ -242,8 +250,8 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
           location_longitude: project.locationLongitude ?? null,
           geofence_radius_meters: project.geofenceRadiusMeters ?? 100,
           project_type: project.projectType || null,
+          branch: project.branch,
           status: project.status,
-          sales_engineer_id: project.salesEngineerId ?? null,
         }),
       });
 
@@ -281,8 +289,8 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
           location_longitude: project.locationLongitude ?? null,
           geofence_radius_meters: project.geofenceRadiusMeters ?? 100,
           project_type: project.projectType || null,
+          branch: project.branch,
           status: project.status,
-          sales_engineer_id: project.salesEngineerId ?? null,
         }),
       });
 

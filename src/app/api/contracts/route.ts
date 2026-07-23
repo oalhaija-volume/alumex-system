@@ -26,9 +26,9 @@ const contractRoles = [
   "Finance / Accountant",
 ] as const;
 const contractBaseSelect =
-  "id, contract_number, project_id, quotation_id, client_id, status, contract_value, source_contract_value, contract_discount_percent, contract_discount_total, contract_date, payment_terms, warranty_terms, execution_terms, contract_terms, first_party_obligations, second_party_obligations, prepared_by_text, language, notes, created_by, created_at, updated_at";
+  "id, contract_number, project_id, quotation_id, client_id, status, contract_value, pricing_source, source_contract_value, contract_discount_percent, contract_discount_total, contract_date, payment_terms, warranty_terms, execution_terms, contract_terms, first_party_obligations, second_party_obligations, prepared_by_text, language, notes, created_by, created_at, updated_at";
 const contractSelectWithSignature =
-  "id, contract_number, project_id, quotation_id, client_id, status, contract_value, source_contract_value, contract_discount_percent, contract_discount_total, contract_date, payment_terms, warranty_terms, execution_terms, contract_terms, first_party_obligations, second_party_obligations, prepared_by_text, client_signature_data_url, client_signed_name, client_signed_at, sales_signature_data_url, sales_signed_name, sales_signed_at, signed_by_sales_user_id, language, notes, created_by, created_at, updated_at";
+  "id, contract_number, project_id, quotation_id, client_id, status, contract_value, pricing_source, source_contract_value, contract_discount_percent, contract_discount_total, contract_date, payment_terms, warranty_terms, execution_terms, contract_terms, first_party_obligations, second_party_obligations, prepared_by_text, client_signature_data_url, client_signed_name, client_signed_at, sales_signature_data_url, sales_signed_name, sales_signed_at, signed_by_sales_user_id, language, notes, created_by, created_at, updated_at";
 const contractDocumentSelect =
   "id, contract_number, project_id, quotation_id, client_id, status, contract_value, contract_date, payment_terms, warranty_terms, execution_terms, contract_terms, first_party_obligations, second_party_obligations, prepared_by_text, language, notes, created_by, created_at, updated_at";
 const contractLegacySelect =
@@ -323,6 +323,8 @@ export async function POST(request: Request) {
     client_id: body.client_id,
     status: body.status ?? "Draft",
     contract_value: body.contract_value ?? 0,
+    pricing_source:
+      body.pricing_source === "project_costing" ? "project_costing" : "catalog",
     source_contract_value:
       body.source_contract_value ?? body.contract_value ?? 0,
     contract_discount_percent: contractDiscountPercent,

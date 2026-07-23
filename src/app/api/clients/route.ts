@@ -18,6 +18,10 @@ const clientWriteRoles = [
 ] as const;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const clientColumns =
+  "id, client_name, mobile, alternate_mobile, address, province, city, email, notes";
+const clientColumnsWithLocation =
+  `${clientColumns}, location_latitude, location_longitude`;
 
 type ClientPayload = {
   client_name?: unknown;
@@ -67,6 +71,22 @@ function coordinateValue(value: unknown, minimum: number, maximum: number) {
   return Number.isFinite(coordinate) && coordinate >= minimum && coordinate <= maximum
     ? coordinate
     : null;
+}
+
+function isMissingClientLocationColumn(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const databaseError = error as { code?: unknown; message?: unknown };
+  const code = typeof databaseError.code === "string" ? databaseError.code : "";
+  const message =
+    typeof databaseError.message === "string" ? databaseError.message : "";
+
+  return (
+    (code === "42703" || code === "PGRST204") &&
+    /location_(latitude|longitude)/i.test(message)
+  );
 }
 
 function duplicateClientDetail(match: DuplicateClientMatch) {
@@ -176,30 +196,69 @@ export async function GET() {
   }
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+  const clientsWithLocation = await admin
     .from("clients")
-    .select(
-      "id, client_name, mobile, alternate_mobile, address, province, city, email, notes, location_latitude, location_longitude",
-    )
+    .select(clientColumnsWithLocation)
     .order("created_at", { ascending: false });
 
-  if (error) {
+  if (isMissingClientLocationColumn(clientsWithLocation.error)) {
+    const clientsWithoutLocation = await admin
+      .from("clients")
+      .select(clientColumns)
+      .order("created_at", { ascending: false });
+
+    if (clientsWithoutLocation.error) {
+      console.error("[api/clients] fallback load failed", {
+        route: "/api/clients",
+        operation: "select-without-location",
+        table: "public.clients",
+        client: "createAdminClient",
+        executingRole: "service_role",
+        error: clientsWithoutLocation.error,
+      });
+
+      return NextResponse.json(
+        {
+          error: friendlyDatabaseError(
+            clientsWithoutLocation.error,
+            "Unable to load clients.",
+          ),
+        },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({
+      clients: (clientsWithoutLocation.data ?? []).map((client) => ({
+        ...client,
+        location_latitude: null,
+        location_longitude: null,
+      })),
+    });
+  }
+
+  if (clientsWithLocation.error) {
     console.error("[api/clients] load failed", {
       route: "/api/clients",
       operation: "select",
       table: "public.clients",
       client: "createAdminClient",
       executingRole: "service_role",
-      error,
+      error: clientsWithLocation.error,
     });
 
     return NextResponse.json(
-      { error: friendlyDatabaseError(error, "Unable to load clients.") },
+      {
+        error: friendlyDatabaseError(
+          clientsWithLocation.error,
+          "Unable to load clients.",
+        ),
+      },
       { status: 500 },
     );
   }
 
-  return NextResponse.json({ clients: data ?? [] });
+  return NextResponse.json({ clients: clientsWithLocation.data ?? [] });
 }
 
 export async function POST(request: Request) {
@@ -269,23 +328,29 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+  const clientPayload = {
+    client_name: clientName,
+    mobile,
+    alternate_mobile: textValue(body.alternate_mobile) || null,
+    address: textValue(body.address),
+    province: textValue(body.province) || null,
+    city: textValue(body.city) || null,
+    email: normalizeEmail(email) || null,
+    notes: textValue(body.notes) || null,
+    created_by: authCheck.user.id,
+  };
+  const insertWithLocation = await admin
     .from("clients")
     .insert({
-      client_name: clientName,
-      mobile,
-      alternate_mobile: textValue(body.alternate_mobile) || null,
-      address: textValue(body.address),
-      province: textValue(body.province) || null,
-      city: textValue(body.city) || null,
-      email: normalizeEmail(email) || null,
-      notes: textValue(body.notes) || null,
+      ...clientPayload,
       location_latitude: coordinateValue(body.location_latitude, -90, 90),
       location_longitude: coordinateValue(body.location_longitude, -180, 180),
-      created_by: authCheck.user.id,
     })
     .select("id")
     .single();
+  const { data, error } = isMissingClientLocationColumn(insertWithLocation.error)
+    ? await admin.from("clients").insert(clientPayload).select("id").single()
+    : insertWithLocation;
 
   if (error) {
     const isDuplicate = isDuplicateError(error);
@@ -383,23 +448,34 @@ export async function PATCH(request: Request) {
   }
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+  const clientPayload = {
+    client_name: clientName,
+    mobile,
+    alternate_mobile: textValue(body.alternate_mobile) || null,
+    address: textValue(body.address),
+    province: textValue(body.province) || null,
+    city: textValue(body.city) || null,
+    email: normalizeEmail(email) || null,
+    notes: textValue(body.notes) || null,
+  };
+  const updateWithLocation = await admin
     .from("clients")
     .update({
-      client_name: clientName,
-      mobile,
-      alternate_mobile: textValue(body.alternate_mobile) || null,
-      address: textValue(body.address),
-      province: textValue(body.province) || null,
-      city: textValue(body.city) || null,
-      email: normalizeEmail(email) || null,
-      notes: textValue(body.notes) || null,
+      ...clientPayload,
       location_latitude: coordinateValue(body.location_latitude, -90, 90),
       location_longitude: coordinateValue(body.location_longitude, -180, 180),
     })
     .eq("id", body.id)
     .select("id")
     .maybeSingle();
+  const { data, error } = isMissingClientLocationColumn(updateWithLocation.error)
+    ? await admin
+        .from("clients")
+        .update(clientPayload)
+        .eq("id", body.id)
+        .select("id")
+        .maybeSingle()
+    : updateWithLocation;
 
   if (error) {
     const isDuplicate = isDuplicateError(error);

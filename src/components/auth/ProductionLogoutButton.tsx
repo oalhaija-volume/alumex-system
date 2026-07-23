@@ -2,7 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { clearCurrentRoleCache } from "@/components/auth/useCurrentRole";
 import { useI18n } from "@/components/i18n/I18nProvider";
+import { clearClientDataCache } from "@/lib/clientRequestCache";
 import { createClient } from "@/lib/supabase/client";
 
 export function ProductionLogoutButton({
@@ -23,6 +25,8 @@ export function ProductionLogoutButton({
       const supabase = createClient();
       await supabase.auth.signOut();
     } finally {
+      clearCurrentRoleCache();
+      clearClientDataCache();
       router.replace("/login");
       router.refresh();
     }

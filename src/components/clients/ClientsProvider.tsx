@@ -11,6 +11,10 @@ import {
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import type { Client } from "@/data/ui";
 import { canViewSalesPrices } from "@/lib/auth/roles";
+import {
+  invalidateClientData,
+  loadCachedClientData,
+} from "@/lib/clientRequestCache";
 
 type ClientInput = Omit<Client, "id">;
 
@@ -99,13 +103,13 @@ function toClientUpdate(client: ClientInput) {
 }
 
 export function ClientsProvider({ children }: { children: React.ReactNode }) {
-  const { isLoaded: isRoleLoaded, role } = useCurrentRole();
+  const { isLoaded: isRoleLoaded, role, userId } = useCurrentRole();
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const canLoadClients = canViewSalesPrices(role);
 
-  const refreshClients = useCallback(async () => {
+  const loadClients = useCallback(async (force = false) => {
     if (!isRoleLoaded) {
       return;
     }
@@ -121,16 +125,23 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
     setError("");
 
     try {
-      const response = await fetch("/api/clients", { cache: "no-store" });
-      const body = (await response.json().catch(() => null)) as
-        | { clients?: ClientRow[]; error?: string }
-        | null;
+      const nextClients = await loadCachedClientData(
+        `clients:${userId ?? "anonymous"}`,
+        async () => {
+          const response = await fetch("/api/clients");
+          const body = (await response.json().catch(() => null)) as
+            | { clients?: ClientRow[]; error?: string }
+            | null;
 
-      if (!response.ok) {
-        throw new Error(body?.error ?? "Unable to load clients.");
-      }
+          if (!response.ok) {
+            throw new Error(body?.error ?? "Unable to load clients.");
+          }
 
-      setClients((body?.clients ?? []).map(mapClient));
+          return (body?.clients ?? []).map(mapClient);
+        },
+        { force, ttlMs: 30_000 },
+      );
+      setClients(nextClients);
     } catch (loadError) {
       setError(
         loadError instanceof Error ? loadError.message : "Unable to load clients.",
@@ -139,15 +150,19 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [canLoadClients, isRoleLoaded]);
+  }, [canLoadClients, isRoleLoaded, userId]);
+
+  const refreshClients = useCallback(async () => {
+    await loadClients(true);
+  }, [loadClients]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void refreshClients();
+      void loadClients();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [refreshClients]);
+  }, [loadClients]);
 
   const createClient = useCallback(
     async (client: ClientInput) => {
@@ -161,9 +176,10 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
         throw new Error(await readApiError(response, "Unable to save client."));
       }
 
+      invalidateClientData(`clients:${userId ?? "anonymous"}`);
       await refreshClients();
     },
-    [refreshClients],
+    [refreshClients, userId],
   );
 
   const updateClient = useCallback(
@@ -178,9 +194,10 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
         throw new Error(await readApiError(response, "Unable to save client."));
       }
 
+      invalidateClientData(`clients:${userId ?? "anonymous"}`);
       await refreshClients();
     },
-    [refreshClients],
+    [refreshClients, userId],
   );
 
   const deleteClient = useCallback(
@@ -193,9 +210,10 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
         throw new Error(await readApiError(response, "Unable to delete client."));
       }
 
+      invalidateClientData(`clients:${userId ?? "anonymous"}`);
       await refreshClients();
     },
-    [refreshClients],
+    [refreshClients, userId],
   );
 
   const findClient = useCallback(

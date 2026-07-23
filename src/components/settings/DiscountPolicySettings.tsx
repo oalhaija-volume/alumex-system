@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import {
   defaultDiscountPolicies,
+  invalidateDiscountPoliciesCache,
   loadDiscountPolicies,
   type DiscountPolicy,
 } from "@/lib/pricing/discountPolicy";
@@ -23,6 +24,7 @@ async function saveDiscountPolicies(policies: DiscountPolicy[]) {
     throw new Error(body?.error ?? "Unable to save discount policies.");
   }
 
+  invalidateDiscountPoliciesCache();
   return body?.policies ?? [];
 }
 

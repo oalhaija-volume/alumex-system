@@ -17,6 +17,10 @@ import type {
   StructuralOpening,
 } from "@/data/ui";
 import { friendlyDatabaseError } from "@/lib/friendlyErrors";
+import {
+  invalidateClientData,
+  loadCachedClientData,
+} from "@/lib/clientRequestCache";
 
 type ProjectInput = Omit<Project, "id" | "structuralOpenings">;
 type StructuralOpeningInput = Omit<StructuralOpening, "id">;
@@ -162,7 +166,7 @@ function mapProject(
 }
 
 export function ProjectsProvider({ children }: { children: React.ReactNode }) {
-  const { isLoaded: isRoleLoaded, role } = useCurrentRole();
+  const { isLoaded: isRoleLoaded, role, userId } = useCurrentRole();
   const { clients } = useClients();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -170,7 +174,7 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
   const [warning, setWarning] = useState("");
   const canLoadProjects = Boolean(role);
 
-  const refreshProjects = useCallback(async () => {
+  const loadProjects = useCallback(async (force = false) => {
     if (!isRoleLoaded) {
       return;
     }
@@ -188,36 +192,44 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
     setWarning("");
 
     try {
-      const response = await fetch("/api/projects", { cache: "no-store" });
-      const body = (await response.json().catch(() => null)) as
-        | {
-            projects?: ProjectRow[];
-            openings?: OpeningRow[];
-            error?: string;
-            warning?: string;
+      const body = await loadCachedClientData(
+        `projects:${userId ?? "anonymous"}`,
+        async () => {
+          const response = await fetch("/api/projects");
+          const result = (await response.json().catch(() => null)) as
+            | {
+                projects?: ProjectRow[];
+                openings?: OpeningRow[];
+                error?: string;
+                warning?: string;
+              }
+            | null;
+
+          if (!response.ok) {
+            throw new Error(result?.error ?? "Unable to load projects.");
           }
-        | null;
 
-      if (!response.ok) {
-        throw new Error(body?.error ?? "Unable to load projects.");
-      }
+          return result ?? {};
+        },
+        { force, ttlMs: 30_000 },
+      );
 
-      if (body?.warning) {
+      if (body.warning) {
         setWarning(
           `Projects loaded using compatibility mode. Apply supabase/manual_sql/20260622_opening_solid_panel_height.sql to remove this warning. Details: ${body.warning}`,
         );
       }
 
       const openingsByProject = new Map<string, StructuralOpening[]>();
-      (body?.openings ?? []).forEach((opening) => {
+      (body.openings ?? []).forEach((opening) => {
         const list = openingsByProject.get(opening.project_id) ?? [];
         list.push(mapOpening(opening));
         openingsByProject.set(opening.project_id, list);
       });
 
       setProjects(
-        (body?.projects ?? []).map((project) =>
-          mapProject(project, clients, openingsByProject),
+        (body.projects ?? []).map((project) =>
+          mapProject(project, [], openingsByProject),
         ),
       );
     } catch (loadError) {
@@ -225,15 +237,19 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [canLoadProjects, clients, isRoleLoaded]);
+  }, [canLoadProjects, isRoleLoaded, userId]);
+
+  const refreshProjects = useCallback(async () => {
+    await loadProjects(true);
+  }, [loadProjects]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void refreshProjects();
+      void loadProjects();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [refreshProjects]);
+  }, [loadProjects]);
 
   const createProject = useCallback(
     async (project: ProjectInput) => {
@@ -268,9 +284,10 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         ]);
       }
 
+      invalidateClientData(`projects:${userId ?? "anonymous"}`);
       await refreshProjects();
     },
-    [clients, refreshProjects],
+    [clients, refreshProjects, userId],
   );
 
   const updateProject = useCallback(
@@ -298,9 +315,10 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         throw new Error(await readApiError(response, "Unable to save project."));
       }
 
+      invalidateClientData(`projects:${userId ?? "anonymous"}`);
       await refreshProjects();
     },
-    [refreshProjects],
+    [refreshProjects, userId],
   );
 
   const deleteProjects = useCallback(
@@ -318,9 +336,10 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         throw new Error(body?.error ?? "Unable to delete project.");
       }
 
+      invalidateClientData(`projects:${userId ?? "anonymous"}`);
       await refreshProjects();
     },
-    [refreshProjects],
+    [refreshProjects, userId],
   );
 
   const findProject = useCallback(
@@ -340,9 +359,10 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         throw new Error(await readApiError(response, "Unable to save opening."));
       }
 
+      invalidateClientData(`projects:${userId ?? "anonymous"}`);
       await refreshProjects();
     },
-    [refreshProjects],
+    [refreshProjects, userId],
   );
 
   const updateOpening = useCallback(
@@ -361,9 +381,10 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         throw new Error(await readApiError(response, "Unable to save opening."));
       }
 
+      invalidateClientData(`projects:${userId ?? "anonymous"}`);
       await refreshProjects();
     },
-    [refreshProjects],
+    [refreshProjects, userId],
   );
 
   const deleteOpening = useCallback(
@@ -377,9 +398,10 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         throw new Error(await readApiError(response, "Unable to delete opening."));
       }
 
+      invalidateClientData(`projects:${userId ?? "anonymous"}`);
       await refreshProjects();
     },
-    [refreshProjects],
+    [refreshProjects, userId],
   );
 
   const duplicateOpening = useCallback(

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import {
   enforceProductPricingRules,
+  invalidateProductPricesCache,
   isGeorgianBarsName,
   loadProductPrices,
   productCatalogCategories,
@@ -56,6 +57,7 @@ async function saveProductPrices(products: ProductDraft[]) {
     throw new Error(body?.error ?? "Unable to save product prices.");
   }
 
+  invalidateProductPricesCache();
   return body?.products ?? [];
 }
 

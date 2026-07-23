@@ -94,18 +94,32 @@ export function optionsForCategory(
       );
 }
 
-export async function loadOpeningDropdownOptions() {
-  const response = await fetch("/api/settings/opening-dropdown-options", {
-    cache: "no-store",
-  });
-  const body = (await response.json().catch(() => null)) as {
-    options?: OpeningDropdownOption[];
-    error?: string;
-  } | null;
+const openingOptionsCacheKey = "settings:opening-dropdown-options";
 
-  if (!response.ok) {
-    throw new Error(body?.error ?? "Unable to load opening dropdown options.");
-  }
-
-  return body?.options?.length ? body.options : defaultOpeningDropdownOptions;
+export function invalidateOpeningDropdownOptionsCache() {
+  invalidateClientData(openingOptionsCacheKey);
 }
+
+export async function loadOpeningDropdownOptions() {
+  return loadCachedClientData(
+    openingOptionsCacheKey,
+    async () => {
+      const response = await fetch("/api/settings/opening-dropdown-options");
+      const body = (await response.json().catch(() => null)) as {
+        options?: OpeningDropdownOption[];
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Unable to load opening dropdown options.");
+      }
+
+      return body?.options?.length ? body.options : defaultOpeningDropdownOptions;
+    },
+    { ttlMs: 5 * 60_000 },
+  );
+}
+import {
+  invalidateClientData,
+  loadCachedClientData,
+} from "@/lib/clientRequestCache";

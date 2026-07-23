@@ -75,13 +75,17 @@ export function DashboardView() {
   useEffect(() => {
     const timer = window.setTimeout(async () => {
       try {
-        setSavedQuotations(
-          showSalesPrices ? await loadSupabaseQuotations(projects) : [],
-        );
         const supabase = createSupabaseClient();
-        const { count } = await supabase
-          .from("contracts")
-          .select("id", { count: "exact", head: true });
+        const [quotations, { count }] = await Promise.all([
+          showSalesPrices
+            ? loadSupabaseQuotations(projects)
+            : Promise.resolve([]),
+          supabase
+            .from("contracts")
+            .select("id", { count: "exact", head: true }),
+        ]);
+
+        setSavedQuotations(quotations);
         setContractCount(count ?? 0);
       } catch {
         setSavedQuotations([]);

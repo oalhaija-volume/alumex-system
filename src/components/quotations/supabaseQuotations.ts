@@ -1,5 +1,9 @@
 import type { Project } from "@/data/ui";
 import type { QuotationDraft, QuotationLine } from "@/components/quotations/quotationTypes";
+import {
+  invalidateClientData,
+  loadCachedClientData,
+} from "@/lib/clientRequestCache";
 
 type QuotationRow = {
   id: string;
@@ -61,28 +65,42 @@ function mapLine(item: QuotationItemRow): QuotationLine {
   };
 }
 
+const quotationsCacheKey = "commercial:quotations";
+
+export function invalidateQuotationsCache() {
+  invalidateClientData(quotationsCacheKey);
+}
+
 export async function loadSupabaseQuotations(
   projects: Project[],
 ): Promise<QuotationDraft[]> {
-  const response = await fetch("/api/quotations", { cache: "no-store" });
-  const body = (await response.json().catch(() => null)) as {
-    quotations?: QuotationRow[];
-    items?: QuotationItemRow[];
-    error?: string;
-  } | null;
+  const body = await loadCachedClientData(
+    quotationsCacheKey,
+    async () => {
+      const response = await fetch("/api/quotations");
+      const result = (await response.json().catch(() => null)) as {
+        quotations?: QuotationRow[];
+        items?: QuotationItemRow[];
+        error?: string;
+      } | null;
 
-  if (!response.ok) {
-    throw new Error(body?.error ?? "Unable to load quotations.");
-  }
+      if (!response.ok) {
+        throw new Error(result?.error ?? "Unable to load quotations.");
+      }
+
+      return result ?? {};
+    },
+    { ttlMs: 15_000 },
+  );
 
   const itemsByQuotation = new Map<string, QuotationLine[]>();
-  (body?.items ?? []).forEach((item) => {
+  (body.items ?? []).forEach((item) => {
     const list = itemsByQuotation.get(item.quotation_id) ?? [];
     list.push(mapLine(item));
     itemsByQuotation.set(item.quotation_id, list);
   });
 
-  return (body?.quotations ?? []).reduce<QuotationDraft[]>(
+  return (body.quotations ?? []).reduce<QuotationDraft[]>(
     (quotations, quotation) => {
       const project = projects.find((item) => item.id === quotation.project_id);
 
@@ -122,4 +140,6 @@ export async function deleteSupabaseQuotation(id: string) {
       body?.error ?? "Quotation was not deleted. It may already have been removed.",
     );
   }
+
+  invalidateQuotationsCache();
 }

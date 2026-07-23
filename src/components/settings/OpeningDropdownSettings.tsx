@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import {
   defaultOpeningDropdownOptions,
+  invalidateOpeningDropdownOptionsCache,
   loadOpeningDropdownOptions,
   openingOptionCategories,
   type OpeningDropdownOption,
@@ -37,6 +38,7 @@ async function saveOpeningDropdownOptions(options: OptionDraft[]) {
     throw new Error(body?.error ?? "Unable to save opening dropdown options.");
   }
 
+  invalidateOpeningDropdownOptionsCache();
   return body?.options ?? [];
 }
 

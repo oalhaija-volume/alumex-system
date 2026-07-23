@@ -1,4 +1,8 @@
 import type { AppRole } from "@/lib/auth/roles";
+import {
+  invalidateClientData,
+  loadCachedClientData,
+} from "@/lib/clientRequestCache";
 
 export type DiscountPolicy = {
   role: AppRole;
@@ -37,18 +41,28 @@ export function clampDiscount(value: number, limit: number) {
   return Math.min(Math.max(value, 0), limit);
 }
 
+const discountPoliciesCacheKey = "settings:discount-policies";
+
+export function invalidateDiscountPoliciesCache() {
+  invalidateClientData(discountPoliciesCacheKey);
+}
+
 export async function loadDiscountPolicies(): Promise<DiscountPolicy[]> {
-  const response = await fetch("/api/settings/discount-policies", {
-    cache: "no-store",
-  });
-  const body = (await response.json().catch(() => null)) as {
-    policies?: DiscountPolicy[];
-    error?: string;
-  } | null;
+  return loadCachedClientData(
+    discountPoliciesCacheKey,
+    async () => {
+      const response = await fetch("/api/settings/discount-policies");
+      const body = (await response.json().catch(() => null)) as {
+        policies?: DiscountPolicy[];
+        error?: string;
+      } | null;
 
-  if (!response.ok) {
-    throw new Error(body?.error ?? "Unable to load discount policies.");
-  }
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Unable to load discount policies.");
+      }
 
-  return body?.policies ?? defaultDiscountPolicies;
+      return body?.policies ?? defaultDiscountPolicies;
+    },
+    { ttlMs: 5 * 60_000 },
+  );
 }

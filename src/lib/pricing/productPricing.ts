@@ -1,4 +1,8 @@
 import type { AppRole } from "@/lib/auth/roles";
+import {
+  invalidateClientData,
+  loadCachedClientData,
+} from "@/lib/clientRequestCache";
 import { defaultDiscountLimitForRole } from "@/lib/pricing/discountPolicy";
 
 export { clampDiscount } from "@/lib/pricing/discountPolicy";
@@ -208,20 +212,30 @@ export function discountLimitForRole(role: AppRole | null) {
   return defaultDiscountLimitForRole(role);
 }
 
+const productPricesCacheKey = "settings:product-prices";
+
+export function invalidateProductPricesCache() {
+  invalidateClientData(productPricesCacheKey);
+}
+
 export async function loadProductPrices(): Promise<ProductPrice[]> {
-  const response = await fetch("/api/settings/product-prices", {
-    cache: "no-store",
-  });
-  const body = (await response.json().catch(() => null)) as {
-    products?: ProductPrice[];
-    error?: string;
-  } | null;
+  return loadCachedClientData(
+    productPricesCacheKey,
+    async () => {
+      const response = await fetch("/api/settings/product-prices");
+      const body = (await response.json().catch(() => null)) as {
+        products?: ProductPrice[];
+        error?: string;
+      } | null;
 
-  if (!response.ok) {
-    throw new Error(body?.error ?? "Unable to load product prices.");
-  }
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Unable to load product prices.");
+      }
 
-  return (body?.products ?? []).map((product) =>
-    enforceProductPricingRules(product),
+      return (body?.products ?? []).map((product) =>
+        enforceProductPricingRules(product),
+      );
+    },
+    { ttlMs: 5 * 60_000 },
   );
 }

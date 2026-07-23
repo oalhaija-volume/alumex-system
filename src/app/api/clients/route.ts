@@ -10,7 +10,12 @@ import { friendlyDatabaseError, isDuplicateError } from "@/lib/friendlyErrors";
 const duplicateClientMessage = "Client already exists.";
 const clientHasProjectsMessage = "Client has projects and cannot be deleted";
 const clientReadRoles = ["Admin", "Sales Manager", "Sales Rep", "Branch Manager"] as const;
-const clientWriteRoles = ["Admin", "Sales Manager", "Sales Rep"] as const;
+const clientWriteRoles = [
+  "Admin",
+  "Sales Manager",
+  "Sales Rep",
+  "Branch Manager",
+] as const;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

@@ -19,6 +19,7 @@ import {
 } from "@/components/quotations/quotationTypes";
 import {
   deleteSupabaseQuotation,
+  invalidateQuotationsCache,
   loadSupabaseQuotations,
 } from "@/components/quotations/supabaseQuotations";
 import type { Project } from "@/data/ui";
@@ -173,6 +174,7 @@ async function saveQuotation(payload: {
     throw new Error(body?.error ?? "Unable to save quotation.");
   }
 
+  invalidateQuotationsCache();
   return body.quotation;
 }
 

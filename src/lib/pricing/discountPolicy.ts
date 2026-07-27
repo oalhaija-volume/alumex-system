@@ -10,6 +10,7 @@ export type DiscountPolicy = {
 };
 
 export const defaultDiscountPolicies: DiscountPolicy[] = [
+  { role: "Indoor Sales", max_discount_percent: 2 },
   { role: "Sales Rep", max_discount_percent: 2 },
   { role: "Sales Manager", max_discount_percent: 4 },
   { role: "Branch Manager", max_discount_percent: 6 },

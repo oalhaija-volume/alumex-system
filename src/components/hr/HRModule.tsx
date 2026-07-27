@@ -78,7 +78,7 @@ export function HRModule({ embedded = false }: { embedded?: boolean }) {
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<AppRole>("Sales Rep");
+  const [role, setRole] = useState<AppRole>("Indoor Sales");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [setupWarning, setSetupWarning] = useState("");
@@ -145,7 +145,7 @@ export function HRModule({ embedded = false }: { embedded?: boolean }) {
       setFullName("");
       setUsername("");
       setPassword("");
-      setRole("Sales Rep");
+      setRole("Indoor Sales");
       setNotice("Employee created.");
       await loadHRData();
     } catch (createError) {
@@ -371,7 +371,7 @@ function EmployeeAccessCard({
   ) => Promise<void>;
 }) {
   const [selectedRole, setSelectedRole] = useState<AppRole>(
-    normalizeAppRole(employee.role) ?? "Sales Rep",
+    normalizeAppRole(employee.role) ?? "Indoor Sales",
   );
   const [selectedName, setSelectedName] = useState(employee.full_name ?? "");
   const [pageAccessModes, setPageAccessModes] = useState<

@@ -6,20 +6,30 @@ import {
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
 import { friendlyDatabaseError, isDuplicateError } from "@/lib/friendlyErrors";
+import { loadOutdoorSalesProjectIds } from "@/lib/projects/access";
 
 const duplicateClientMessage = "Client already exists.";
 const clientHasProjectsMessage = "Client has projects and cannot be deleted";
-const clientReadRoles = ["Admin", "Sales Manager", "Sales Rep", "Branch Manager"] as const;
+const clientReadRoles = [
+  "Admin",
+  "Sales Manager",
+  "Indoor Sales",
+  "Outdoor Sales",
+  "Sales Rep",
+  "Branch Manager",
+] as const;
 const clientWriteRoles = [
   "Admin",
   "Sales Manager",
+  "Indoor Sales",
+  "Outdoor Sales",
   "Sales Rep",
   "Branch Manager",
 ] as const;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const clientColumns =
-  "id, client_name, mobile, alternate_mobile, address, province, city, email, notes";
+  "id, client_name, mobile, alternate_mobile, address, province, city, email, notes, created_by";
 const clientColumnsWithLocation =
   `${clientColumns}, location_latitude, location_longitude`;
 
@@ -103,6 +113,36 @@ function duplicateClientDetail(match: DuplicateClientMatch) {
   }
 
   return `Client already exists with the same mobile: ${clientName}${mobileDetail}.`;
+}
+
+async function outdoorSalesClientIds(userId: string) {
+  const admin = createAdminClient();
+  const { data: ownedClients, error: clientsError } = await admin
+    .from("clients")
+    .select("id")
+    .eq("created_by", userId);
+  const { data: ownedProjects, error: projectsError } = await admin
+    .from("projects")
+    .select("id, client_id");
+  const projectScope = await loadOutdoorSalesProjectIds(userId);
+
+  if (clientsError || projectsError || projectScope.error) {
+    return {
+      ids: new Set<string>(),
+      error: clientsError ?? projectsError ?? projectScope.error,
+    };
+  }
+
+  return {
+    ids: new Set([
+      ...(ownedClients ?? []).map((client) => client.id),
+      ...(ownedProjects ?? [])
+        .filter((project) => projectScope.ids.has(project.id))
+        .map((project) => project.client_id)
+        .filter((clientId): clientId is string => Boolean(clientId)),
+    ]),
+    error: null,
+  };
 }
 
 async function findDuplicateClient({
@@ -196,6 +236,27 @@ export async function GET() {
   }
 
   const admin = createAdminClient();
+  const outdoorScope =
+    authCheck.role === "Outdoor Sales"
+      ? await outdoorSalesClientIds(authCheck.user.id)
+      : null;
+
+  if (outdoorScope?.error) {
+    return NextResponse.json(
+      {
+        error: friendlyDatabaseError(
+          outdoorScope.error,
+          "Unable to verify client access.",
+        ),
+      },
+      { status: 500 },
+    );
+  }
+
+  const visibleClients = <T extends { id: string }>(clients: T[]) =>
+    outdoorScope
+      ? clients.filter((client) => outdoorScope.ids.has(client.id))
+      : clients;
   const clientsWithLocation = await admin
     .from("clients")
     .select(clientColumnsWithLocation)
@@ -229,11 +290,13 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      clients: (clientsWithoutLocation.data ?? []).map((client) => ({
-        ...client,
-        location_latitude: null,
-        location_longitude: null,
-      })),
+      clients: visibleClients(clientsWithoutLocation.data ?? []).map(
+        (client) => ({
+          ...client,
+          location_latitude: null,
+          location_longitude: null,
+        }),
+      ),
     });
   }
 
@@ -258,7 +321,9 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json({ clients: clientsWithLocation.data ?? [] });
+  return NextResponse.json({
+    clients: visibleClients(clientsWithLocation.data ?? []),
+  });
 }
 
 export async function POST(request: Request) {
@@ -448,6 +513,29 @@ export async function PATCH(request: Request) {
   }
 
   const admin = createAdminClient();
+  if (authCheck.role === "Outdoor Sales") {
+    const scope = await outdoorSalesClientIds(authCheck.user.id);
+
+    if (scope.error) {
+      return NextResponse.json(
+        {
+          error: friendlyDatabaseError(
+            scope.error,
+            "Unable to verify client access.",
+          ),
+        },
+        { status: 500 },
+      );
+    }
+
+    if (!scope.ids.has(body.id)) {
+      return NextResponse.json(
+        { error: "Assigned client access is required." },
+        { status: 403 },
+      );
+    }
+  }
+
   const clientPayload = {
     client_name: clientName,
     mobile,

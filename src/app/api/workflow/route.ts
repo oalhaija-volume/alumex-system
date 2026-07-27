@@ -595,7 +595,11 @@ function canRoleSeeProject({
     return Boolean(project.sales_engineer_id || project.created_by);
   }
 
-  if (role === "Sales Rep") {
+  if (
+    role === "Indoor Sales" ||
+    role === "Outdoor Sales" ||
+    role === "Sales Rep"
+  ) {
     return project.sales_engineer_id === userId || project.created_by === userId;
   }
 

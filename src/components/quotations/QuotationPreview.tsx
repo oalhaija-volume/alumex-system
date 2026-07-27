@@ -13,6 +13,7 @@ import {
   quotationStorageKey,
   type QuotationDraft,
 } from "@/components/quotations/quotationTypes";
+import { transitionQuotationVersion } from "@/components/quotations/supabaseQuotations";
 
 const totalPages = 3;
 
@@ -462,6 +463,17 @@ export function QuotationPreview() {
     [draft],
   );
 
+  async function printQuotation() {
+    if (draft?.versionId) {
+      await transitionQuotationVersion(draft.versionId, "record_print").catch(
+        (printError) => {
+          console.error("[QuotationPreview] unable to record print", printError);
+        },
+      );
+    }
+    window.print();
+  }
+
   if (isLoading) {
     return (
       <main className="min-h-screen bg-slate-100 px-4 py-8">
@@ -509,11 +521,12 @@ export function QuotationPreview() {
         </Link>
         <div className="flex flex-col gap-3 sm:flex-row">
           <p className="flex min-h-11 items-center rounded-md border border-emerald-200 bg-emerald-50 px-4 text-sm font-bold text-emerald-700">
-            {t("quotations.savedQuotation")}
+            {(draft.versionStatus ?? "draft").replaceAll("_", " ")} · v
+            {draft.versionNumber ?? 1}
           </p>
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => void printQuotation()}
             className="h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700"
           >
             {t("quotations.printQuotation")}

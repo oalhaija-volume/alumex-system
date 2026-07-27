@@ -1,6 +1,8 @@
 export type AppRole =
   | "Admin"
   | "Sales Manager"
+  | "Indoor Sales"
+  | "Outdoor Sales"
   | "Sales Rep"
   | "Finance / Accountant"
   | "Operations Manager"
@@ -23,7 +25,8 @@ export type AppRole =
 export const appRoles: AppRole[] = [
   "Admin",
   "Sales Manager",
-  "Sales Rep",
+  "Indoor Sales",
+  "Outdoor Sales",
   "Finance / Accountant",
   "Operations Manager",
   "Procurement Engineer",
@@ -43,9 +46,12 @@ export const appRoles: AppRole[] = [
   "HR",
 ];
 
+const recognizedAppRoles: AppRole[] = [...appRoles, "Sales Rep"];
+
 export const salesPriceRoles: AppRole[] = [
   "Admin",
   "Sales Manager",
+  "Indoor Sales",
   "Sales Rep",
   "Branch Manager",
 ];
@@ -53,12 +59,13 @@ export const salesPriceRoles: AppRole[] = [
 export const financeValueRoles: AppRole[] = [
   "Admin",
   "Sales Manager",
+  "Indoor Sales",
   "Sales Rep",
   "Finance / Accountant",
 ];
 
 export function isAppRole(value: unknown): value is AppRole {
-  return appRoles.includes(value as AppRole);
+  return recognizedAppRoles.includes(value as AppRole);
 }
 
 export function normalizeAppRole(role: string | null | undefined): AppRole | null {

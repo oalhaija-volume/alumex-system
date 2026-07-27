@@ -11,6 +11,7 @@ import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 const contractRoles = [
   "Admin",
   "Sales Manager",
+  "Indoor Sales",
   "Sales Rep",
   "Branch Manager",
   "Finance / Accountant",

@@ -74,7 +74,7 @@ export async function requireRole(
         ? "Admin"
         : normalizeAppRole(profileData?.role);
 
-  if (!role || !allowedRoles.includes(role)) {
+  if (!role || (role !== "Admin" && !allowedRoles.includes(role))) {
     return {
       ok: false,
       status: 403,

@@ -9,6 +9,10 @@ type QuotationRow = {
   id: string;
   quotation_number: string;
   project_id: string;
+  version_id: string;
+  version_number: number;
+  version_status: QuotationDraft["versionStatus"];
+  approved_at: string | null;
   quotation_discount_percent: number | string;
   pricing_source: "catalog" | "project_costing";
   notes: string | null;
@@ -71,6 +75,31 @@ export function invalidateQuotationsCache() {
   invalidateClientData(quotationsCacheKey);
 }
 
+export async function transitionQuotationVersion(
+  versionId: string,
+  action: "mark_ready" | "present" | "send" | "approve" | "record_print",
+) {
+  const response = await fetch(
+    `/api/quotations/versions/${encodeURIComponent(versionId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    },
+  );
+  const body = (await response.json().catch(() => null)) as {
+    error?: string;
+  } | null;
+
+  if (!response.ok) {
+    throw new Error(
+      body?.error ?? "Unable to update the quotation version.",
+    );
+  }
+
+  invalidateQuotationsCache();
+}
+
 export async function loadSupabaseQuotations(
   projects: Project[],
 ): Promise<QuotationDraft[]> {
@@ -110,6 +139,10 @@ export async function loadSupabaseQuotations(
 
       quotations.push({
         id: quotation.id,
+        versionId: quotation.version_id,
+        versionNumber: quotation.version_number,
+        versionStatus: quotation.version_status,
+        approvedAt: quotation.approved_at ?? undefined,
         quotationNumber: quotation.quotation_number,
         project,
         lines: itemsByQuotation.get(quotation.id) ?? [],

@@ -18,7 +18,6 @@ import {
   calculateQuotationTotals,
   type QuotationDraft,
 } from "@/components/quotations/quotationTypes";
-import { loadSupabaseQuotations } from "@/components/quotations/supabaseQuotations";
 import { useProjects } from "@/components/projects/ProjectsProvider";
 import { canViewSalesPrices } from "@/lib/auth/roles";
 import {
@@ -44,6 +43,7 @@ type ContractRow = {
   contract_number: string;
   project_id: string;
   quotation_id: string | null;
+  quotation_version_id?: string | null;
   contract_value: number | string;
   pricing_source?: "catalog" | "project_costing";
   source_contract_value?: number | string | null;
@@ -83,6 +83,8 @@ type ContractSourceDraft = QuotationDraft & {
 
 type ContractSourceRow = {
   id: string;
+  versionId: string;
+  versionNumber: number;
   quotationNumber: string;
   projectId: string;
   projectName: string;
@@ -91,6 +93,25 @@ type ContractSourceRow = {
   contractTotal: number;
   pricingSource: "catalog" | "project_costing";
   status?: string | null;
+  items: Array<{
+    id: string;
+    opening_id: string | null;
+    opening_code: string;
+    floor: string | null;
+    room: string | null;
+    width: number | string;
+    height: number | string;
+    solid_panel_height: number | string;
+    quantity: number;
+    product_system: string | null;
+    glass_type: string | null;
+    aluminum_color: string | null;
+    unit_price: number | string;
+    discount_percent: number | string;
+    line_type: "base" | "service" | "addon" | "accessory";
+    is_discountable: boolean;
+    notes: string | null;
+  }>;
 };
 
 async function readApiError(
@@ -194,12 +215,28 @@ async function loadContractSourceQuotations(
 
       sources.push({
         id: source.id,
-        quotationNumber: source.quotationNumber,
+        versionId: source.versionId,
+        versionNumber: source.versionNumber,
+        versionStatus: "approved",
+        quotationNumber: `${source.quotationNumber} · v${source.versionNumber}`,
         project,
-        lines: project.structuralOpenings.map((opening) => ({
-          ...opening,
-          unitPrice: 0,
-          discountPercent: 0,
+        lines: source.items.map((item) => ({
+          id: item.opening_id ?? item.id,
+          floor: item.floor ?? "",
+          room: item.room ?? "",
+          openingCode: item.opening_code,
+          width: Number(item.width),
+          height: Number(item.height),
+          solidPanelHeight: Number(item.solid_panel_height),
+          quantity: item.quantity,
+          productSystem: item.product_system ?? "",
+          glassType: item.glass_type ?? "",
+          aluminumColor: item.aluminum_color ?? "",
+          notes: item.notes ?? "",
+          unitPrice: Number(item.unit_price),
+          discountPercent: Number(item.discount_percent),
+          lineType: item.line_type,
+          isDiscountable: item.is_discountable,
         })),
         discountPercent: 0,
         notes: "",
@@ -304,9 +341,7 @@ export function ContractGenerator() {
 
     const timer = window.setTimeout(async () => {
       try {
-        const nextQuotations = canViewSalesPrices(role)
-          ? await loadSupabaseQuotations(projects)
-          : await loadContractSourceQuotations(projects);
+        const nextQuotations = await loadContractSourceQuotations(projects);
         const nextQuotationSources: ContractSourceDraft[] = nextQuotations.map((quotation) => ({
           ...quotation,
           quotationStatus:
@@ -381,11 +416,17 @@ export function ContractGenerator() {
             contractNumber: contract.contract_number,
             contractDate: contract.contract_date ?? today(),
             quotationNumber:
-              nextQuotationSources.find((quotation) => quotation.id === contract.quotation_id)
+              nextQuotationSources.find(
+                (quotation) =>
+                  quotation.versionId === contract.quotation_version_id,
+              )
                 ?.quotationNumber ?? "",
             project,
             openingSchedule:
-              nextQuotationSources.find((quotation) => quotation.id === contract.quotation_id)
+              nextQuotationSources.find(
+                (quotation) =>
+                  quotation.versionId === contract.quotation_version_id,
+              )
                 ?.lines ?? project.structuralOpenings.map((opening) => ({
                   ...opening,
                   unitPrice: 0,
@@ -470,7 +511,11 @@ export function ContractGenerator() {
       return;
     }
 
-    if (!selectedProject.clientId || !selectedQuotation.id) {
+    if (
+      !selectedProject.clientId ||
+      !selectedQuotation.id ||
+      !selectedQuotation.versionId
+    ) {
       setError(t("contracts.saveError"));
       return;
     }
@@ -506,6 +551,7 @@ export function ContractGenerator() {
           contract_number: nextContractNumber,
           project_id: selectedProject.id,
           quotation_id: selectedQuotation.id,
+          quotation_version_id: selectedQuotation.versionId,
           client_id: selectedProject.clientId,
           status: "Draft",
           contract_value: totalAmount,
@@ -654,10 +700,10 @@ export function ContractGenerator() {
         {savedQuotations.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border bg-surface-muted p-6 text-center">
             <p className="text-base font-bold text-foreground">
-              No saved quotations yet.
+              No approved quotations yet.
             </p>
             <p className="mt-2 text-sm text-muted">
-              Create and save a quotation before generating a contract.
+              Approve a quotation version before generating its contract.
             </p>
           </div>
         ) : (

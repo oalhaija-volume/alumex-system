@@ -11,12 +11,27 @@ import {
   technicalErrorMessage,
 } from "@/lib/friendlyErrors";
 import { generateNextProjectNumber } from "@/lib/projects/numbering";
+import { loadOutdoorSalesProjectIds } from "@/lib/projects/access";
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const projectReadRoles = ["Admin", "Sales Manager", "Sales Rep", "Branch Manager"] as const;
-const projectWriteRoles = ["Admin", "Sales Manager", "Sales Rep", "Branch Manager"] as const;
+const projectReadRoles = [
+  "Admin",
+  "Sales Manager",
+  "Indoor Sales",
+  "Outdoor Sales",
+  "Sales Rep",
+  "Branch Manager",
+] as const;
+const projectWriteRoles = [
+  "Admin",
+  "Sales Manager",
+  "Indoor Sales",
+  "Outdoor Sales",
+  "Sales Rep",
+  "Branch Manager",
+] as const;
 const fullProjectSelect =
   "id, project_number, project_name, client_id, address, location_latitude, location_longitude, geofence_radius_meters, project_type, branch, sales_engineer_id, status, clients(client_name)";
 const baseProjectSelect =
@@ -202,13 +217,35 @@ export async function GET() {
       throw profilesResult.error;
     }
 
+    const outdoorScope =
+      authCheck.role === "Outdoor Sales"
+        ? await loadOutdoorSalesProjectIds(authCheck.user.id)
+        : null;
+
+    if (outdoorScope?.error) {
+      throw outdoorScope.error;
+    }
+
     const salesNames = new Map(
       (profilesResult.data ?? []).map((profile) => [
         profile.id,
         profile.full_name?.trim() || profile.email || "",
       ]),
     );
-    const projectsWithSalesOwners = projects.map((project) => ({
+    const visibleProjects =
+      outdoorScope
+        ? projects.filter(
+            (project) => outdoorScope.ids.has(project.id),
+          )
+        : projects;
+    const visibleProjectIds = new Set(
+      visibleProjects.map((project) => project.id),
+    );
+    const visibleOpenings =
+      authCheck.role === "Outdoor Sales"
+        ? openings.filter((opening) => visibleProjectIds.has(opening.project_id))
+        : openings;
+    const projectsWithSalesOwners = visibleProjects.map((project) => ({
       ...project,
       branch: "branch" in project ? project.branch : null,
       sales_engineer_name:
@@ -221,7 +258,7 @@ export async function GET() {
 
     return NextResponse.json({
       projects: projectsWithSalesOwners,
-      openings,
+      openings: visibleOpenings,
       warning:
         technicalErrorMessage(projectsWarning) ||
         technicalErrorMessage(openingsWarning) ||
@@ -408,6 +445,24 @@ export async function PATCH(request: Request) {
   }
 
   const admin = createAdminClient();
+  if (authCheck.role === "Outdoor Sales") {
+    const access = await loadOutdoorSalesProjectIds(authCheck.user.id);
+
+    if (access.error) {
+      return jsonDatabaseError(
+        access.error,
+        "Unable to verify project access.",
+      );
+    }
+
+    if (!access.ids.has(body.id)) {
+      return NextResponse.json(
+        { error: "Assigned project access is required." },
+        { status: 403 },
+      );
+    }
+  }
+
   const { data, error } = await admin
     .from("projects")
     .update({

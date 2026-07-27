@@ -21,6 +21,7 @@ import {
   deleteSupabaseQuotation,
   invalidateQuotationsCache,
   loadSupabaseQuotations,
+  transitionQuotationVersion,
 } from "@/components/quotations/supabaseQuotations";
 import type { Project } from "@/data/ui";
 import { canViewSalesPrices } from "@/lib/auth/roles";
@@ -165,6 +166,9 @@ async function saveQuotation(payload: {
     quotation?: {
       id: string;
       quotation_number: string;
+      version_id: string;
+      version_number: number;
+      version_status: QuotationDraft["versionStatus"];
       created_at?: string | null;
     };
     error?: string;
@@ -733,6 +737,28 @@ export function QuotationBuilder() {
     }
   }
 
+  async function runQuotationAction(
+    quotation: QuotationDraft,
+    action: "mark_ready" | "present" | "send" | "approve",
+  ) {
+    if (!quotation.versionId) {
+      setError("Quotation version information is missing.");
+      return;
+    }
+
+    setError("");
+    try {
+      await transitionQuotationVersion(quotation.versionId, action);
+      await refreshSavedQuotations();
+    } catch (workflowError) {
+      setError(
+        workflowError instanceof Error
+          ? workflowError.message
+          : "Unable to update the quotation version.",
+      );
+    }
+  }
+
   async function openPreview() {
     setError("");
 
@@ -801,6 +827,9 @@ export function QuotationBuilder() {
 
       const draft: QuotationDraft = {
         id: quotation.id,
+        versionId: quotation.version_id,
+        versionNumber: quotation.version_number,
+        versionStatus: quotation.version_status,
         quotationNumber: quotation.quotation_number,
         project: selectedProject,
         lines,
@@ -889,7 +918,7 @@ export function QuotationBuilder() {
                 >
                   <div>
                     <p className="text-sm font-bold text-foreground">
-                      {quotation.quotationNumber}
+                      {quotation.quotationNumber} · v{quotation.versionNumber ?? 1}
                     </p>
                     <p className="mt-1 text-xs text-muted">
                       {term(quotation.project.projectName)} -{" "}
@@ -899,6 +928,9 @@ export function QuotationBuilder() {
                       {quotation.pricingSource === "project_costing"
                         ? "Costing-based quotation"
                         : "Catalog quotation"}
+                    </p>
+                    <p className="mt-1 text-xs font-semibold capitalize text-muted-strong">
+                      {(quotation.versionStatus ?? "draft").replaceAll("_", " ")}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -916,6 +948,53 @@ export function QuotationBuilder() {
                     >
                       {t("quotations.editQuotation")}
                     </button>
+                    {quotation.versionStatus === "draft" ? (
+                      <button
+                        type="button"
+                        onClick={() => void runQuotationAction(quotation, "mark_ready")}
+                        className="h-10 rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-bold text-amber-800"
+                      >
+                        Mark ready
+                      </button>
+                    ) : null}
+                    {quotation.versionStatus === "ready_for_review" ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => void runQuotationAction(quotation, "present")}
+                          className="h-10 rounded-md border border-blue-200 bg-blue-50 px-3 text-sm font-bold text-blue-800"
+                        >
+                          Mark presented
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void runQuotationAction(quotation, "send")}
+                          className="h-10 rounded-md border border-blue-200 bg-blue-50 px-3 text-sm font-bold text-blue-800"
+                        >
+                          Mark sent
+                        </button>
+                      </>
+                    ) : null}
+                    {quotation.versionStatus === "presented" ? (
+                      <button
+                        type="button"
+                        onClick={() => void runQuotationAction(quotation, "send")}
+                        className="h-10 rounded-md border border-blue-200 bg-blue-50 px-3 text-sm font-bold text-blue-800"
+                      >
+                        Mark sent
+                      </button>
+                    ) : null}
+                    {["draft", "ready_for_review", "presented", "sent"].includes(
+                      quotation.versionStatus ?? "draft",
+                    ) && ["Admin", "Sales Manager", "Indoor Sales"].includes(role ?? "") ? (
+                      <button
+                        type="button"
+                        onClick={() => void runQuotationAction(quotation, "approve")}
+                        className="h-10 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-bold text-emerald-800"
+                      >
+                        Approve version
+                      </button>
+                    ) : null}
                   {canDeleteQuotations ? (
                     <button
                       type="button"

@@ -9,7 +9,14 @@ import {
 import { isWorkflowStatus } from "@/lib/workflow/display";
 import type { ProjectWorkflowStatus } from "@/lib/workflow/statuses";
 
-const measurementRoles = ["Admin", "Project Engineer", "Site Engineer"] as const;
+const measurementRoles = [
+  "Admin",
+  "Sales Manager",
+  "Indoor Sales",
+  "Outdoor Sales",
+  "Project Engineer",
+  "Site Engineer",
+] as const;
 
 type ProjectRow = {
   id: string;
@@ -18,6 +25,7 @@ type ProjectRow = {
   client_id: string | null;
   address: string | null;
   workflow_status: string | null;
+  sales_status: string | null;
   project_engineer_id: string | null;
   site_engineer_id: string | null;
   clients:
@@ -54,8 +62,23 @@ type OpeningRow = {
   bottom_frame?: string | null;
   opening_direction?: string | null;
   glass_color?: string | null;
+  measurement_request_id?: string | null;
+  measurement_visit_id?: string | null;
+  measurement_submission_id?: string | null;
+  measurement_version?: number | string | null;
   notes: string | null;
   created_at: string;
+};
+
+type MeasurementRequestRow = {
+  id: string;
+  project_id: string;
+  assigned_to: string | null;
+  return_to_user_id: string | null;
+  status: string;
+  instructions: string | null;
+  preferred_at: string | null;
+  updated_at: string;
 };
 
 type OpeningPayload = {
@@ -173,21 +196,33 @@ function canAccessProject({
   role,
   userId,
   project,
+  measurementRequest,
 }: {
   role: AppRole;
   userId: string;
   project: ProjectRow;
+  measurementRequest: MeasurementRequestRow | null;
 }) {
-  if (role === "Admin") {
+  if (role === "Admin" || role === "Sales Manager" || role === "Indoor Sales") {
     return true;
   }
 
+  if (role === "Outdoor Sales") {
+    return measurementRequest?.assigned_to === userId;
+  }
+
   if (role === "Project Engineer") {
-    return project.project_engineer_id === userId;
+    return (
+      measurementRequest?.assigned_to === userId ||
+      project.project_engineer_id === userId
+    );
   }
 
   if (role === "Site Engineer") {
-    return project.site_engineer_id === userId;
+    return (
+      measurementRequest?.assigned_to === userId ||
+      project.site_engineer_id === userId
+    );
   }
 
   return false;
@@ -219,7 +254,7 @@ async function loadProjectForUser(projectId: string) {
   const { data, error } = await admin
     .from("projects")
     .select(
-      "id, project_number, project_name, client_id, address, workflow_status, project_engineer_id, site_engineer_id, clients(client_name, mobile, email)",
+      "id, project_number, project_name, client_id, address, workflow_status, sales_status, project_engineer_id, site_engineer_id, clients(client_name, mobile, email)",
     )
     .eq("id", projectId)
     .maybeSingle();
@@ -242,11 +277,34 @@ async function loadProjectForUser(projectId: string) {
   }
 
   const project = data as ProjectRow;
+  const { data: requestData, error: requestError } = await admin
+    .from("measurement_requests")
+    .select(
+      "id, project_id, assigned_to, return_to_user_id, status, instructions, preferred_at, updated_at",
+    )
+    .eq("project_id", projectId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (requestError) {
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { error: requestError.message },
+        { status: 500 },
+      ),
+    };
+  }
+
+  const measurementRequest =
+    (requestData as MeasurementRequestRow | null) ?? null;
   if (
     !canAccessProject({
       role: authCheck.role,
       userId: authCheck.user.id,
       project,
+      measurementRequest,
     })
   ) {
     return {
@@ -258,20 +316,57 @@ async function loadProjectForUser(projectId: string) {
     };
   }
 
-  return { ok: true as const, admin, authCheck, project };
+  return {
+    ok: true as const,
+    admin,
+    authCheck,
+    project,
+    measurementRequest,
+  };
 }
 
-async function loadOpenings(admin: ReturnType<typeof createAdminClient>, projectId: string) {
+function currentRequestOpenings(
+  rows: OpeningRow[],
+  measurementRequest: MeasurementRequestRow | null,
+) {
+  if (!measurementRequest) return rows;
+
+  const requestRows = rows.filter(
+    (opening) => opening.measurement_request_id === measurementRequest.id,
+  );
+  const activeDraftRows = requestRows.filter(
+    (opening) => !opening.measurement_submission_id,
+  );
+  if (activeDraftRows.length) return activeDraftRows;
+
+  const latestVersion = requestRows.reduce(
+    (latest, opening) =>
+      Math.max(latest, Number(opening.measurement_version) || 0),
+    0,
+  );
+  return requestRows.filter(
+    (opening) => Number(opening.measurement_version) === latestVersion,
+  );
+}
+
+async function loadOpenings(
+  admin: ReturnType<typeof createAdminClient>,
+  projectId: string,
+  measurementRequest: MeasurementRequestRow | null,
+) {
   const extendedResult = await admin
     .from("openings")
     .select(
-      "id, project_id, floor, room, opening_code, width, height, solid_panel_height, fixed_height, quantity, area_sqm, product_system, glass_type, aluminum_color, shape, opening_type, bottom_frame, opening_direction, glass_color, notes, created_at",
+      "id, project_id, floor, room, opening_code, width, height, solid_panel_height, fixed_height, quantity, area_sqm, product_system, glass_type, aluminum_color, shape, opening_type, bottom_frame, opening_direction, glass_color, measurement_request_id, measurement_visit_id, measurement_submission_id, measurement_version, notes, created_at",
     )
     .eq("project_id", projectId)
     .order("created_at", { ascending: true });
 
   if (!extendedResult.error) {
-    return ((extendedResult.data ?? []) as OpeningRow[]).map(mapOpening);
+    return currentRequestOpenings(
+      (extendedResult.data ?? []) as OpeningRow[],
+      measurementRequest,
+    ).map(mapOpening);
   }
 
   const message = extendedResult.error.message?.toLowerCase() ?? "";
@@ -307,7 +402,10 @@ async function loadOpenings(admin: ReturnType<typeof createAdminClient>, project
   return ((data ?? []) as OpeningRow[]).map(mapOpening);
 }
 
-function projectResponse(project: ProjectRow) {
+function projectResponse(
+  project: ProjectRow,
+  measurementRequest: MeasurementRequestRow | null,
+) {
   const client = clientFromProject(project);
   const workflowStatus: ProjectWorkflowStatus = isWorkflowStatus(project.workflow_status)
     ? project.workflow_status
@@ -319,6 +417,17 @@ function projectResponse(project: ProjectRow) {
     projectName: project.project_name,
     address: project.address ?? "",
     workflowStatus,
+    salesStatus: project.sales_status ?? "",
+    measurementRequest: measurementRequest
+      ? {
+          id: measurementRequest.id,
+          status: measurementRequest.status,
+          assignedTo: measurementRequest.assigned_to,
+          returnTo: measurementRequest.return_to_user_id,
+          instructions: measurementRequest.instructions ?? "",
+          preferredAt: measurementRequest.preferred_at,
+        }
+      : null,
     client: {
       id: project.client_id ?? "",
       name: client?.client_name ?? "",
@@ -339,10 +448,29 @@ export async function GET(
   }
 
   try {
-    const openings = await loadOpenings(loaded.admin, projectId);
+    const openings = await loadOpenings(
+      loaded.admin,
+      projectId,
+      loaded.measurementRequest,
+    );
+    const submissionResult = loaded.measurementRequest
+      ? await loaded.admin
+          .from("measurement_submissions")
+          .select(
+            "id, version, status, submitted_at, reviewed_at, review_note",
+          )
+          .eq("measurement_request_id", loaded.measurementRequest.id)
+          .order("version", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : { data: null, error: null };
+    if (submissionResult.error) {
+      throw submissionResult.error;
+    }
     return NextResponse.json({
-      project: projectResponse(loaded.project),
+      project: projectResponse(loaded.project, loaded.measurementRequest),
       openings,
+      submission: submissionResult.data,
     });
   } catch (error) {
     return NextResponse.json(
@@ -367,6 +495,32 @@ export async function POST(
     return loaded.response;
   }
 
+  if (
+    !loaded.measurementRequest ||
+    !["in_progress", "draft_saved"].includes(loaded.measurementRequest.status)
+  ) {
+    return NextResponse.json(
+      { error: "Start the assigned measurement visit before adding openings." },
+      { status: 409 },
+    );
+  }
+
+  const { data: activeVisit, error: visitError } = await loaded.admin
+    .from("measurement_visits")
+    .select("id")
+    .eq("measurement_request_id", loaded.measurementRequest.id)
+    .is("completed_at", null)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (visitError || !activeVisit) {
+    return NextResponse.json(
+      { error: visitError?.message ?? "Start a measurement visit first." },
+      { status: visitError ? 500 : 409 },
+    );
+  }
+
   const body = (await request.json().catch(() => null)) as OpeningPayload | null;
   const normalized = normalizeOpeningPayload(body ?? {});
   if (!normalized.ok) {
@@ -378,6 +532,8 @@ export async function POST(
     .insert({
       ...normalized.opening,
       project_id: projectId,
+      measurement_request_id: loaded.measurementRequest.id,
+      measurement_visit_id: activeVisit.id,
       created_by: loaded.authCheck.user.id,
     })
     .select(
@@ -402,6 +558,16 @@ export async function PATCH(
     return loaded.response;
   }
 
+  if (
+    !loaded.measurementRequest ||
+    !["in_progress", "draft_saved"].includes(loaded.measurementRequest.status)
+  ) {
+    return NextResponse.json(
+      { error: "Only an active measurement visit can change openings." },
+      { status: 409 },
+    );
+  }
+
   const body = (await request.json().catch(() => null)) as OpeningPayload | null;
   const openingId = typeof body?.id === "string" ? body.id : "";
   if (!openingId) {
@@ -418,6 +584,8 @@ export async function PATCH(
     .update(normalized.opening)
     .eq("id", openingId)
     .eq("project_id", projectId)
+    .eq("measurement_request_id", loaded.measurementRequest.id)
+    .is("measurement_submission_id", null)
     .select(
       "id, project_id, floor, room, opening_code, width, height, solid_panel_height, fixed_height, quantity, area_sqm, product_system, glass_type, aluminum_color, shape, opening_type, bottom_frame, opening_direction, glass_color, notes, created_at",
     )
@@ -447,6 +615,16 @@ export async function DELETE(
     return loaded.response;
   }
 
+  if (
+    !loaded.measurementRequest ||
+    !["in_progress", "draft_saved"].includes(loaded.measurementRequest.status)
+  ) {
+    return NextResponse.json(
+      { error: "Only an active measurement visit can remove openings." },
+      { status: 409 },
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const openingId = searchParams.get("openingId") ?? "";
   if (!openingId) {
@@ -457,7 +635,9 @@ export async function DELETE(
     .from("openings")
     .delete()
     .eq("id", openingId)
-    .eq("project_id", projectId);
+    .eq("project_id", projectId)
+    .eq("measurement_request_id", loaded.measurementRequest.id)
+    .is("measurement_submission_id", null);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

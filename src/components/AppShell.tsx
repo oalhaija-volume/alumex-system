@@ -9,6 +9,7 @@ import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 import { navItems } from "@/data/ui";
 import { canAccessRouteWithOverrides } from "@/lib/auth/permissions";
 import {
@@ -115,14 +116,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isRtl = direction === "rtl";
   const isWideWorkspace = pathname.startsWith("/site-measurements");
 
+  const availableNavItems = role === "Admin" ? navItems : activeNavItems;
   const visibleNavItems = isRoleLoaded
-    ? activeNavItems.filter((item) => {
-        if (role === "Admin" && item.href === "/hr") {
-          return false;
-        }
-
-        return canAccessRouteWithOverrides(item.href, role, pageAccess);
-      })
+    ? availableNavItems.filter((item) =>
+        canAccessRouteWithOverrides(item.href, role, pageAccess),
+      )
     : activeNavItems;
 
   return (
@@ -164,6 +162,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             />
           </Link>
           <div className="flex min-w-0 items-center gap-2">
+            <NotificationCenter />
             <LanguageSwitcher compact />
             <ThemeToggle compact />
             <ShellLogoutButton
@@ -189,6 +188,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </p>
             </div>
             <div className={`flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 ${isRtl ? "flex-row-reverse" : ""}`}>
+              <NotificationCenter />
               <LanguageSwitcher />
               <ThemeToggle />
               <div className="h-10 rounded-md border border-material-outline-variant bg-material-surface-container px-4 text-sm font-semibold leading-10 text-muted">
@@ -209,10 +209,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-30 max-w-[100vw] overflow-x-hidden border-t border-material-outline-variant bg-material-surface-container-low px-2 py-2 shadow-[var(--md-elevation-2)] lg:hidden">
-        <div className="flex gap-1">
+      <nav className="fixed bottom-0 left-0 right-0 z-30 max-w-[100vw] overflow-x-auto border-t border-material-outline-variant bg-material-surface-container-low px-2 py-2 shadow-[var(--md-elevation-2)] lg:hidden">
+        <div className="flex min-w-max gap-1">
           {visibleNavItems.map((item) => (
-            <NavLink key={item.href} compact {...item} />
+            <div key={item.href} className="w-[78px] shrink-0">
+              <NavLink compact {...item} />
+            </div>
           ))}
         </div>
       </nav>

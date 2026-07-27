@@ -26,6 +26,7 @@ const uuidPattern =
 const productPriceRoles = [
   "Admin",
   "Sales Manager",
+  "Indoor Sales",
   "Sales Rep",
   "Branch Manager",
   "Procurement Engineer",

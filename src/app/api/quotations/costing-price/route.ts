@@ -10,6 +10,7 @@ import {
 const quotationRoles = [
   "Admin",
   "Sales Manager",
+  "Indoor Sales",
   "Sales Rep",
   "Branch Manager",
 ] as const;

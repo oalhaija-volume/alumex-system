@@ -180,18 +180,6 @@ function getSupabaseErrorDetails(error: unknown): SupabaseErrorDetails {
   };
 }
 
-function isMissingColumnError(error: unknown) {
-  const details = getSupabaseErrorDetails(error);
-  const message = `${details.message ?? ""} ${details.details ?? ""} ${details.hint ?? ""}`;
-
-  return (
-    details.code === "42703" ||
-    details.code === "PGRST204" ||
-    message.includes("line_type") ||
-    message.includes("is_discountable")
-  );
-}
-
 function quotationErrorResponse(
   error: unknown,
   fallback: string,
@@ -276,62 +264,77 @@ export async function GET() {
   }
 
   const admin = createAdminClient();
-  const [{ data: quotations, error: quotationsError }, itemsResult] =
-    await Promise.all([
+  const [
+    { data: quotations, error: quotationsError },
+    { data: versions, error: versionsError },
+    { data: versionItems, error: versionItemsError },
+  ] = await Promise.all([
     admin
       .from("quotations")
       .select(
-        "id, quotation_number, project_id, quotation_discount_percent, pricing_source, notes, prepared_by_text, client_representative, created_at",
+        "id, quotation_number, project_id, current_version_id, created_at",
       )
       .order("created_at", { ascending: false }),
     admin
-      .from("quotation_items")
+      .from("quotation_versions")
       .select(
-        "id, quotation_id, opening_id, opening_code, floor, room, width, height, solid_panel_height, quantity, product_system, glass_type, aluminum_color, unit_price, discount_percent, line_type, is_discountable, notes",
+        "id, quotation_id, version_number, status, quotation_discount_percent, pricing_source, notes, prepared_by_text, client_representative, approved_at, created_at",
+      ),
+    admin
+      .from("quotation_version_items")
+      .select(
+        "id, quotation_version_id, opening_id, opening_code, floor, room, width, height, solid_panel_height, quantity, product_system, glass_type, aluminum_color, unit_price, discount_percent, line_type, is_discountable, notes",
       ),
   ]);
 
-  if (quotationsError) {
-    logQuotationError("select-quotations", quotationsError);
+  const firstError = quotationsError ?? versionsError ?? versionItemsError;
+
+  if (firstError) {
+    logQuotationError("select-versioned-quotations", firstError);
     return NextResponse.json(
-      { error: readApiError(quotationsError, "Unable to load quotations.") },
+      { error: readApiError(firstError, "Unable to load quotation versions.") },
       { status: 500 },
     );
   }
 
-  let items = itemsResult.data as unknown[] | null;
-  if (itemsResult.error && isMissingColumnError(itemsResult.error)) {
-    const fallbackItemsResult = await admin
-      .from("quotation_items")
-      .select(
-        "id, quotation_id, opening_id, opening_code, floor, room, width, height, quantity, product_system, glass_type, aluminum_color, unit_price, discount_percent, notes",
-      );
+  const versionsById = new Map((versions ?? []).map((version) => [version.id, version]));
+  const currentQuotations = (quotations ?? []).flatMap((quotation) => {
+    const version = quotation.current_version_id
+      ? versionsById.get(quotation.current_version_id)
+      : null;
 
-    items = fallbackItemsResult.data as unknown[] | null;
-
-    if (fallbackItemsResult.error) {
-      logQuotationError("select-quotation-items", fallbackItemsResult.error);
-      return NextResponse.json(
-        {
-          error: readApiError(
-            fallbackItemsResult.error,
-            "Unable to load quotation items.",
-          ),
-        },
-        { status: 500 },
-      );
+    if (!version) {
+      return [];
     }
-  } else if (itemsResult.error) {
-    logQuotationError("select-quotation-items", itemsResult.error);
-    return NextResponse.json(
-      { error: readApiError(itemsResult.error, "Unable to load quotation items.") },
-      { status: 500 },
-    );
-  }
+
+    return [{
+      id: quotation.id,
+      quotation_number: quotation.quotation_number,
+      project_id: quotation.project_id,
+      version_id: version.id,
+      version_number: version.version_number,
+      version_status: version.status,
+      quotation_discount_percent: version.quotation_discount_percent,
+      pricing_source: version.pricing_source,
+      notes: version.notes,
+      prepared_by_text: version.prepared_by_text,
+      client_representative: version.client_representative,
+      approved_at: version.approved_at,
+      created_at: version.created_at,
+    }];
+  });
+
+  const quotationIdByVersionId = new Map(
+    currentQuotations.map((quotation) => [quotation.version_id, quotation.id]),
+  );
+  const items = (versionItems ?? []).flatMap((item) => {
+    const quotationId = quotationIdByVersionId.get(item.quotation_version_id);
+    return quotationId ? [{ ...item, quotation_id: quotationId }] : [];
+  });
 
   return NextResponse.json({
-    quotations: quotations ?? [],
-    items: items ?? [],
+    quotations: currentQuotations,
+    items,
   });
 }
 
@@ -386,11 +389,11 @@ export async function POST(request: Request) {
 
   for (let attempt = 0; attempt < 10; attempt += 1) {
     let rpcResult:
-      | Awaited<ReturnType<typeof admin.rpc<"save_quotation_with_items">>>
+      | Awaited<ReturnType<typeof admin.rpc<"save_quotation_version_with_items">>>
       | null = null;
 
     try {
-      rpcResult = await admin.rpc("save_quotation_with_items", {
+      rpcResult = await admin.rpc("save_quotation_version_with_items", {
         p_quotation_id: null,
         p_project_id: body.project_id,
         p_client_id: body.client_id,
@@ -399,6 +402,7 @@ export async function POST(request: Request) {
         p_line_discount_total: numberValue(body.line_discount_total),
         p_quotation_discount_total: numberValue(body.quotation_discount_total),
         p_grand_total: numberValue(body.grand_total),
+        p_pricing_source: pricingSource,
         p_notes: nullableText(body.notes),
         p_prepared_by_text: nullableText(body.prepared_by_text),
         p_client_representative: nullableText(body.client_representative),
@@ -421,34 +425,6 @@ export async function POST(request: Request) {
     const { data, error } = rpcResult;
 
     if (!error && Array.isArray(data) && data[0]) {
-      const { error: sourceError } = await admin
-        .from("quotations")
-        .update({ pricing_source: pricingSource })
-        .eq("id", data[0].id);
-
-      if (sourceError) {
-        return quotationErrorResponse(
-          sourceError,
-          "Quotation was saved, but its pricing source could not be recorded.",
-          500,
-        );
-      }
-
-      const { error: workflowError } = await admin
-        .from("projects")
-        .update({ workflow_status: "sales_quotation_created" })
-        .eq("id", body.project_id)
-        .eq("workflow_status", "sales_client_created");
-
-      if (workflowError) {
-        logQuotationError("workflow-update", workflowError);
-        return quotationErrorResponse(
-          workflowError,
-          "Quotation was saved, but the project workflow could not be updated.",
-          500,
-        );
-      }
-
       return NextResponse.json({ quotation: data[0] }, { status: 201 });
     }
 
@@ -527,7 +503,7 @@ export async function PATCH(request: Request) {
     );
   }
 
-  const { data, error } = await admin.rpc("save_quotation_with_items", {
+  const { data, error } = await admin.rpc("save_quotation_version_with_items", {
     p_quotation_id: body.id,
     p_project_id: body.project_id,
     p_client_id: body.client_id,
@@ -536,6 +512,7 @@ export async function PATCH(request: Request) {
     p_line_discount_total: numberValue(body.line_discount_total),
     p_quotation_discount_total: numberValue(body.quotation_discount_total),
     p_grand_total: numberValue(body.grand_total),
+    p_pricing_source: pricingSource,
     p_notes: nullableText(body.notes),
     p_prepared_by_text: nullableText(body.prepared_by_text),
     p_client_representative: nullableText(body.client_representative),
@@ -561,20 +538,7 @@ export async function PATCH(request: Request) {
     );
   }
 
-  const { error: sourceError } = await admin
-    .from("quotations")
-    .update({ pricing_source: pricingSource })
-    .eq("id", quotation.id);
-
-  if (sourceError) {
-    return quotationErrorResponse(
-      sourceError,
-      "Quotation was saved, but its pricing source could not be recorded.",
-      500,
-    );
-  }
-
-  return NextResponse.json({ quotation: { ...quotation, pricing_source: pricingSource } });
+  return NextResponse.json({ quotation });
 }
 
 export async function DELETE(request: Request) {
@@ -602,27 +566,31 @@ export async function DELETE(request: Request) {
   }
 
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("quotations")
-    .delete()
-    .eq("id", quotationId)
-    .select("id")
-    .maybeSingle();
+  const { count, error } = await admin
+    .from("quotation_versions")
+    .select("id", { count: "exact", head: true })
+    .eq("quotation_id", quotationId);
 
   if (error) {
-    logQuotationError("delete", error);
+    logQuotationError("delete-check", error);
     return NextResponse.json(
-      { error: readApiError(error, "Unable to delete quotation.") },
+      { error: readApiError(error, "Unable to verify quotation history.") },
       { status: 500 },
     );
   }
 
-  if (!data) {
+  if (!count) {
     return NextResponse.json(
-      { error: "Quotation was not deleted. It may already have been removed." },
+      { error: "Quotation was not found." },
       { status: 404 },
     );
   }
 
-  return NextResponse.json({ quotation: data });
+  return NextResponse.json(
+    {
+      error:
+        "Versioned quotations cannot be deleted because their commercial history must be preserved.",
+    },
+    { status: 409 },
+  );
 }

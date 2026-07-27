@@ -82,7 +82,11 @@ export function ProjectLocationPicker({
   searchingLabel = "Searching...",
   noResultsLabel = "No matching locations found.",
   searchErrorLabel = "Unable to search locations.",
+  currentLocationLabel = "Use current location",
+  locatingLabel = "Locating...",
+  currentLocationErrorLabel = "Unable to access your current location.",
   onSearchSelect,
+  onCurrentLocationSelect,
 }: {
   latitude?: number | null;
   longitude?: number | null;
@@ -102,7 +106,14 @@ export function ProjectLocationPicker({
   searchingLabel?: string;
   noResultsLabel?: string;
   searchErrorLabel?: string;
+  currentLocationLabel?: string;
+  locatingLabel?: string;
+  currentLocationErrorLabel?: string;
   onSearchSelect?: (address: string) => void;
+  onCurrentLocationSelect?: (location: {
+    latitude: number;
+    longitude: number;
+  }) => void;
 }) {
   const hasPin =
     typeof latitude === "number" &&
@@ -114,6 +125,8 @@ export function ProjectLocationPicker({
   const [searchResults, setSearchResults] = useState<LocationSearchResult[]>([]);
   const [searchError, setSearchError] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState("");
   const [center, setCenter] = useState({
     latitude: hasPin ? latitude : defaultLocation.latitude,
     longitude: hasPin ? longitude : defaultLocation.longitude,
@@ -177,12 +190,47 @@ export function ProjectLocationPicker({
 
   function useCurrentLocation() {
     if (!navigator.geolocation) {
+      setLocationError(currentLocationErrorLabel);
       return;
     }
 
-    navigator.geolocation.getCurrentPosition((position) => {
-      setPin(position.coords.latitude, position.coords.longitude);
-    });
+    setIsLocating(true);
+    setLocationError("");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextLatitude = position.coords.latitude;
+        const nextLongitude = position.coords.longitude;
+        setPin(nextLatitude, nextLongitude);
+        onCurrentLocationSelect?.({
+          latitude: nextLatitude,
+          longitude: nextLongitude,
+        });
+        void fetch(
+          `/api/location-search?lat=${encodeURIComponent(nextLatitude)}&lng=${encodeURIComponent(nextLongitude)}`,
+        )
+          .then(async (response) => {
+            const body = (await response.json().catch(() => null)) as
+              | { result?: LocationSearchResult | null }
+              | null;
+            const label = body?.result?.label;
+            if (response.ok && label) {
+              setSearchQuery(label);
+              onSearchSelect?.(label);
+            }
+          })
+          .catch(() => undefined)
+          .finally(() => setIsLocating(false));
+      },
+      () => {
+        setLocationError(currentLocationErrorLabel);
+        setIsLocating(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 30000,
+      },
+    );
   }
 
   async function searchLocation(event: FormEvent<HTMLFormElement>) {
@@ -244,10 +292,11 @@ export function ProjectLocationPicker({
           {!readOnly ? (
             <button
               type="button"
+              disabled={isLocating}
               onClick={useCurrentLocation}
-              className="h-9 rounded-md border border-border bg-surface px-3 text-xs font-bold text-muted-strong"
+              className="h-11 rounded-md border border-border bg-surface px-3 text-xs font-bold text-muted-strong disabled:cursor-wait disabled:opacity-60"
             >
-              Use current location
+              {isLocating ? locatingLabel : currentLocationLabel}
             </button>
           ) : null}
           <button
@@ -268,6 +317,11 @@ export function ProjectLocationPicker({
           </button>
         </div>
       </div>
+      {locationError ? (
+        <p className="mt-2 text-xs font-semibold text-danger-text" role="alert">
+          {locationError}
+        </p>
+      ) : null}
 
       {enableSearch && !readOnly ? (
         <div className="relative mt-3">
@@ -329,7 +383,7 @@ export function ProjectLocationPicker({
       <button
         type="button"
         onClick={handleMapClick}
-        className="relative mt-3 h-80 w-full overflow-hidden rounded-md border border-border bg-surface text-left"
+        className="relative mt-3 h-64 w-full overflow-hidden rounded-md border border-border bg-surface text-left sm:h-80"
         aria-label={mapAriaLabel}
       >
         {tiles.map((tile) => (

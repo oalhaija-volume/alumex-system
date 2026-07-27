@@ -15,6 +15,7 @@ import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 const discountPolicyRoles = [
   "Admin",
   "Sales Manager",
+  "Indoor Sales",
   "Sales Rep",
   "Branch Manager",
 ] as const;

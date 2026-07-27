@@ -7,6 +7,7 @@ import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 const quotationRoles = [
   "Admin",
   "Sales Manager",
+  "Indoor Sales",
   "Sales Rep",
   "Branch Manager",
 ] as const;

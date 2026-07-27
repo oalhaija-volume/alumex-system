@@ -905,7 +905,9 @@ export function ContractPreview() {
 
       setDraft(nextDraft);
       window.localStorage.setItem(contractStorageKey, JSON.stringify(nextDraft));
-      setSignatureNotice("تم حفظ التواقيع على العقد.");
+      setSignatureNotice(
+        "تم حفظ التواقيع وتحويل ملف العقد إلى العمليات.",
+      );
     } catch (saveError) {
       setSignatureError(
         saveError instanceof Error

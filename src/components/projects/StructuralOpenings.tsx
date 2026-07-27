@@ -11,6 +11,7 @@ import {
   type OpeningDropdownOption,
   type OpeningOptionCategory,
 } from "@/lib/openings/dropdownOptions";
+import { centimetersToSquareMeters } from "@/lib/measurements/area";
 import {
   loadProductPrices,
   productsForCatalog,
@@ -190,8 +191,7 @@ const numberFields = new Set<keyof StructuralOpeningValues>([
 ]);
 
 function calculateArea(opening: Pick<StructuralOpening, "width" | "height" | "quantity">) {
-  const rawArea = (opening.width / 100) * (opening.height / 100) * opening.quantity;
-  return Math.max(rawArea, 1);
+  return centimetersToSquareMeters(opening);
 }
 
 function formatArea(

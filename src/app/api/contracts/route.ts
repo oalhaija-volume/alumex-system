@@ -21,18 +21,19 @@ const duplicateContractNumberMessage =
 const contractRoles = [
   "Admin",
   "Sales Manager",
+  "Indoor Sales",
   "Sales Rep",
   "Branch Manager",
   "Finance / Accountant",
 ] as const;
 const contractBaseSelect =
-  "id, contract_number, project_id, quotation_id, client_id, status, contract_value, pricing_source, source_contract_value, contract_discount_percent, contract_discount_total, contract_date, payment_terms, warranty_terms, execution_terms, contract_terms, first_party_obligations, second_party_obligations, prepared_by_text, language, notes, created_by, created_at, updated_at";
+  "id, contract_number, project_id, quotation_id, quotation_version_id, client_id, status, contract_value, pricing_source, source_contract_value, contract_discount_percent, contract_discount_total, contract_date, payment_terms, warranty_terms, execution_terms, contract_terms, first_party_obligations, second_party_obligations, prepared_by_text, language, notes, created_by, created_at, updated_at";
 const contractSelectWithSignature =
-  "id, contract_number, project_id, quotation_id, client_id, status, contract_value, pricing_source, source_contract_value, contract_discount_percent, contract_discount_total, contract_date, payment_terms, warranty_terms, execution_terms, contract_terms, first_party_obligations, second_party_obligations, prepared_by_text, client_signature_data_url, client_signed_name, client_signed_at, sales_signature_data_url, sales_signed_name, sales_signed_at, signed_by_sales_user_id, language, notes, created_by, created_at, updated_at";
+  "id, contract_number, project_id, quotation_id, quotation_version_id, client_id, status, contract_value, pricing_source, source_contract_value, contract_discount_percent, contract_discount_total, contract_date, payment_terms, warranty_terms, execution_terms, contract_terms, first_party_obligations, second_party_obligations, prepared_by_text, client_signature_data_url, client_signed_name, client_signed_at, sales_signature_data_url, sales_signed_name, sales_signed_at, signed_by_sales_user_id, language, notes, created_by, created_at, updated_at";
 const contractDocumentSelect =
-  "id, contract_number, project_id, quotation_id, client_id, status, contract_value, contract_date, payment_terms, warranty_terms, execution_terms, contract_terms, first_party_obligations, second_party_obligations, prepared_by_text, language, notes, created_by, created_at, updated_at";
+  "id, contract_number, project_id, quotation_id, quotation_version_id, client_id, status, contract_value, contract_date, payment_terms, warranty_terms, execution_terms, contract_terms, first_party_obligations, second_party_obligations, prepared_by_text, language, notes, created_by, created_at, updated_at";
 const contractLegacySelect =
-  "id, contract_number, project_id, quotation_id, client_id, status, contract_value, notes, created_by, created_at, updated_at";
+  "id, contract_number, project_id, quotation_id, quotation_version_id, client_id, status, contract_value, notes, created_by, created_at, updated_at";
 
 async function loadContractNumbers(admin: ReturnType<typeof createAdminClient>) {
   const date = new Date();
@@ -303,6 +304,43 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
+  const quotationVersionId =
+    typeof body.quotation_version_id === "string"
+      ? body.quotation_version_id
+      : "";
+
+  if (!quotationVersionId) {
+    return NextResponse.json(
+      { error: "Select an approved quotation version." },
+      { status: 400 },
+    );
+  }
+
+  const { data: approvedVersion, error: approvedVersionError } = await admin
+    .from("quotation_versions")
+    .select("id, quotation_id, status")
+    .eq("id", quotationVersionId)
+    .eq("status", "approved")
+    .maybeSingle();
+
+  if (approvedVersionError) {
+    return contractErrorResponse(
+      approvedVersionError,
+      "Unable to verify the approved quotation version.",
+      500,
+    );
+  }
+
+  if (
+    !approvedVersion ||
+    approvedVersion.quotation_id !== body.quotation_id
+  ) {
+    return NextResponse.json(
+      { error: "Only an approved quotation version can create a contract." },
+      { status: 409 },
+    );
+  }
+
   const discountLimit = await discountLimitForRoleFromSettings(
     authCheck.role,
     admin,
@@ -320,6 +358,7 @@ export async function POST(request: Request) {
   const contractPayload = {
     project_id: body.project_id,
     quotation_id: body.quotation_id ?? null,
+    quotation_version_id: quotationVersionId,
     client_id: body.client_id,
     status: body.status ?? "Draft",
     contract_value: body.contract_value ?? 0,
@@ -413,43 +452,6 @@ export async function POST(request: Request) {
       .single();
 
     if (!error && data) {
-      const { error: workflowError } = await admin
-        .from("projects")
-        .update({ workflow_status: "finance_down_payment_pending" })
-        .eq("id", contractPayload.project_id);
-
-      if (workflowError) {
-        logContractSupabaseError("workflow-update", workflowError);
-
-        const { error: rollbackError } = await admin
-          .from("contracts")
-          .delete()
-          .eq("id", data.id);
-
-        if (rollbackError) {
-          logContractSupabaseError("rollback", rollbackError);
-        }
-
-        return NextResponse.json(
-          process.env.NODE_ENV === "production"
-            ? {
-                error: friendlyDatabaseError(
-                  workflowError,
-                  "Contract was not saved because the workflow status could not be updated.",
-                ),
-              }
-            : {
-                error:
-                  getSupabaseErrorDetails(workflowError).message ??
-                  "Contract was not saved because the workflow status could not be updated.",
-                code: getSupabaseErrorDetails(workflowError).code,
-                details: getSupabaseErrorDetails(workflowError).details,
-                hint: getSupabaseErrorDetails(workflowError).hint,
-              },
-          { status: 500 },
-        );
-      }
-
       return NextResponse.json({ contract: data }, { status: 201 });
     }
 
@@ -461,6 +463,16 @@ export async function POST(request: Request) {
     }
 
     if (error) {
+      if (isMissingColumnError(error)) {
+        return NextResponse.json(
+          {
+            error:
+              "Quotation versioning is not installed in Supabase. Apply migration 20260727160000_quotation_contract_versions.sql, then try again.",
+          },
+          { status: 409 },
+        );
+      }
+
       if (isMissingColumnError(error)) {
         if (isMissingSignatureColumnError(error)) {
           return NextResponse.json(
@@ -493,7 +505,7 @@ export async function POST(request: Request) {
         if (!fallbackError && fallbackData) {
           const { error: workflowError } = await admin
             .from("projects")
-            .update({ workflow_status: "finance_down_payment_pending" })
+            .update({ sales_status: "contract_generated" })
             .eq("id", contractPayload.project_id);
 
           if (workflowError) {
@@ -541,7 +553,7 @@ export async function POST(request: Request) {
           if (!legacyError && legacyData) {
             const { error: workflowError } = await admin
               .from("projects")
-              .update({ workflow_status: "finance_down_payment_pending" })
+              .update({ sales_status: "contract_generated" })
               .eq("id", contractPayload.project_id);
 
             if (workflowError) {

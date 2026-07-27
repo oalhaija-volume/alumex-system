@@ -32,7 +32,7 @@ export function UsersSettings() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<AppRole>("Sales Rep");
+  const [role, setRole] = useState<AppRole>("Indoor Sales");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -138,7 +138,7 @@ export function UsersSettings() {
 
       setUsername("");
       setPassword("");
-      setRole("Sales Rep");
+      setRole("Indoor Sales");
       setNotice(t("settings.userCreated"));
       await loadUsers();
     } catch {
@@ -363,7 +363,7 @@ function UserRow({
   onDelete: (user: ManagedUser) => void;
 }) {
   const [selectedRole, setSelectedRole] = useState<AppRole>(
-    normalizeAppRole(user.role) ?? "Sales Rep",
+    normalizeAppRole(user.role) ?? "Indoor Sales",
   );
   const [password, setPassword] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);

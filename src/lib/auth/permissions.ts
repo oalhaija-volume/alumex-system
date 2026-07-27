@@ -10,14 +10,21 @@ export type { AppRole };
 const dashboardRoles: AppRole[] = [
   "Admin",
   "Sales Manager",
+  "Indoor Sales",
+  "Outdoor Sales",
   "Sales Rep",
   "Operations Manager",
 ];
 const salesWorkspaceRoles: AppRole[] = [
   "Admin",
   "Sales Manager",
+  "Indoor Sales",
   "Sales Rep",
   "Branch Manager",
+];
+const clientProjectRoles: AppRole[] = [
+  ...salesWorkspaceRoles,
+  "Outdoor Sales",
 ];
 const workflowDetailRoles: AppRole[] = [
   "Admin",
@@ -30,6 +37,20 @@ const routePermissions: Array<{
 }> = [
   { prefix: "/settings", roles: ["Admin"] },
   { prefix: "/hr", roles: ["Admin", "HR"] },
+  {
+    prefix: "/intake",
+    roles: [
+      "Admin",
+      "Sales Manager",
+      "Indoor Sales",
+      "Outdoor Sales",
+      "Sales Rep",
+    ],
+  },
+  {
+    prefix: "/crm",
+    roles: ["Admin", "Sales Manager", "Indoor Sales", "Branch Manager"],
+  },
   { prefix: "/commercial", roles: salesWorkspaceRoles },
   { prefix: "/contracts", roles: [...salesWorkspaceRoles, "Finance / Accountant"] },
   { prefix: "/finance", roles: ["Admin", "Finance / Accountant"] },
@@ -39,15 +60,25 @@ const routePermissions: Array<{
   { prefix: "/operations-manager", roles: ["Admin", "Operations Manager"] },
   { prefix: "/project-manager", roles: ["Admin", "Project Manager"] },
   { prefix: "/project-engineer", roles: ["Admin", "Project Engineer"] },
-  { prefix: "/site-measurements", roles: ["Admin", "Project Engineer", "Site Engineer"] },
+  {
+    prefix: "/site-measurements",
+    roles: [
+      "Admin",
+      "Sales Manager",
+      "Indoor Sales",
+      "Outdoor Sales",
+      "Project Engineer",
+      "Site Engineer",
+    ],
+  },
   { prefix: "/quality-control", roles: ["Admin", "Quality Control"] },
   { prefix: "/aluminum-factory", roles: ["Admin", "Factory", "Glass Department"] },
   { prefix: "/delivery", roles: ["Admin", "Delivery Head", "Delivery Team"] },
   { prefix: "/installation", roles: ["Admin", "Installation Head", "Installation Team"] },
   { prefix: "/quotations", roles: salesWorkspaceRoles },
   { prefix: "/dashboard", roles: dashboardRoles },
-  { prefix: "/clients", roles: salesWorkspaceRoles },
-  { prefix: "/projects", roles: salesWorkspaceRoles },
+  { prefix: "/clients", roles: clientProjectRoles },
+  { prefix: "/projects", roles: clientProjectRoles },
   { prefix: "/workflow", roles: workflowDetailRoles },
   { prefix: "/", roles: dashboardRoles },
 ];
@@ -56,6 +87,8 @@ export function defaultRouteForRole(role: AppRole | null) {
   switch (role) {
     case "Admin":
     case "Sales Manager":
+    case "Indoor Sales":
+    case "Outdoor Sales":
     case "Sales Rep":
     case "Branch Manager":
       return "/dashboard";
@@ -85,12 +118,12 @@ export function defaultRouteForRole(role: AppRole | null) {
 }
 
 export function canAccessRoute(pathname: string, role: AppRole | null) {
-  if (!role || !isActiveSystemRoute(pathname)) {
-    return false;
-  }
-
   if (role === "Admin") {
     return true;
+  }
+
+  if (!role || !isActiveSystemRoute(pathname)) {
+    return false;
   }
 
   const permission = routePermissions.find(({ prefix }) =>
@@ -105,12 +138,12 @@ export function canAccessRouteWithOverrides(
   role: AppRole | null,
   accessRows: Array<Pick<EmployeePageAccess, "route_path" | "can_access">>,
 ) {
-  if (!isActiveSystemRoute(pathname)) {
-    return false;
-  }
-
   if (role === "Admin") {
     return true;
+  }
+
+  if (!isActiveSystemRoute(pathname)) {
+    return false;
   }
 
   const override = accessRows

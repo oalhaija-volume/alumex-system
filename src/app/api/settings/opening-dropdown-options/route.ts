@@ -15,6 +15,8 @@ import {
 const openingOptionRoles = [
   "Admin",
   "Sales Manager",
+  "Indoor Sales",
+  "Outdoor Sales",
   "Sales Rep",
   "Branch Manager",
   "Project Engineer",

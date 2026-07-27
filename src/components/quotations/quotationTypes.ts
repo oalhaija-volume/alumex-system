@@ -1,4 +1,5 @@
 import type { Project, StructuralOpening } from "@/data/ui";
+import type { QuotationVersionStatus } from "@/lib/quotations/versionWorkflow";
 
 export type QuotationLine = StructuralOpening & {
   unitPrice: number;
@@ -9,6 +10,10 @@ export type QuotationLine = StructuralOpening & {
 
 export type QuotationDraft = {
   id?: string;
+  versionId?: string;
+  versionNumber?: number;
+  versionStatus?: QuotationVersionStatus;
+  approvedAt?: string;
   quotationNumber: string;
   project: Project;
   lines: QuotationLine[];

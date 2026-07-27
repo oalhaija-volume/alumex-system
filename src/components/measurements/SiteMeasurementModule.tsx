@@ -10,6 +10,7 @@ import {
   optionsForCategory,
   type OpeningDropdownOption,
 } from "@/lib/openings/dropdownOptions";
+import { centimetersToSquareMeters } from "@/lib/measurements/area";
 
 type MeasurementProject = {
   id: string;
@@ -17,6 +18,15 @@ type MeasurementProject = {
   projectName: string;
   address: string;
   workflowStatus: string;
+  salesStatus: string;
+  measurementRequest: {
+    id: string;
+    status: string;
+    assignedTo: string | null;
+    returnTo: string | null;
+    instructions: string;
+    preferredAt: string | null;
+  } | null;
   client: {
     name: string;
     mobile: string;
@@ -117,10 +127,6 @@ const typeOptions = ["Window", "Door", "Sliding", "Fixed", "Curtain Wall", "Skyl
 const bottomFrameOptions = ["With bottom frame", "Without bottom frame", "Low threshold", "Flush"];
 const openingDirectionOptions = ["Left", "Right", "Inside", "Outside", "Sliding left", "Sliding right", "Fixed"];
 const mobileWizardSteps = ["Location", "Dimensions", "Details", "Review"];
-
-function calculateArea(opening: Pick<OpeningDraft, "width" | "height" | "quantity">) {
-  return Math.max((opening.width / 100) * (opening.height / 100) * opening.quantity, 1);
-}
 
 function openingToDraft(opening: MeasurementOpening): OpeningDraft {
   return {
@@ -243,6 +249,7 @@ export function SiteMeasurementModule() {
   const [workflowSaving, setWorkflowSaving] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
   const [openingOptions, setOpeningOptions] = useState<OpeningDropdownOption[]>(
     defaultOpeningDropdownOptions,
   );
@@ -251,14 +258,33 @@ export function SiteMeasurementModule() {
     () =>
       openings.reduce(
         (sum, opening) =>
-          sum + calculateArea({ width: opening.width, height: opening.height, quantity: opening.quantity }),
+          sum +
+          centimetersToSquareMeters({
+            width: opening.width,
+            height: opening.height,
+            quantity: opening.quantity,
+          }),
         0,
       ),
     [openings],
   );
-  const canStart = project?.workflowStatus === "site_engineer_assigned";
-  const canComplete = project?.workflowStatus === "measurement_pending";
-  const isEditable = canStart || canComplete;
+  const measurementRequest = project?.measurementRequest ?? null;
+  const canStart = Boolean(
+    measurementRequest &&
+      [
+        "assigned",
+        "appointment_scheduled",
+        "employee_en_route",
+        "correction_required",
+      ].includes(
+        measurementRequest.status,
+      ),
+  );
+  const isEditable = Boolean(
+    measurementRequest &&
+      ["in_progress", "draft_saved"].includes(measurementRequest.status),
+  );
+  const canSubmit = isEditable && openings.length > 0;
   const roomOptions = useMemo(
     () => optionsForCategory(openingOptions, "room"),
     [openingOptions],
@@ -295,7 +321,22 @@ export function SiteMeasurementModule() {
         ? current
         : { ...current, openingCode: nextOpeningCode(loadedOpenings) },
     );
-    setNewOpenings(openingRows(1, loadedOpenings.length));
+    const localDraftKey = `alumex:measurement-draft:${projectId}`;
+    const savedDraft = window.localStorage.getItem(localDraftKey);
+    if (savedDraft) {
+      try {
+        const parsedDraft = JSON.parse(savedDraft) as OpeningDraft[];
+        setNewOpenings(
+          Array.isArray(parsedDraft) && parsedDraft.length
+            ? parsedDraft
+            : openingRows(1, loadedOpenings.length),
+        );
+      } catch {
+        setNewOpenings(openingRows(1, loadedOpenings.length));
+      }
+    } else {
+      setNewOpenings(openingRows(1, loadedOpenings.length));
+    }
     setWizardIndex(0);
     setMobileWizardStep(0);
     setIsLoading(false);
@@ -325,6 +366,20 @@ export function SiteMeasurementModule() {
 
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!isEditable || !projectId) return;
+
+    const timer = window.setTimeout(() => {
+      window.localStorage.setItem(
+        `alumex:measurement-draft:${projectId}`,
+        JSON.stringify(newOpenings),
+      );
+      setDraftSavedAt(new Date());
+    }, 600);
+
+    return () => window.clearTimeout(timer);
+  }, [isEditable, newOpenings, projectId]);
 
   function updateDraft(key: keyof OpeningDraft, value: string) {
     setDraft((current) => ({
@@ -364,16 +419,20 @@ export function SiteMeasurementModule() {
     );
   }
 
-  async function runWorkflowAction(workflowAction: "startMeasurement" | "completeMeasurement") {
+  async function runMeasurementAction(
+    action: "en_route" | "start" | "save_draft" | "submit",
+    options?: { quiet?: boolean },
+  ) {
+    if (!measurementRequest) return;
     setError("");
-    setMessage("");
-    setWorkflowSaving(workflowAction);
+    if (!options?.quiet) setMessage("");
+    setWorkflowSaving(action);
 
     try {
-      const response = await fetch("/api/workflow", {
+      const response = await fetch(`/api/measurements/${measurementRequest.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, workflowAction }),
+        body: JSON.stringify({ action }),
       });
       const body = (await response.json().catch(() => null)) as
         | { error?: string }
@@ -383,12 +442,21 @@ export function SiteMeasurementModule() {
         throw new Error(body?.error ?? t("measurements.workflowUpdateError"));
       }
 
+      if (action === "submit") {
+        window.localStorage.removeItem(`alumex:measurement-draft:${projectId}`);
+      }
       await loadMeasurements();
-      setMessage(
-        workflowAction === "startMeasurement"
-          ? t("measurements.startSuccess")
-          : t("measurements.completeSuccess"),
-      );
+      if (!options?.quiet) {
+        setMessage(
+          action === "start"
+            ? "Measurement visit started."
+            : action === "en_route"
+              ? "Marked as en route to the site."
+            : action === "submit"
+              ? "Measurements submitted to Indoor Sales for review."
+              : "Measurement draft saved.",
+        );
+      }
     } catch (actionError) {
       setError(
         actionError instanceof Error
@@ -448,6 +516,8 @@ export function SiteMeasurementModule() {
       setNewOpenings(openingRows(1, nextCount));
       setWizardIndex(0);
       setMobileWizardStep(0);
+      window.localStorage.removeItem(`alumex:measurement-draft:${projectId}`);
+      await runMeasurementAction("save_draft", { quiet: true });
       setMessage(
         savedOpenings.length === 1
           ? t("measurements.openingSaved")
@@ -485,6 +555,7 @@ export function SiteMeasurementModule() {
       );
       setDraft(emptyOpening);
       setEditingId(null);
+      await runMeasurementAction("save_draft", { quiet: true });
       setMessage(t("measurements.openingUpdated"));
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : t("measurements.saveOpeningError"));
@@ -620,7 +691,12 @@ export function SiteMeasurementModule() {
             ) : null}
           </div>
           <span className="material-status self-start">
-            {term(project.workflowStatus)}
+            {measurementRequest
+              ? measurementRequest.status
+                  .split("_")
+                  .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                  .join(" ")
+              : term(project.salesStatus || project.workflowStatus)}
           </span>
         </div>
 
@@ -640,37 +716,60 @@ export function SiteMeasurementModule() {
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_1fr]">
+          {measurementRequest &&
+          ["assigned", "appointment_scheduled"].includes(
+            measurementRequest.status,
+          ) ? (
+            <button
+              type="button"
+              onClick={() => void runMeasurementAction("en_route")}
+              disabled={Boolean(workflowSaving)}
+              className="material-button-tonal min-h-12 w-full sm:w-auto"
+            >
+              {workflowSaving === "en_route" ? "Updating…" : "I’m en route"}
+            </button>
+          ) : null}
           {canStart ? (
             <button
               type="button"
-              onClick={() => void runWorkflowAction("startMeasurement")}
+              onClick={() => void runMeasurementAction("start")}
               disabled={Boolean(workflowSaving)}
               className="material-button-filled min-h-12 w-full sm:w-auto"
             >
-              {workflowSaving === "startMeasurement"
-                ? t("measurements.starting")
-                : t("measurements.startSiteMeasurement")}
+              {workflowSaving === "start"
+                ? "Starting…"
+                : "Start measurement visit"}
             </button>
           ) : null}
-          {canComplete ? (
+          {isEditable ? (
             <button
               type="button"
-              onClick={() => void runWorkflowAction("completeMeasurement")}
-              disabled={Boolean(workflowSaving) || openings.length === 0}
+              onClick={() => void runMeasurementAction("submit")}
+              disabled={Boolean(workflowSaving) || !canSubmit}
               className="material-button-filled min-h-12 w-full sm:w-auto"
             >
-              {workflowSaving === "completeMeasurement"
-                ? t("measurements.completing")
-                : t("measurements.completeMeasurements")}
+              {workflowSaving === "submit"
+                ? "Submitting…"
+                : "Submit measurements"}
             </button>
           ) : null}
           <Link
-            href={`/workflow/${project.id}`}
+            href="/site-measurements"
             className="material-button-tonal min-h-12 w-full sm:w-auto"
           >
-            {t("measurements.workflowDetails")}
+            Measurement queue
           </Link>
         </div>
+        {isEditable ? (
+          <p className="mt-3 text-xs font-semibold text-muted">
+            {draftSavedAt
+              ? `Draft saved on this device at ${draftSavedAt.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}`
+              : "Draft persistence is active on this device."}
+          </p>
+        ) : null}
       </div>
 
       {message ? <div className="material-alert-success">{message}</div> : null}
@@ -699,9 +798,9 @@ export function SiteMeasurementModule() {
 
         {canStart ? (
           <div className="mt-4 rounded-lg border border-material-outline-variant bg-material-primary-container p-4 text-material-on-primary-container">
-            <p className="text-sm font-bold">{t("measurements.receivedBySiteEngineer")}</p>
+            <p className="text-sm font-bold">Measurement assignment received</p>
             <p className="mt-1 text-sm">
-              {t("measurements.startToUnlock")}
+              Start the visit to unlock field capture and draft saving.
             </p>
           </div>
         ) : null}
@@ -937,7 +1036,9 @@ export function SiteMeasurementModule() {
               <div className="material-card-muted p-3">
                 <p className="text-xs font-bold uppercase text-muted">{t("measurements.areaEstimate")}</p>
                 <p className="mt-1 text-2xl font-bold text-foreground">
-                  {t("common.areaValue", { value: calculateArea(draft).toFixed(2) })}
+                  {t("common.areaValue", {
+                    value: centimetersToSquareMeters(draft).toFixed(2),
+                  })}
                 </p>
               </div>
               <button
@@ -1163,7 +1264,9 @@ export function SiteMeasurementModule() {
                           />
                         </td>
                         <td className="w-28 bg-material-primary-container px-2 py-2 text-sm font-bold text-material-on-primary-container">
-                          {t("common.areaValue", { value: calculateArea(opening).toFixed(2) })}
+                          {t("common.areaValue", {
+                            value: centimetersToSquareMeters(opening).toFixed(2),
+                          })}
                         </td>
                         <td className="w-28 px-2 py-2">
                           <button
@@ -1207,7 +1310,9 @@ export function SiteMeasurementModule() {
                       </p>
                     </div>
                     <span className="material-status">
-                      {t("common.areaValue", { value: calculateArea(opening).toFixed(2) })}
+                      {t("common.areaValue", {
+                        value: centimetersToSquareMeters(opening).toFixed(2),
+                      })}
                     </span>
                   </div>
 
@@ -1439,7 +1544,9 @@ export function SiteMeasurementModule() {
                             .join(" - ") || t("measurements.specificationsIncomplete")}
                         </p>
                         <p className="mt-2 text-xl font-bold text-foreground">
-                          {t("common.areaValue", { value: calculateArea(opening).toFixed(2) })}
+                          {t("common.areaValue", {
+                            value: centimetersToSquareMeters(opening).toFixed(2),
+                          })}
                         </p>
                       </div>
 
@@ -1537,7 +1644,9 @@ export function SiteMeasurementModule() {
                   </p>
                 </div>
                 <span className="material-status">
-                  {t("common.areaValue", { value: calculateArea(opening).toFixed(2) })}
+                  {t("common.areaValue", {
+                    value: centimetersToSquareMeters(opening).toFixed(2),
+                  })}
                 </span>
               </div>
 

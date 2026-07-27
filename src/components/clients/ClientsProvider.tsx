@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import type { Client } from "@/data/ui";
-import { canViewSalesPrices } from "@/lib/auth/roles";
+import { roleHasCapability } from "@/lib/auth/capabilities";
 import {
   invalidateClientData,
   loadCachedClientData,
@@ -107,7 +107,7 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const canLoadClients = canViewSalesPrices(role);
+  const canLoadClients = roleHasCapability(role, "clients:create");
 
   const loadClients = useCallback(async (force = false) => {
     if (!isRoleLoaded) {

@@ -6,10 +6,14 @@ import { useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { PageHeader } from "@/components/PageHeader";
 import { ProjectForm, type ProjectFormValues } from "@/components/projects/ProjectForm";
+import { ProjectSalesProfile } from "@/components/projects/ProjectSalesProfile";
+import { CrmWorkspace } from "@/components/crm/CrmWorkspace";
+import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useProjects } from "@/components/projects/ProjectsProvider";
 import { StructuralOpenings } from "@/components/projects/StructuralOpenings";
 import { SectionCard } from "@/components/SectionCard";
 import { StatusPill } from "@/components/StatusPill";
+import { roleHasCapability } from "@/lib/auth/capabilities";
 
 const details: Array<[string, keyof ProjectFormValues]> = [
   ["projects.fields.projectNumber", "projectNumber"],
@@ -26,6 +30,7 @@ export function ProjectDetails() {
   const params = useParams<{ projectId: string }>();
   const router = useRouter();
   const { t, term } = useI18n();
+  const { role } = useCurrentRole();
   const [error, setError] = useState("");
   const {
     findProject,
@@ -141,6 +146,12 @@ export function ProjectDetails() {
           />
         </SectionCard>
       </section>
+
+      <ProjectSalesProfile projectId={activeProject.id} />
+
+      {roleHasCapability(role, "follow-ups:perform") ? (
+        <CrmWorkspace projectId={activeProject.id} embedded />
+      ) : null}
 
       <div id="structural-openings" className="scroll-mt-24">
         <StructuralOpenings

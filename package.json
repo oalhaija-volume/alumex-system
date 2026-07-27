@@ -6,7 +6,13 @@
     "dev": "next dev -p 3003",
     "build": "next build",
     "start": "next start -p 3003",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:sales-foundation": "node --experimental-strip-types --test tests/sales-foundation.test.mjs",
+    "test:database": "node --test tests/database/rls.integration.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:list": "playwright test --list",
+    "test:phase8": "npm run lint && npx tsc --noEmit && npm test && npm run test:database && npm run test:e2e"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
@@ -18,6 +24,7 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

@@ -13,12 +13,15 @@ import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { canViewSalesPrices } from "@/lib/auth/roles";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
+import { SalesRoleDashboard } from "@/components/dashboard/SalesRoleDashboard";
+import { salesDashboardKind } from "@/lib/dashboard/salesDashboard";
 
 export function DashboardView() {
   const { formatCurrency, t, term } = useI18n();
   const { role } = useCurrentRole();
   const { projects } = useProjects();
   const showSalesPrices = canViewSalesPrices(role);
+  const showSalesRoleDashboard = salesDashboardKind(role) !== null;
   const [savedQuotations, setSavedQuotations] = useState<QuotationDraft[]>([]);
   const [contractCount, setContractCount] = useState(0);
   const activeProjects = projects.filter(
@@ -73,6 +76,10 @@ export function DashboardView() {
   );
 
   useEffect(() => {
+    if (showSalesRoleDashboard) {
+      return;
+    }
+
     const timer = window.setTimeout(async () => {
       try {
         const supabase = createSupabaseClient();
@@ -94,7 +101,22 @@ export function DashboardView() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [projects, showSalesPrices]);
+  }, [projects, showSalesPrices, showSalesRoleDashboard]);
+
+  if (showSalesRoleDashboard) {
+    return (
+      <AppShell>
+        <div className="space-y-6">
+          <PageHeader
+            eyebrow={t("dashboard.eyebrow")}
+            title={t("dashboard.title")}
+            description={t("dashboard.description")}
+          />
+          <SalesRoleDashboard />
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

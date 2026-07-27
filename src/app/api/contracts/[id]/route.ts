@@ -145,8 +145,14 @@ export async function PATCH(
   const isSignatureUpdate = body?.action === "save-signatures";
   const authCheck = await requireRole(
     isSignatureUpdate
-      ? ["Admin", "Sales Manager", "Sales Rep"]
-      : ["Admin", "Sales Manager", "Sales Rep", "Branch Manager"],
+      ? ["Admin", "Sales Manager", "Indoor Sales", "Sales Rep"]
+      : [
+          "Admin",
+          "Sales Manager",
+          "Indoor Sales",
+          "Sales Rep",
+          "Branch Manager",
+        ],
   );
 
   if (!authCheck.ok) {
@@ -203,20 +209,19 @@ export async function PATCH(
       );
     }
 
-    const { data, error } = await admin
-      .from("contracts")
-      .update({
-        client_signature_data_url: clientSignatureDataUrl,
-        client_signed_name: textValue(body.client_signed_name) || null,
-        client_signed_at: textValue(body.client_signed_at) || now,
-        sales_signature_data_url: salesSignatureDataUrl,
-        sales_signed_name: textValue(body.sales_signed_name) || null,
-        sales_signed_at: textValue(body.sales_signed_at) || now,
-        signed_by_sales_user_id: authCheck.user.id,
-      })
-      .eq("id", id)
-      .select("id")
-      .maybeSingle();
+    const { data, error } = await admin.rpc(
+      "sign_contract_and_create_handoff",
+      {
+        target_contract_id: id,
+        client_signature: clientSignatureDataUrl,
+        client_name: textValue(body.client_signed_name),
+        client_signature_at: textValue(body.client_signed_at) || now,
+        sales_signature: salesSignatureDataUrl,
+        sales_name: textValue(body.sales_signed_name),
+        sales_signature_at: textValue(body.sales_signed_at) || now,
+        actor_user_id: authCheck.user.id,
+      },
+    );
 
     if (error) {
       if (isMissingSignatureColumnError(error)) {
@@ -233,14 +238,22 @@ export async function PATCH(
       return contractErrorResponse(error, contractError(error), 500);
     }
 
-    if (!data) {
+    const result = Array.isArray(data) ? data[0] : null;
+
+    if (!result) {
       return NextResponse.json(
         { error: "Contract was not found." },
         { status: 404 },
       );
     }
 
-    return NextResponse.json({ contract: data });
+    return NextResponse.json({
+      contract: { id: result.contract_id },
+      handoff: {
+        id: result.handoff_id,
+        status: result.handoff_status,
+      },
+    });
   }
 
   const normalizedContractNumber = normalizeContractNumber(body.contract_number);
@@ -286,6 +299,7 @@ export async function PATCH(
     contract_number: textValue(body.contract_number),
     project_id: body.project_id,
     quotation_id: body.quotation_id ?? null,
+    quotation_version_id: body.quotation_version_id ?? null,
     client_id: body.client_id,
     status: body.status,
     contract_value: body.contract_value,
@@ -310,6 +324,7 @@ export async function PATCH(
     contract_number: updatePayload.contract_number,
     project_id: updatePayload.project_id,
     quotation_id: updatePayload.quotation_id,
+    quotation_version_id: updatePayload.quotation_version_id,
     client_id: updatePayload.client_id,
     status: updatePayload.status,
     contract_value: updatePayload.contract_value,
@@ -374,7 +389,12 @@ export async function DELETE(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const authCheck = await requireRole(["Admin", "Sales Manager", "Sales Rep"]);
+  const authCheck = await requireRole([
+    "Admin",
+    "Sales Manager",
+    "Indoor Sales",
+    "Sales Rep",
+  ]);
 
   if (!authCheck.ok) {
     return NextResponse.json(

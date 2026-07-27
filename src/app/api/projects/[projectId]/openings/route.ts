@@ -10,10 +10,13 @@ import {
   hasSupabaseServiceRoleKey,
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
+import { loadOutdoorSalesProjectIds } from "@/lib/projects/access";
 
 const openingRoles = [
   "Admin",
   "Sales Manager",
+  "Indoor Sales",
+  "Outdoor Sales",
   "Sales Rep",
   "Project Engineer",
   "Site Engineer",
@@ -182,10 +185,28 @@ async function requireOpeningAccess(projectId: string) {
     project_engineer_id: string | null;
     site_engineer_id: string | null;
   };
+  const outdoorScope =
+    roleCheck.role === "Outdoor Sales"
+      ? await loadOutdoorSalesProjectIds(roleCheck.user.id)
+      : null;
+
+  if (outdoorScope?.error) {
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { error: friendlyDatabaseError(outdoorScope.error, "Unable to verify project access.") },
+        { status: 500 },
+      ),
+    };
+  }
+
   const canAccess =
     roleCheck.role === "Admin" ||
     roleCheck.role === "Sales Manager" ||
-    (roleCheck.role === "Sales Rep" &&
+    (roleCheck.role === "Outdoor Sales" &&
+      Boolean(outdoorScope?.ids.has(projectId))) ||
+    ((roleCheck.role === "Indoor Sales" ||
+      roleCheck.role === "Sales Rep") &&
       projectRow.sales_engineer_id === roleCheck.user.id) ||
     (roleCheck.role === "Project Engineer" &&
       projectRow.project_engineer_id === roleCheck.user.id) ||

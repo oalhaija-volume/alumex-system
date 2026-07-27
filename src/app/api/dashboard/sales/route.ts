@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/adminServer";
-import { friendlyDatabaseError } from "@/lib/friendlyErrors";
+import {
+  friendlyDatabaseError,
+  isMissingDatabaseObjectError,
+} from "@/lib/friendlyErrors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   hasSupabaseServiceRoleKey,
@@ -164,6 +167,20 @@ export async function GET() {
     profileResult.error ??
     auditResult.error;
   if (firstError) {
+    if (isMissingDatabaseObjectError(firstError)) {
+      return NextResponse.json({
+        role: context.auth.role,
+        currentUserId: context.auth.user.id,
+        projects: [],
+        followUps: [],
+        measurements: [],
+        appointments: [],
+        profiles: profileResult.data ?? [],
+        auditEvents: [],
+        setupRequired: true,
+      });
+    }
+
     return NextResponse.json(
       { error: friendlyDatabaseError(firstError, "Unable to load dashboard.") },
       { status: 500 },

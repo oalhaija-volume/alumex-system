@@ -43,6 +43,24 @@ export function isDuplicateError(error: unknown) {
   );
 }
 
+export function isMissingDatabaseObjectError(error: unknown) {
+  const message = technicalErrorMessage(error).toLowerCase();
+  const code =
+    error && typeof error === "object" && typeof (error as ErrorLike).code === "string"
+      ? (error as ErrorLike).code
+      : "";
+
+  return (
+    code === "42P01" ||
+    code === "42703" ||
+    code === "PGRST204" ||
+    code === "PGRST205" ||
+    message.includes("could not find the table") ||
+    message.includes("could not find the column") ||
+    message.includes("does not exist")
+  );
+}
+
 export function friendlyDatabaseError(
   error: unknown,
   fallback: string,

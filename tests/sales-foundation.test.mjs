@@ -24,6 +24,7 @@ import {
   canRunQuotationVersionAction,
 } from "../src/lib/quotations/versionWorkflow.ts";
 import { salesDashboardKind } from "../src/lib/dashboard/salesDashboard.ts";
+import { isMissingDatabaseObjectError } from "../src/lib/friendlyErrors.ts";
 
 test("every configured project transition points to a known status", () => {
   const knownStatuses = new Set(projectSalesStatuses);
@@ -170,4 +171,29 @@ test("sales roles receive the correct owner-first dashboard", () => {
   assert.equal(salesDashboardKind("Branch Manager"), "indoor");
   assert.equal(salesDashboardKind("Outdoor Sales"), "outdoor");
   assert.equal(salesDashboardKind("Finance / Accountant"), null);
+});
+
+test("pre-migration database objects degrade to empty workflow states", () => {
+  assert.equal(
+    isMissingDatabaseObjectError({
+      code: "PGRST205",
+      message:
+        "Could not find the table 'public.follow_up_tasks' in the schema cache",
+    }),
+    true,
+  );
+  assert.equal(
+    isMissingDatabaseObjectError({
+      code: "42703",
+      message: 'column projects.sales_status does not exist',
+    }),
+    true,
+  );
+  assert.equal(
+    isMissingDatabaseObjectError({
+      code: "23505",
+      message: "duplicate key value violates unique constraint",
+    }),
+    false,
+  );
 });

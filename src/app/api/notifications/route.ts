@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/adminServer";
+import { isMissingDatabaseObjectError } from "@/lib/friendlyErrors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   hasSupabaseServiceRoleKey,
@@ -40,6 +41,13 @@ export async function GET() {
     .order("created_at", { ascending: false })
     .limit(30);
   if (error) {
+    if (isMissingDatabaseObjectError(error)) {
+      return NextResponse.json({
+        notifications: [],
+        setupRequired: true,
+      });
+    }
+
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   return NextResponse.json({ notifications: data ?? [] });
@@ -86,6 +94,13 @@ export async function PATCH(request: Request) {
 
   const { error } = await query;
   if (error) {
+    if (isMissingDatabaseObjectError(error)) {
+      return NextResponse.json({
+        updated: false,
+        setupRequired: true,
+      });
+    }
+
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   return NextResponse.json({ updated: true });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/adminServer";
+import { isMissingDatabaseObjectError } from "@/lib/friendlyErrors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   hasSupabaseServiceRoleKey,
@@ -55,6 +56,18 @@ export async function GET(request: Request) {
 
   const { data: taskData, error: taskError } = await taskQuery;
   if (taskError) {
+    if (isMissingDatabaseObjectError(taskError)) {
+      return NextResponse.json({
+        role: context.auth.role,
+        currentUserId: context.auth.user.id,
+        tasks: [],
+        notifications: [],
+        availableProjects: [],
+        assignees: [],
+        setupRequired: true,
+      });
+    }
+
     return NextResponse.json({ error: taskError.message }, { status: 500 });
   }
   const tasks = (taskData ?? []) as TaskRow[];

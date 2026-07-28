@@ -51,7 +51,6 @@ type IntakeContact = {
 
 type IntakeBody = {
   existingClientId?: unknown;
-  duplicateOverrideReason?: unknown;
   client?: {
     clientType?: unknown;
     clientName?: unknown;
@@ -90,10 +89,6 @@ type IntakeBody = {
 
 function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function normalizedPhone(value: unknown) {
-  return text(value).replace(/\D/g, "");
 }
 
 async function nextProjectNumber() {
@@ -211,34 +206,7 @@ export async function POST(request: Request) {
 
   try {
     if (!clientId && client) {
-      const mobileKey = normalizedPhone(client.mobile);
       const emailKey = text(client.email).toLowerCase();
-      const { data: candidates, error: duplicateError } = await admin
-        .from("clients")
-        .select("id, client_name, mobile, email")
-        .is("archived_at", null);
-
-      if (duplicateError) throw duplicateError;
-      const duplicate = (candidates ?? []).find(
-        (candidate) =>
-          (mobileKey &&
-            normalizedPhone(candidate.mobile) === mobileKey) ||
-          (emailKey && text(candidate.email).toLowerCase() === emailKey),
-      );
-      const overrideReason = text(body?.duplicateOverrideReason);
-      const mayOverride =
-        auth.role === "Admin" || auth.role === "Sales Manager";
-
-      if (duplicate && (!mayOverride || !overrideReason)) {
-        return NextResponse.json(
-          {
-            error: "A possible duplicate client already exists.",
-            duplicateClient: duplicate,
-          },
-          { status: 409 },
-        );
-      }
-
       const { data: savedClient, error: clientError } = await admin
         .from("clients")
         .insert({

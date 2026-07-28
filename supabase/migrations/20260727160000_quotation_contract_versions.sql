@@ -370,9 +370,9 @@ begin
 
   select * into actor_profile
   from public.profiles
-  where id = p_created_by
-    and is_active = true
-    and coalesce(status, 'Active') <> 'Inactive';
+  where public.profiles.id = p_created_by
+    and public.profiles.is_active = true
+    and coalesce(public.profiles.status, 'Active') <> 'Inactive';
 
   if actor_profile.id is null
     or actor_profile.role not in (
@@ -391,7 +391,9 @@ begin
 
   select * into project_row
   from public.projects
-  where id = p_project_id and client_id = p_client_id and archived_at is null
+  where public.projects.id = p_project_id
+    and public.projects.client_id = p_client_id
+    and public.projects.archived_at is null
   for update;
 
   if project_row.id is null then

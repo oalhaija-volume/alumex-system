@@ -5,10 +5,9 @@ import {
   hasSupabaseServiceRoleKey,
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
-import { friendlyDatabaseError, isDuplicateError } from "@/lib/friendlyErrors";
+import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 import { loadOutdoorSalesProjectIds } from "@/lib/projects/access";
 
-const duplicateClientMessage = "Client already exists.";
 const clientHasProjectsMessage = "Client has projects and cannot be deleted";
 const clientReadRoles = [
   "Admin",
@@ -46,26 +45,8 @@ type ClientPayload = {
   location_longitude?: unknown;
 };
 
-type ExistingClient = {
-  id: string;
-  client_name: string | null;
-  mobile: string | null;
-  email: string | null;
-};
-
-type DuplicateClientMatch = {
-  field: "mobile" | "email" | "name_mobile";
-  clientName: string;
-  mobile: string;
-  email: string;
-};
-
 function textValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function normalizePhone(value: string) {
-  return value.replace(/\D/g, "");
 }
 
 function normalizeEmail(value: string) {
@@ -99,22 +80,6 @@ function isMissingClientLocationColumn(error: unknown) {
   );
 }
 
-function duplicateClientDetail(match: DuplicateClientMatch) {
-  const clientName = match.clientName || "an existing client";
-  const mobileDetail = match.mobile ? ` (${match.mobile})` : "";
-  const emailDetail = match.email ? ` (${match.email})` : "";
-
-  if (match.field === "email") {
-    return `Client already exists with the same email: ${clientName}${emailDetail}.`;
-  }
-
-  if (match.field === "name_mobile") {
-    return `Client already exists with the same name and mobile: ${clientName}${mobileDetail}.`;
-  }
-
-  return `Client already exists with the same mobile: ${clientName}${mobileDetail}.`;
-}
-
 async function outdoorSalesClientIds(userId: string) {
   const admin = createAdminClient();
   const { data: ownedClients, error: clientsError } = await admin
@@ -143,79 +108,6 @@ async function outdoorSalesClientIds(userId: string) {
     ]),
     error: null,
   };
-}
-
-async function findDuplicateClient({
-  clientName,
-  mobile,
-  email,
-  excludeId,
-}: {
-  clientName: string;
-  mobile: string;
-  email: string;
-  excludeId?: string;
-}) {
-  const admin = createAdminClient();
-  const normalizedMobile = normalizePhone(mobile);
-  const normalizedEmail = normalizeEmail(email);
-  const { data: existingClients, error } = await admin
-    .from("clients")
-    .select("id, client_name, mobile, email");
-
-  if (error) {
-    return { error };
-  }
-
-  const duplicate = ((existingClients ?? []) as ExistingClient[]).reduce<
-    DuplicateClientMatch | null
-  >(
-    (match, client) => {
-      if (match) {
-        return match;
-      }
-
-      if (excludeId && client.id === excludeId) {
-        return null;
-      }
-
-      const existingMobile = normalizePhone(client.mobile ?? "");
-      const existingEmail = normalizeEmail(client.email ?? "");
-      const existingName = (client.client_name ?? "").trim();
-
-      if (normalizedMobile && existingMobile === normalizedMobile) {
-        return {
-          field: "mobile",
-          clientName: existingName,
-          mobile: client.mobile ?? "",
-          email: client.email ?? "",
-        };
-      }
-
-      if (normalizedEmail && existingEmail === normalizedEmail) {
-        return {
-          field: "email",
-          clientName: existingName,
-          mobile: client.mobile ?? "",
-          email: client.email ?? "",
-        };
-      }
-
-      if (existingName === clientName && existingMobile === normalizedMobile) {
-        return {
-          field: "name_mobile",
-          clientName: existingName,
-          mobile: client.mobile ?? "",
-          email: client.email ?? "",
-        };
-      }
-
-      return null;
-    },
-    null,
-  );
-
-  return { duplicate };
 }
 
 export async function GET() {
@@ -363,35 +255,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const duplicateCheck = await findDuplicateClient({
-    clientName,
-    mobile,
-    email,
-  });
-
-  if (duplicateCheck.error) {
-    console.error("[api/clients] duplicate check failed", {
-      route: "/api/clients",
-      operation: "duplicate-check",
-      table: "public.clients",
-      client: "createAdminClient",
-      executingRole: "service_role",
-      error: duplicateCheck.error,
-    });
-
-    return NextResponse.json(
-      { error: friendlyDatabaseError(duplicateCheck.error, "Unable to verify client duplicates.") },
-      { status: 500 },
-    );
-  }
-
-  if (duplicateCheck.duplicate) {
-    return NextResponse.json(
-      { error: duplicateClientDetail(duplicateCheck.duplicate) },
-      { status: 409 },
-    );
-  }
-
   const admin = createAdminClient();
   const clientPayload = {
     client_name: clientName,
@@ -418,7 +281,6 @@ export async function POST(request: Request) {
     : insertWithLocation;
 
   if (error) {
-    const isDuplicate = isDuplicateError(error);
     console.error("[api/clients] create failed", {
       route: "/api/clients",
       operation: "insert",
@@ -430,13 +292,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        error: friendlyDatabaseError(
-          error,
-          "Unable to save client.",
-          duplicateClientMessage,
-        ),
+        error: friendlyDatabaseError(error, "Unable to save client."),
       },
-      { status: isDuplicate ? 409 : 500 },
+      { status: 500 },
     );
   }
 
@@ -479,36 +337,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json(
       { error: "Client name, phone number, and address are required." },
       { status: 400 },
-    );
-  }
-
-  const duplicateCheck = await findDuplicateClient({
-    clientName,
-    mobile,
-    email,
-    excludeId: body.id,
-  });
-
-  if (duplicateCheck.error) {
-    console.error("[api/clients] duplicate check failed", {
-      route: "/api/clients",
-      operation: "duplicate-check-update",
-      table: "public.clients",
-      client: "createAdminClient",
-      executingRole: "service_role",
-      error: duplicateCheck.error,
-    });
-
-    return NextResponse.json(
-      { error: friendlyDatabaseError(duplicateCheck.error, "Unable to verify client duplicates.") },
-      { status: 500 },
-    );
-  }
-
-  if (duplicateCheck.duplicate) {
-    return NextResponse.json(
-      { error: duplicateClientDetail(duplicateCheck.duplicate) },
-      { status: 409 },
     );
   }
 
@@ -566,7 +394,6 @@ export async function PATCH(request: Request) {
     : updateWithLocation;
 
   if (error) {
-    const isDuplicate = isDuplicateError(error);
     console.error("[api/clients] update failed", {
       route: "/api/clients",
       operation: "update",
@@ -578,13 +405,9 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json(
       {
-        error: friendlyDatabaseError(
-          error,
-          "Unable to save client.",
-          duplicateClientMessage,
-        ),
+        error: friendlyDatabaseError(error, "Unable to save client."),
       },
-      { status: isDuplicate ? 409 : 500 },
+      { status: 500 },
     );
   }
 

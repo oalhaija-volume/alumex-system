@@ -72,6 +72,7 @@ test("admin can open sales creation flows and every system area", async ({
   await expect(page.locator('nav a[href="/quality-control"]')).toHaveCount(0);
   await expect(page.locator('nav a[href="/aluminum-factory"]')).toHaveCount(0);
   await expect(page.locator('nav a[href="/delivery"]')).toHaveCount(0);
+  await expect(page.locator('nav a[href="/installation"]')).toHaveCount(0);
 
   expect(errors).toEqual([]);
 });

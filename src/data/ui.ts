@@ -74,7 +74,6 @@ export const navItems: NavItem[] = [
   { labelKey: "nav.operationsManager", href: "/operations-manager", icon: "O" },
   { labelKey: "nav.costing", href: "/costing", icon: "C" },
   { labelKey: "nav.pricing", href: "/pricing", icon: "P" },
-  { labelKey: "nav.installation", href: "/installation", icon: "I" },
   { labelKey: "nav.finance", href: "/finance", icon: "F" },
   { labelKey: "nav.hr", href: "/hr", icon: "H" },
   { labelKey: "nav.settings", href: "/settings", icon: "S" },

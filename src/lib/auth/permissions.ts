@@ -69,7 +69,6 @@ const routePermissions: Array<{
       "Site Engineer",
     ],
   },
-  { prefix: "/installation", roles: ["Admin", "Installation Head", "Installation Team"] },
   { prefix: "/quotations", roles: salesWorkspaceRoles },
   { prefix: "/dashboard", roles: dashboardRoles },
   { prefix: "/clients", roles: clientProjectRoles },

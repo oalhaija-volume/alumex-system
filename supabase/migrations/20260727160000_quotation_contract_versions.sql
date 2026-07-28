@@ -77,6 +77,14 @@ create table if not exists public.quotation_version_items (
 );
 
 alter table public.quotation_items
+  add column if not exists line_type text not null default 'base',
+  add column if not exists is_discountable boolean not null default true;
+
+update public.quotation_items
+set line_type = coalesce(line_type, 'base'),
+    is_discountable = coalesce(is_discountable, true);
+
+alter table public.quotation_items
   drop constraint if exists quotation_items_line_type_check;
 
 alter table public.quotation_items

@@ -15,7 +15,6 @@ export const pageAccessItems: PageAccessItem[] = [
   { labelKey: "nav.quotations", routePath: "/quotations" },
   { labelKey: "nav.commercial", routePath: "/commercial" },
   { labelKey: "nav.operationsManager", routePath: "/operations-manager" },
-  { labelKey: "nav.installation", routePath: "/installation" },
   { labelKey: "nav.finance", routePath: "/finance" },
   { labelKey: "nav.hr", routePath: "/hr" },
   { labelKey: "nav.settings", routePath: "/settings" },

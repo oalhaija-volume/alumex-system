@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { PageHeader } from "@/components/PageHeader";
 import { ProjectForm, type ProjectFormValues } from "@/components/projects/ProjectForm";
+import { ProjectDeleteDialog } from "@/components/projects/ProjectDeleteDialog";
 import { ProjectSalesProfile } from "@/components/projects/ProjectSalesProfile";
 import { CrmWorkspace } from "@/components/crm/CrmWorkspace";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
@@ -30,11 +31,14 @@ export function ProjectDetails() {
   const params = useParams<{ projectId: string }>();
   const router = useRouter();
   const { t, term } = useI18n();
-  const { role } = useCurrentRole();
+  const { role, isAdmin } = useCurrentRole();
   const [error, setError] = useState("");
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const {
     findProject,
     updateProject,
+    deleteProjects,
     addOpening,
     updateOpening,
     deleteOpening,
@@ -74,6 +78,26 @@ export function ProjectDetails() {
     }
   }
 
+  async function handleDeleteProject() {
+    setIsDeleting(true);
+    setError("");
+
+    try {
+      await deleteProjects([activeProject.id]);
+      router.replace("/projects");
+      router.refresh();
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : t("projects.deleteError"),
+      );
+      setIsDeleteDialogOpen(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -107,6 +131,15 @@ export function ProjectDetails() {
             {t("projects.openings.addOpeningBeforeQuotation")}
           </span>
         )}
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={() => setIsDeleteDialogOpen(true)}
+            className="inline-flex h-11 items-center rounded-md border border-danger-text bg-transparent px-4 text-sm font-bold text-danger-text transition hover:bg-danger-text hover:text-white"
+          >
+            {t("projects.deleteProject")}
+          </button>
+        ) : null}
       </div>
 
       {error ? (
@@ -201,6 +234,14 @@ export function ProjectDetails() {
           }}
         />
       </div>
+
+      {isDeleteDialogOpen ? (
+        <ProjectDeleteDialog
+          isDeleting={isDeleting}
+          onCancel={() => setIsDeleteDialogOpen(false)}
+          onConfirm={handleDeleteProject}
+        />
+      ) : null}
     </div>
   );
 }

@@ -540,124 +540,19 @@ export async function DELETE(request: Request) {
   }
 
   const admin = createAdminClient();
-  const { data: quotations, error: quotationsError } = await admin
-    .from("quotations")
-    .select("id")
-    .in("project_id", projectIds);
-
-  if (quotationsError) {
-    console.error("[api/projects] quotation lookup failed", {
-      route: "/api/projects",
-      operation: "select-project-quotations",
-      table: "public.quotations",
-      client: "createAdminClient",
-      executingRole: "service_role",
-      error: quotationsError,
-    });
-
-    return NextResponse.json(
-      { error: friendlyDatabaseError(quotationsError, "Unable to prepare project deletion.") },
-      { status: 500 },
-    );
-  }
-
-  const quotationIds = (quotations ?? []).map(
-    (quotation: { id: string }) => quotation.id,
+  const { data: deletedProjects, error: projectsDeleteError } = await admin.rpc(
+    "delete_projects_as_admin",
+    {
+      target_project_ids: projectIds,
+      actor_user_id: authCheck.user.id,
+    },
   );
-
-  if (quotationIds.length > 0) {
-    const { error: quotationItemsError } = await admin
-      .from("quotation_items")
-      .delete()
-      .in("quotation_id", quotationIds);
-
-    if (quotationItemsError) {
-      console.error("[api/projects] quotation items cleanup failed", {
-        route: "/api/projects",
-        operation: "delete-quotation-items",
-        table: "public.quotation_items",
-        client: "createAdminClient",
-        executingRole: "service_role",
-        error: quotationItemsError,
-      });
-
-      return NextResponse.json(
-        { error: friendlyDatabaseError(quotationItemsError, "Unable to delete project quotations.") },
-        { status: 500 },
-      );
-    }
-  }
-
-  const { error: documentsError } = await admin
-    .from("documents")
-    .delete()
-    .in("project_id", projectIds);
-
-  if (documentsError) {
-    console.error("[api/projects] project documents cleanup failed", {
-      route: "/api/projects",
-      operation: "delete-project-documents",
-      table: "public.documents",
-      client: "createAdminClient",
-      executingRole: "service_role",
-      error: documentsError,
-    });
-
-    return NextResponse.json(
-      { error: friendlyDatabaseError(documentsError, "Unable to delete project documents.") },
-      { status: 500 },
-    );
-  }
-
-  const deleteSteps = [
-    {
-      table: "public.contracts",
-      operation: "delete-contracts",
-      query: admin.from("contracts").delete().in("project_id", projectIds),
-    },
-    {
-      table: "public.quotations",
-      operation: "delete-quotations",
-      query: admin.from("quotations").delete().in("project_id", projectIds),
-    },
-    {
-      table: "public.openings",
-      operation: "delete-openings",
-      query: admin.from("openings").delete().in("project_id", projectIds),
-    },
-  ];
-
-  for (const deleteStep of deleteSteps) {
-    const { error } = await deleteStep.query;
-
-    if (error) {
-      console.error("[api/projects] cascading delete failed", {
-        route: "/api/projects",
-        operation: deleteStep.operation,
-        table: deleteStep.table,
-        client: "createAdminClient",
-        executingRole: "service_role",
-        error,
-      });
-
-      return NextResponse.json(
-        { error: friendlyDatabaseError(error, "Unable to delete project.") },
-        { status: 500 },
-      );
-    }
-  }
-
-  const { data: deletedProjects, error: projectsDeleteError } = await admin
-    .from("projects")
-    .delete()
-    .in("id", projectIds)
-    .select("id");
 
   if (projectsDeleteError) {
     console.error("[api/projects] project delete failed", {
       route: "/api/projects",
-      operation: "delete-projects",
-      table: "public.projects",
+      operation: "delete-projects-as-admin",
+      function: "public.delete_projects_as_admin",
       client: "createAdminClient",
       executingRole: "service_role",
       error: projectsDeleteError,
@@ -669,12 +564,16 @@ export async function DELETE(request: Request) {
     );
   }
 
-  if ((deletedProjects ?? []).length !== projectIds.length) {
+  const deletedProjectIds = (
+    (deletedProjects ?? []) as Array<{ deleted_project_id: string }>
+  ).map((project) => project.deleted_project_id);
+
+  if (deletedProjectIds.length !== new Set(projectIds).size) {
     return NextResponse.json(
       { error: "Project was not deleted. It may already have been removed." },
       { status: 404 },
     );
   }
 
-  return NextResponse.json({ ok: true, deletedProjectIds: deletedProjects });
+  return NextResponse.json({ ok: true, deletedProjectIds });
 }

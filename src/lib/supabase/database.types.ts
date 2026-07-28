@@ -1397,6 +1397,13 @@ export type Database = {
       };
     };
     Functions: {
+      delete_projects_as_admin: {
+        Args: {
+          target_project_ids: string[];
+          actor_user_id: string;
+        };
+        Returns: Array<{ deleted_project_id: string }>;
+      };
       create_measurement_request: {
         Args: {
           target_project_id: string;

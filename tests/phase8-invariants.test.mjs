@@ -183,3 +183,48 @@ test("Admin remains an unrestricted system testing role", () => {
     /role === "Admin" && item\.href === "\/hr"/,
   );
 });
+
+test("project deletion is Admin-only and transactional", () => {
+  const sql = readMigration("20260728160000_admin_project_deletion.sql");
+  const projectsRoute = readFileSync(
+    join(repositoryRoot, "src", "app", "api", "projects", "route.ts"),
+    "utf8",
+  );
+  const projectDetails = readFileSync(
+    join(
+      repositoryRoot,
+      "src",
+      "components",
+      "projects",
+      "ProjectDetails.tsx",
+    ),
+    "utf8",
+  );
+
+  assert.match(sql, /create or replace function public\.delete_projects_as_admin/);
+  assert.match(sql, /security definer/);
+  assert.match(
+    sql,
+    /actor_role_value is distinct from 'Admin'::public\.app_role/,
+  );
+  assert.match(sql, /insert into public\.audit_events/);
+  assert.match(sql, /'project_deleted'/);
+  assert.match(sql, /delete from public\.measurement_submissions/);
+  assert.match(sql, /delete from public\.quotation_versions/);
+  assert.match(sql, /delete from public\.projects as project/);
+  assert.match(
+    sql,
+    /revoke all on function public\.delete_projects_as_admin\(uuid\[\], uuid\)[\s\S]*from authenticated/,
+  );
+  assert.match(
+    sql,
+    /grant execute on function public\.delete_projects_as_admin\(uuid\[\], uuid\)[\s\S]*to service_role/,
+  );
+  assert.match(
+    projectsRoute,
+    /export async function DELETE[\s\S]*requireRole\(\["Admin"\]\)[\s\S]*delete_projects_as_admin/,
+  );
+  assert.match(projectDetails, /const \{ role, isAdmin \} = useCurrentRole\(\)/);
+  assert.match(projectDetails, /\{isAdmin \? \([\s\S]*setIsDeleteDialogOpen\(true\)/);
+  assert.match(projectDetails, /<ProjectDeleteDialog/);
+});

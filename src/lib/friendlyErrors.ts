@@ -58,10 +58,12 @@ export function isMissingDatabaseObjectError(error: unknown) {
   return (
     code === "42P01" ||
     code === "42703" ||
+    code === "PGRST202" ||
     code === "PGRST204" ||
     code === "PGRST205" ||
     message.includes("could not find the table") ||
     message.includes("could not find the column") ||
+    message.includes("could not find the function") ||
     message.includes("does not exist")
   );
 }

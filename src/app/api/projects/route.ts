@@ -8,6 +8,7 @@ import {
 import {
   friendlyDatabaseError,
   isDuplicateError,
+  isMissingDatabaseObjectError,
   technicalErrorMessage,
 } from "@/lib/friendlyErrors";
 import { generateNextProjectNumber } from "@/lib/projects/numbering";
@@ -558,8 +559,23 @@ export async function DELETE(request: Request) {
       error: projectsDeleteError,
     });
 
+    if (isMissingDatabaseObjectError(projectsDeleteError)) {
+      return NextResponse.json(
+        {
+          error:
+            "The project deletion database update has not been installed. Apply the latest Supabase migration and try again.",
+        },
+        { status: 503 },
+      );
+    }
+
     return NextResponse.json(
-      { error: friendlyDatabaseError(projectsDeleteError, "Unable to delete project.") },
+      {
+        error: friendlyDatabaseError(
+          projectsDeleteError,
+          "Unable to delete project.",
+        ),
+      },
       { status: 500 },
     );
   }

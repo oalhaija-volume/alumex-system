@@ -382,3 +382,13 @@ test("pre-migration database objects degrade to empty workflow states", () => {
     false,
   );
 });
+
+test("missing Supabase RPC functions are recognized as unapplied migrations", () => {
+  assert.equal(
+    isMissingDatabaseObjectError({
+      code: "PGRST202",
+      message: "Could not find the function public.delete_projects_as_admin",
+    }),
+    true,
+  );
+});

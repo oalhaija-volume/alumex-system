@@ -182,6 +182,11 @@ test("Admin remains an unrestricted system testing role", () => {
     appShell,
     /role === "Admin" && item\.href === "\/hr"/,
   );
+  assert.match(
+    appShell,
+    /gridTemplateColumns: `repeat\(\$\{visibleNavItems\.length\}, minmax\(0, 1fr\)\)`/,
+  );
+  assert.doesNotMatch(appShell, /max-w-full truncate/);
 });
 
 test("project deletion is Admin-only and transactional", () => {

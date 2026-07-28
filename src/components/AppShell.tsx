@@ -73,8 +73,15 @@ function NavLink({
             : "text-muted hover:bg-material-surface-container/70 hover:text-foreground"
         }`}
       >
-        <MobileNavIcon href={href} active={isActive} />
-        <span className="max-w-full truncate">{label}</span>
+        <span
+          aria-hidden="true"
+          className="flex h-6 w-full shrink-0 items-center justify-center"
+        >
+          <MobileNavIcon href={href} active={isActive} />
+        </span>
+        <span className="block w-full whitespace-normal text-center leading-[1.15]">
+          {label}
+        </span>
       </Link>
     );
   }
@@ -287,11 +294,16 @@ export function AppShell({
 
       <nav
         data-testid="mobile-tabbar"
-        className="mobile-tabbar fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-3 right-3 z-30 max-w-[calc(100vw-1.5rem)] overflow-x-auto rounded-[22px] border border-material-outline-variant bg-material-surface-container-low/88 p-1.5 shadow-[var(--md-elevation-2)] backdrop-blur-2xl lg:hidden"
+        className="mobile-tabbar fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-3 right-3 z-30 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-[22px] border border-material-outline-variant bg-material-surface-container-low/88 p-1.5 shadow-[var(--md-elevation-2)] backdrop-blur-2xl lg:hidden"
       >
-        <div className="flex w-max min-w-full gap-1">
+        <div
+          className="grid w-full items-stretch gap-1"
+          style={{
+            gridTemplateColumns: `repeat(${visibleNavItems.length}, minmax(0, 1fr))`,
+          }}
+        >
           {visibleNavItems.map((item) => (
-            <div key={item.href} className="w-[76px] min-w-[76px] flex-1">
+            <div key={item.href} className="min-w-0">
               <NavLink compact {...item} />
             </div>
           ))}

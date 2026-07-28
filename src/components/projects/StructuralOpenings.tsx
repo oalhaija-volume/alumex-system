@@ -117,11 +117,6 @@ const spreadsheetColumns: Array<{
     widthClass: "w-28",
   },
   {
-    key: "quantity",
-    labelKey: "projects.openings.fields.quantity",
-    widthClass: "w-24",
-  },
-  {
     key: "notes",
     labelKey: "projects.openings.fields.notes",
     widthClass: "w-56",
@@ -770,7 +765,7 @@ export function StructuralOpenings({
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-[1120px] table-fixed divide-y divide-slate-200 text-left text-sm">
+            <table className="min-w-[1000px] table-fixed divide-y divide-slate-200 text-left text-sm">
               <caption className="sr-only">{t("projects.openings.caption")}</caption>
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
                 <tr className="divide-x divide-slate-200">
@@ -821,7 +816,7 @@ export function StructuralOpenings({
             </h3>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-[1120px] table-fixed divide-y divide-slate-200 text-left text-sm">
+            <table className="min-w-[1000px] table-fixed divide-y divide-slate-200 text-left text-sm">
               <caption className="sr-only">{t("projects.openings.caption")}</caption>
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
                 <tr className="divide-x divide-slate-200">
@@ -888,7 +883,6 @@ export function StructuralOpenings({
                       <td className="px-2 py-3">
                         {t("common.cmValue", { value: opening.height })}
                       </td>
-                      <td className="px-2 py-3">{opening.quantity}</td>
                       <td className="px-2 py-3">
                         {opening.notes ? term(opening.notes) : "-"}
                       </td>

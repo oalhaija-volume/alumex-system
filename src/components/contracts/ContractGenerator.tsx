@@ -351,17 +351,26 @@ export function ContractGenerator() {
             (quotation as ContractSourceDraft).quotationStatus ?? "Saved",
         }));
         setSavedQuotations(nextQuotationSources);
-        setQuotationNumber((current) =>
-          nextQuotationSources.find(
+        setQuotationNumber((current) => {
+          const requestedQuotation = nextQuotationSources.find(
             (quotation) =>
               quotation.versionId === requestedQuotationVersionId,
-          )?.quotationNumber ??
-          (nextQuotationSources.some(
-            (quotation) => quotation.quotationNumber === current,
-          )
-            ? current
-            : ""),
-        );
+          );
+
+          if (requestedQuotation) {
+            return requestedQuotation.quotationNumber;
+          }
+
+          if (
+            nextQuotationSources.some(
+              (quotation) => quotation.quotationNumber === current,
+            )
+          ) {
+            return current;
+          }
+
+          return nextQuotationSources[0]?.quotationNumber ?? "";
+        });
 
         const [
           contractsResponse,

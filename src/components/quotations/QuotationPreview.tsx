@@ -524,6 +524,22 @@ export function QuotationPreview() {
             {(draft.versionStatus ?? "draft").replaceAll("_", " ")} · v
             {draft.versionNumber ?? 1}
           </p>
+          {showSalesPrices &&
+          draft.versionStatus === "approved" &&
+          draft.versionId ? (
+            <Link
+              href={{
+                pathname: "/quotations",
+                query: {
+                  view: "contracts",
+                  quotationVersionId: draft.versionId,
+                },
+              }}
+              className="flex h-11 items-center justify-center rounded-md bg-[var(--alumex-blue)] px-4 text-sm font-bold text-white"
+            >
+              {t("quotations.createContract")}
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={() => void printQuotation()}

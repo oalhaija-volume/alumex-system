@@ -1281,8 +1281,8 @@ export function QuotationBuilder() {
             {existingProjectQuotation && !isEditingExistingQuotation
               ? t("quotations.viewExistingQuotation")
               : isEditingExistingQuotation
-                ? "Update Quotation"
-                : t("quotations.createQuotation")}
+                ? t("quotations.saveQuotationChanges")
+                : t("quotations.saveAndPreviewQuotation")}
           </button>
         </div>
       </SectionCard>

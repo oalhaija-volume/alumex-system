@@ -246,6 +246,16 @@ test("ready Outdoor Sales intake skips confirmation for measurements", () => {
   );
 });
 
+test("completed field measurements can move directly to quotation", () => {
+  assert.equal(
+    canTransitionProjectSalesStatus(
+      "measurement_in_progress",
+      "ready_for_quotation",
+    ),
+    true,
+  );
+});
+
 test("mini CRM follow-ups stay with Indoor Sales and sales management", () => {
   assert.equal(roleHasCapability("Admin", "follow-ups:perform"), true);
   assert.equal(roleHasCapability("Sales Manager", "follow-ups:perform"), true);

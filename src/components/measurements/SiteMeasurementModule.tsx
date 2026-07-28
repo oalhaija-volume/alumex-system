@@ -242,7 +242,10 @@ export function SiteMeasurementModule() {
     measurementRequest &&
       ["in_progress", "draft_saved"].includes(measurementRequest.status),
   );
-  const canSubmit = isEditable && openings.length > 0;
+  const canComplete = Boolean(
+    isEditable &&
+      (openings.length > 0 || newOpenings.some(hasOpeningContent)),
+  );
   const roomOptions = useMemo(
     () => optionsForCategory(openingOptions, "room"),
     [openingOptions],
@@ -535,6 +538,60 @@ export function SiteMeasurementModule() {
     }
   }
 
+  async function completeMeasurements() {
+    if (!measurementRequest) return;
+
+    setError("");
+    setMessage("");
+
+    const pendingOpenings = newOpenings
+      .filter(hasOpeningContent)
+      .map(normalizeDraft);
+    if (pendingOpenings.some((opening) => !isOpeningValid(opening))) {
+      setError(t("measurements.completeRequiredDetails"));
+      return;
+    }
+    if (openings.length === 0 && pendingOpenings.length === 0) {
+      setError(t("measurements.addOpeningBeforeSaving"));
+      return;
+    }
+
+    setIsSaving(true);
+    setWorkflowSaving("complete");
+
+    try {
+      for (const opening of pendingOpenings) {
+        await saveOpeningPayload(opening);
+      }
+
+      const response = await fetch(`/api/measurements/${measurementRequest.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "complete" }),
+      });
+      const body = (await response.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+      if (!response.ok) {
+        throw new Error(body?.error ?? t("measurements.workflowUpdateError"));
+      }
+
+      window.localStorage.removeItem(`alumex:measurement-draft:${projectId}`);
+      setNewOpenings(openingRows(1));
+      await loadMeasurements();
+      setMessage(t("measurements.savedAndReadyForQuotation"));
+    } catch (completeError) {
+      setError(
+        completeError instanceof Error
+          ? completeError.message
+          : t("measurements.workflowUpdateError"),
+      );
+    } finally {
+      setIsSaving(false);
+      setWorkflowSaving(null);
+    }
+  }
+
   async function deleteOpening(openingId: string) {
     setError("");
     setMessage("");
@@ -709,13 +766,13 @@ export function SiteMeasurementModule() {
           {isEditable ? (
             <button
               type="button"
-              onClick={() => void runMeasurementAction("submit")}
-              disabled={Boolean(workflowSaving) || !canSubmit}
+              onClick={() => void completeMeasurements()}
+              disabled={Boolean(workflowSaving) || !canComplete}
               className="material-button-filled min-h-12 w-full sm:w-auto"
             >
-              {workflowSaving === "submit"
-                ? "Submitting…"
-                : "Submit measurements"}
+              {workflowSaving === "complete"
+                ? t("measurements.savingAndCompleting")
+                : t("measurements.saveAndComplete")}
             </button>
           ) : null}
           <Link
@@ -1327,6 +1384,19 @@ export function SiteMeasurementModule() {
             className="material-button-filled min-h-12 w-full"
           >
             {isSaving ? t("measurements.saving") : t("measurements.saveOpening")}
+          </button>
+        </div>
+      ) : isEditable && canComplete ? (
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-material-outline-variant bg-material-surface-container-low p-3 shadow-[var(--md-elevation-2)] sm:hidden">
+          <button
+            type="button"
+            onClick={() => void completeMeasurements()}
+            disabled={Boolean(workflowSaving) || isSaving}
+            className="material-button-filled min-h-12 w-full"
+          >
+            {workflowSaving === "complete"
+              ? t("measurements.savingAndCompleting")
+              : t("measurements.saveAndComplete")}
           </button>
         </div>
       ) : null}

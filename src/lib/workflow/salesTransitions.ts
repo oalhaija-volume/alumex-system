@@ -12,6 +12,7 @@ const outdoorSalesTransitions = new Set<string>([
   "structure_not_ready:waiting_for_follow_up",
   "measurement_assigned:measurement_in_progress",
   "measurement_in_progress:measurements_submitted",
+  "measurement_in_progress:ready_for_quotation",
   "measurements_need_correction:measurement_in_progress",
 ]);
 

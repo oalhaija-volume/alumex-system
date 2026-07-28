@@ -97,7 +97,7 @@ const coreProjectTransitions: Readonly<
   measurement_required: ["measurement_scheduled", "measurement_assigned"],
   measurement_scheduled: ["measurement_assigned"],
   measurement_assigned: ["measurement_in_progress"],
-  measurement_in_progress: ["measurements_submitted"],
+  measurement_in_progress: ["measurements_submitted", "ready_for_quotation"],
   measurements_submitted: ["measurements_under_review"],
   measurements_under_review: [
     "measurements_need_correction",

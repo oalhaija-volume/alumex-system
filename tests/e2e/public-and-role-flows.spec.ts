@@ -143,4 +143,21 @@ test("Outdoor Sales sees mobile measurement actions without commercial values", 
   ).toBeVisible();
   await expect(page.getByText(/contract total|إجمالي العقد/i)).toHaveCount(0);
   await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
+
+  const measurementLinks = page.locator('a[href^="/site-measurements/"]');
+  if ((await measurementLinks.count()) > 0) {
+    await measurementLinks.first().click();
+    await expect(page.getByTestId("guided-opening-capture")).toBeVisible();
+    await expect(page.getByTestId("desktop-opening-capture")).toBeHidden();
+    await expect(
+      page.getByRole("button", {
+        name: /save & next opening|حفظ والانتقال للفتحة التالية/i,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: /done — send to indoor sales|تم — إرسال إلى المبيعات الداخلية/i,
+      }),
+    ).toBeVisible();
+  }
 });

@@ -106,8 +106,6 @@ const numberFields: Array<{
   { key: "height", label: "Height", suffix: "cm", step: "0.01" },
 ];
 
-const mobileWizardSteps = ["Location", "Size and type", "Review"];
-
 function openingToDraft(opening: MeasurementOpening): OpeningDraft {
   return {
     floor: opening.floor,
@@ -199,8 +197,6 @@ export function SiteMeasurementModule() {
   const [newOpenings, setNewOpenings] = useState<OpeningDraft[]>(
     openingRows(1),
   );
-  const [wizardIndex, setWizardIndex] = useState(0);
-  const [mobileWizardStep, setMobileWizardStep] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -288,8 +284,6 @@ export function SiteMeasurementModule() {
     } else {
       setNewOpenings(openingRows(1));
     }
-    setWizardIndex(0);
-    setMobileWizardStep(0);
     setIsLoading(false);
   }, [projectId, t]);
 
@@ -488,8 +482,6 @@ export function SiteMeasurementModule() {
 
       setOpenings((current) => [...current, ...savedOpenings]);
       setNewOpenings(openingRows(1));
-      setWizardIndex(0);
-      setMobileWizardStep(0);
       window.localStorage.removeItem(`alumex:measurement-draft:${projectId}`);
       await runMeasurementAction("save_draft", { quiet: true });
       setMessage(
@@ -499,6 +491,39 @@ export function SiteMeasurementModule() {
       );
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : t("measurements.saveOpeningError"));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function saveCurrentOpeningAndContinue() {
+    const currentOpening = newOpenings[0];
+    if (!currentOpening) return;
+
+    setError("");
+    setMessage("");
+
+    const normalized = normalizeDraft(currentOpening);
+    if (!isOpeningValid(normalized)) {
+      setError(t("measurements.completeRequiredDetails"));
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const savedOpening = await saveOpeningPayload(normalized);
+      setOpenings((current) => [...current, savedOpening]);
+      setNewOpenings(openingRows(1));
+      window.localStorage.removeItem(`alumex:measurement-draft:${projectId}`);
+      await runMeasurementAction("save_draft", { quiet: true });
+      setMessage(t("measurements.openingSavedContinue"));
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : t("measurements.saveOpeningError"),
+      );
     } finally {
       setIsSaving(false);
     }
@@ -560,8 +585,14 @@ export function SiteMeasurementModule() {
     setWorkflowSaving("complete");
 
     try {
+      const savedPendingOpenings: MeasurementOpening[] = [];
       for (const opening of pendingOpenings) {
-        await saveOpeningPayload(opening);
+        savedPendingOpenings.push(await saveOpeningPayload(opening));
+      }
+      if (savedPendingOpenings.length > 0) {
+        setOpenings((current) => [...current, ...savedPendingOpenings]);
+        setNewOpenings(openingRows(1));
+        window.localStorage.removeItem(`alumex:measurement-draft:${projectId}`);
       }
 
       const response = await fetch(`/api/measurements/${measurementRequest.id}`, {
@@ -581,6 +612,7 @@ export function SiteMeasurementModule() {
       await loadMeasurements();
       setMessage(t("measurements.savedAndReadyForQuotation"));
     } catch (completeError) {
+      await loadMeasurements().catch(() => undefined);
       setError(
         completeError instanceof Error
           ? completeError.message
@@ -641,43 +673,6 @@ export function SiteMeasurementModule() {
     setError("");
   }
 
-  function canContinueMobileStep(opening: OpeningDraft, step: number) {
-    const normalized = normalizeDraft(opening);
-
-    if (step === 0) {
-      return Boolean(normalized.floor && normalized.room);
-    }
-
-    if (step === 1) {
-      return Boolean(
-        normalized.width > 0 &&
-          normalized.height > 0 &&
-          normalized.openingType,
-      );
-    }
-
-    return isOpeningValid(normalized);
-  }
-
-  function goToNextMobileStep(opening: OpeningDraft) {
-    setError("");
-    setMessage("");
-
-    if (!canContinueMobileStep(opening, mobileWizardStep)) {
-      setError(t("measurements.completeStep"));
-      return;
-    }
-
-    setMobileWizardStep((currentStep) =>
-      Math.min(currentStep + 1, mobileWizardSteps.length - 1),
-    );
-  }
-
-  function goToPreviousMobileStep() {
-    setError("");
-    setMobileWizardStep((currentStep) => Math.max(currentStep - 1, 0));
-  }
-
   if (isLoading) {
     return (
       <div className="material-card p-5">
@@ -695,7 +690,7 @@ export function SiteMeasurementModule() {
   }
 
   return (
-    <div className="mx-auto w-full space-y-4 pb-28 sm:pb-4">
+    <div className="mx-auto w-full space-y-4 pb-4">
       <div className="material-card p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
@@ -768,7 +763,7 @@ export function SiteMeasurementModule() {
               type="button"
               onClick={() => void completeMeasurements()}
               disabled={Boolean(workflowSaving) || !canComplete}
-              className="material-button-filled min-h-12 w-full sm:w-auto"
+              className="material-button-filled hidden min-h-12 w-full xl:inline-flex xl:w-auto"
             >
               {workflowSaving === "complete"
                 ? t("measurements.savingAndCompleting")
@@ -934,7 +929,7 @@ export function SiteMeasurementModule() {
           </>
         ) : (
           <>
-            <div className="mt-4 hidden justify-end gap-2 sm:flex">
+            <div className="mt-4 hidden justify-end gap-2 xl:flex">
                 <button
                   type="button"
                   onClick={() =>
@@ -952,8 +947,6 @@ export function SiteMeasurementModule() {
                   type="button"
                   onClick={() => {
                     setNewOpenings(openingRows(1));
-                    setWizardIndex(0);
-                    setMobileWizardStep(0);
                   }}
                   disabled={!isEditable || isSaving}
                   className="material-button-outlined min-h-11 px-3"
@@ -962,7 +955,10 @@ export function SiteMeasurementModule() {
                 </button>
             </div>
 
-            <div className="mt-4 hidden overflow-hidden rounded-lg border border-material-outline-variant sm:block">
+            <div
+              data-testid="desktop-opening-capture"
+              className="mt-4 hidden overflow-hidden rounded-lg border border-material-outline-variant xl:block"
+            >
               <div className="overflow-x-auto">
                 <table className="min-w-[920px] table-fixed divide-y divide-material-outline-variant text-left text-sm">
                   <thead className="bg-material-surface-container-lowest text-xs font-bold uppercase text-muted">
@@ -1070,20 +1066,14 @@ export function SiteMeasurementModule() {
               </div>
             </div>
 
-            <div className="mt-4 space-y-4 sm:hidden">
-              {newOpenings.map((opening, index) => (
-                <div
-                  key={`new-opening-${index}`}
-                  className={`material-card-muted p-3 sm:p-4 ${
-                    index === wizardIndex ? "" : "hidden"
-                  }`}
-                >
+            <div data-testid="guided-opening-capture" className="mt-4 xl:hidden">
+              {newOpenings.slice(0, 1).map((opening) => (
+                <div key="guided-opening" className="material-card-muted p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-bold uppercase text-muted">
-                        {t("measurements.openingProgress", {
-                          index: index + 1,
-                          total: newOpenings.length,
+                        {t("measurements.openingNumber", {
+                          index: openings.length + 1,
                         })}
                       </p>
                       <p className="mt-1 text-sm font-bold text-foreground">
@@ -1097,181 +1087,117 @@ export function SiteMeasurementModule() {
                     </span>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-4 gap-1">
-                    {mobileWizardSteps.map((step, stepIndex) => (
-                      <button
-                        key={step}
-                        type="button"
-                        onClick={() => {
-                          if (stepIndex <= mobileWizardStep) {
-                            setMobileWizardStep(stepIndex);
-                          }
-                        }}
-                        className={`min-h-10 rounded-md px-1 text-[10px] font-black ${
-                          stepIndex === mobileWizardStep
-                            ? "bg-material-primary text-material-on-primary"
-                            : stepIndex < mobileWizardStep
-                              ? "bg-material-primary-container text-material-on-primary-container"
-                              : "bg-material-surface-container text-muted"
-                        }`}
-                      >
-                        {stepIndex + 1}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-xs font-bold uppercase text-muted">
-                    {term(mobileWizardSteps[mobileWizardStep])}
+                  <p className="mt-2 text-sm text-muted">
+                    {t("measurements.oneOpeningAtATimeHelp")}
                   </p>
 
-                  {mobileWizardStep === 0 ? (
-                    <div className="mt-4 grid gap-3">
-                      {textFields.map((field) => (
-                        <label key={field.key} className="block">
-                          <span className="material-label">
-                            {term(field.label)}
-                            {field.required ? " *" : ""}
-                          </span>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    {textFields.map((field) => (
+                      <label key={field.key} className="block">
+                        <span className="material-label">
+                          {term(field.label)}
+                          {field.required ? " *" : ""}
+                        </span>
+                        <input
+                          value={String(opening[field.key])}
+                          onChange={(event) =>
+                            updateNewOpening(0, field.key, event.target.value)
+                          }
+                          placeholder={term(field.placeholder)}
+                          disabled={!isEditable}
+                          className="material-field mt-2 min-h-12"
+                        />
+                      </label>
+                    ))}
+
+                    <label className="block">
+                      <span className="material-label">{term("Room")} *</span>
+                      <select
+                        value={opening.room}
+                        onChange={(event) =>
+                          updateNewOpening(0, "room", event.target.value)
+                        }
+                        disabled={!isEditable}
+                        className="material-field mt-2 min-h-12"
+                      >
+                        <option value="">{t("measurements.selectRoom")}</option>
+                        {optionLabels(roomOptions, opening.room).map((option) => (
+                          <option key={option} value={option}>
+                            {term(option)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    {numberFields.map((field) => (
+                      <label key={field.key} className="block">
+                        <span className="material-label">{term(field.label)} *</span>
+                        <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container-low">
                           <input
-                            value={String(opening[field.key])}
+                            type="number"
+                            min="0"
+                            inputMode="decimal"
+                            step={field.step}
+                            value={opening[field.key]}
                             onChange={(event) =>
-                              updateNewOpening(index, field.key, event.target.value)
+                              updateNewOpening(0, field.key, event.target.value)
                             }
-                            placeholder={term(field.placeholder)}
                             disabled={!isEditable}
-                            className="material-field mt-2 min-h-12"
+                            className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
                           />
-                        </label>
-                      ))}
-
-                      <label className="block">
-                        <span className="material-label">{term("Room")} *</span>
-                        <select
-                          value={opening.room}
-                          onChange={(event) =>
-                            updateNewOpening(index, "room", event.target.value)
-                          }
-                          disabled={!isEditable}
-                          className="material-field mt-2 min-h-12"
-                        >
-                          <option value="">{t("measurements.selectRoom")}</option>
-                          {optionLabels(roomOptions, opening.room).map((option) => (
-                            <option key={option} value={option}>
-                              {term(option)}
-                            </option>
-                          ))}
-                        </select>
+                          <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
+                            {term(field.suffix)}
+                          </span>
+                        </div>
                       </label>
-                    </div>
-                  ) : null}
+                    ))}
 
-                  {mobileWizardStep === 1 ? (
-                    <div className="mt-4 grid gap-3">
-                      {numberFields.map((field) => (
-                        <label key={field.key} className="block">
-                          <span className="material-label">{term(field.label)}</span>
-                          <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container-low">
-                            <input
-                              type="number"
-                              min="0"
-                              inputMode="decimal"
-                              step={field.step}
-                              value={opening[field.key]}
-                              onChange={(event) =>
-                                updateNewOpening(index, field.key, event.target.value)
-                              }
-                              disabled={!isEditable}
-                              className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
-                            />
-                            <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
-                              {term(field.suffix)}
-                            </span>
-                          </div>
-                        </label>
-                      ))}
+                    <label className="block">
+                      <span className="material-label">{term("Type")} *</span>
+                      <select
+                        value={opening.openingType || opening.type}
+                        onChange={(event) =>
+                          updateNewOpening(0, "openingType", event.target.value)
+                        }
+                        disabled={!isEditable}
+                        className="material-field mt-2 min-h-12"
+                      >
+                        <option value="">{t("measurements.selectType")}</option>
+                        {structuralOpeningTypes.map((option) => (
+                          <option key={option} value={option}>
+                            {term(option)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
 
-                      <label className="block">
-                        <span className="material-label">{term("Type")} *</span>
-                        <select
-                          value={opening.openingType || opening.type}
-                          onChange={(event) =>
-                            updateNewOpening(index, "openingType", event.target.value)
-                          }
-                          disabled={!isEditable}
-                          className="material-field mt-2 min-h-12"
-                        >
-                          <option value="">{t("measurements.selectType")}</option>
-                          {structuralOpeningTypes.map((option) => (
-                            <option key={option} value={option}>
-                              {term(option)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  ) : null}
-
-                  {mobileWizardStep === 2 ? (
-                    <div className="mt-4 grid gap-3">
-                      <div className="material-card p-3 shadow-none">
-                        <p className="text-xs font-bold uppercase text-muted">{term("Review")}</p>
-                        <p className="mt-2 text-sm font-bold text-foreground">
-                          {[opening.openingCode, opening.floor, opening.room]
-                            .filter(Boolean)
-                            .join(" - ") || t("measurements.openingDetails")}
-                        </p>
-                        <p className="mt-1 text-sm text-muted-strong">
-                          {t("measurements.dimensionSummary", {
-                            width: opening.width,
-                            height: opening.height,
-                            quantity: 1,
-                          })}
-                        </p>
-                        <p className="mt-1 text-sm text-muted-strong">
-                          {opening.openingType || opening.type
-                            ? term(opening.openingType || opening.type)
-                            : t("measurements.typeNotAdded")}
-                        </p>
-                        <p className="mt-2 text-xl font-bold text-foreground">
-                          {t("common.areaValue", {
-                            value: centimetersToSquareMeters(opening).toFixed(2),
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div className="mt-4 grid grid-cols-2 gap-2">
+                  <div className="mt-4 grid gap-2 md:grid-cols-2">
                     <button
                       type="button"
-                      onClick={
-                        mobileWizardStep === 0
-                          ? () => setWizardIndex((currentIndex) => Math.max(currentIndex - 1, 0))
-                          : goToPreviousMobileStep
-                      }
-                      disabled={(mobileWizardStep === 0 && wizardIndex === 0) || isSaving}
-                      className="material-button-outlined min-h-11"
+                      onClick={() => void saveCurrentOpeningAndContinue()}
+                      disabled={!isEditable || isSaving}
+                      className="material-button-tonal min-h-12"
                     >
-                      {t("common.back")}
+                      {isSaving
+                        ? t("measurements.saving")
+                        : t("measurements.saveAndNext")}
                     </button>
-                    {mobileWizardStep < mobileWizardSteps.length - 1 ? (
-                      <button
-                        type="button"
-                        onClick={() => goToNextMobileStep(opening)}
-                        disabled={!isEditable || isSaving}
-                        className="material-button-tonal min-h-11"
-                      >
-                        {t("measurements.next")}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => void saveNewOpenings()}
-                        disabled={!isEditable || isSaving}
-                        className="material-button-filled min-h-11"
-                      >
-                        {isSaving ? t("measurements.saving") : t("measurements.saveOpening")}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => void completeMeasurements()}
+                      disabled={
+                        !isEditable ||
+                        !canComplete ||
+                        isSaving ||
+                        Boolean(workflowSaving)
+                      }
+                      className="material-button-filled min-h-12"
+                    >
+                      {workflowSaving === "complete"
+                        ? t("measurements.savingAndCompleting")
+                        : t("measurements.doneSendToIndoor")}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1281,7 +1207,7 @@ export function SiteMeasurementModule() {
               type="button"
               onClick={() => void saveNewOpenings()}
               disabled={!isEditable || isSaving}
-              className="material-button-filled mt-4 hidden min-h-12 w-full sm:block"
+              className="material-button-filled mt-4 hidden min-h-12 w-full xl:block"
             >
               {isSaving ? t("measurements.saving") : t("measurements.saveStructuralOpenings")}
             </button>
@@ -1375,31 +1301,6 @@ export function SiteMeasurementModule() {
         )}
       </section>
 
-      {editingId ? (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-material-outline-variant bg-material-surface-container-low p-3 shadow-[var(--md-elevation-2)] sm:hidden">
-          <button
-            type="button"
-            onClick={() => void saveEditedOpening()}
-            disabled={!isEditable || isSaving}
-            className="material-button-filled min-h-12 w-full"
-          >
-            {isSaving ? t("measurements.saving") : t("measurements.saveOpening")}
-          </button>
-        </div>
-      ) : isEditable && canComplete ? (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-material-outline-variant bg-material-surface-container-low p-3 shadow-[var(--md-elevation-2)] sm:hidden">
-          <button
-            type="button"
-            onClick={() => void completeMeasurements()}
-            disabled={Boolean(workflowSaving) || isSaving}
-            className="material-button-filled min-h-12 w-full"
-          >
-            {workflowSaving === "complete"
-              ? t("measurements.savingAndCompleting")
-              : t("measurements.saveAndComplete")}
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }

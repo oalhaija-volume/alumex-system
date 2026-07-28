@@ -12,6 +12,7 @@ import {
 import { MetricCard } from "@/components/MetricCard";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { salesDashboardKind } from "@/lib/dashboard/salesDashboard";
+import type { DashboardPreviewRole } from "@/lib/dashboard/salesDashboard";
 import { normalizeAppRole } from "@/lib/auth/roles";
 
 type Person = {
@@ -436,7 +437,11 @@ function AppointmentList({
   );
 }
 
-export function SalesRoleDashboard() {
+export function SalesRoleDashboard({
+  previewRole = null,
+}: {
+  previewRole?: DashboardPreviewRole | null;
+}) {
   const { t } = useI18n();
   const [payload, setPayload] = useState<DashboardPayload | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -448,7 +453,10 @@ export function SalesRoleDashboard() {
   const [currentTime, setCurrentTime] = useState(0);
 
   const loadDashboard = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch("/api/dashboard/sales", {
+    const query = previewRole
+      ? `?viewAs=${encodeURIComponent(previewRole)}`
+      : "";
+    const response = await fetch(`/api/dashboard/sales${query}`, {
       cache: "no-store",
       signal,
     });
@@ -459,7 +467,7 @@ export function SalesRoleDashboard() {
       throw new Error(body?.error ?? t("dashboard.role.loadError"));
     }
     startTransition(() => setPayload(body));
-  }, [t]);
+  }, [previewRole, t]);
 
   useEffect(() => {
     const controller = new AbortController();

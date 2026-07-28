@@ -31,7 +31,10 @@ import {
   canCreateContractFromQuotationVersion,
   canRunQuotationVersionAction,
 } from "../src/lib/quotations/versionWorkflow.ts";
-import { salesDashboardKind } from "../src/lib/dashboard/salesDashboard.ts";
+import {
+  normalizeDashboardPreviewRole,
+  salesDashboardKind,
+} from "../src/lib/dashboard/salesDashboard.ts";
 import {
   isMissingDatabaseObjectError,
   isOutdoorSiteDuplicateError,
@@ -263,6 +266,17 @@ test("sales roles receive the correct owner-first dashboard", () => {
   assert.equal(salesDashboardKind("Branch Manager"), "indoor");
   assert.equal(salesDashboardKind("Outdoor Sales"), "outdoor");
   assert.equal(salesDashboardKind("Finance / Accountant"), null);
+});
+
+test("Admin dashboard preview accepts only supported sales roles", () => {
+  assert.equal(
+    normalizeDashboardPreviewRole("Sales Manager"),
+    "Sales Manager",
+  );
+  assert.equal(normalizeDashboardPreviewRole("Indoor Sales"), "Indoor Sales");
+  assert.equal(normalizeDashboardPreviewRole("Outdoor Sales"), "Outdoor Sales");
+  assert.equal(normalizeDashboardPreviewRole("Finance / Accountant"), null);
+  assert.equal(normalizeDashboardPreviewRole(null), null);
 });
 
 test("pre-migration database objects degrade to empty workflow states", () => {

@@ -172,7 +172,11 @@ test("Admin remains an unrestricted system testing role", () => {
   );
   assert.match(
     appShell,
-    /role === "Admin" \? navItems : activeNavItems/,
+    /role === "Admin" && previewRole \? previewRole : role/,
+  );
+  assert.match(
+    appShell,
+    /effectiveRole === "Admin" \? navItems : activeNavItems/,
   );
   assert.doesNotMatch(
     appShell,

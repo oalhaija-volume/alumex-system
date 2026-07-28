@@ -131,6 +131,16 @@
     "page": "Page"
   },
   "dashboard": {
+    "preview": {
+      "eyebrow": "Admin testing",
+      "title": "Preview the system as a sales role",
+      "description": "This changes the dashboard data scope and navigation preview only. Your account remains Admin.",
+      "admin": "Admin",
+      "manager": "Sales Manager",
+      "indoor": "Indoor Sales",
+      "outdoor": "Outdoor Sales",
+      "active": "Previewing as {role}"
+    },
     "eyebrow": "Overview",
     "title": "Dashboard",
     "description": "Monitor the commercial pipeline, project handoffs, and contract activity from one workspace.",

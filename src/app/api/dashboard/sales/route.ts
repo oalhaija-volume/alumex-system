@@ -10,6 +10,7 @@ import {
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
 import type { Database } from "@/lib/supabase/database.types";
+import { normalizeDashboardPreviewRole } from "@/lib/dashboard/salesDashboard";
 
 const dashboardRoles = [
   "Admin",
@@ -68,13 +69,20 @@ async function loadContext() {
   return { ok: true as const, auth, admin: createAdminClient() };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const context = await loadContext();
   if (!context.ok) return context.response;
 
-  const isOutdoor = context.auth.role === "Outdoor Sales";
+  const requestedPreviewRole = normalizeDashboardPreviewRole(
+    new URL(request.url).searchParams.get("viewAs"),
+  );
+  const effectiveRole =
+    context.auth.role === "Admin" && requestedPreviewRole
+      ? requestedPreviewRole
+      : context.auth.role;
+  const isOutdoor = effectiveRole === "Outdoor Sales";
   const isManager =
-    context.auth.role === "Admin" || context.auth.role === "Sales Manager";
+    effectiveRole === "Admin" || effectiveRole === "Sales Manager";
 
   let projectQuery = context.admin
     .from("projects")
@@ -169,7 +177,7 @@ export async function GET() {
   if (firstError) {
     if (isMissingDatabaseObjectError(firstError)) {
       return NextResponse.json({
-        role: context.auth.role,
+        role: effectiveRole,
         currentUserId: context.auth.user.id,
         projects: [],
         followUps: [],
@@ -254,7 +262,7 @@ export async function GET() {
   }));
 
   return NextResponse.json({
-    role: context.auth.role,
+    role: effectiveRole,
     currentUserId: context.auth.user.id,
     projects: enrichedProjects,
     followUps: (taskResult.data ?? []).map((task) => ({

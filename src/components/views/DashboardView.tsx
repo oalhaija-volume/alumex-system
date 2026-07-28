@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { MetricCard } from "@/components/MetricCard";
 import { PageHeader } from "@/components/PageHeader";
@@ -15,8 +16,16 @@ import { canViewSalesPrices } from "@/lib/auth/roles";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { SalesRoleDashboard } from "@/components/dashboard/SalesRoleDashboard";
 import { salesDashboardKind } from "@/lib/dashboard/salesDashboard";
+import {
+  dashboardPreviewRoles,
+  type DashboardPreviewRole,
+} from "@/lib/dashboard/salesDashboard";
 
-export function DashboardView() {
+export function DashboardView({
+  previewRole = null,
+}: {
+  previewRole?: DashboardPreviewRole | null;
+}) {
   const { formatCurrency, t, term } = useI18n();
   const { role } = useCurrentRole();
   const { projects } = useProjects();
@@ -105,14 +114,67 @@ export function DashboardView() {
 
   if (showSalesRoleDashboard) {
     return (
-      <AppShell>
+      <AppShell previewRole={previewRole}>
         <div className="space-y-6">
+          {role === "Admin" ? (
+            <section className="material-card border-material-primary p-4 sm:p-5">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase text-material-primary">
+                    {t("dashboard.preview.eyebrow")}
+                  </p>
+                  <h2 className="mt-1 text-lg font-bold text-foreground">
+                    {t("dashboard.preview.title")}
+                  </h2>
+                  <p className="mt-1 text-sm text-muted">
+                    {t("dashboard.preview.description")}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href="/dashboard"
+                    className={`material-button-outlined min-h-11 ${
+                      !previewRole
+                        ? "border-material-primary bg-material-primary-container"
+                        : ""
+                    }`}
+                  >
+                    {t("dashboard.preview.admin")}
+                  </Link>
+                  {dashboardPreviewRoles.map((preview) => (
+                    <Link
+                      key={preview}
+                      href={`/dashboard?viewAs=${encodeURIComponent(preview)}`}
+                      className={`material-button-outlined min-h-11 ${
+                        previewRole === preview
+                          ? "border-material-primary bg-material-primary-container"
+                          : ""
+                      }`}
+                    >
+                      {t(
+                        preview === "Sales Manager"
+                          ? "dashboard.preview.manager"
+                          : preview === "Indoor Sales"
+                            ? "dashboard.preview.indoor"
+                            : "dashboard.preview.outdoor",
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+              {previewRole ? (
+                <p className="mt-3 rounded-md bg-material-primary-container px-3 py-2 text-sm font-bold text-material-on-primary-container">
+                  {t("dashboard.preview.active", { role: term(previewRole) })}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
           <PageHeader
             eyebrow={t("dashboard.eyebrow")}
             title={t("dashboard.title")}
             description={t("dashboard.description")}
           />
-          <SalesRoleDashboard />
+          <SalesRoleDashboard previewRole={previewRole} />
         </div>
       </AppShell>
     );

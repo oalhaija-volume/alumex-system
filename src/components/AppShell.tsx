@@ -15,6 +15,7 @@ import { canAccessRouteWithOverrides } from "@/lib/auth/permissions";
 import {
   activeNavigationHrefs,
 } from "@/lib/systemScope";
+import type { DashboardPreviewRole } from "@/lib/dashboard/salesDashboard";
 
 const ProductionAuthStatus = dynamic(
   () =>
@@ -109,17 +110,30 @@ function ShellLogoutButton({
   return <ProductionLogoutButton {...props} />;
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  previewRole = null,
+}: {
+  children: React.ReactNode;
+  previewRole?: DashboardPreviewRole | null;
+}) {
   const { direction, formatDate, t } = useI18n();
   const { isLoaded: isRoleLoaded, pageAccess, role } = useCurrentRole();
   const pathname = usePathname();
   const isRtl = direction === "rtl";
   const isWideWorkspace = pathname.startsWith("/site-measurements");
+  const effectiveRole =
+    role === "Admin" && previewRole ? previewRole : role;
 
-  const availableNavItems = role === "Admin" ? navItems : activeNavItems;
+  const availableNavItems =
+    effectiveRole === "Admin" ? navItems : activeNavItems;
   const visibleNavItems = isRoleLoaded
     ? availableNavItems.filter((item) =>
-        canAccessRouteWithOverrides(item.href, role, pageAccess),
+        canAccessRouteWithOverrides(
+          item.href,
+          effectiveRole,
+          effectiveRole === role ? pageAccess : [],
+        ),
       )
     : activeNavItems;
 

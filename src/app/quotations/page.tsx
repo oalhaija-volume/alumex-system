@@ -1,14 +1,14 @@
 import { Suspense } from "react";
 import { AppDataProviders } from "@/components/AppDataProviders";
 import { AppShell } from "@/components/AppShell";
-import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
+import { QuotationContractWorkspace } from "@/components/quotations/QuotationContractWorkspace";
 
 export default function QuotationsPage() {
   return (
     <AppDataProviders>
       <AppShell>
         <Suspense fallback={null}>
-          <QuotationBuilder />
+          <QuotationContractWorkspace />
         </Suspense>
       </AppShell>
     </AppDataProviders>

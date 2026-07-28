@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/adminServer";
-import { friendlyDatabaseError, isDuplicateError } from "@/lib/friendlyErrors";
+import {
+  friendlyDatabaseError,
+  isDuplicateError,
+  isOutdoorSiteDuplicateError,
+} from "@/lib/friendlyErrors";
 import { generateNextProjectNumber } from "@/lib/projects/numbering";
 import {
   normalizeGeofenceRadius,
+  outdoorSiteDuplicateRadiusMeters,
   parseProjectLocation,
 } from "@/lib/location/coordinates";
+import { intakeMovesDirectlyToMeasurements } from "@/lib/intake/nextStage";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   hasSupabaseServiceRoleKey,
@@ -57,6 +63,8 @@ type IntakeBody = {
     address?: unknown;
     province?: unknown;
     city?: unknown;
+    locationLatitude?: unknown;
+    locationLongitude?: unknown;
     notes?: unknown;
   };
   contacts?: unknown;
@@ -70,7 +78,7 @@ type IntakeBody = {
     geofenceRadiusMeters?: unknown;
     source?: unknown;
     structureReadiness?: unknown;
-    expectedReadyDate?: unknown;
+    followUpAt?: unknown;
     priority?: unknown;
     estimatedValue?: unknown;
     engineerName?: unknown;
@@ -127,6 +135,11 @@ export async function POST(request: Request) {
     project?.locationLatitude,
     project?.locationLongitude,
   );
+  const clientType = text(client?.clientType);
+  const companyLocation = parseProjectLocation(
+    client?.locationLatitude,
+    client?.locationLongitude,
+  );
 
   if (
     !projectName ||
@@ -156,12 +169,19 @@ export async function POST(request: Request) {
       !client ||
       !text(client.clientName) ||
       !text(client.mobile) ||
-      !text(client.address) ||
-      !["individual", "company"].includes(text(client.clientType)) ||
-      (text(client.clientType) === "company" && !text(client.companyName))
+      !["individual", "company"].includes(clientType)
     ) {
       return NextResponse.json(
         { error: "Complete all required client fields." },
+        { status: 400 },
+      );
+    }
+    if (clientType === "company" && !companyLocation.isValid) {
+      return NextResponse.json(
+        {
+          error:
+            "Add the company location using a map pin or current location.",
+        },
         { status: 400 },
       );
     }
@@ -169,14 +189,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Select a valid client." }, { status: 400 });
   }
 
-  const expectedReadyDate =
-    readiness === "not_ready" ? text(project?.expectedReadyDate) : null;
-  if (readiness === "not_ready" && !expectedReadyDate) {
+  const followUpAt =
+    readiness === "not_ready" ? text(project?.followUpAt) : "";
+  const followUpTime = Date.parse(followUpAt);
+  if (
+    readiness === "not_ready" &&
+    (!followUpAt ||
+      !Number.isFinite(followUpTime) ||
+      followUpTime <= Date.now())
+  ) {
     return NextResponse.json(
-      { error: "Expected structure-ready date is required." },
+      { error: "Select a future Indoor Sales follow-up date and time." },
       { status: 400 },
     );
   }
+  const followUpDueAt =
+    readiness === "not_ready" ? new Date(followUpTime).toISOString() : null;
 
   const admin = createAdminClient();
   let clientId = existingClientId;
@@ -215,13 +243,17 @@ export async function POST(request: Request) {
         .from("clients")
         .insert({
           client_name: text(client.clientName),
-          client_type: text(client.clientType) as "individual" | "company",
+          client_type: clientType as "individual" | "company",
           company_name: text(client.companyName) || null,
           mobile: text(client.mobile),
           whatsapp: text(client.whatsapp) || null,
-          address: text(client.address),
+          address: text(client.address) || null,
           province: text(client.province) || null,
           city: text(client.city) || null,
+          location_latitude:
+            clientType === "company" ? companyLocation.latitude : null,
+          location_longitude:
+            clientType === "company" ? companyLocation.longitude : null,
           email: emailKey || null,
           notes: text(client.notes) || null,
           preferred_language: text(client.preferredLanguage) === "en" ? "en" : "ar",
@@ -241,7 +273,9 @@ export async function POST(request: Request) {
         : null;
     const projectNumber = await nextProjectNumber();
     const department =
-      auth.role === "Outdoor Sales"
+      readiness === "not_ready"
+        ? "indoor_sales"
+        : auth.role === "Outdoor Sales"
         ? "outdoor_sales"
         : auth.role === "Sales Manager"
           ? "sales_management"
@@ -255,16 +289,20 @@ export async function POST(request: Request) {
         address,
         location_latitude: projectLocation.latitude,
         location_longitude: projectLocation.longitude,
-        geofence_radius_meters: normalizeGeofenceRadius(
-          project?.geofenceRadiusMeters,
-        ),
+        geofence_radius_meters:
+          auth.role === "Outdoor Sales"
+            ? outdoorSiteDuplicateRadiusMeters
+            : normalizeGeofenceRadius(project?.geofenceRadiusMeters),
         project_type: projectType,
         branch: branch as "Rasafa" | "Karkh",
         status: readiness === "ready" ? "Measuring" : "Draft",
         sales_status:
-          readiness === "ready" ? "measurement_required" : "structure_not_ready",
+          readiness === "ready"
+            ? "measurement_required"
+            : "waiting_for_follow_up",
         structure_readiness: readiness as "ready" | "not_ready",
-        expected_structure_ready_date: expectedReadyDate,
+        expected_structure_ready_date: null,
+        next_follow_up_at: followUpDueAt,
         original_source: source as
           | "outdoor_sales"
           | "showroom_walk_in"
@@ -278,7 +316,8 @@ export async function POST(request: Request) {
         original_creator_id: auth.user.id,
         original_creator_role: auth.role,
         owner_id: auth.user.id,
-        responsible_user_id: auth.user.id,
+        responsible_user_id:
+          readiness === "not_ready" ? null : auth.user.id,
         responsible_department: department,
         priority: ["low", "normal", "high", "urgent"].includes(text(project?.priority))
           ? (text(project?.priority) as "low" | "normal" | "high" | "urgent")
@@ -295,6 +334,61 @@ export async function POST(request: Request) {
       .single();
 
     if (projectError) throw projectError;
+
+    if (readiness === "not_ready") {
+      const reminderAt = new Date(
+        Math.max(Date.now(), followUpTime - 24 * 60 * 60 * 1000),
+      ).toISOString();
+      const { error: followUpError } = await admin
+        .from("follow_up_tasks")
+        .insert({
+          client_id: clientId,
+          project_id: savedProject.id,
+          task_type: "structure_readiness",
+          owner_id: auth.user.id,
+          assigned_to: null,
+          due_at: followUpDueAt!,
+          reminder_at: reminderAt,
+          interval_source: "structure_readiness",
+          deduplication_key: `intake-structure-readiness:${savedProject.id}`,
+          created_by: auth.user.id,
+        });
+
+      if (followUpError) throw followUpError;
+    }
+
+    const startsOwnMeasurement = intakeMovesDirectlyToMeasurements({
+      role: auth.role,
+      source,
+      readiness: readiness as "ready" | "not_ready",
+    });
+    if (startsOwnMeasurement) {
+      const { error: measurementRequestError } = await admin
+        .from("measurement_requests")
+        .insert({
+          project_id: savedProject.id,
+          requested_by: auth.user.id,
+          return_to_user_id:
+            auth.role === "Admin" ? auth.user.id : null,
+          assigned_to: auth.user.id,
+          status: "assigned",
+          instructions: "Capture structural opening measurements.",
+          assigned_at: new Date().toISOString(),
+        });
+
+      if (measurementRequestError) throw measurementRequestError;
+
+      const { error: measurementProjectError } = await admin
+        .from("projects")
+        .update({
+          sales_status: "measurement_assigned",
+          responsible_user_id: auth.user.id,
+          responsible_department: "outdoor_sales",
+        })
+        .eq("id", savedProject.id);
+
+      if (measurementProjectError) throw measurementProjectError;
+    }
 
     const contacts = Array.isArray(body?.contacts)
       ? (body.contacts as IntakeContact[])
@@ -337,6 +431,7 @@ export async function POST(request: Request) {
         project_number: savedProject.project_number,
         source,
         structure_readiness: readiness,
+        follow_up_at: followUpDueAt,
       },
     });
 
@@ -345,10 +440,23 @@ export async function POST(request: Request) {
         clientId,
         projectId: savedProject.id,
         projectNumber: savedProject.project_number,
+        nextPath: startsOwnMeasurement
+          ? `/site-measurements/${savedProject.id}`
+          : `/projects/${savedProject.id}`,
       },
       { status: 201 },
     );
   } catch (error) {
+    if (isOutdoorSiteDuplicateError(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "A project for this client already exists within 200 m. Open the existing project or contact your manager.",
+        },
+        { status: 409 },
+      );
+    }
+
     return NextResponse.json(
       {
         error: friendlyDatabaseError(

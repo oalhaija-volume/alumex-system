@@ -11,6 +11,7 @@ import {
   type OpeningDropdownOption,
 } from "@/lib/openings/dropdownOptions";
 import { centimetersToSquareMeters } from "@/lib/measurements/area";
+import { structuralOpeningTypes } from "@/lib/measurements/structuralOpenings";
 
 type MeasurementProject = {
   id: string;
@@ -89,12 +90,6 @@ const textFields: Array<{
   required?: boolean;
 }> = [
   { key: "floor", label: "Floor", placeholder: "Ground floor", required: true },
-  {
-    key: "openingCode",
-    label: "Opening code",
-    placeholder: "W-01",
-    required: true,
-  },
 ];
 
 const numberFields: Array<{
@@ -104,29 +99,10 @@ const numberFields: Array<{
   step: string;
 }> = [
   { key: "width", label: "Width", suffix: "cm", step: "0.01" },
-  { key: "height", label: "Length", suffix: "cm", step: "0.01" },
+  { key: "height", label: "Height", suffix: "cm", step: "0.01" },
 ];
 
-const measurementNumberFields: Array<{
-  key: "solidPanelHeight" | "fixedHeight";
-  label: string;
-  suffix: string;
-  step: string;
-}> = [
-  {
-    key: "solidPanelHeight",
-    label: "Solid panel height",
-    suffix: "cm",
-    step: "0.01",
-  },
-  { key: "fixedHeight", label: "Fixed height", suffix: "cm", step: "0.01" },
-];
-
-const shapeOptions = ["Rectangle", "Arched", "Triangle", "Circle", "Custom"];
-const typeOptions = ["Window", "Door", "Sliding", "Fixed", "Curtain Wall", "Skylight"];
-const bottomFrameOptions = ["With bottom frame", "Without bottom frame", "Low threshold", "Flush"];
-const openingDirectionOptions = ["Left", "Right", "Inside", "Outside", "Sliding left", "Sliding right", "Fixed"];
-const mobileWizardSteps = ["Location", "Dimensions", "Details", "Review"];
+const mobileWizardSteps = ["Location", "Size and type", "Review"];
 
 function openingToDraft(opening: MeasurementOpening): OpeningDraft {
   return {
@@ -160,40 +136,29 @@ function normalizeDraft(opening: OpeningDraft): OpeningDraft {
     width: Number(opening.width) || 0,
     height: Number(opening.height) || 0,
     length: Number(opening.height) || 0,
-    shape: opening.shape.trim(),
+    shape: "",
     type: (opening.openingType || opening.type).trim(),
     openingType: (opening.openingType || opening.type).trim(),
-    bottomFrame: opening.bottomFrame.trim(),
-    openingDirection: opening.openingDirection.trim(),
-    glassColor: (opening.glassColor || opening.aluminumColor).trim(),
-    solidPanelHeight: Math.min(
-      Math.max(Number(opening.solidPanelHeight) || 0, 0),
-      Number(opening.height) || 0,
-    ),
-    fixedHeight: Math.min(
-      Math.max(Number(opening.fixedHeight) || 0, 0),
-      Number(opening.height) || 0,
-    ),
-    quantity: Math.max(1, Math.round(Number(opening.quantity) || 1)),
-    productSystem: (opening.productSystem || opening.openingType || opening.type).trim(),
-    glassType: (opening.glassType || opening.openingType || opening.type).trim(),
-    aluminumColor: (opening.aluminumColor || opening.glassColor).trim(),
-    notes: opening.notes.trim(),
+    bottomFrame: "",
+    openingDirection: "",
+    glassColor: "",
+    solidPanelHeight: 0,
+    fixedHeight: 0,
+    quantity: 1,
+    productSystem: "",
+    glassType: "",
+    aluminumColor: "",
+    notes: "",
   };
 }
 
 function hasOpeningContent(opening: OpeningDraft) {
   return Boolean(
-    opening.floor.trim() ||
+      opening.floor.trim() ||
       opening.room.trim() ||
       opening.openingCode.trim() ||
-      opening.shape.trim() ||
       opening.openingType.trim() ||
-      opening.type.trim() ||
-      opening.bottomFrame.trim() ||
-      opening.openingDirection.trim() ||
-      opening.glassColor.trim() ||
-      opening.notes.trim(),
+      opening.type.trim(),
   );
 }
 
@@ -204,11 +169,7 @@ function isOpeningValid(opening: OpeningDraft) {
       opening.openingCode &&
       opening.width > 0 &&
       opening.height > 0 &&
-      opening.shape &&
-      (opening.openingType || opening.type) &&
-      opening.bottomFrame &&
-      opening.openingDirection &&
-      opening.glassColor,
+      (opening.openingType || opening.type),
   );
 }
 
@@ -289,11 +250,6 @@ export function SiteMeasurementModule() {
     () => optionsForCategory(openingOptions, "room"),
     [openingOptions],
   );
-  const glassColorOptions = useMemo(
-    () => optionsForCategory(openingOptions, "glass_color"),
-    [openingOptions],
-  );
-
   const loadMeasurements = useCallback(async () => {
     setIsLoading(true);
     setError("");
@@ -621,16 +577,10 @@ export function SiteMeasurementModule() {
     }
 
     if (step === 1) {
-      return normalized.width > 0 && normalized.height > 0 && normalized.quantity > 0;
-    }
-
-    if (step === 2) {
       return Boolean(
-        normalized.shape &&
-          normalized.openingType &&
-          normalized.bottomFrame &&
-          normalized.openingDirection &&
-          normalized.glassColor,
+        normalized.width > 0 &&
+          normalized.height > 0 &&
+          normalized.openingType,
       );
     }
 
@@ -754,10 +704,10 @@ export function SiteMeasurementModule() {
             </button>
           ) : null}
           <Link
-            href="/site-measurements"
+            href="/dashboard"
             className="material-button-tonal min-h-12 w-full sm:w-auto"
           >
-            Measurement queue
+            Back to dashboard
           </Link>
         </div>
         {isEditable ? (
@@ -784,6 +734,9 @@ export function SiteMeasurementModule() {
             <h2 className="mt-1 text-lg font-bold text-foreground">
               {t("measurements.structuralOpenings")}
             </h2>
+            <p className="mt-1 text-sm text-muted">
+              {t("measurements.structuralOnlyHelp")}
+            </p>
           </div>
           {editingId ? (
             <button
@@ -863,45 +816,6 @@ export function SiteMeasurementModule() {
               ))}
 
               <label className="block">
-                <span className="material-label">{term("Quantity")}</span>
-                <input
-                  type="number"
-                  min="1"
-                  inputMode="numeric"
-                  step="1"
-                  value={draft.quantity}
-                  onChange={(event) => updateDraft("quantity", event.target.value)}
-                  disabled={!isEditable}
-                  className="material-field mt-2 min-h-12"
-                />
-              </label>
-
-              <label className="block">
-                <span className="material-label">{term("Shape")} *</span>
-                <select
-                  value={draft.shape}
-                  onChange={(event) => updateDraft("shape", event.target.value)}
-                  disabled={!isEditable}
-                  className="material-field mt-2 min-h-12"
-                >
-                  <option value="">{t("measurements.selectShape")}</option>
-                  {optionLabels(
-                    shapeOptions.map((label, index) => ({
-                      category: "room" as const,
-                      label,
-                      sort_order: index + 1,
-                      is_active: true,
-                    })),
-                    draft.shape,
-                  ).map((option) => (
-                    <option key={option} value={option}>
-                      {term(option)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
                 <span className="material-label">{term("Type")} *</span>
                 <select
                   value={draft.openingType || draft.type}
@@ -911,7 +825,7 @@ export function SiteMeasurementModule() {
                 >
                   <option value="">{t("measurements.selectType")}</option>
                   {optionLabels(
-                    typeOptions.map((label, index) => ({
+                    structuralOpeningTypes.map((label, index) => ({
                       category: "room" as const,
                       label,
                       sort_order: index + 1,
@@ -924,111 +838,6 @@ export function SiteMeasurementModule() {
                     </option>
                   ))}
                 </select>
-              </label>
-
-              <label className="block">
-                <span className="material-label">{term("Bottom frame")} *</span>
-                <select
-                  value={draft.bottomFrame}
-                  onChange={(event) => updateDraft("bottomFrame", event.target.value)}
-                  disabled={!isEditable}
-                  className="material-field mt-2 min-h-12"
-                >
-                  <option value="">{t("measurements.selectBottomFrame")}</option>
-                  {optionLabels(
-                    bottomFrameOptions.map((label, index) => ({
-                      category: "room" as const,
-                      label,
-                      sort_order: index + 1,
-                      is_active: true,
-                    })),
-                    draft.bottomFrame,
-                  ).map((option) => (
-                    <option key={option} value={option}>
-                      {term(option)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="material-label">{term("Opening direction")} *</span>
-                <select
-                  value={draft.openingDirection}
-                  onChange={(event) =>
-                    updateDraft("openingDirection", event.target.value)
-                  }
-                  disabled={!isEditable}
-                  className="material-field mt-2 min-h-12"
-                >
-                  <option value="">{t("measurements.selectDirection")}</option>
-                  {optionLabels(
-                    openingDirectionOptions.map((label, index) => ({
-                      category: "room" as const,
-                      label,
-                      sort_order: index + 1,
-                      is_active: true,
-                    })),
-                    draft.openingDirection,
-                  ).map((option) => (
-                    <option key={option} value={option}>
-                      {term(option)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="material-label">{term("Glass color")} *</span>
-                <select
-                  value={draft.glassColor}
-                  onChange={(event) => updateDraft("glassColor", event.target.value)}
-                  disabled={!isEditable}
-                  className="material-field mt-2 min-h-12"
-                >
-                  <option value="">{t("measurements.selectColor")}</option>
-                  {optionLabels(glassColorOptions, draft.glassColor).map((option) => (
-                    <option key={option} value={option}>
-                      {term(option)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {measurementNumberFields.map((field) => (
-                <label key={field.key} className="block">
-                  <span className="material-label">{term(field.label)}</span>
-                <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container">
-                  <input
-                    type="number"
-                    min="0"
-                    max={draft.height}
-                    inputMode="decimal"
-                    step={field.step}
-                    value={draft[field.key]}
-                    onChange={(event) =>
-                      updateDraft(field.key, event.target.value)
-                    }
-                    disabled={!isEditable}
-                    className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
-                  />
-                  <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
-                    {term(field.suffix)}
-                  </span>
-                </div>
-                </label>
-              ))}
-
-              <label className="block sm:col-span-2">
-                <span className="material-label">{t("measurements.siteNotes")}</span>
-                <textarea
-                  value={draft.notes}
-                  onChange={(event) => updateDraft("notes", event.target.value)}
-                  rows={3}
-                  disabled={!isEditable}
-                  className="material-field mt-2 min-h-24 py-3"
-                  placeholder={t("measurements.siteNotesPlaceholder")}
-                />
               </label>
             </div>
 
@@ -1083,24 +892,15 @@ export function SiteMeasurementModule() {
 
             <div className="mt-4 hidden overflow-hidden rounded-lg border border-material-outline-variant sm:block">
               <div className="overflow-x-auto">
-                <table className="min-w-[1720px] table-fixed divide-y divide-material-outline-variant text-left text-sm">
+                <table className="min-w-[920px] table-fixed divide-y divide-material-outline-variant text-left text-sm">
                   <thead className="bg-material-surface-container-lowest text-xs font-bold uppercase text-muted">
                     <tr>
                       {[
                         "Floor",
                         "Room",
-                        "Opening code",
                         "Width",
-                        "Length",
-                        "Qty",
-                        "Shape",
+                        "Height",
                         "Type",
-                        "Bottom frame",
-                        "Opening direction",
-                        "Glass color",
-                        "Solid panel height",
-                        "Fixed height",
-                        "Notes",
                         "Area",
                         "Actions",
                       ].map((heading) => (
@@ -1140,16 +940,6 @@ export function SiteMeasurementModule() {
                             ))}
                           </select>
                         </td>
-                        <td className="w-32 px-2 py-2">
-                          <input
-                            value={opening.openingCode}
-                            onChange={(event) =>
-                              updateNewOpening(index, "openingCode", event.target.value)
-                            }
-                            disabled={!isEditable}
-                            className="material-field h-10 px-2"
-                          />
-                        </td>
                         {numberFields.map((field) => (
                           <td key={field.key} className="w-28 px-2 py-2">
                             <input
@@ -1165,103 +955,22 @@ export function SiteMeasurementModule() {
                             />
                           </td>
                         ))}
-                        <td className="w-24 px-2 py-2">
-                          <input
-                            type="number"
-                            min="1"
-                            step="1"
-                            value={opening.quantity}
-                            onChange={(event) =>
-                              updateNewOpening(index, "quantity", event.target.value)
-                            }
-                            disabled={!isEditable}
-                            className="material-field h-10 px-2"
-                          />
-                        </td>
-                        {[
-                          ["shape", t("measurements.selectShape"), shapeOptions, opening.shape],
-                          [
-                            "openingType",
-                            t("measurements.selectType"),
-                            typeOptions,
-                            opening.openingType || opening.type,
-                          ],
-                          [
-                            "bottomFrame",
-                            t("measurements.selectBottomFrame"),
-                            bottomFrameOptions,
-                            opening.bottomFrame,
-                          ],
-                          [
-                            "openingDirection",
-                            t("measurements.selectDirection"),
-                            openingDirectionOptions,
-                            opening.openingDirection,
-                          ],
-                        ].map(([key, placeholder, options, value]) => (
-                          <td key={String(key)} className="w-40 px-2 py-2">
-                            <select
-                              value={String(value)}
-                              onChange={(event) =>
-                                updateNewOpening(
-                                  index,
-                                  key as keyof OpeningDraft,
-                                  event.target.value,
-                                )
-                              }
-                              disabled={!isEditable}
-                              className="material-field h-10 px-2"
-                            >
-                              <option value="">{String(placeholder)}</option>
-                              {(options as string[]).map((option) => (
-                                <option key={option} value={option}>
-                                  {term(option)}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                        ))}
-                        <td className="w-36 px-2 py-2">
+                        <td className="w-40 px-2 py-2">
                           <select
-                            value={opening.glassColor}
+                            value={opening.openingType || opening.type}
                             onChange={(event) =>
-                              updateNewOpening(index, "glassColor", event.target.value)
+                              updateNewOpening(index, "openingType", event.target.value)
                             }
                             disabled={!isEditable}
                             className="material-field h-10 px-2"
                           >
-                            <option value="">{t("measurements.selectColor")}</option>
-                            {optionLabels(glassColorOptions, opening.glassColor).map((option) => (
+                            <option value="">{t("measurements.selectType")}</option>
+                            {structuralOpeningTypes.map((option) => (
                               <option key={option} value={option}>
                                 {term(option)}
                               </option>
                             ))}
                           </select>
-                        </td>
-                        {measurementNumberFields.map((field) => (
-                          <td key={field.key} className="w-32 px-2 py-2">
-                            <input
-                              type="number"
-                              min="0"
-                              step={field.step}
-                              value={opening[field.key]}
-                              onChange={(event) =>
-                                updateNewOpening(index, field.key, event.target.value)
-                              }
-                              disabled={!isEditable}
-                              className="material-field h-10 px-2"
-                            />
-                          </td>
-                        ))}
-                        <td className="w-56 px-2 py-2">
-                          <input
-                            value={opening.notes}
-                            onChange={(event) =>
-                              updateNewOpening(index, "notes", event.target.value)
-                            }
-                            disabled={!isEditable}
-                            className="material-field h-10 px-2"
-                          />
                         </td>
                         <td className="w-28 bg-material-primary-container px-2 py-2 text-sm font-bold text-material-on-primary-container">
                           {t("common.areaValue", {
@@ -1409,119 +1118,27 @@ export function SiteMeasurementModule() {
                       ))}
 
                       <label className="block">
-                        <span className="material-label">{term("Quantity")}</span>
-                        <input
-                          type="number"
-                          min="1"
-                          inputMode="numeric"
-                          step="1"
-                          value={opening.quantity}
+                        <span className="material-label">{term("Type")} *</span>
+                        <select
+                          value={opening.openingType || opening.type}
                           onChange={(event) =>
-                            updateNewOpening(index, "quantity", event.target.value)
+                            updateNewOpening(index, "openingType", event.target.value)
                           }
                           disabled={!isEditable}
                           className="material-field mt-2 min-h-12"
-                        />
+                        >
+                          <option value="">{t("measurements.selectType")}</option>
+                          {structuralOpeningTypes.map((option) => (
+                            <option key={option} value={option}>
+                              {term(option)}
+                            </option>
+                          ))}
+                        </select>
                       </label>
-
-                      {measurementNumberFields.map((field) => (
-                        <label key={field.key} className="block">
-                          <span className="material-label">{term(field.label)}</span>
-                          <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container-low">
-                            <input
-                              type="number"
-                              min="0"
-                              max={opening.height}
-                              inputMode="decimal"
-                              step={field.step}
-                              value={opening[field.key]}
-                              onChange={(event) =>
-                                updateNewOpening(index, field.key, event.target.value)
-                              }
-                              disabled={!isEditable}
-                              className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
-                            />
-                            <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
-                              {term(field.suffix)}
-                            </span>
-                          </div>
-                        </label>
-                      ))}
                     </div>
                   ) : null}
 
                   {mobileWizardStep === 2 ? (
-                    <div className="mt-4 grid gap-3">
-                      <label className="block">
-                        <span className="material-label">{term("Shape")} *</span>
-                        <select
-                          value={opening.shape}
-                          onChange={(event) =>
-                            updateNewOpening(index, "shape", event.target.value)
-                          }
-                          disabled={!isEditable}
-                          className="material-field mt-2 min-h-12"
-                        >
-                          <option value="">{t("measurements.selectShape")}</option>
-                          {shapeOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {term(option)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-
-                      {[
-                        ["openingType", `${term("Type")} *`, t("measurements.selectType"), typeOptions, opening.openingType || opening.type],
-                        ["bottomFrame", `${term("Bottom frame")} *`, t("measurements.selectBottomFrame"), bottomFrameOptions, opening.bottomFrame],
-                        ["openingDirection", `${term("Opening direction")} *`, t("measurements.selectDirection"), openingDirectionOptions, opening.openingDirection],
-                      ].map(([key, label, placeholder, options, value]) => (
-                        <label key={String(key)} className="block">
-                          <span className="material-label">{String(label)}</span>
-                          <select
-                            value={String(value)}
-                            onChange={(event) =>
-                              updateNewOpening(
-                                index,
-                                key as keyof OpeningDraft,
-                                event.target.value,
-                              )
-                            }
-                            disabled={!isEditable}
-                            className="material-field mt-2 min-h-12"
-                          >
-                            <option value="">{String(placeholder)}</option>
-                            {(options as string[]).map((option) => (
-                              <option key={option} value={option}>
-                                {term(option)}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      ))}
-
-                      <label className="block">
-                        <span className="material-label">{term("Glass color")} *</span>
-                        <select
-                          value={opening.glassColor}
-                          onChange={(event) =>
-                            updateNewOpening(index, "glassColor", event.target.value)
-                          }
-                          disabled={!isEditable}
-                          className="material-field mt-2 min-h-12"
-                        >
-                          <option value="">{t("measurements.selectColor")}</option>
-                          {optionLabels(glassColorOptions, opening.glassColor).map((option) => (
-                            <option key={option} value={option}>
-                              {term(option)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  ) : null}
-
-                  {mobileWizardStep === 3 ? (
                     <div className="mt-4 grid gap-3">
                       <div className="material-card p-3 shadow-none">
                         <p className="text-xs font-bold uppercase text-muted">{term("Review")}</p>
@@ -1534,14 +1151,13 @@ export function SiteMeasurementModule() {
                           {t("measurements.dimensionSummary", {
                             width: opening.width,
                             height: opening.height,
-                            quantity: opening.quantity,
+                            quantity: 1,
                           })}
                         </p>
                         <p className="mt-1 text-sm text-muted-strong">
-                          {[opening.shape, opening.openingType || opening.type, opening.glassColor]
-                            .filter(Boolean)
-                            .map((value) => term(value))
-                            .join(" - ") || t("measurements.specificationsIncomplete")}
+                          {opening.openingType || opening.type
+                            ? term(opening.openingType || opening.type)
+                            : t("measurements.typeNotAdded")}
                         </p>
                         <p className="mt-2 text-xl font-bold text-foreground">
                           {t("common.areaValue", {
@@ -1549,20 +1165,6 @@ export function SiteMeasurementModule() {
                           })}
                         </p>
                       </div>
-
-                      <label className="block">
-                        <span className="material-label">{t("measurements.siteNotes")}</span>
-                        <textarea
-                          value={opening.notes}
-                          onChange={(event) =>
-                            updateNewOpening(index, "notes", event.target.value)
-                          }
-                          rows={3}
-                          disabled={!isEditable}
-                          className="material-field mt-2 min-h-24 py-3"
-                          placeholder={t("measurements.siteNotesPlaceholder")}
-                        />
-                      </label>
                     </div>
                   ) : null}
 
@@ -1650,36 +1252,23 @@ export function SiteMeasurementModule() {
                 </span>
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+              <div className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-3">
                 <div className="material-card-muted p-2">
                   <p className="text-[11px] font-bold uppercase text-muted">{term("Width")}</p>
                   <p className="text-sm font-bold text-foreground">{t("common.cmValue", { value: opening.width })}</p>
                 </div>
                 <div className="material-card-muted p-2">
-                  <p className="text-[11px] font-bold uppercase text-muted">{term("Length")}</p>
+                  <p className="text-[11px] font-bold uppercase text-muted">{term("Height")}</p>
                   <p className="text-sm font-bold text-foreground">{t("common.cmValue", { value: opening.height })}</p>
                 </div>
                 <div className="material-card-muted p-2">
-                  <p className="text-[11px] font-bold uppercase text-muted">{term("Solid panel height")}</p>
+                  <p className="text-[11px] font-bold uppercase text-muted">{term("Type")}</p>
                   <p className="text-sm font-bold text-foreground">
-                    {t("common.cmValue", { value: opening.solidPanelHeight })}
+                    {opening.openingType || opening.type
+                      ? term(opening.openingType || opening.type)
+                      : t("measurements.typeNotAdded")}
                   </p>
                 </div>
-                <div className="material-card-muted p-2">
-                  <p className="text-[11px] font-bold uppercase text-muted">{term("Fixed height")}</p>
-                  <p className="text-sm font-bold text-foreground">{t("common.cmValue", { value: opening.fixedHeight })}</p>
-                </div>
-              </div>
-
-              <div className="mt-3 text-sm font-semibold text-muted-strong">
-                <p>{opening.shape ? term(opening.shape) : t("measurements.shapeNotAdded")}</p>
-                <p>{opening.openingType || opening.type ? term(opening.openingType || opening.type) : t("measurements.typeNotAdded")}</p>
-                <p>{opening.bottomFrame ? term(opening.bottomFrame) : t("measurements.bottomFrameNotAdded")}</p>
-                <p>{opening.openingDirection ? term(opening.openingDirection) : t("measurements.openingDirectionNotAdded")}</p>
-                <p>{opening.glassColor ? term(opening.glassColor) : t("measurements.glassColorNotAdded")}</p>
-                {opening.notes ? (
-                  <p className="mt-2 font-normal text-muted">{opening.notes}</p>
-                ) : null}
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2">

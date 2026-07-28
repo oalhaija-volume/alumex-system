@@ -50,7 +50,7 @@ export function NotificationCenter() {
   }
 
   return (
-    <details className="relative">
+    <details className="relative open:z-[100]">
       <summary
         aria-label={`Notifications, ${unread.length} unread`}
         className="relative flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-md border border-material-outline-variant bg-material-surface-container text-sm font-black text-muted-strong"
@@ -62,7 +62,7 @@ export function NotificationCenter() {
           </span>
         ) : null}
       </summary>
-      <div className="absolute right-0 z-50 mt-2 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-lg border border-material-outline-variant bg-material-surface-container-low shadow-[var(--md-elevation-3)]">
+      <div className="absolute right-0 z-[100] mt-2 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-lg border border-material-outline-variant bg-material-surface-container-low shadow-[var(--md-elevation-3)]">
         <div className="flex items-center justify-between gap-3 border-b border-material-outline-variant p-3">
           <div>
             <p className="text-sm font-bold text-foreground">Notifications</p>

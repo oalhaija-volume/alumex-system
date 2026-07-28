@@ -341,6 +341,34 @@ export async function POST(request: Request) {
     );
   }
 
+  const { data: sourceQuotation, error: sourceQuotationError } = await admin
+    .from("quotations")
+    .select("id, project_id, client_id")
+    .eq("id", approvedVersion.quotation_id)
+    .maybeSingle();
+
+  if (sourceQuotationError) {
+    return contractErrorResponse(
+      sourceQuotationError,
+      "Unable to verify the quotation source.",
+      500,
+    );
+  }
+
+  if (
+    !sourceQuotation ||
+    sourceQuotation.project_id !== body.project_id ||
+    sourceQuotation.client_id !== body.client_id
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Contract project and client must match the approved quotation.",
+      },
+      { status: 409 },
+    );
+  }
+
   const discountLimit = await discountLimitForRoleFromSettings(
     authCheck.role,
     admin,

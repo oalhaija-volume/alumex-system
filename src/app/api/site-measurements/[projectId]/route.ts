@@ -6,6 +6,7 @@ import {
   hasSupabaseServiceRoleKey,
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
+import { isStructuralOpeningType } from "@/lib/measurements/structuralOpenings";
 import { isWorkflowStatus } from "@/lib/workflow/display";
 import type { ProjectWorkflowStatus } from "@/lib/workflow/statuses";
 
@@ -146,28 +147,14 @@ function mapOpening(opening: OpeningRow) {
 function normalizeOpeningPayload(body: OpeningPayload) {
   const length = numberValue(body.length ?? body.height);
   const openingType = textValue(body.openingType ?? body.type);
-  const glassColor = textValue(body.glassColor ?? body.aluminumColor);
   const opening = {
     floor: textValue(body.floor),
     room: textValue(body.room),
     opening_code: textValue(body.openingCode),
     width: numberValue(body.width),
     height: length,
-    solid_panel_height: Math.min(
-      Math.max(numberValue(body.solidPanelHeight), 0),
-      length,
-    ),
-    fixed_height: Math.min(Math.max(numberValue(body.fixedHeight), 0), length),
-    quantity: Math.max(1, Math.round(numberValue(body.quantity) || 1)),
-    product_system: textValue(body.productSystem) || openingType,
-    glass_type: textValue(body.glassType) || openingType,
-    aluminum_color: textValue(body.aluminumColor) || glassColor,
-    shape: textValue(body.shape),
+    quantity: 1,
     opening_type: openingType,
-    bottom_frame: textValue(body.bottomFrame),
-    opening_direction: textValue(body.openingDirection),
-    glass_color: glassColor,
-    notes: textValue(body.notes),
   };
 
   if (
@@ -176,16 +163,12 @@ function normalizeOpeningPayload(body: OpeningPayload) {
     !opening.opening_code ||
     opening.width <= 0 ||
     opening.height <= 0 ||
-    !opening.shape ||
-    !opening.opening_type ||
-    !opening.bottom_frame ||
-    !opening.opening_direction ||
-    !opening.glass_color
+    !isStructuralOpeningType(opening.opening_type)
   ) {
     return {
       ok: false as const,
       error:
-        "Floor, room, opening code, width, length, shape, type, bottom frame, opening direction, and glass color are required.",
+        "Floor, room, width, height, and opening type are required.",
     };
   }
 

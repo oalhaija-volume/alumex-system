@@ -11,20 +11,12 @@ export type EmployeePageAccess = {
 
 export const pageAccessItems: PageAccessItem[] = [
   { labelKey: "nav.dashboard", routePath: "/dashboard" },
-  { labelKey: "nav.clients", routePath: "/clients" },
   { labelKey: "nav.projects", routePath: "/projects" },
   { labelKey: "nav.quotations", routePath: "/quotations" },
   { labelKey: "nav.commercial", routePath: "/commercial" },
   { labelKey: "nav.operationsManager", routePath: "/operations-manager" },
-  { labelKey: "nav.projectManager", routePath: "/project-manager" },
-  { labelKey: "nav.projectEngineer", routePath: "/project-engineer" },
-  { labelKey: "nav.siteMeasurements", routePath: "/site-measurements" },
-  { labelKey: "nav.qualityControl", routePath: "/quality-control" },
-  { labelKey: "nav.factory", routePath: "/aluminum-factory" },
-  { labelKey: "nav.delivery", routePath: "/delivery" },
   { labelKey: "nav.installation", routePath: "/installation" },
   { labelKey: "nav.finance", routePath: "/finance" },
-  { labelKey: "nav.contracts", routePath: "/contracts" },
   { labelKey: "nav.hr", routePath: "/hr" },
   { labelKey: "nav.settings", routePath: "/settings" },
 ];

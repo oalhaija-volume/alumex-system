@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useClients } from "@/components/clients/ClientsProvider";
 import { useI18n } from "@/components/i18n/I18nProvider";
@@ -277,6 +277,9 @@ function payloadFromTemplate(template: ContractTemplate) {
 
 export function ContractGenerator() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedQuotationVersionId =
+    searchParams.get("quotationVersionId") ?? "";
   const { formatCurrency, t, term } = useI18n();
   const { isLoaded: isRoleLoaded, role } = useCurrentRole();
   const { clients } = useClients();
@@ -349,11 +352,15 @@ export function ContractGenerator() {
         }));
         setSavedQuotations(nextQuotationSources);
         setQuotationNumber((current) =>
-          nextQuotationSources.some(
+          nextQuotationSources.find(
+            (quotation) =>
+              quotation.versionId === requestedQuotationVersionId,
+          )?.quotationNumber ??
+          (nextQuotationSources.some(
             (quotation) => quotation.quotationNumber === current,
           )
             ? current
-            : "",
+            : ""),
         );
 
         const [
@@ -475,7 +482,16 @@ export function ContractGenerator() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [clients, defaultTemplate, isRoleLoaded, language, projects, role, t]);
+  }, [
+    clients,
+    defaultTemplate,
+    isRoleLoaded,
+    language,
+    projects,
+    requestedQuotationVersionId,
+    role,
+    t,
+  ]);
 
   function selectQuotation(nextQuotationNumber: string) {
     setQuotationNumber(nextQuotationNumber);

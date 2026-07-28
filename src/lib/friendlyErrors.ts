@@ -43,6 +43,11 @@ export function isDuplicateError(error: unknown) {
   );
 }
 
+export function isOutdoorSiteDuplicateError(error: unknown) {
+  const message = technicalErrorMessage(error).toLowerCase();
+  return message.includes("projects_outdoor_site_200m_duplicate");
+}
+
 export function isMissingDatabaseObjectError(error: unknown) {
   const message = technicalErrorMessage(error).toLowerCase();
   const code =

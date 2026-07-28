@@ -15,16 +15,26 @@ import {
 } from "../src/lib/crm/followUps.ts";
 import { roleHasCapability } from "../src/lib/auth/capabilities.ts";
 import {
+  distanceBetweenCoordinatesMeters,
   normalizeGeofenceRadius,
+  outdoorSiteDuplicateRadiusMeters,
   parseProjectLocation,
 } from "../src/lib/location/coordinates.ts";
 import { centimetersToSquareMeters } from "../src/lib/measurements/area.ts";
+import {
+  isStructuralOpeningType,
+  structuralOpeningTypes,
+} from "../src/lib/measurements/structuralOpenings.ts";
 import {
   canCreateContractFromQuotationVersion,
   canRunQuotationVersionAction,
 } from "../src/lib/quotations/versionWorkflow.ts";
 import { salesDashboardKind } from "../src/lib/dashboard/salesDashboard.ts";
-import { isMissingDatabaseObjectError } from "../src/lib/friendlyErrors.ts";
+import {
+  isMissingDatabaseObjectError,
+  isOutdoorSiteDuplicateError,
+} from "../src/lib/friendlyErrors.ts";
+import { intakeMovesDirectlyToMeasurements } from "../src/lib/intake/nextStage.ts";
 
 test("every configured project transition points to a known status", () => {
   const knownStatuses = new Set(projectSalesStatuses);
@@ -107,6 +117,28 @@ test("project pins reject missing or out-of-range coordinates", () => {
   assert.equal(normalizeGeofenceRadius(undefined), 100);
   assert.equal(normalizeGeofenceRadius(5), 25);
   assert.equal(normalizeGeofenceRadius(1500), 1000);
+  assert.equal(outdoorSiteDuplicateRadiusMeters, 200);
+  assert.equal(
+    distanceBetweenCoordinatesMeters(
+      { latitude: 33.3152, longitude: 44.3661 },
+      { latitude: 33.3152, longitude: 44.3661 },
+    ),
+    0,
+  );
+  assert.equal(
+    distanceBetweenCoordinatesMeters(
+      { latitude: 33.3152, longitude: 44.3661 },
+      { latitude: 33.3175, longitude: 44.3661 },
+    ) > outdoorSiteDuplicateRadiusMeters,
+    true,
+  );
+  assert.equal(
+    isOutdoorSiteDuplicateError({
+      code: "23505",
+      message: "projects_outdoor_site_200m_duplicate",
+    }),
+    true,
+  );
 });
 
 test("measurement handoff separates field capture from Indoor Sales review", () => {
@@ -143,6 +175,53 @@ test("opening dimensions convert from centimeters to exact square meters", () =>
   assert.equal(
     centimetersToSquareMeters({ width: 120, height: 200, quantity: 2 }),
     4.8,
+  );
+});
+
+test("structural measurement only accepts broad opening types", () => {
+  assert.deepEqual([...structuralOpeningTypes], [
+    "Window",
+    "Door",
+    "Curtain Wall",
+    "Skylight",
+  ]);
+  assert.equal(isStructuralOpeningType("Door"), true);
+  assert.equal(isStructuralOpeningType("Sliding"), false);
+  assert.equal(isStructuralOpeningType("Clear glass"), false);
+});
+
+test("ready Outdoor Sales intake skips confirmation for measurements", () => {
+  assert.equal(
+    intakeMovesDirectlyToMeasurements({
+      role: "Outdoor Sales",
+      source: "outdoor_sales",
+      readiness: "ready",
+    }),
+    true,
+  );
+  assert.equal(
+    intakeMovesDirectlyToMeasurements({
+      role: "Admin",
+      source: "outdoor_sales",
+      readiness: "ready",
+    }),
+    true,
+  );
+  assert.equal(
+    intakeMovesDirectlyToMeasurements({
+      role: "Indoor Sales",
+      source: "showroom_walk_in",
+      readiness: "ready",
+    }),
+    false,
+  );
+  assert.equal(
+    intakeMovesDirectlyToMeasurements({
+      role: "Outdoor Sales",
+      source: "outdoor_sales",
+      readiness: "not_ready",
+    }),
+    false,
   );
 });
 

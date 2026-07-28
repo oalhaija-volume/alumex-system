@@ -69,6 +69,7 @@ export function ProjectLocationPicker({
   geofenceRadiusMeters,
   onChange,
   onRadiusChange,
+  allowRadiusChange = true,
   readOnly = false,
   enableSearch = false,
   showGeofence = true,
@@ -85,6 +86,7 @@ export function ProjectLocationPicker({
   currentLocationLabel = "Use current location",
   locatingLabel = "Locating...",
   currentLocationErrorLabel = "Unable to access your current location.",
+  radiusDescription = "Future installation check-ins can be accepted only inside this radius.",
   onSearchSelect,
   onCurrentLocationSelect,
 }: {
@@ -93,6 +95,7 @@ export function ProjectLocationPicker({
   geofenceRadiusMeters?: number | null;
   onChange: (location: { latitude: number | null; longitude: number | null }) => void;
   onRadiusChange?: (radius: number) => void;
+  allowRadiusChange?: boolean;
   readOnly?: boolean;
   enableSearch?: boolean;
   showGeofence?: boolean;
@@ -109,6 +112,7 @@ export function ProjectLocationPicker({
   currentLocationLabel?: string;
   locatingLabel?: string;
   currentLocationErrorLabel?: string;
+  radiusDescription?: string;
   onSearchSelect?: (address: string) => void;
   onCurrentLocationSelect?: (location: {
     latitude: number;
@@ -450,7 +454,7 @@ export function ProjectLocationPicker({
               <span className="text-xs font-bold uppercase tracking-wide text-muted">
                 Geofence radius
               </span>
-              {readOnly ? (
+              {readOnly || !allowRadiusChange ? (
                 <p className="mt-1 text-sm font-bold text-foreground">
                   {radiusMeters} meters
                 </p>
@@ -468,7 +472,7 @@ export function ProjectLocationPicker({
                 />
               )}
             </label>
-            {!readOnly ? (
+            {!readOnly && allowRadiusChange ? (
               <input
                 type="number"
                 min={25}
@@ -484,7 +488,7 @@ export function ProjectLocationPicker({
             ) : null}
           </div>
           <p className="mt-2 text-xs font-semibold text-muted">
-            Future installation check-ins can be accepted only inside this radius.
+            {radiusDescription}
           </p>
         </div>
       ) : null}

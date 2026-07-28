@@ -12,7 +12,7 @@ test("public login renders without framework or console errors", async ({
   await page.goto("/login");
   await expect(page).toHaveTitle(/Alumex/i);
   await expect(
-    page.getByRole("heading", { name: /log in|تسجيل الدخول/i }),
+    page.getByRole("heading", { name: /login|log in|تسجيل الدخول/i }),
   ).toBeVisible();
   await expect(page.locator("nextjs-portal")).toHaveCount(0);
   await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
@@ -40,8 +40,11 @@ test("admin can open sales creation flows and every system area", async ({
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
 
   await page.goto("/clients");
+  await expect(page).toHaveURL(/\/intake$/);
   await expect(
-    page.getByRole("button", { name: /new client|عميل جديد/i }),
+    page.getByRole("heading", {
+      name: /start sales intake|تسجيل فرصة بيع/i,
+    }),
   ).toBeVisible();
 
   await page.goto("/projects");
@@ -49,9 +52,26 @@ test("admin can open sales creation flows and every system area", async ({
     page.getByRole("button", { name: /new project|مشروع جديد/i }),
   ).toBeVisible();
 
-  await page.goto("/quality-control");
-  await expect(page).toHaveURL(/\/quality-control$/);
-  await expect(page).not.toHaveURL(/\/unauthorized$/);
+  await page.goto("/quotations");
+  await expect(
+    page.getByRole("link", { name: /^quotations$|^عروض الأسعار$/i }),
+  ).toHaveAttribute("aria-current", "page");
+  await page.getByRole("link", { name: /^contracts$|^العقود$/i }).click();
+  await expect(page).toHaveURL(/\/quotations\?view=contracts$/);
+  await expect(
+    page.getByRole("heading", { name: /contract generator|منشئ العقد/i }),
+  ).toBeVisible();
+  await expect(page.locator('nav a[href="/contracts"]')).toHaveCount(0);
+
+  await page.goto("/contracts");
+  await expect(page).toHaveURL(/\/quotations\?view=contracts$/);
+
+  await expect(page.locator('nav a[href="/project-manager"]')).toHaveCount(0);
+  await expect(page.locator('nav a[href="/project-engineer"]')).toHaveCount(0);
+  await expect(page.locator('nav a[href="/site-measurements"]')).toHaveCount(0);
+  await expect(page.locator('nav a[href="/quality-control"]')).toHaveCount(0);
+  await expect(page.locator('nav a[href="/aluminum-factory"]')).toHaveCount(0);
+  await expect(page.locator('nav a[href="/delivery"]')).toHaveCount(0);
 
   expect(errors).toEqual([]);
 });

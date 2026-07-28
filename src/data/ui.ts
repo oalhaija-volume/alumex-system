@@ -67,7 +67,6 @@ export type StructuralOpening = {
 export const navItems: NavItem[] = [
   { labelKey: "nav.dashboard", href: "/dashboard", icon: "D" },
   { labelKey: "nav.intake", href: "/intake", icon: "N" },
-  { labelKey: "nav.clients", href: "/clients", icon: "C" },
   { labelKey: "nav.projects", href: "/projects", icon: "P" },
   { labelKey: "nav.crm", href: "/crm", icon: "F" },
   { labelKey: "nav.quotations", href: "/quotations", icon: "Q" },
@@ -75,15 +74,8 @@ export const navItems: NavItem[] = [
   { labelKey: "nav.operationsManager", href: "/operations-manager", icon: "O" },
   { labelKey: "nav.costing", href: "/costing", icon: "C" },
   { labelKey: "nav.pricing", href: "/pricing", icon: "P" },
-  { labelKey: "nav.projectManager", href: "/project-manager", icon: "M" },
-  { labelKey: "nav.projectEngineer", href: "/project-engineer", icon: "E" },
-  { labelKey: "nav.siteMeasurements", href: "/site-measurements", icon: "S" },
-  { labelKey: "nav.qualityControl", href: "/quality-control", icon: "Q" },
-  { labelKey: "nav.factory", href: "/aluminum-factory", icon: "F" },
-  { labelKey: "nav.delivery", href: "/delivery", icon: "D" },
   { labelKey: "nav.installation", href: "/installation", icon: "I" },
   { labelKey: "nav.finance", href: "/finance", icon: "F" },
-  { labelKey: "nav.contracts", href: "/contracts", icon: "K" },
   { labelKey: "nav.hr", href: "/hr", icon: "H" },
   { labelKey: "nav.settings", href: "/settings", icon: "S" },
 ];

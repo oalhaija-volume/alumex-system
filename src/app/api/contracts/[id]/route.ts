@@ -180,6 +180,68 @@ export async function PATCH(
 
   const admin = createAdminClient();
 
+  if (!isSignatureUpdate) {
+    const quotationVersionId = textValue(body.quotation_version_id);
+    const quotationId = textValue(body.quotation_id);
+
+    if (!quotationVersionId || !quotationId) {
+      return NextResponse.json(
+        { error: "Select an approved quotation version." },
+        { status: 400 },
+      );
+    }
+
+    const { data: approvedVersion, error: approvedVersionError } = await admin
+      .from("quotation_versions")
+      .select("id, quotation_id, status")
+      .eq("id", quotationVersionId)
+      .eq("status", "approved")
+      .maybeSingle();
+
+    if (approvedVersionError) {
+      return contractErrorResponse(
+        approvedVersionError,
+        "Unable to verify the approved quotation version.",
+        500,
+      );
+    }
+
+    if (!approvedVersion || approvedVersion.quotation_id !== quotationId) {
+      return NextResponse.json(
+        { error: "Only an approved quotation version can create a contract." },
+        { status: 409 },
+      );
+    }
+
+    const { data: sourceQuotation, error: sourceQuotationError } = await admin
+      .from("quotations")
+      .select("id, project_id, client_id")
+      .eq("id", quotationId)
+      .maybeSingle();
+
+    if (sourceQuotationError) {
+      return contractErrorResponse(
+        sourceQuotationError,
+        "Unable to verify the quotation source.",
+        500,
+      );
+    }
+
+    if (
+      !sourceQuotation ||
+      sourceQuotation.project_id !== body.project_id ||
+      sourceQuotation.client_id !== body.client_id
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Contract project and client must match the approved quotation.",
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   if (!isSignatureUpdate && body.contract_discount_percent !== undefined) {
     const discountLimit = await discountLimitForRoleFromSettings(
       authCheck.role,

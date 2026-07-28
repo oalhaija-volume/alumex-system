@@ -1,5 +1,5 @@
-import { ClientsModule } from "@/components/clients/ClientsModule";
+import { redirect } from "next/navigation";
 
 export default function ClientsPage() {
-  return <ClientsModule />;
+  redirect("/intake");
 }

@@ -1,12 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useClients } from "@/components/clients/ClientsProvider";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { ProjectLocationPicker } from "@/components/projects/ProjectLocationPicker";
 import { useProjects } from "@/components/projects/ProjectsProvider";
+import { intakeMovesDirectlyToMeasurements } from "@/lib/intake/nextStage";
+import { outdoorSiteDuplicateRadiusMeters } from "@/lib/location/coordinates";
 
 type ContactDraft = {
   contactName: string;
@@ -29,6 +31,8 @@ type IntakeDraft = {
   address: string;
   province: string;
   city: string;
+  companyLatitude: number | null;
+  companyLongitude: number | null;
   contacts: ContactDraft[];
   projectName: string;
   branch: "" | "Rasafa" | "Karkh";
@@ -39,7 +43,7 @@ type IntakeDraft = {
   geofenceRadiusMeters: number;
   source: string;
   readiness: "ready" | "not_ready";
-  expectedReadyDate: string;
+  followUpAt: string;
   priority: "low" | "normal" | "high" | "urgent";
   estimatedValue: string;
   engineerName: string;
@@ -57,7 +61,7 @@ const emptyContact: ContactDraft = {
 };
 
 const initialDraft: IntakeDraft = {
-  mode: "new",
+  mode: "existing",
   existingClientId: "",
   clientType: "individual",
   clientName: "",
@@ -69,17 +73,19 @@ const initialDraft: IntakeDraft = {
   address: "",
   province: "",
   city: "",
-  contacts: [{ ...emptyContact }],
+  companyLatitude: null,
+  companyLongitude: null,
+  contacts: [],
   projectName: "",
   branch: "",
   projectType: "",
   projectAddress: "",
   projectLatitude: null,
   projectLongitude: null,
-  geofenceRadiusMeters: 100,
+  geofenceRadiusMeters: outdoorSiteDuplicateRadiusMeters,
   source: "",
   readiness: "ready",
-  expectedReadyDate: "",
+  followUpAt: "",
   priority: "normal",
   estimatedValue: "",
   engineerName: "",
@@ -88,14 +94,21 @@ const initialDraft: IntakeDraft = {
   notes: "",
 };
 
-const steps = ["client", "contacts", "project", "readiness", "review"] as const;
+const steps = ["client", "project", "review"] as const;
+const measurementSteps = ["client", "project", "measurements"] as const;
 const inputClass =
   "mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-[var(--alumex-blue)] focus:ring-4 focus:ring-blue-100";
 const labelClass = "text-sm font-bold text-slate-700";
-const draftKey = "alumex:sales-intake:draft:v1";
+const draftKey = "alumex:sales-intake:draft:v2";
 
 function normalize(value: string) {
   return value.trim().toLowerCase().replace(/\D/g, "");
+}
+
+function nextAvailableLocalDateTime() {
+  const date = new Date(Date.now() + 60_000);
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
 }
 
 function Field({
@@ -105,6 +118,7 @@ function Field({
   required,
   type = "text",
   placeholder,
+  min,
 }: {
   label: string;
   value: string;
@@ -112,6 +126,7 @@ function Field({
   required?: boolean;
   type?: string;
   placeholder?: string;
+  min?: string;
 }) {
   return (
     <label className={labelClass}>
@@ -122,6 +137,7 @@ function Field({
         value={value}
         required={required}
         placeholder={placeholder}
+        min={min}
         onChange={(event) => onChange(event.target.value)}
         className={inputClass}
       />
@@ -149,17 +165,37 @@ export function SalesIntakeWizard() {
   const [clientSearch, setClientSearch] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingSite, setIsCheckingSite] = useState(false);
   const selectedClient = clients.find(
     (client) => client.id === draft.existingClientId,
   );
   const sourceDefault =
     role === "Outdoor Sales" ? "outdoor_sales" : "showroom_walk_in";
   const isOutdoorSales = role === "Outdoor Sales";
+  const isDirectMeasurement = intakeMovesDirectlyToMeasurements({
+    role,
+    source: draft.source || sourceDefault,
+    readiness: draft.readiness,
+  });
+  const displayedSteps = isDirectMeasurement ? measurementSteps : steps;
   const hasProjectPin =
     typeof draft.projectLatitude === "number" &&
     Number.isFinite(draft.projectLatitude) &&
     typeof draft.projectLongitude === "number" &&
     Number.isFinite(draft.projectLongitude);
+  const hasCompanyPin =
+    typeof draft.companyLatitude === "number" &&
+    Number.isFinite(draft.companyLatitude) &&
+    typeof draft.companyLongitude === "number" &&
+    Number.isFinite(draft.companyLongitude);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      window.localStorage.setItem(draftKey, JSON.stringify(draft));
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [draft]);
 
   const candidates = useMemo(() => {
     const query = clientSearch.trim().toLowerCase();
@@ -185,36 +221,26 @@ export function SalesIntakeWizard() {
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
-  function saveDraft() {
-    window.localStorage.setItem(draftKey, JSON.stringify(draft));
-    setError("");
-  }
-
   function validateCurrentStep() {
     if (
       step === 0 &&
       ((draft.mode === "existing" && !draft.existingClientId) ||
         (draft.mode === "new" &&
           (!draft.clientName.trim() ||
-            !draft.mobile.trim() ||
-            !draft.address.trim() ||
-            (draft.clientType === "company" && !draft.companyName.trim()))))
+            !draft.mobile.trim())))
     ) {
       return t("intake.errors.client");
     }
     if (
-      step === 1 &&
-      draft.contacts.some(
-        (contact) =>
-          contact.contactName &&
-          !contact.mobile &&
-          !contact.email,
-      )
+      step === 0 &&
+      draft.mode === "new" &&
+      draft.clientType === "company" &&
+      !hasCompanyPin
     ) {
-      return t("intake.errors.contact");
+      return t("intake.errors.companyLocation");
     }
     if (
-      step === 2 &&
+      step === 1 &&
       (!draft.projectName.trim() ||
         !draft.branch ||
         !draft.projectType.trim() ||
@@ -222,25 +248,69 @@ export function SalesIntakeWizard() {
     ) {
       return t("intake.errors.project");
     }
-    if (step === 2 && isOutdoorSales && !hasProjectPin) {
+    if (step === 1 && isOutdoorSales && !hasProjectPin) {
       return t("intake.errors.location");
     }
     if (
-      step === 3 &&
+      step === 1 &&
       draft.readiness === "not_ready" &&
-      !draft.expectedReadyDate
+      !draft.followUpAt
     ) {
       return t("intake.errors.readiness");
     }
     return "";
   }
 
-  function continueStep() {
+  async function continueStep() {
     const validationError = validateCurrentStep();
     if (validationError) {
       setError(validationError);
       return;
     }
+
+    if (
+      step === 1 &&
+      isOutdoorSales &&
+      draft.mode === "existing" &&
+      draft.existingClientId &&
+      hasProjectPin
+    ) {
+      setIsCheckingSite(true);
+      try {
+        const response = await fetch("/api/sales-intake/site-duplicate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientId: draft.existingClientId,
+            latitude: draft.projectLatitude,
+            longitude: draft.projectLongitude,
+          }),
+        });
+        const result = (await response.json().catch(() => null)) as
+          | { duplicate?: boolean; error?: string }
+          | null;
+
+        if (!response.ok) {
+          setError(result?.error ?? t("intake.errors.locationCheck"));
+          return;
+        }
+        if (result?.duplicate) {
+          setError(t("intake.errors.siteDuplicate"));
+          return;
+        }
+      } catch {
+        setError(t("intake.errors.locationCheck"));
+        return;
+      } finally {
+        setIsCheckingSite(false);
+      }
+    }
+
+    if (step === 1 && isDirectMeasurement) {
+      await submit();
+      return;
+    }
+
     setError("");
     setStep((current) => Math.min(current + 1, steps.length - 1));
   }
@@ -269,6 +339,8 @@ export function SalesIntakeWizard() {
                   address: draft.address,
                   province: draft.province,
                   city: draft.city,
+                  locationLatitude: draft.companyLatitude,
+                  locationLongitude: draft.companyLongitude,
                 }
               : null,
           contacts: draft.contacts,
@@ -282,7 +354,10 @@ export function SalesIntakeWizard() {
             geofenceRadiusMeters: draft.geofenceRadiusMeters,
             source: draft.source || sourceDefault,
             structureReadiness: draft.readiness,
-            expectedReadyDate: draft.expectedReadyDate,
+            followUpAt:
+              draft.readiness === "not_ready" && draft.followUpAt
+                ? new Date(draft.followUpAt).toISOString()
+                : null,
             priority: draft.priority,
             estimatedValue: draft.estimatedValue,
             engineerName: draft.engineerName,
@@ -294,6 +369,7 @@ export function SalesIntakeWizard() {
       });
       const result = (await response.json().catch(() => null)) as {
         projectId?: string;
+        nextPath?: string;
         error?: string;
       } | null;
       if (!response.ok || !result?.projectId) {
@@ -318,7 +394,7 @@ export function SalesIntakeWizard() {
 
       window.localStorage.removeItem(draftKey);
       await Promise.all([refreshClients(), refreshProjects()]);
-      router.push(`/projects/${result.projectId}`);
+      router.push(result.nextPath ?? `/projects/${result.projectId}`);
     } catch (submitError) {
       setError(
         submitError instanceof Error ? submitError.message : t("intake.errors.save"),
@@ -328,45 +404,117 @@ export function SalesIntakeWizard() {
     }
   }
 
-  const ownerLabel = role ? term(role) : t("common.notAdded");
   const sourceLabel = t(`intake.sources.${draft.source || sourceDefault}`);
+  const customerName =
+    selectedClient?.clientName || draft.companyName || draft.clientName;
+  const locationPicker = (
+    <ProjectLocationPicker
+      latitude={draft.projectLatitude}
+      longitude={draft.projectLongitude}
+      geofenceRadiusMeters={
+        isOutdoorSales
+          ? outdoorSiteDuplicateRadiusMeters
+          : draft.geofenceRadiusMeters
+      }
+      onChange={({ latitude, longitude }) =>
+        setDraft((current) => ({
+          ...current,
+          projectLatitude: latitude,
+          projectLongitude: longitude,
+        }))
+      }
+      onRadiusChange={
+        isOutdoorSales
+          ? undefined
+          : (radius) => update("geofenceRadiusMeters", radius)
+      }
+      allowRadiusChange={!isOutdoorSales}
+      enableSearch
+      title={t("intake.location.title")}
+      editableDescription={
+        isOutdoorSales
+          ? t("intake.location.outdoorRequired")
+          : t("intake.location.description")
+      }
+      radiusDescription={
+        isOutdoorSales ? t("intake.location.duplicateRadius") : undefined
+      }
+      mapAriaLabel={t("intake.location.mapAriaLabel")}
+      searchLabel={t("intake.location.searchLabel")}
+      searchPlaceholder={t("intake.location.searchPlaceholder")}
+      searchButtonLabel={t("common.search")}
+      searchingLabel={t("intake.location.searching")}
+      noResultsLabel={t("intake.location.noResults")}
+      searchErrorLabel={t("intake.location.searchError")}
+      currentLocationLabel={t("intake.location.useCurrentLocation")}
+      locatingLabel={t("intake.location.locating")}
+      currentLocationErrorLabel={t("intake.location.currentLocationError")}
+      onSearchSelect={(address) => update("projectAddress", address)}
+      onCurrentLocationSelect={({ latitude, longitude }) =>
+        setDraft((current) => ({
+          ...current,
+          projectAddress:
+            current.projectAddress.trim() ||
+            `${t("intake.location.gpsAddress")} ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+        }))
+      }
+    />
+  );
+  const companyLocationPicker = (
+    <ProjectLocationPicker
+      latitude={draft.companyLatitude}
+      longitude={draft.companyLongitude}
+      onChange={({ latitude, longitude }) =>
+        setDraft((current) => ({
+          ...current,
+          companyLatitude: latitude,
+          companyLongitude: longitude,
+        }))
+      }
+      allowRadiusChange={false}
+      showGeofence={false}
+      enableSearch
+      title={t("intake.companyLocation.title")}
+      editableDescription={t("intake.companyLocation.description")}
+      mapAriaLabel={t("intake.companyLocation.mapAriaLabel")}
+      searchLabel={t("intake.companyLocation.searchLabel")}
+      searchPlaceholder={t("intake.location.searchPlaceholder")}
+      searchButtonLabel={t("common.search")}
+      searchingLabel={t("intake.location.searching")}
+      noResultsLabel={t("intake.location.noResults")}
+      searchErrorLabel={t("intake.location.searchError")}
+      currentLocationLabel={t("intake.location.useCurrentLocation")}
+      locatingLabel={t("intake.location.locating")}
+      currentLocationErrorLabel={t("intake.location.currentLocationError")}
+      onSearchSelect={(address) => update("address", address)}
+      onCurrentLocationSelect={({ latitude, longitude }) =>
+        setDraft((current) => ({
+          ...current,
+          address:
+            current.address.trim() ||
+            `${t("intake.location.gpsAddress")} ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+        }))
+      }
+    />
+  );
 
   return (
     <div className="space-y-5">
-      <header>
+      <header className="border-b border-slate-200 pb-5">
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">
           {t("intake.title")}
         </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-          {t("intake.description")}
-        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
+          <strong className="text-slate-900">
+            {t("intake.progress.step", {
+              current: step + 1,
+              total: steps.length,
+            })}
+          </strong>
+          <span aria-hidden="true">•</span>
+          <span>{t("intake.progress.time")}</span>
+        </div>
       </header>
-
-      <ol className="grid grid-cols-5 border-b border-slate-200 pb-4">
-        {steps.map((item, index) => (
-          <li key={item} className="relative text-center">
-            {index < steps.length - 1 ? (
-              <span className="absolute left-1/2 right-[-50%] top-4 h-px bg-slate-300" />
-            ) : null}
-            <button
-              type="button"
-              onClick={() => index <= step && setStep(index)}
-              className="relative z-10 mx-auto flex h-8 w-8 items-center justify-center rounded-full border text-xs font-extrabold transition"
-              style={{
-                background: index <= step ? "var(--alumex-blue)" : "white",
-                borderColor: index <= step ? "var(--alumex-blue)" : "#cbd5e1",
-                color: index <= step ? "white" : "#475569",
-              }}
-              aria-current={index === step ? "step" : undefined}
-            >
-              {index + 1}
-            </button>
-            <span className="mt-2 block truncate text-[11px] font-bold text-slate-700 sm:text-sm">
-              {t(`intake.steps.${item}`)}
-            </span>
-          </li>
-        ))}
-      </ol>
 
       {error ? (
         <p role="alert" className="border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
@@ -378,30 +526,50 @@ export function SalesIntakeWizard() {
         <section className="min-w-0">
           {step === 0 ? (
             <div className="space-y-5">
-              <h2 className="text-lg font-extrabold text-slate-950">{t("intake.sections.client")}</h2>
-              <div className="flex gap-6 border-b border-slate-200 pb-4">
-                {(["new", "existing"] as const).map((mode) => (
-                  <label key={mode} className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                    <input
-                      type="radio"
-                      checked={draft.mode === mode}
-                      onChange={() => update("mode", mode)}
-                    />
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-950">
+                  {t("intake.guided.customerQuestion")}
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  {t("intake.guided.customerHelp")}
+                </p>
+              </div>
+              <div className="grid overflow-hidden rounded-md border border-slate-300 sm:grid-cols-2">
+                {(["existing", "new"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => update("mode", mode)}
+                    aria-pressed={draft.mode === mode}
+                    className={`min-h-12 px-4 text-sm font-bold transition ${
+                      draft.mode === mode
+                        ? "bg-[var(--alumex-blue)] text-white"
+                        : "bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
                     {t(`intake.clientMode.${mode}`)}
-                  </label>
+                  </button>
                 ))}
               </div>
               {draft.mode === "existing" ? (
                 <div>
-                  <Field label={t("intake.fields.searchClient")} value={clientSearch} onChange={setClientSearch} />
-                  <div className="mt-3 divide-y divide-slate-200 border border-slate-200">
+                  <Field
+                    required
+                    label={t("intake.fields.searchClient")}
+                    placeholder={t("intake.guided.searchPlaceholder")}
+                    value={clientSearch}
+                    onChange={setClientSearch}
+                  />
+                  <div className="mt-3 overflow-hidden rounded-md border border-slate-200">
                     {candidates.map((client) => (
                       <button
                         type="button"
                         key={client.id}
                         onClick={() => update("existingClientId", client.id)}
-                        className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-start text-sm ${
-                          draft.existingClientId === client.id ? "bg-blue-50" : "bg-white"
+                        className={`flex min-h-14 w-full items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-start text-sm last:border-b-0 ${
+                          draft.existingClientId === client.id
+                            ? "bg-blue-50 ring-2 ring-inset ring-[var(--alumex-blue)]"
+                            : "bg-white hover:bg-slate-50"
                         }`}
                       >
                         <span className="font-bold text-slate-900">{term(client.clientName)}</span>
@@ -409,6 +577,13 @@ export function SalesIntakeWizard() {
                       </button>
                     ))}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => update("mode", "new")}
+                    className="mt-4 min-h-11 text-sm font-bold text-[var(--alumex-blue)]"
+                  >
+                    {t("intake.guided.createInstead")}
+                  </button>
                 </div>
               ) : (
                 <>
@@ -438,15 +613,33 @@ export function SalesIntakeWizard() {
                   ) : null}
                   <div className="grid gap-4 md:grid-cols-2">
                     <Field required label={t("intake.fields.clientName")} value={draft.clientName} onChange={(value) => update("clientName", value)} />
-                    {draft.clientType === "company" ? <Field required label={t("intake.fields.companyName")} value={draft.companyName} onChange={(value) => update("companyName", value)} /> : null}
                     <Field required type="tel" label={t("intake.fields.mobile")} value={draft.mobile} onChange={(value) => update("mobile", value)} />
-                    <Field type="tel" label={t("intake.fields.whatsapp")} value={draft.whatsapp} onChange={(value) => update("whatsapp", value)} />
-                    <Field type="email" label={t("intake.fields.email")} value={draft.email} onChange={(value) => update("email", value)} />
-                    <label className={labelClass}>{t("intake.fields.language")}<select value={draft.preferredLanguage} onChange={(event) => update("preferredLanguage", event.target.value as "ar" | "en")} className={inputClass}><option value="ar">العربية</option><option value="en">English</option></select></label>
-                    <div className="md:col-span-2"><Field required label={t("intake.fields.address")} value={draft.address} onChange={(value) => update("address", value)} /></div>
-                    <Field label={t("intake.fields.province")} value={draft.province} onChange={(value) => update("province", value)} />
-                    <Field label={t("intake.fields.city")} value={draft.city} onChange={(value) => update("city", value)} />
                   </div>
+                  {draft.clientType === "company" ? (
+                    <div
+                      className={
+                        hasCompanyPin
+                          ? ""
+                          : "rounded-lg border-2 border-amber-400"
+                      }
+                    >
+                      {companyLocationPicker}
+                    </div>
+                  ) : null}
+                  <details className="border-y border-slate-200 py-4">
+                    <summary className="cursor-pointer text-sm font-bold text-[var(--alumex-blue)]">
+                      {t("intake.guided.moreCustomer")}
+                    </summary>
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                      {draft.clientType === "company" ? <Field label={t("intake.fields.companyName")} value={draft.companyName} onChange={(value) => update("companyName", value)} /> : null}
+                      <Field type="tel" label={t("intake.fields.whatsapp")} value={draft.whatsapp} onChange={(value) => update("whatsapp", value)} />
+                      <Field type="email" label={t("intake.fields.email")} value={draft.email} onChange={(value) => update("email", value)} />
+                      <label className={labelClass}>{t("intake.fields.language")}<select value={draft.preferredLanguage} onChange={(event) => update("preferredLanguage", event.target.value as "ar" | "en")} className={inputClass}><option value="ar">العربية</option><option value="en">English</option></select></label>
+                      <div className="md:col-span-2"><Field label={t("intake.fields.address")} value={draft.address} onChange={(value) => update("address", value)} /></div>
+                      <Field label={t("intake.fields.province")} value={draft.province} onChange={(value) => update("province", value)} />
+                      <Field label={t("intake.fields.city")} value={draft.city} onChange={(value) => update("city", value)} />
+                    </div>
+                  </details>
                 </>
               )}
             </div>
@@ -454,96 +647,110 @@ export function SalesIntakeWizard() {
 
           {step === 1 ? (
             <div className="space-y-5">
-              <h2 className="text-lg font-extrabold text-slate-950">{t("intake.sections.contacts")}</h2>
-              {draft.contacts.map((contact, index) => (
-                <div key={index} className="grid gap-4 border-b border-slate-200 pb-5 md:grid-cols-2">
-                  <Field label={t("intake.fields.contactName")} value={contact.contactName} onChange={(value) => update("contacts", draft.contacts.map((item, itemIndex) => itemIndex === index ? { ...item, contactName: value } : item))} />
-                  <Field label={t("intake.fields.roleTitle")} value={contact.roleTitle} onChange={(value) => update("contacts", draft.contacts.map((item, itemIndex) => itemIndex === index ? { ...item, roleTitle: value } : item))} />
-                  <Field type="tel" label={t("intake.fields.mobile")} value={contact.mobile} onChange={(value) => update("contacts", draft.contacts.map((item, itemIndex) => itemIndex === index ? { ...item, mobile: value } : item))} />
-                  <Field type="email" label={t("intake.fields.email")} value={contact.email} onChange={(value) => update("contacts", draft.contacts.map((item, itemIndex) => itemIndex === index ? { ...item, email: value } : item))} />
-                  <button type="button" onClick={() => update("contacts", draft.contacts.filter((_, itemIndex) => itemIndex !== index))} className="justify-self-start text-sm font-bold text-red-700">{t("intake.removeContact")}</button>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    {t("intake.steps.client")}
+                  </p>
+                  <p className="mt-1 font-extrabold text-slate-950">
+                    {term(customerName)}
+                  </p>
                 </div>
-              ))}
-              <button type="button" onClick={() => update("contacts", [...draft.contacts, { ...emptyContact, isPrimary: false }])} className="h-11 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700">+ {t("intake.addContact")}</button>
-            </div>
-          ) : null}
-
-          {step === 2 ? (
-            <div className="space-y-5">
-              <h2 className="text-lg font-extrabold text-slate-950">{t("intake.sections.project")}</h2>
+                <button
+                  type="button"
+                  onClick={() => setStep(0)}
+                  className="min-h-11 px-2 text-sm font-bold text-[var(--alumex-blue)]"
+                >
+                  {t("common.edit")}
+                </button>
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-950">
+                  {t("intake.guided.opportunityQuestion")}
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  {t("intake.guided.opportunityHelp")}
+                </p>
+              </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <Field required label={t("intake.fields.projectName")} value={draft.projectName} onChange={(value) => update("projectName", value)} />
                 <label className={labelClass}>{t("intake.fields.branch")} *<select value={draft.branch} onChange={(event) => update("branch", event.target.value as IntakeDraft["branch"])} className={inputClass}><option value="">{t("intake.select")}</option><option value="Rasafa">{term("Rasafa")}</option><option value="Karkh">{term("Karkh")}</option></select></label>
                 <Field required label={t("intake.fields.projectType")} value={draft.projectType} onChange={(value) => update("projectType", value)} />
                 <label className={labelClass}>{t("intake.fields.source")} *<select value={draft.source || sourceDefault} onChange={(event) => update("source", event.target.value)} className={inputClass}>{["outdoor_sales","showroom_walk_in","existing_client","referral","phone_inquiry","website","social_media","management_referral","other"].map((source) => <option key={source} value={source}>{t(`intake.sources.${source}`)}</option>)}</select></label>
                 <div className="md:col-span-2"><Field required label={t("intake.fields.projectAddress")} value={draft.projectAddress} onChange={(value) => update("projectAddress", value)} /></div>
-                <Field label={t("intake.fields.engineer")} value={draft.engineerName} onChange={(value) => update("engineerName", value)} />
-                <Field label={t("intake.fields.consultant")} value={draft.consultantName} onChange={(value) => update("consultantName", value)} />
-                <Field label={t("intake.fields.contractor")} value={draft.contractorName} onChange={(value) => update("contractorName", value)} />
               </div>
               <div className={isOutdoorSales && !hasProjectPin ? "rounded-lg border-2 border-amber-400" : ""}>
-                <ProjectLocationPicker
-                  latitude={draft.projectLatitude}
-                  longitude={draft.projectLongitude}
-                  geofenceRadiusMeters={draft.geofenceRadiusMeters}
-                  onChange={({ latitude, longitude }) =>
-                    setDraft((current) => ({
-                      ...current,
-                      projectLatitude: latitude,
-                      projectLongitude: longitude,
-                    }))
-                  }
-                  onRadiusChange={(radius) => update("geofenceRadiusMeters", radius)}
-                  enableSearch
-                  title={t("intake.location.title")}
-                  editableDescription={
-                    isOutdoorSales
-                      ? t("intake.location.outdoorRequired")
-                      : t("intake.location.description")
-                  }
-                  mapAriaLabel={t("intake.location.mapAriaLabel")}
-                  searchLabel={t("intake.location.searchLabel")}
-                  searchPlaceholder={t("intake.location.searchPlaceholder")}
-                  searchButtonLabel={t("common.search")}
-                  searchingLabel={t("intake.location.searching")}
-                  noResultsLabel={t("intake.location.noResults")}
-                  searchErrorLabel={t("intake.location.searchError")}
-                  currentLocationLabel={t("intake.location.useCurrentLocation")}
-                  locatingLabel={t("intake.location.locating")}
-                  currentLocationErrorLabel={t("intake.location.currentLocationError")}
-                  onSearchSelect={(address) => update("projectAddress", address)}
-                  onCurrentLocationSelect={({ latitude, longitude }) =>
-                    setDraft((current) => ({
-                      ...current,
-                      projectAddress:
-                        current.projectAddress.trim() ||
-                        `${t("intake.location.gpsAddress")} ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
-                    }))
-                  }
-                />
+                {locationPicker}
               </div>
+              <fieldset>
+                <legend className={labelClass}>
+                  {t("intake.guided.siteReady")} *
+                </legend>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  {(["ready", "not_ready"] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => update("readiness", value)}
+                      aria-pressed={draft.readiness === value}
+                      className={`min-h-12 rounded-md border px-4 text-start text-sm font-bold ${
+                        draft.readiness === value
+                          ? "border-[var(--alumex-blue)] bg-blue-50 text-[var(--alumex-blue)] ring-2 ring-blue-100"
+                          : "border-slate-300 bg-white text-slate-700"
+                      }`}
+                    >
+                      {t(`intake.readiness.${value}`)}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+              {draft.readiness === "not_ready" ? (
+                <div className="max-w-md">
+                  <Field required type="datetime-local" min={nextAvailableLocalDateTime()} label={t("intake.fields.followUpAt")} value={draft.followUpAt} onChange={(value) => update("followUpAt", value)} />
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    {t("intake.guided.followUpHelp")}
+                  </p>
+                </div>
+              ) : null}
+              <details className="border-y border-slate-200 py-4">
+                <summary className="cursor-pointer text-sm font-bold text-[var(--alumex-blue)]">
+                  {t("intake.guided.moreOpportunity")}
+                </summary>
+                <div className="mt-5 space-y-5">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className={labelClass}>{t("intake.fields.priority")}<select value={draft.priority} onChange={(event) => update("priority", event.target.value as IntakeDraft["priority"])} className={inputClass}>{["low","normal","high","urgent"].map((priority) => <option key={priority} value={priority}>{t(`intake.priority.${priority}`)}</option>)}</select></label>
+                    <Field type="number" label={t("intake.fields.estimatedValue")} value={draft.estimatedValue} onChange={(value) => update("estimatedValue", value)} />
+                    <Field label={t("intake.fields.engineer")} value={draft.engineerName} onChange={(value) => update("engineerName", value)} />
+                    <Field label={t("intake.fields.consultant")} value={draft.consultantName} onChange={(value) => update("consultantName", value)} />
+                    <Field label={t("intake.fields.contractor")} value={draft.contractorName} onChange={(value) => update("contractorName", value)} />
+                    <label className={`${labelClass} md:col-span-2`}>{t("intake.fields.notes")}<textarea value={draft.notes} onChange={(event) => update("notes", event.target.value)} rows={4} className={`${inputClass} h-auto py-3`} /></label>
+                  </div>
+                  <div className="space-y-4 border-t border-slate-200 pt-5">
+                    <h3 className="text-sm font-extrabold text-slate-900">
+                      {t("intake.sections.contacts")}
+                    </h3>
+                    {draft.contacts.map((contact, index) => (
+                      <div key={index} className="grid gap-4 border-b border-slate-200 pb-5 md:grid-cols-2">
+                        <Field label={t("intake.fields.contactName")} value={contact.contactName} onChange={(value) => update("contacts", draft.contacts.map((item, itemIndex) => itemIndex === index ? { ...item, contactName: value } : item))} />
+                        <Field label={t("intake.fields.roleTitle")} value={contact.roleTitle} onChange={(value) => update("contacts", draft.contacts.map((item, itemIndex) => itemIndex === index ? { ...item, roleTitle: value } : item))} />
+                        <Field type="tel" label={t("intake.fields.mobile")} value={contact.mobile} onChange={(value) => update("contacts", draft.contacts.map((item, itemIndex) => itemIndex === index ? { ...item, mobile: value } : item))} />
+                        <Field type="email" label={t("intake.fields.email")} value={contact.email} onChange={(value) => update("contacts", draft.contacts.map((item, itemIndex) => itemIndex === index ? { ...item, email: value } : item))} />
+                        <button type="button" onClick={() => update("contacts", draft.contacts.filter((_, itemIndex) => itemIndex !== index))} className="min-h-11 justify-self-start text-sm font-bold text-red-700">{t("intake.removeContact")}</button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => update("contacts", [...draft.contacts, { ...emptyContact, isPrimary: draft.contacts.length === 0 }])} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700">+ {t("intake.addContact")}</button>
+                  </div>
+                  <label className="block rounded-md border border-dashed border-slate-400 p-5 text-sm text-slate-700">
+                    <span className="font-extrabold text-[var(--alumex-blue)]">{t("intake.attachments.title")}</span>
+                    <span className="mt-1 block text-xs text-slate-500">{t("intake.attachments.help")}</span>
+                    <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} className="mt-3 block w-full text-sm" />
+                  </label>
+                </div>
+              </details>
             </div>
           ) : null}
 
-          {step === 3 ? (
-            <div className="space-y-5">
-              <h2 className="text-lg font-extrabold text-slate-950">{t("intake.sections.readiness")}</h2>
-              <fieldset><legend className={labelClass}>{t("intake.fields.readiness")}</legend><div className="mt-2 grid grid-cols-2">{(["ready","not_ready"] as const).map((value) => <button key={value} type="button" onClick={() => update("readiness", value)} className={`h-11 border text-sm font-bold ${draft.readiness === value ? "border-[var(--alumex-blue)] bg-blue-50 text-[var(--alumex-blue)]" : "border-slate-300 bg-white text-slate-700"}`}>{t(`intake.readiness.${value}`)}</button>)}</div></fieldset>
-              <div className="grid gap-4 md:grid-cols-2">
-                {draft.readiness === "not_ready" ? <Field required type="date" label={t("intake.fields.expectedDate")} value={draft.expectedReadyDate} onChange={(value) => update("expectedReadyDate", value)} /> : null}
-                <label className={labelClass}>{t("intake.fields.priority")}<select value={draft.priority} onChange={(event) => update("priority", event.target.value as IntakeDraft["priority"])} className={inputClass}>{["low","normal","high","urgent"].map((priority) => <option key={priority} value={priority}>{t(`intake.priority.${priority}`)}</option>)}</select></label>
-                <Field type="number" label={t("intake.fields.estimatedValue")} value={draft.estimatedValue} onChange={(value) => update("estimatedValue", value)} />
-                <label className={`${labelClass} md:col-span-2`}>{t("intake.fields.notes")}<textarea value={draft.notes} onChange={(event) => update("notes", event.target.value)} rows={4} className={`${inputClass} h-auto py-3`} /></label>
-              </div>
-              <label className="block border border-dashed border-slate-400 p-5 text-sm text-slate-700">
-                <span className="font-extrabold text-[var(--alumex-blue)]">{t("intake.attachments.title")}</span>
-                <span className="mt-1 block text-xs text-slate-500">{t("intake.attachments.help")}</span>
-                <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} className="mt-3 block w-full text-sm" />
-              </label>
-            </div>
-          ) : null}
-
-          {step === 4 ? (
+          {step === 2 ? (
             <div className="space-y-5">
               <h2 className="text-lg font-extrabold text-slate-950">{t("intake.sections.review")}</h2>
               <dl className="divide-y divide-slate-200 border-y border-slate-200">
@@ -553,8 +760,20 @@ export function SalesIntakeWizard() {
                   [t("intake.fields.projectName"), draft.projectName],
                   [t("intake.fields.branch"), draft.branch],
                   [t("intake.fields.source"), sourceLabel],
+                  ...(draft.mode === "new" &&
+                  draft.clientType === "company"
+                    ? [[
+                        t("intake.companyLocation.pin"),
+                        hasCompanyPin
+                          ? `${draft.companyLatitude?.toFixed(6)}, ${draft.companyLongitude?.toFixed(6)}`
+                          : t("common.notAdded"),
+                      ]]
+                    : []),
                   [t("intake.location.pin"), hasProjectPin ? `${draft.projectLatitude?.toFixed(6)}, ${draft.projectLongitude?.toFixed(6)}` : t("common.notAdded")],
                   [t("intake.fields.readiness"), t(`intake.readiness.${draft.readiness}`)],
+                  ...(draft.readiness === "not_ready"
+                    ? [[t("intake.fields.followUpAt"), draft.followUpAt.replace("T", " ")]]
+                    : []),
                   [t("intake.attachments.title"), String(files.length)],
                 ].map(([label, value]) => <div key={label} className="grid gap-1 py-3 sm:grid-cols-[180px_1fr]"><dt className="text-sm font-bold text-slate-500">{label}</dt><dd className="text-sm font-semibold text-slate-950">{term(value || t("common.notAdded"))}</dd></div>)}
               </dl>
@@ -562,23 +781,66 @@ export function SalesIntakeWizard() {
           ) : null}
         </section>
 
-        <aside className="h-fit border-l border-slate-200 pl-0 xl:pl-6">
-          <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-900">{t("intake.summary.title")}</h2>
-          <dl className="mt-4 divide-y divide-slate-200 text-sm">
-            <div className="py-3"><dt className="text-slate-500">{t("intake.summary.creator")}</dt><dd className="mt-1 font-bold text-slate-900">{ownerLabel}</dd></div>
-            <div className="py-3"><dt className="text-slate-500">{t("intake.summary.owner")}</dt><dd className="mt-1 font-bold text-slate-900">{ownerLabel}</dd></div>
-            <div className="py-3"><dt className="text-slate-500">{t("intake.fields.source")}</dt><dd className="mt-1 font-bold text-slate-900">{sourceLabel}</dd></div>
-            <div className="py-3"><dt className="text-slate-500">{t("intake.fields.readiness")}</dt><dd className="mt-1 font-bold text-slate-900">{t(`intake.readiness.${draft.readiness}`)}</dd></div>
-          </dl>
+        <aside className="h-fit border-t border-slate-200 pt-6 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0">
+          <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-900">
+            {t("intake.progress.title")}
+          </h2>
+          <ol className="mt-5 space-y-1">
+            {displayedSteps.map((item, index) => (
+              <li key={item} className="relative flex gap-3 pb-7 last:pb-0">
+                {index < displayedSteps.length - 1 ? (
+                  <span className="absolute bottom-0 left-[21px] top-11 w-px bg-slate-200 rtl:left-auto rtl:right-[21px]" />
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => index <= step && setStep(index)}
+                  aria-current={index === step ? "step" : undefined}
+                  disabled={index > step}
+                  className={`relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm font-extrabold ${
+                    index <= step
+                      ? "border-[var(--alumex-blue)] bg-[var(--alumex-blue)] text-white"
+                      : "border-slate-300 bg-white text-slate-500"
+                  }`}
+                >
+                  {index + 1}
+                </button>
+                <div className="pt-1">
+                  <p className="text-sm font-extrabold text-slate-900">
+                    {t(`intake.steps.${item}`)}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    {t(`intake.progress.${item}`)}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
         </aside>
       </div>
 
-      <footer className="sticky bottom-[72px] z-10 flex items-center justify-between gap-3 border-t border-slate-200 bg-white/95 py-4 backdrop-blur lg:bottom-0">
-        <button type="button" onClick={saveDraft} className="h-11 px-2 text-sm font-bold text-[var(--alumex-blue)]">{t("intake.actions.saveDraft")}</button>
-        <div className="flex gap-3">
+      <footer className="fixed bottom-[64px] left-0 right-0 z-20 flex gap-3 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6 lg:sticky lg:bottom-0 lg:z-10 lg:items-center lg:justify-between lg:px-0 lg:py-4">
+        <div aria-live="polite" className="hidden lg:block">
+          <p className="text-sm font-bold text-emerald-700">
+            {t("intake.actions.autosaved")}
+          </p>
+          <p className="text-xs text-slate-500">
+            {t("intake.actions.autosavedHelp")}
+          </p>
+        </div>
+        <div className="grid w-full grid-cols-[auto_minmax(0,1fr)] gap-3 lg:flex lg:w-auto">
           <button type="button" disabled={step === 0 || isSubmitting} onClick={() => setStep((current) => Math.max(0, current - 1))} className="h-11 min-w-24 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-40">{t("intake.actions.back")}</button>
-          {step < steps.length - 1 ? (
-            <button type="button" onClick={continueStep} className="h-11 min-w-28 bg-[var(--alumex-blue)] px-5 text-sm font-bold text-white">{t("intake.actions.continue")}</button>
+          {step < displayedSteps.length - 1 ? (
+            <button type="button" disabled={isCheckingSite || isSubmitting} onClick={() => void continueStep()} className="h-11 min-w-48 bg-[var(--alumex-blue)] px-5 text-sm font-bold text-white disabled:opacity-50">
+              {isSubmitting
+                ? t("common.loading")
+                : isCheckingSite
+                ? t("intake.actions.checkingLocation")
+                : step === 0
+                ? t("intake.actions.continueOpportunity")
+                : isDirectMeasurement
+                ? t("intake.actions.startMeasurements")
+                : t("intake.actions.reviewOpportunity")}
+            </button>
           ) : (
             <button type="button" disabled={isSubmitting} onClick={() => void submit()} className="h-11 min-w-32 bg-[var(--alumex-blue)] px-5 text-sm font-bold text-white disabled:opacity-50">{isSubmitting ? t("common.loading") : t("intake.actions.create")}</button>
           )}

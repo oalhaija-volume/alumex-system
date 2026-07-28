@@ -147,7 +147,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <header className="sticky top-0 z-20 max-w-[100vw] overflow-x-hidden border-b border-material-outline-variant bg-material-surface-container-low/95 px-4 py-3 shadow-[var(--md-elevation-1)] backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-40 max-w-[100vw] border-b border-material-outline-variant bg-material-surface-container-low/95 px-4 py-3 shadow-[var(--md-elevation-1)] backdrop-blur lg:hidden">
         <div className="flex items-center justify-between gap-3">
           <Link
             href="/dashboard"
@@ -177,7 +177,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           isRtl ? "lg:mr-72" : "lg:ml-72"
         }`}
       >
-        <div className="hidden max-w-full overflow-x-hidden border-b border-material-outline-variant bg-material-surface-container-low px-8 py-4 shadow-[var(--md-elevation-1)] lg:block">
+        <div className="relative z-40 hidden max-w-full border-b border-material-outline-variant bg-material-surface-container-low px-8 py-4 shadow-[var(--md-elevation-1)] lg:block">
           <div className={`flex min-w-0 items-center justify-between gap-4 ${isRtl ? "flex-row-reverse" : ""}`}>
             <div className="min-w-0">
               <p className="text-sm font-bold text-foreground">

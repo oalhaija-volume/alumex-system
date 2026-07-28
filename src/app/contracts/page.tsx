@@ -1,13 +1,5 @@
-import { AppDataProviders } from "@/components/AppDataProviders";
-import { AppShell } from "@/components/AppShell";
-import { ContractGenerator } from "@/components/contracts/ContractGenerator";
+import { redirect } from "next/navigation";
 
 export default function ContractsPage() {
-  return (
-    <AppDataProviders>
-      <AppShell>
-        <ContractGenerator />
-      </AppShell>
-    </AppDataProviders>
-  );
+  redirect("/quotations?view=contracts");
 }

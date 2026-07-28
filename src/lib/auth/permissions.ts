@@ -58,8 +58,6 @@ const routePermissions: Array<{
   { prefix: "/pricing", roles: ["Admin"] },
   { prefix: "/operation-manager", roles: ["Admin", "Operations Manager"] },
   { prefix: "/operations-manager", roles: ["Admin", "Operations Manager"] },
-  { prefix: "/project-manager", roles: ["Admin", "Project Manager"] },
-  { prefix: "/project-engineer", roles: ["Admin", "Project Engineer"] },
   {
     prefix: "/site-measurements",
     roles: [
@@ -71,9 +69,6 @@ const routePermissions: Array<{
       "Site Engineer",
     ],
   },
-  { prefix: "/quality-control", roles: ["Admin", "Quality Control"] },
-  { prefix: "/aluminum-factory", roles: ["Admin", "Factory", "Glass Department"] },
-  { prefix: "/delivery", roles: ["Admin", "Delivery Head", "Delivery Team"] },
   { prefix: "/installation", roles: ["Admin", "Installation Head", "Installation Team"] },
   { prefix: "/quotations", roles: salesWorkspaceRoles },
   { prefix: "/dashboard", roles: dashboardRoles },

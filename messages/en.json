@@ -7,7 +7,7 @@
   },
   "nav": {
     "dashboard": "Dashboard",
-    "intake": "New Intake",
+    "intake": "Sales Intake",
     "clients": "Clients",
     "projects": "Projects",
     "crm": "Follow-ups",
@@ -24,7 +24,7 @@
     "delivery": "Delivery",
     "installation": "Installation",
     "finance": "Finance",
-    "quotations": "Quotations",
+    "quotations": "Quotations & Contracts",
     "contracts": "Contracts",
     "hr": "HR",
     "settings": "Admin"
@@ -284,14 +284,36 @@
     }
   },
   "intake": {
-    "title": "New sales intake",
-    "description": "Capture the client, contacts, project details, and structure readiness in one controlled workflow.",
+    "title": "Start sales intake",
+    "description": "Use this for every new sales opportunity. Select or create the client, then register the project and its readiness in one workflow.",
     "steps": {
-      "client": "Client",
+      "client": "Customer",
       "contacts": "Contacts",
-      "project": "Project",
+      "project": "Opportunity",
       "readiness": "Readiness",
-      "review": "Review"
+      "review": "Confirm",
+      "measurements": "Measurements"
+    },
+    "progress": {
+      "title": "Your progress",
+      "step": "Step {current} of {total}",
+      "time": "About 1 minute",
+      "client": "Who is this opportunity for?",
+      "project": "Tell us about the opportunity",
+      "review": "Review and confirm details",
+      "measurements": "Fill structural opening sizes"
+    },
+    "guided": {
+      "customerQuestion": "Who is this opportunity for?",
+      "customerHelp": "Select an existing customer or create a new customer with the minimum details.",
+      "searchPlaceholder": "Search by customer name, phone, or email",
+      "createInstead": "Create a new customer instead",
+      "moreCustomer": "More customer details (optional)",
+      "opportunityQuestion": "Tell us about the opportunity",
+      "opportunityHelp": "Add the project essentials now. You can complete the remaining details later.",
+      "siteReady": "Is the site ready for measurement?",
+      "followUpHelp": "Indoor Sales will receive this project in the follow-up queue at the selected time.",
+      "moreOpportunity": "Add contacts, value, files, or notes (optional)"
     },
     "sections": {
       "client": "Client details",
@@ -331,6 +353,7 @@
       "contractor": "Contractor",
       "readiness": "Structure readiness",
       "expectedDate": "Expected ready date",
+      "followUpAt": "Indoor Sales follow-up date and time",
       "priority": "Priority",
       "estimatedValue": "Estimated value",
       "notes": "Internal notes"
@@ -376,8 +399,16 @@
       "useCurrentLocation": "Use current location",
       "locating": "Getting location...",
       "currentLocationError": "Location access failed. Allow location permission or add the pin on the map.",
+      "duplicateRadius": "Outdoor Sales duplicate protection checks this customer’s active projects within a fixed 200 m radius.",
       "gpsAddress": "GPS location:",
       "pin": "Saved map pin"
+    },
+    "companyLocation": {
+      "title": "Company location",
+      "description": "Required for companies: search for the company address or tap the map to save its exact pin. The project site is added separately.",
+      "mapAriaLabel": "Company map location picker",
+      "searchLabel": "Search for the company location",
+      "pin": "Company map pin"
     },
     "summary": {
       "title": "Intake summary",
@@ -396,17 +427,26 @@
       "saveDraft": "Save draft",
       "back": "Back",
       "continue": "Continue",
+      "continueOpportunity": "Continue to opportunity",
+      "reviewOpportunity": "Review opportunity",
+      "startMeasurements": "Continue to measurements",
+      "checkingLocation": "Checking location...",
+      "autosaved": "Autosaved",
+      "autosavedHelp": "Your progress is saved on this device.",
       "create": "Create intake"
     },
-    "addContact": "Add contact",
+    "addContact": "Add contact person",
     "removeContact": "Remove contact",
     "select": "Select",
     "errors": {
       "client": "Select an existing client or complete all required client fields.",
+      "companyLocation": "Add the company location pin on the map or use the current location.",
       "contact": "Each named contact needs a phone number or email.",
       "project": "Project name, branch, type, and address are required.",
       "location": "Outdoor Sales must add the project pin on the map or use the current location.",
-      "readiness": "Add the expected structure-ready date.",
+      "locationCheck": "Unable to check this project location. Try again.",
+      "siteDuplicate": "A project for this client already exists within 200 m. Open the existing project or contact your manager.",
+      "readiness": "Select when Indoor Sales should follow up.",
       "save": "Unable to save the sales intake.",
       "attachment": "The intake was created, but an attachment could not be uploaded."
     }
@@ -461,12 +501,13 @@
   "projects": {
     "eyebrow": "Projects",
     "title": "Projects",
-    "description": "Create, update, search, filter, and review project records.",
+    "description": "Search, review, and update existing projects. To register a new sales opportunity, start Sales Intake.",
     "searchLabel": "Search projects",
     "searchPlaceholder": "Search by number, name, client, type, engineer, address, or status",
     "filterByStatus": "Filter by status",
     "createProject": "Create project",
     "newProject": "New Project",
+    "startIntake": "Start Sales Intake",
     "editProject": "Edit project",
     "deleteProject": "Delete Project",
     "deleteSelectedProjects": "Delete selected projects",
@@ -581,6 +622,10 @@
   "quotations": {
     "eyebrow": "Pricing",
     "title": "Quotations",
+    "workspaceTabs": "Quotation and contract workspace",
+    "tabQuotations": "Quotations",
+    "tabContracts": "Contracts",
+    "createContract": "Create contract",
     "description": "Generate quotation previews from project structural openings with unit prices and discounts.",
     "builder": "Quotation Builder",
     "builderDescription": "Generate quotation totals from project structural openings, unit prices, and discounts.",
@@ -866,14 +911,14 @@
     "saveOpeningError": "Unable to save opening.",
     "deleteOpeningError": "Unable to delete opening.",
     "addOpeningBeforeSaving": "Add at least one structural opening before saving.",
-    "completeRequiredDetails": "Complete the required opening details before saving.",
+    "completeRequiredDetails": "Add the floor, room, width, height, and opening type before saving.",
     "completeStep": "Complete this step before continuing.",
     "openingUpdated": "Opening updated.",
     "openingSaved": "Opening saved.",
     "openingsSaved": "{count} openings saved.",
     "openingRemoved": "Opening removed.",
     "openings": "Openings",
-    "billableArea": "Billable area",
+    "billableArea": "Measured area",
     "starting": "Starting...",
     "startSiteMeasurement": "Start site measurement",
     "completing": "Completing...",
@@ -882,6 +927,7 @@
     "editOpening": "Edit opening",
     "newOpenings": "New openings",
     "structuralOpenings": "Structural openings",
+    "structuralOnlyHelp": "Record only the opening location, size, and type. Glass, color, and product configuration are completed later during quotation.",
     "receivedBySiteEngineer": "Project received by site engineer.",
     "startToUnlock": "Start the site measurement to unlock structural opening entry.",
     "selectRoom": "Select room",
@@ -900,7 +946,7 @@
     "openingProgress": "Opening {index} of {total}",
     "newStructuralOpening": "New structural opening",
     "openingDetails": "Opening details",
-    "dimensionSummary": "{width} x {height} cm, Qty {quantity}",
+    "dimensionSummary": "{width} × {height} cm",
     "specificationsIncomplete": "Specifications not complete",
     "next": "Next",
     "saveStructuralOpenings": "Save structural openings",

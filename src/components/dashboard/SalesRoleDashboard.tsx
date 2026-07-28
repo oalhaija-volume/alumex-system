@@ -339,11 +339,7 @@ function MeasurementList({
             </div>
             <div className="flex flex-wrap gap-2">
               <Link
-                href={
-                  outdoorActions
-                    ? `/site-measurements/${measurement.project_id}?requestId=${measurement.id}`
-                    : `/site-measurements?requestId=${measurement.id}`
-                }
+                href={`/site-measurements/${measurement.project_id}?requestId=${measurement.id}`}
                 className="material-button-filled min-h-11"
               >
                 {measurement.status === "draft_saved"
@@ -694,11 +690,6 @@ export function SalesRoleDashboard() {
           title={t("dashboard.role.outdoor.measurementVisits")}
           description={t("dashboard.role.outdoor.measurementVisitsDetail")}
           count={outdoorMeasurements.length}
-          action={
-            <Link href="/site-measurements" className="material-button-tonal">
-              {t("dashboard.role.openMeasurements")}
-            </Link>
-          }
         >
           <MeasurementList measurements={outdoorMeasurements} outdoorActions />
         </DashboardSection>

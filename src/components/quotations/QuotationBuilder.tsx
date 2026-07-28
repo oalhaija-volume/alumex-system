@@ -995,6 +995,17 @@ export function QuotationBuilder() {
                         Approve version
                       </button>
                     ) : null}
+                    {quotation.versionStatus === "approved" &&
+                    quotation.versionId ? (
+                      <Link
+                        href={`/quotations?view=contracts&quotationVersionId=${encodeURIComponent(
+                          quotation.versionId,
+                        )}`}
+                        className="flex h-10 items-center rounded-md bg-primary px-3 text-sm font-bold text-white"
+                      >
+                        {t("quotations.createContract")}
+                      </Link>
+                    ) : null}
                   {canDeleteQuotations ? (
                     <button
                       type="button"
@@ -1028,7 +1039,7 @@ export function QuotationBuilder() {
             <div className="flex flex-wrap gap-2">
               {!hasClients ? (
                 <Link
-                  href="/clients"
+                  href="/intake"
                   className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-bold text-white"
                 >
                   {t("clients.newClient")}
@@ -1036,10 +1047,10 @@ export function QuotationBuilder() {
               ) : null}
               {!hasProjects ? (
                 <Link
-                  href="/projects"
+                  href="/intake"
                   className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-bold text-white"
                 >
-                  {t("projects.newProject")}
+                  {t("projects.startIntake")}
                 </Link>
               ) : null}
               {hasProjects && !hasProjectsWithOpenings ? (

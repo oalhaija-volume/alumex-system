@@ -1,21 +1,21 @@
 export const activeNavigationHrefs = [
   "/dashboard",
   "/intake",
-  "/clients",
   "/projects",
   "/crm",
-  "/site-measurements",
   "/quotations",
   "/settings",
   "/hr",
   "/commercial",
-  "/contracts",
   "/finance",
   "/operations-manager",
   "/costing",
 ] as const;
 
 const supportingRoutePrefixes = [
+  "/clients",
+  "/contracts",
+  "/site-measurements",
   "/operation-manager",
   "/pricing",
   "/workflow",

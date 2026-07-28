@@ -135,7 +135,6 @@ export function ProjectsModule() {
     projects,
     error: projectsLoadError,
     warning: projectsLoadWarning,
-    createProject,
     updateProject,
     deleteProjects,
   } = useProjects();
@@ -161,11 +160,6 @@ export function ProjectsModule() {
     [projects, search, statusFilter],
   );
 
-  function openCreateForm() {
-    setEditingProject(undefined);
-    setIsFormOpen(true);
-  }
-
   function openEditForm(project: Project) {
     setEditingProject(project);
     setIsFormOpen(true);
@@ -177,15 +171,14 @@ export function ProjectsModule() {
   }
 
   async function handleSubmit(values: ProjectFormValues) {
+    if (!editingProject) {
+      return;
+    }
+
     setError("");
 
     try {
-      if (editingProject) {
-        await updateProject(editingProject.id, values);
-      } else {
-        await createProject(values);
-      }
-
+      await updateProject(editingProject.id, values);
       closeForm();
     } catch (saveError) {
       setError(
@@ -293,13 +286,12 @@ export function ProjectsModule() {
             ))}
           </select>
         </label>
-        <button
-          type="button"
-          onClick={openCreateForm}
-          className="h-11 rounded-md bg-[var(--alumex-blue)] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[var(--alumex-blue-dark)]"
+        <Link
+          href="/intake"
+          className="flex h-11 items-center justify-center rounded-md bg-[var(--alumex-blue)] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[var(--alumex-blue-dark)]"
         >
-          {t("projects.newProject")}
-        </button>
+          {t("projects.startIntake")}
+        </Link>
       </div>
 
       {error ? (
@@ -341,13 +333,7 @@ export function ProjectsModule() {
       ) : null}
 
       {isFormOpen ? (
-        <SectionCard
-          title={
-            editingProject
-              ? t("projects.editProject")
-              : t("projects.newProject")
-          }
-        >
+        <SectionCard title={t("projects.editProject")}>
           <ProjectForm
             project={editingProject}
             onSubmit={handleSubmit}

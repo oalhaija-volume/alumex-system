@@ -47,8 +47,10 @@ function numberValue(value: number | string | null | undefined) {
 }
 
 function mapLine(item: QuotationItemRow): QuotationLine {
+  const lineType = item.line_type ?? "base";
+
   return {
-    id: item.opening_id ?? item.id,
+    id: lineType === "base" ? item.opening_id ?? item.id : item.id,
     floor: item.floor ?? "",
     room: item.room ?? "",
     openingCode: item.opening_code,
@@ -62,10 +64,14 @@ function mapLine(item: QuotationItemRow): QuotationLine {
     notes: item.notes ?? "",
     unitPrice: numberValue(item.unit_price),
     discountPercent: item.is_discountable === false ? 0 : numberValue(item.discount_percent),
-    lineType: item.line_type ?? "base",
+    lineType,
     isDiscountable:
       item.is_discountable ??
-      !["addon", "accessory"].includes(item.line_type ?? "base"),
+      !["addon", "accessory"].includes(lineType),
+    parentOpeningId:
+      lineType === "addon" || lineType === "accessory"
+        ? item.opening_id ?? undefined
+        : undefined,
   };
 }
 
@@ -145,7 +151,16 @@ export async function loadSupabaseQuotations(
         approvedAt: quotation.approved_at ?? undefined,
         quotationNumber: quotation.quotation_number,
         project,
-        lines: itemsByQuotation.get(quotation.id) ?? [],
+        lines: (itemsByQuotation.get(quotation.id) ?? []).map((line) => {
+          if ((line.lineType ?? "base") !== "base") return line;
+
+          const opening = project.structuralOpenings.find(
+            (item) => item.id === line.id,
+          );
+          return opening?.openingType
+            ? { ...line, openingType: opening.openingType }
+            : line;
+        }),
         discountPercent: numberValue(quotation.quotation_discount_percent),
         notes: quotation.notes ?? "",
         preparedBy: quotation.prepared_by_text ?? "",

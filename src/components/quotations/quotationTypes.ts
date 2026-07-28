@@ -6,6 +6,7 @@ export type QuotationLine = StructuralOpening & {
   discountPercent: number;
   lineType?: "base" | "service" | "addon" | "accessory";
   isDiscountable?: boolean;
+  parentOpeningId?: string;
 };
 
 export type QuotationDraft = {

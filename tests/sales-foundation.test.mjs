@@ -40,6 +40,11 @@ import {
   isOutdoorSiteDuplicateError,
 } from "../src/lib/friendlyErrors.ts";
 import { intakeMovesDirectlyToMeasurements } from "../src/lib/intake/nextStage.ts";
+import {
+  canAttachAddonToOpening,
+  openingAddonProducts,
+  projectServiceProducts,
+} from "../src/lib/quotations/openingAddons.ts";
 
 test("every configured project transition points to a known status", () => {
   const knownStatuses = new Set(projectSalesStatuses);
@@ -256,6 +261,70 @@ test("quotation versions preserve approval as the contract boundary", () => {
   assert.equal(canRunQuotationVersionAction("approved", "send"), false);
   assert.equal(canCreateContractFromQuotationVersion("sent"), false);
   assert.equal(canCreateContractFromQuotationVersion("approved"), true);
+});
+
+test("quotation add-ons attach only to eligible aluminum openings", () => {
+  assert.equal(
+    canAttachAddonToOpening({
+      openingCode: "W-01",
+      openingType: "Window",
+      lineType: "base",
+    }),
+    true,
+  );
+  assert.equal(
+    canAttachAddonToOpening({
+      openingCode: "CW-01",
+      openingType: "Curtain Wall",
+      lineType: "base",
+    }),
+    true,
+  );
+  assert.equal(
+    canAttachAddonToOpening({
+      openingCode: "SK-01",
+      openingType: "Skylight",
+      lineType: "base",
+    }),
+    false,
+  );
+  assert.equal(
+    canAttachAddonToOpening({
+      openingCode: "SRV",
+      openingType: "Door",
+      lineType: "service",
+    }),
+    false,
+  );
+});
+
+test("opening add-on catalog excludes migrated items from project services", () => {
+  const products = [
+    {
+      product_name: "Cladding",
+      category: "service",
+      is_active: true,
+    },
+    {
+      product_name: "A Swing Door",
+      category: "service",
+      is_active: true,
+    },
+    {
+      product_name: "Georgian Bars",
+      category: "addon",
+      is_active: true,
+    },
+  ];
+
+  assert.deepEqual(
+    projectServiceProducts(products).map((item) => item.product_name),
+    ["Cladding"],
+  );
+  assert.deepEqual(
+    openingAddonProducts(products).map((item) => item.product_name),
+    ["A Swing Door", "Georgian Bars"],
+  );
 });
 
 test("sales roles receive the correct owner-first dashboard", () => {

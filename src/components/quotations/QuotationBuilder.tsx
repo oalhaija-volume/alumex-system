@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useClients } from "@/components/clients/ClientsProvider";
@@ -39,6 +46,11 @@ import {
   discountLimitFromPolicies,
   loadDiscountPolicies,
 } from "@/lib/pricing/discountPolicy";
+import {
+  canAttachAddonToOpening,
+  openingAddonProducts,
+  projectServiceProducts,
+} from "@/lib/quotations/openingAddons";
 
 function createQuotationLines(
   projectId: string,
@@ -190,6 +202,7 @@ export function QuotationBuilder() {
   const { clients } = useClients();
   const { projects } = useProjects();
   const builderFormRef = useRef<HTMLDivElement | null>(null);
+  const generatedLineIdRef = useRef(0);
   const requestedProjectId = searchParams.get("projectId") ?? "";
   const initialProjectId =
     projects.find((project) => project.id === requestedProjectId)?.id ??
@@ -217,6 +230,7 @@ export function QuotationBuilder() {
   const [serviceSpecification, setServiceSpecification] = useState("");
   const [serviceQuantity, setServiceQuantity] = useState(1);
   const [selectedAddonName, setSelectedAddonName] = useState("");
+  const [selectedAddonVariantName, setSelectedAddonVariantName] = useState("");
   const [addonTargetLineId, setAddonTargetLineId] = useState("");
   const [addonSpecification, setAddonSpecification] = useState("");
   const [addonQuantity, setAddonQuantity] = useState(1);
@@ -252,7 +266,7 @@ export function QuotationBuilder() {
     [lines, discountPercent],
   );
   const servicePrices = useMemo(
-    () => productsForCatalog(productPrices, "service", true),
+    () => projectServiceProducts(productPrices),
     [productPrices],
   );
   const systemPrices = useMemo(
@@ -268,7 +282,7 @@ export function QuotationBuilder() {
     [productPrices],
   );
   const addonPrices = useMemo(
-    () => productsForCatalog(productPrices, "addon", true),
+    () => openingAddonProducts(productPrices),
     [productPrices],
   );
   const selectedService = servicePrices.find(
@@ -283,6 +297,16 @@ export function QuotationBuilder() {
   const selectedAddon = addonPrices.find(
     (addon) => addon.product_name === selectedAddonName,
   );
+  const availableAddonVariants =
+    selectedAddonName === "Roller Shutters"
+      ? serviceVariants.filter((item) =>
+          item.product_name.startsWith("Roller Shutter -"),
+        )
+      : selectedAddonName === "Photocell Doors"
+        ? serviceVariants.filter((item) =>
+            item.product_name.startsWith("Photocell Door -"),
+          )
+        : [];
   const requiresAluminumSystem = [
     "Windows & Doors",
     "Curtain Wall",
@@ -455,17 +479,18 @@ export function QuotationBuilder() {
     );
   }
 
-  function addScopeLine(lineType: "addon" | "accessory") {
-    const id =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${lineType}-${Date.now()}`;
+  function addScopeLine(
+    lineType: "addon" | "accessory",
+    targetLine: QuotationLine,
+  ) {
+    generatedLineIdRef.current += 1;
+    const id = `${lineType}-local-${generatedLineIdRef.current}`;
 
     setLines((currentLines) => [
       ...currentLines,
       {
         id,
-        floor: "Project description",
+        floor: targetLine.floor,
         room: lineType === "addon" ? "Add-on" : "Accessory",
         openingCode: lineType === "addon" ? "ADD-ON" : "ACC",
         width: 100,
@@ -480,6 +505,7 @@ export function QuotationBuilder() {
         discountPercent: 0,
         lineType,
         isDiscountable: false,
+        parentOpeningId: targetLine.id,
       },
     ]);
   }
@@ -628,41 +654,49 @@ export function QuotationBuilder() {
     }
     const targetLine = lines.find((line) => line.id === addonTargetLineId);
 
-    const id =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `addon-${Date.now()}`;
+    if (!targetLine || !canAttachAddonToOpening(targetLine)) {
+      setError("Select a window, door, or curtain wall opening.");
+      return;
+    }
+    const addonVariant = availableAddonVariants.find(
+      (product) => product.product_name === selectedAddonVariantName,
+    );
+
+    generatedLineIdRef.current += 1;
+    const id = `addon-local-${generatedLineIdRef.current}`;
 
     setLines((currentLines) => [
       ...currentLines,
       {
         id,
-        floor: t("quotations.projectScope"),
+        floor: targetLine.floor,
         room: "Add-on",
-        openingCode: "ADD-ON",
+        openingCode: `${targetLine.openingCode}-ADD`,
         width: 100,
         height: Math.max(addonQuantity, 0.01) * 100,
         solidPanelHeight: 0,
         quantity: 1,
-        productSystem: addon.product_name,
+        productSystem: [addon.product_name, addonVariant?.product_name ?? ""]
+          .filter(Boolean)
+          .join(" — "),
         glassType: "",
         aluminumColor: "",
         notes: [
           `Pricing unit: ${addon.unit}`,
-          targetLine
-            ? `Applied to: ${targetLine.openingCode} ${targetLine.productSystem}`
-            : "",
+          `Applied to: ${targetLine.openingCode}`,
           addonSpecification.trim(),
         ]
           .filter(Boolean)
           .join("; "),
-        unitPrice: addon.unit_price,
+        unitPrice: addon.unit_price + (addonVariant?.unit_price ?? 0),
         discountPercent: 0,
         lineType: "addon",
         isDiscountable: false,
+        parentOpeningId: targetLine.id,
       },
     ]);
     setSelectedAddonName("");
+    setSelectedAddonVariantName("");
     setAddonTargetLineId("");
     setAddonSpecification("");
     setAddonQuantity(1);
@@ -799,7 +833,10 @@ export function QuotationBuilder() {
         prepared_by_text: preparedBy || null,
         client_representative: clientRepresentative || null,
         items: lines.map((line) => ({
-          opening_id: (line.lineType ?? "base") === "base" ? line.id : "",
+          opening_id:
+            (line.lineType ?? "base") === "base"
+              ? line.id
+              : line.parentOpeningId ?? "",
           opening_code: line.openingCode,
           floor: line.floor || null,
           room: line.room || null,
@@ -882,6 +919,140 @@ export function QuotationBuilder() {
     } finally {
       setIsDeleting(false);
     }
+  }
+
+  function openAddonEditor(line: QuotationLine) {
+    setAddonTargetLineId(line.id);
+    setSelectedAddonName("");
+    setSelectedAddonVariantName("");
+    setAddonSpecification("");
+    setAddonQuantity(1);
+    setError("");
+  }
+
+  function renderOpeningAddonEditor(targetLine: QuotationLine) {
+    return (
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-bold text-[var(--alumex-blue)]">
+              {t("quotations.addAddonToOpening", {
+                code: targetLine.openingCode,
+              })}
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              {t("quotations.openingAddonDescription")}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAddonTargetLineId("")}
+            className="h-9 rounded-md border border-blue-200 bg-white px-3 text-xs font-bold text-blue-800"
+          >
+            {t("common.cancel")}
+          </button>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <select
+            value={selectedAddonName}
+            onChange={(event) => {
+              setSelectedAddonName(event.target.value);
+              setSelectedAddonVariantName("");
+            }}
+            aria-label={t("quotations.selectAddon")}
+            className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+          >
+            <option value="">{t("quotations.selectAddon")}</option>
+            {addonPrices.map((addon) => (
+              <option
+                key={addon.id ?? addon.product_name}
+                value={addon.product_name}
+              >
+                {addon.product_name} — {formatCurrency(addon.unit_price)} /{" "}
+                {addon.unit}
+              </option>
+            ))}
+          </select>
+          {availableAddonVariants.length > 0 ? (
+            <select
+              value={selectedAddonVariantName}
+              onChange={(event) =>
+                setSelectedAddonVariantName(event.target.value)
+              }
+              aria-label={t("quotations.selectAddonVariant")}
+              className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+            >
+              <option value="">{t("quotations.selectAddonVariant")}</option>
+              {availableAddonVariants.map((variant) => (
+                <option
+                  key={variant.id ?? variant.product_name}
+                  value={variant.product_name}
+                >
+                  {variant.product_name} —{" "}
+                  {formatCurrency(variant.unit_price)} / {variant.unit}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={addonQuantity}
+            onChange={(event) =>
+              setAddonQuantity(Math.max(Number(event.target.value) || 1, 0.01))
+            }
+            aria-label={
+              selectedAddon?.unit === "meter"
+                ? t("quotations.addonLength")
+                : t("quotations.addonQuantity")
+            }
+            placeholder={
+              selectedAddon?.unit === "meter"
+                ? t("quotations.addonLength")
+                : t("quotations.addonQuantity")
+            }
+            className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+          />
+          <input
+            value={addonSpecification}
+            onChange={(event) => setAddonSpecification(event.target.value)}
+            placeholder={t("quotations.addonSpecification")}
+            className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+          />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={addCatalogAddon}
+            disabled={!selectedAddonName}
+            className="h-10 rounded-md bg-primary px-3 text-sm font-bold text-white disabled:opacity-50"
+          >
+            {t("quotations.addSelectedAddon")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              addScopeLine("addon", targetLine);
+              setAddonTargetLineId("");
+            }}
+            className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-bold text-[var(--alumex-blue)]"
+          >
+            {t("quotations.addCustomAddon")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              addScopeLine("accessory", targetLine);
+              setAddonTargetLineId("");
+            }}
+            className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-bold text-[var(--alumex-blue)]"
+          >
+            {t("quotations.addAccessory")}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -1322,92 +1493,9 @@ export function QuotationBuilder() {
             ) : null}
           </div>
 
-          <div className="border-t border-blue-200 pt-4">
-            <p className="text-sm font-bold text-[var(--alumex-blue)]">Catalog add-ons</p>
-            <p className="mt-1 text-xs text-slate-500">
-              Standard glass is included in the window or door price. Select upgraded glass
-              and other features here to add their configured price to the applicable item.
-            </p>
-            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              <select
-                value={selectedAddonName}
-                onChange={(event) => setSelectedAddonName(event.target.value)}
-                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
-              >
-                <option value="">Select add-on</option>
-                {addonPrices.map((addon) => (
-                  <option key={addon.id ?? addon.product_name} value={addon.product_name}>
-                    {addon.product_name} — {formatCurrency(addon.unit_price)} / {addon.unit}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={addonTargetLineId}
-                onChange={(event) => setAddonTargetLineId(event.target.value)}
-                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
-              >
-                <option value="">Apply to whole project</option>
-                {lines
-                  .filter((line) =>
-                    ["base", "service"].includes(line.lineType ?? "base"),
-                  )
-                  .map((line) => (
-                    <option key={line.id} value={line.id}>
-                      {line.openingCode} — {line.productSystem}
-                    </option>
-                  ))}
-              </select>
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={addonQuantity}
-                onChange={(event) => setAddonQuantity(Math.max(Number(event.target.value) || 1, 0.01))}
-                aria-label={
-                  selectedAddon?.unit === "meter"
-                    ? "Add-on length in meters"
-                    : "Add-on billable quantity"
-                }
-                placeholder={
-                  selectedAddon?.unit === "meter"
-                    ? "Length (m)"
-                    : "Billable quantity"
-                }
-                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
-              />
-              <input
-                value={addonSpecification}
-                onChange={(event) => setAddonSpecification(event.target.value)}
-                placeholder="Optional add-on specification"
-                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
-              />
-              <button
-                type="button"
-                onClick={addCatalogAddon}
-                disabled={!selectedAddonName}
-                className="h-10 rounded-md bg-primary px-3 text-sm font-bold text-white disabled:opacity-50"
-              >
-                Add selected add-on
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2 border-t border-blue-200 pt-4">
-            <button
-              type="button"
-              onClick={() => addScopeLine("addon")}
-              className="h-10 rounded-md bg-primary px-3 text-sm font-bold text-white"
-            >
-              {t("quotations.addCustomAddon")}
-            </button>
-            <button
-              type="button"
-              onClick={() => addScopeLine("accessory")}
-              className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-bold text-[var(--alumex-blue)]"
-            >
-              {t("quotations.addAccessory")}
-            </button>
-          </div>
+          <p className="border-t border-blue-200 pt-4 text-sm font-semibold text-blue-800">
+            {t("quotations.openingAddonsHint")}
+          </p>
         </div>
 
         <div className="hidden overflow-hidden rounded-lg border border-slate-200 xl:block">
@@ -1439,9 +1527,14 @@ export function QuotationBuilder() {
                   const lineTotal = calculateLineTotal(line);
                   const isBaseLine = (line.lineType ?? "base") === "base";
                   const pricingUnit = pricingUnitForLine(line);
+                  const acceptsAddons = canAttachAddonToOpening(line);
+                  const attachedAddonCount = lines.filter(
+                    (item) => item.parentOpeningId === line.id,
+                  ).length;
 
                   return (
-                    <tr key={line.id}>
+                    <Fragment key={line.id}>
+                    <tr>
                       <td className="px-3 py-4 font-bold text-slate-950">
                         {isBaseLine ? (
                           line.openingCode
@@ -1559,7 +1652,24 @@ export function QuotationBuilder() {
                         {formatCurrency(lineTotal.net)}
                       </td>
                       <td className="px-3 py-4">
-                        {!isBaseLine ? (
+                        {acceptsAddons ? (
+                          <div className="flex flex-col gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openAddonEditor(line)}
+                              className="h-9 rounded-md border border-blue-200 bg-blue-50 px-2 text-xs font-bold text-[var(--alumex-blue)]"
+                            >
+                              {t("quotations.addAddon")}
+                            </button>
+                            {attachedAddonCount > 0 ? (
+                              <span className="text-center text-[11px] font-semibold text-slate-500">
+                                {t("quotations.attachedAddonCount", {
+                                  count: attachedAddonCount,
+                                })}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : !isBaseLine ? (
                           <button
                             type="button"
                             onClick={() => removeScopeLine(line.id)}
@@ -1570,6 +1680,14 @@ export function QuotationBuilder() {
                         ) : null}
                       </td>
                     </tr>
+                    {acceptsAddons && addonTargetLineId === line.id ? (
+                      <tr>
+                        <td colSpan={14} className="bg-slate-50 p-3">
+                          {renderOpeningAddonEditor(line)}
+                        </td>
+                      </tr>
+                    ) : null}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -1582,6 +1700,10 @@ export function QuotationBuilder() {
             const lineTotal = calculateLineTotal(line);
             const isBaseLine = (line.lineType ?? "base") === "base";
             const pricingUnit = pricingUnitForLine(line);
+            const acceptsAddons = canAttachAddonToOpening(line);
+            const attachedAddonCount = lines.filter(
+              (item) => item.parentOpeningId === line.id,
+            ).length;
 
             return (
               <article
@@ -1704,6 +1826,27 @@ export function QuotationBuilder() {
                       value: line.solidPanelHeight ?? 0,
                     })}
                   </p>
+                ) : null}
+                {acceptsAddons ? (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => openAddonEditor(line)}
+                      className="h-10 w-full rounded-md border border-blue-200 bg-blue-50 text-sm font-bold text-[var(--alumex-blue)]"
+                    >
+                      {t("quotations.addAddon")}
+                      {attachedAddonCount > 0
+                        ? ` · ${t("quotations.attachedAddonCount", {
+                            count: attachedAddonCount,
+                          })}`
+                        : ""}
+                    </button>
+                    {addonTargetLineId === line.id ? (
+                      <div className="mt-3">
+                        {renderOpeningAddonEditor(line)}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
                 {!isBaseLine ? (
                   <button

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 type Person = {
   id: string;
@@ -90,28 +91,39 @@ const activityMethods = [
   "other",
 ] as const;
 
-function label(value: string) {
+function fallbackLabel(value: string) {
   return value
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }
 
-function personName(person: Person | null) {
-  return person?.full_name?.trim() || person?.email || "Unassigned";
+function camelCaseLabel(value: string) {
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((part, index) =>
+      index === 0
+        ? part
+        : part.charAt(0).toUpperCase() + part.slice(1),
+    )
+    .join("");
 }
 
-function notificationTitle(notification: Notification) {
+function notificationTitle(
+  notification: Notification,
+  t: (key: string) => string,
+) {
   if (notification.title_key.endsWith("followUpAssigned")) {
-    return "Follow-up assigned";
+    return t("crm.notifications.followUpAssigned");
   }
   if (notification.title_key.endsWith("followUpRescheduled")) {
-    return "Follow-up rescheduled";
+    return t("crm.notifications.followUpRescheduled");
   }
   if (notification.title_key.endsWith("followUpOverdue")) {
-    return "Follow-up overdue";
+    return t("crm.notifications.followUpOverdue");
   }
-  return "Sales notification";
+  return t("crm.notifications.salesNotification");
 }
 
 function startOfToday() {
@@ -137,11 +149,17 @@ function taskMatchesFilter(task: CrmTask, filter: TaskFilter) {
   return dueAt > endOfToday();
 }
 
-function dueLabel(task: CrmTask) {
+function dueLabel(
+  task: CrmTask,
+  t: (key: string, replacements?: Record<string, string | number>) => string,
+  formatDateTime: (value: Date | string) => string,
+) {
   const dueAt = new Date(task.due_at);
-  if (task.status === "completed") return "Completed";
-  if (dueAt < new Date()) return `Overdue · ${dueAt.toLocaleString()}`;
-  return dueAt.toLocaleString();
+  if (task.status === "completed") return t("crm.labels.completed");
+  if (dueAt < new Date()) {
+    return t("crm.overdueAt", { date: formatDateTime(dueAt) });
+  }
+  return formatDateTime(dueAt);
 }
 
 export function CrmWorkspace({
@@ -151,6 +169,7 @@ export function CrmWorkspace({
   projectId?: string;
   embedded?: boolean;
 }) {
+  const { locale, t, term } = useI18n();
   const [payload, setPayload] = useState<CrmPayload | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [filter, setFilter] = useState<TaskFilter>("today");
@@ -171,6 +190,35 @@ export function CrmWorkspace({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const dateTimeFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale === "ar" ? "ar-IQ" : "en-US", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }),
+    [locale],
+  );
+  const formatDateTime = useCallback(
+    (value: Date | string) => dateTimeFormatter.format(new Date(value)),
+    [dateTimeFormatter],
+  );
+  const displayLabel = useCallback(
+    (value: string) => {
+      const key = `crm.labels.${camelCaseLabel(value)}`;
+      const translated = t(key);
+      if (translated !== key) return translated;
+      const translatedTerm = term(value);
+      return translatedTerm !== value ? translatedTerm : fallbackLabel(value);
+    },
+    [t, term],
+  );
+  const displayPersonName = useCallback(
+    (person: Person | null) =>
+      person?.full_name?.trim() ||
+      person?.email ||
+      t("crm.labels.unassigned"),
+    [t],
+  );
 
   const loadCrm = useCallback(async () => {
     const query = projectId
@@ -181,7 +229,11 @@ export function CrmWorkspace({
       | CrmPayload
       | null;
     if (!response.ok || !body) {
-      throw new Error(body?.error ?? "Unable to load sales follow-ups.");
+      throw new Error(
+        locale === "ar"
+          ? t("crm.errors.load")
+          : body?.error ?? t("crm.errors.load"),
+      );
     }
     setPayload(body);
     const requestedTaskId =
@@ -196,7 +248,7 @@ export function CrmWorkspace({
         ? current
         : body.tasks[0]?.id ?? "";
     });
-  }, [projectId]);
+  }, [locale, projectId, t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -204,12 +256,12 @@ export function CrmWorkspace({
         setError(
           loadError instanceof Error
             ? loadError.message
-            : "Unable to load sales follow-ups.",
+            : t("crm.errors.load"),
         ),
       );
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [loadCrm]);
+  }, [loadCrm, t]);
 
   const counts = useMemo(() => {
     if (!payload) return { today: 0, overdue: 0, upcoming: 0, completed: 0 };
@@ -262,7 +314,7 @@ export function CrmWorkspace({
 
   async function createTask() {
     if (!newProjectId || !newDueAt) {
-      setError("Select a project and due date.");
+      setError(t("crm.errors.projectAndDueRequired"));
       return;
     }
     const saved = await submit({
@@ -275,13 +327,13 @@ export function CrmWorkspace({
     if (!saved) return;
     setShowNewTask(false);
     setNewDueAt("");
-    setMessage("Follow-up task created.");
+    setMessage(t("crm.messages.taskCreated"));
   }
 
   async function recordActivity(completeTask = false) {
     if (!selected) return;
     if (!clientResponse.trim() && !internalNotes.trim() && !outcome.trim()) {
-      setError("Add a response, outcome, or internal note.");
+      setError(t("crm.errors.activityRequired"));
       return;
     }
     const saved = await submit({
@@ -303,10 +355,10 @@ export function CrmWorkspace({
     setNextDueAt("");
     setMessage(
       nextDueAt
-        ? "Activity saved and the next follow-up was scheduled."
+        ? t("crm.messages.activityScheduled")
         : completeTask
-          ? "Activity saved and task completed."
-          : "Activity saved.",
+          ? t("crm.messages.activityCompleted")
+          : t("crm.messages.activitySaved"),
     );
   }
 
@@ -319,7 +371,7 @@ export function CrmWorkspace({
     if (!saved) return;
     setShowTeam(false);
     setMessage(
-      "Follow-up assigned to you. The original project owner is unchanged.",
+      t("crm.messages.taskClaimed"),
     );
   }
 
@@ -337,7 +389,11 @@ export function CrmWorkspace({
         | { error?: string }
         | null;
       if (!response.ok) {
-        throw new Error(result?.error ?? "Unable to save the CRM update.");
+        throw new Error(
+          locale === "ar"
+            ? t("crm.errors.save")
+            : result?.error ?? t("crm.errors.save"),
+        );
       }
       await loadCrm();
       return true;
@@ -345,7 +401,7 @@ export function CrmWorkspace({
       setError(
         saveError instanceof Error
           ? saveError.message
-          : "Unable to save the CRM update.",
+          : t("crm.errors.save"),
       );
       return false;
     } finally {
@@ -366,14 +422,18 @@ export function CrmWorkspace({
         | { error?: string }
         | null;
       if (!response.ok) {
-        throw new Error(body?.error ?? "Unable to update notifications.");
+        throw new Error(
+          locale === "ar"
+            ? t("crm.errors.notifications")
+            : body?.error ?? t("crm.errors.notifications"),
+        );
       }
       await loadCrm();
     } catch (saveError) {
       setError(
         saveError instanceof Error
           ? saveError.message
-          : "Unable to update notifications.",
+          : t("crm.errors.notifications"),
       );
     } finally {
       setIsSaving(false);
@@ -385,7 +445,7 @@ export function CrmWorkspace({
       <div className="material-alert-error">{error}</div>
     ) : (
       <div className="material-card p-5 text-sm font-bold">
-        Loading sales follow-ups…
+        {t("crm.loading")}
       </div>
     );
   }
@@ -403,11 +463,10 @@ export function CrmWorkspace({
         <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
-              Sales follow-ups
+              {t("crm.title")}
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-muted">
-              Prioritize your client actions, record every contact, and keep the
-              next commitment visible.
+              {t("crm.description")}
             </p>
           </div>
           <button
@@ -415,17 +474,17 @@ export function CrmWorkspace({
             onClick={() => setShowNewTask((current) => !current)}
             className="material-button-filled min-h-12"
           >
-            {showNewTask ? "Close" : "New follow-up"}
+            {showNewTask ? t("common.close") : t("crm.newFollowUp")}
           </button>
         </header>
       ) : (
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold text-foreground">
-              Follow-up history
+              {t("crm.history.title")}
             </h2>
             <p className="mt-1 text-sm text-muted">
-              Chronological client contact and next actions.
+              {t("crm.history.description")}
             </p>
           </div>
           <button
@@ -433,7 +492,7 @@ export function CrmWorkspace({
             onClick={() => setShowNewTask((current) => !current)}
             className="material-button-tonal min-h-11"
           >
-            New follow-up
+            {t("crm.newFollowUp")}
           </button>
         </div>
       )}
@@ -445,14 +504,14 @@ export function CrmWorkspace({
         <section className="material-card p-4">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <label className="block xl:col-span-2">
-              <span className="material-label">Project *</span>
+              <span className="material-label">{t("crm.fields.project")} *</span>
               <select
                 value={newProjectId}
                 onChange={(event) => setNewProjectId(event.target.value)}
                 disabled={Boolean(projectId)}
                 className="material-field mt-2 min-h-12"
               >
-                <option value="">Select project</option>
+                <option value="">{t("crm.fields.selectProject")}</option>
                 {payload.availableProjects.map((project) => (
                   <option key={project.id} value={project.id}>
                     {project.project_number} · {project.project_name}
@@ -461,7 +520,7 @@ export function CrmWorkspace({
               </select>
             </label>
             <label className="block">
-              <span className="material-label">Type</span>
+              <span className="material-label">{t("crm.fields.type")}</span>
               <select
                 value={newTaskType}
                 onChange={(event) =>
@@ -472,13 +531,13 @@ export function CrmWorkspace({
                 className="material-field mt-2 min-h-12"
               >
                 <option value="structure_readiness">
-                  Structure readiness
+                  {t("crm.labels.structureReadiness")}
                 </option>
-                <option value="quotation">Quotation</option>
+                <option value="quotation">{t("crm.labels.quotation")}</option>
               </select>
             </label>
             <label className="block">
-              <span className="material-label">Due date *</span>
+              <span className="material-label">{t("crm.fields.dueDate")} *</span>
               <input
                 type="datetime-local"
                 value={newDueAt}
@@ -487,16 +546,16 @@ export function CrmWorkspace({
               />
             </label>
             <label className="block">
-              <span className="material-label">Assignee</span>
+              <span className="material-label">{t("crm.fields.assignee")}</span>
               <select
                 value={newAssignee}
                 onChange={(event) => setNewAssignee(event.target.value)}
                 className="material-field mt-2 min-h-12"
               >
-                <option value="">Assign to me</option>
+                <option value="">{t("crm.fields.assignToMe")}</option>
                 {payload.assignees.map((person) => (
                   <option key={person.id} value={person.id}>
-                    {personName(person)}
+                    {displayPersonName(person)}
                   </option>
                 ))}
               </select>
@@ -509,7 +568,7 @@ export function CrmWorkspace({
               disabled={isSaving || !newProjectId || !newDueAt}
               className="material-button-filled min-h-11"
             >
-              {isSaving ? "Saving…" : "Create follow-up"}
+              {isSaving ? t("common.saving") : t("crm.createFollowUp")}
             </button>
           </div>
         </section>
@@ -518,9 +577,13 @@ export function CrmWorkspace({
       {!embedded ? (
         <details className="material-card overflow-hidden 2xl:hidden">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
-            <span className="font-bold text-foreground">Notifications</span>
+            <span className="font-bold text-foreground">
+              {t("crm.notifications.title")}
+            </span>
             <span className="material-status">
-              {unreadNotifications.length} unread
+              {t("crm.notifications.unreadCount", {
+                count: unreadNotifications.length,
+              })}
             </span>
           </summary>
           <div className="border-t border-material-outline-variant">
@@ -532,7 +595,7 @@ export function CrmWorkspace({
                     onClick={() => void markNotificationsRead(true)}
                     className="text-xs font-bold text-material-primary"
                   >
-                    Mark all read
+                    {t("crm.notifications.markAllRead")}
                   </button>
                 </div>
                 {unreadNotifications.slice(0, 8).map((notification) => (
@@ -542,20 +605,20 @@ export function CrmWorkspace({
                     onClick={() =>
                       void markNotificationsRead(false, notification.id)
                     }
-                    className="block w-full border-t border-material-outline-variant bg-material-primary-container p-4 text-left"
+                    className="block w-full border-t border-material-outline-variant bg-material-primary-container p-4 text-start"
                   >
                     <p className="text-sm font-bold text-foreground">
-                      {notificationTitle(notification)}
+                      {notificationTitle(notification, t)}
                     </p>
                     <p className="mt-1 text-xs text-muted">
-                      {new Date(notification.created_at).toLocaleString()}
+                      {formatDateTime(notification.created_at)}
                     </p>
                   </button>
                 ))}
               </>
             ) : (
               <p className="border-t border-material-outline-variant p-4 text-sm text-muted">
-                No unread notifications.
+                {t("crm.notifications.noneUnread")}
               </p>
             )}
           </div>
@@ -565,7 +628,7 @@ export function CrmWorkspace({
       {embedded ? (
         <section className="material-card p-4 sm:p-5">
           <h3 className="font-bold text-foreground">
-            Complete activity timeline
+            {t("crm.history.completeTimeline")}
           </h3>
           <div className="mt-3 divide-y divide-material-outline-variant">
             {completeProjectTimeline.length ? (
@@ -575,10 +638,11 @@ export function CrmWorkspace({
                   className="grid gap-2 py-3 sm:grid-cols-[170px_180px_minmax(0,1fr)]"
                 >
                   <time className="text-xs font-semibold text-muted">
-                    {new Date(activity.performed_at).toLocaleString()}
+                    {formatDateTime(activity.performed_at)}
                   </time>
                   <p className="text-sm font-bold text-foreground">
-                    {label(activity.method)} · {label(activity.taskType)}
+                    {displayLabel(activity.method)} ·{" "}
+                    {displayLabel(activity.taskType)}
                   </p>
                   <p className="text-sm text-muted-strong">
                     {activity.client_response ||
@@ -589,7 +653,7 @@ export function CrmWorkspace({
               ))
             ) : (
               <p className="py-3 text-sm text-muted">
-                No follow-up activity has been recorded for this project.
+                {t("crm.history.noneForProject")}
               </p>
             )}
           </div>
@@ -607,7 +671,7 @@ export function CrmWorkspace({
           <div className="border-b border-material-outline-variant p-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-bold text-foreground">
-                {showTeam ? "Team support" : "My tasks"}
+                {showTeam ? t("crm.teamSupport") : t("crm.myTasks")}
               </h2>
               {!embedded ? (
                 <button
@@ -615,7 +679,7 @@ export function CrmWorkspace({
                   onClick={() => setShowTeam((current) => !current)}
                   className="text-xs font-bold text-material-primary"
                 >
-                  {showTeam ? "My tasks" : "Team support"}
+                  {showTeam ? t("crm.myTasks") : t("crm.teamSupport")}
                 </button>
               ) : null}
             </div>
@@ -631,7 +695,7 @@ export function CrmWorkspace({
                       : "border-material-outline-variant bg-material-surface-container-lowest text-muted-strong"
                   }`}
                 >
-                  {label(item)}
+                  {displayLabel(item)}
                   {!showTeam ? ` ${counts[item]}` : ""}
                 </button>
               ))}
@@ -644,7 +708,7 @@ export function CrmWorkspace({
                   key={task.id}
                   type="button"
                   onClick={() => setSelectedId(task.id)}
-                  className={`w-full p-4 text-left transition ${
+                  className={`w-full p-4 text-start transition ${
                     selected?.id === task.id
                       ? "bg-material-primary-container"
                       : "hover:bg-material-surface-container-lowest"
@@ -660,30 +724,34 @@ export function CrmWorkspace({
                             : "text-muted"
                         }`}
                       >
-                        {dueLabel(task)}
+                        {dueLabel(task, t, formatDateTime)}
                       </p>
                       <p className="mt-1 truncate font-bold text-foreground">
-                        {task.client?.client_name ?? "Unknown client"}
+                        {task.client?.client_name ??
+                          t("crm.labels.unknownClient")}
                       </p>
                       <p className="mt-1 truncate text-sm text-muted">
-                        {task.project?.project_name ?? "Unknown project"}
+                        {task.project?.project_name ??
+                          t("crm.labels.unknownProject")}
                       </p>
                     </div>
                     <span className="material-status shrink-0">
-                      {label(task.task_type)}
+                      {displayLabel(task.task_type)}
                     </span>
                   </div>
                   <p className="mt-2 text-xs font-semibold text-muted">
-                    {personName(task.assignee)} ·{" "}
-                    {label(task.project?.priority ?? "normal")}
+                    {displayPersonName(task.assignee)} ·{" "}
+                    {displayLabel(task.project?.priority ?? "normal")}
                   </p>
                 </button>
               ))
             ) : (
               <div className="p-8 text-center">
-                <p className="font-bold text-foreground">No tasks here</p>
+                <p className="font-bold text-foreground">
+                  {t("crm.empty.title")}
+                </p>
                 <p className="mt-1 text-sm text-muted">
-                  Change the filter or create a follow-up.
+                  {t("crm.empty.description")}
                 </p>
               </div>
             )}
@@ -693,7 +761,7 @@ export function CrmWorkspace({
         <section className="material-card min-w-0 p-4 sm:p-5">
           {!selected ? (
             <div className="py-16 text-center text-sm text-muted">
-              Select a task to view its activity history.
+              {t("crm.empty.selectTask")}
             </div>
           ) : (
             <div className="space-y-5">
@@ -710,25 +778,31 @@ export function CrmWorkspace({
                   </p>
                 </div>
                 <span className="material-status self-start">
-                  {label(selected.task_type)}
+                  {displayLabel(selected.task_type)}
                 </span>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  ["Due", dueLabel(selected)],
-                  ["Stage", label(selected.project?.sales_status ?? "")],
-                  ["Responsible", personName(selected.assignee)],
+                  ["crm.fields.due", dueLabel(selected, t, formatDateTime)],
                   [
-                    "Previous outcome",
+                    "crm.fields.stage",
+                    displayLabel(selected.project?.sales_status ?? ""),
+                  ],
+                  [
+                    "crm.fields.responsible",
+                    displayPersonName(selected.assignee),
+                  ],
+                  [
+                    "crm.fields.previousOutcome",
                     selected.activities[0]?.outcome ||
                       selected.completion_outcome ||
-                      "No previous outcome",
+                      t("crm.history.noPreviousOutcome"),
                   ],
-                ].map(([title, value]) => (
-                  <div key={title} className="border-b border-material-outline-variant pb-3">
+                ].map(([titleKey, value]) => (
+                  <div key={titleKey} className="border-b border-material-outline-variant pb-3">
                     <p className="text-xs font-bold uppercase text-muted">
-                      {title}
+                      {t(titleKey)}
                     </p>
                     <p className="mt-1 text-sm font-bold text-foreground">
                       {value}
@@ -743,7 +817,7 @@ export function CrmWorkspace({
                     href={`tel:${selected.client.mobile}`}
                     className="material-button-tonal min-h-11"
                   >
-                    Call client
+                    {t("crm.actions.callClient")}
                   </a>
                 ) : null}
                 {selected.client?.whatsapp ? (
@@ -761,7 +835,7 @@ export function CrmWorkspace({
                     href={`/projects/${selected.project.id}`}
                     className="material-button-outlined min-h-11"
                   >
-                    Open project
+                    {t("crm.actions.openProject")}
                   </Link>
                 ) : null}
                 {selected.status === "open" &&
@@ -773,7 +847,9 @@ export function CrmWorkspace({
                     disabled={isSaving}
                     className="material-button-filled min-h-11"
                   >
-                    {isSaving ? "Assigning…" : "Take follow-up"}
+                    {isSaving
+                      ? t("crm.actions.assigning")
+                      : t("crm.actions.takeFollowUp")}
                   </button>
                 ) : null}
               </div>
@@ -781,7 +857,7 @@ export function CrmWorkspace({
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_330px]">
                 <div>
                   <h3 className="font-bold text-foreground">
-                    Activity history
+                    {t("crm.history.activityHistory")}
                   </h3>
                   <div className="mt-3 border-l-2 border-material-outline-variant pl-4">
                     {selected.activities.length ? (
@@ -793,12 +869,10 @@ export function CrmWorkspace({
                           <span className="absolute -left-[21px] top-5 h-2.5 w-2.5 rounded-full bg-material-primary first:top-1" />
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-bold text-foreground">
-                              {label(activity.method)}
+                              {displayLabel(activity.method)}
                             </p>
                             <time className="text-xs text-muted">
-                              {new Date(
-                                activity.performed_at,
-                              ).toLocaleString()}
+                              {formatDateTime(activity.performed_at)}
                             </time>
                           </div>
                           <p className="mt-2 text-sm text-muted-strong">
@@ -808,17 +882,18 @@ export function CrmWorkspace({
                           </p>
                           {activity.next_follow_up_at ? (
                             <p className="mt-2 text-xs font-bold text-material-primary">
-                              Next follow-up:{" "}
-                              {new Date(
-                                activity.next_follow_up_at,
-                              ).toLocaleString()}
+                              {t("crm.history.nextFollowUp", {
+                                date: formatDateTime(
+                                  activity.next_follow_up_at,
+                                ),
+                              })}
                             </p>
                           ) : null}
                         </article>
                       ))
                     ) : (
                       <p className="py-4 text-sm text-muted">
-                        No activity has been recorded yet.
+                        {t("crm.history.none")}
                       </p>
                     )}
                   </div>
@@ -826,10 +901,14 @@ export function CrmWorkspace({
 
                 {selected.status === "open" && selected.isMine ? (
                   <div className="rounded-lg border border-material-outline-variant p-4">
-                    <h3 className="font-bold text-foreground">Log activity</h3>
+                    <h3 className="font-bold text-foreground">
+                      {t("crm.activity.log")}
+                    </h3>
                     <div className="mt-3 space-y-3">
                       <label className="block">
-                        <span className="material-label">Method</span>
+                        <span className="material-label">
+                          {t("crm.activity.method")}
+                        </span>
                         <select
                           value={method}
                           onChange={(event) =>
@@ -842,14 +921,14 @@ export function CrmWorkspace({
                         >
                           {activityMethods.map((item) => (
                             <option key={item} value={item}>
-                              {label(item)}
+                              {displayLabel(item)}
                             </option>
                           ))}
                         </select>
                       </label>
                       <fieldset>
                         <legend className="material-label">
-                          Client answered?
+                          {t("crm.activity.clientAnswered")}
                         </legend>
                         <div className="mt-2 grid grid-cols-2 gap-2">
                           {[true, false].map((value) => (
@@ -863,14 +942,16 @@ export function CrmWorkspace({
                                   : "border-material-outline-variant text-muted-strong"
                               }`}
                             >
-                              {value ? "Yes" : "No"}
+                              {value
+                                ? t("common.yes")
+                                : t("common.no")}
                             </button>
                           ))}
                         </div>
                       </fieldset>
                       <label className="block">
                         <span className="material-label">
-                          Response / outcome
+                          {t("crm.activity.response")}
                         </span>
                         <input
                           value={clientResponse}
@@ -878,11 +959,13 @@ export function CrmWorkspace({
                             setClientResponse(event.target.value)
                           }
                           className="material-field mt-2 min-h-11"
-                          placeholder="What did the client say?"
+                          placeholder={t("crm.activity.responsePlaceholder")}
                         />
                       </label>
                       <label className="block">
-                        <span className="material-label">Internal notes</span>
+                        <span className="material-label">
+                          {t("crm.activity.internalNotes")}
+                        </span>
                         <textarea
                           value={internalNotes}
                           onChange={(event) =>
@@ -890,21 +973,23 @@ export function CrmWorkspace({
                           }
                           rows={3}
                           className="material-field mt-2 min-h-20 py-3"
-                          placeholder="Private context for the sales team…"
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="material-label">Outcome</span>
-                        <input
-                          value={outcome}
-                          onChange={(event) => setOutcome(event.target.value)}
-                          className="material-field mt-2 min-h-11"
-                          placeholder="Interested, postponed, no answer…"
+                          placeholder={t("crm.activity.notesPlaceholder")}
                         />
                       </label>
                       <label className="block">
                         <span className="material-label">
-                          Next follow-up
+                          {t("crm.activity.outcome")}
+                        </span>
+                        <input
+                          value={outcome}
+                          onChange={(event) => setOutcome(event.target.value)}
+                          className="material-field mt-2 min-h-11"
+                          placeholder={t("crm.activity.outcomePlaceholder")}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="material-label">
+                          {t("crm.activity.nextFollowUp")}
                         </span>
                         <input
                           type="datetime-local"
@@ -919,7 +1004,9 @@ export function CrmWorkspace({
                         disabled={isSaving}
                         className="material-button-filled min-h-11 w-full"
                       >
-                        {isSaving ? "Saving…" : "Save activity"}
+                        {isSaving
+                          ? t("common.saving")
+                          : t("crm.activity.save")}
                       </button>
                       <button
                         type="button"
@@ -927,7 +1014,7 @@ export function CrmWorkspace({
                         disabled={isSaving}
                         className="material-button-outlined min-h-11 w-full"
                       >
-                        Mark complete
+                        {t("crm.activity.markComplete")}
                       </button>
                     </div>
                   </div>
@@ -941,9 +1028,13 @@ export function CrmWorkspace({
           <aside className="material-card hidden min-w-0 overflow-hidden 2xl:block">
             <div className="flex items-center justify-between gap-2 border-b border-material-outline-variant p-4">
               <div>
-                <h2 className="font-bold text-foreground">Notifications</h2>
+                <h2 className="font-bold text-foreground">
+                  {t("crm.notifications.title")}
+                </h2>
                 <p className="mt-1 text-xs text-muted">
-                  {unreadNotifications.length} unread
+                  {t("crm.notifications.unreadCount", {
+                    count: unreadNotifications.length,
+                  })}
                 </p>
               </div>
               {unreadNotifications.length ? (
@@ -953,7 +1044,7 @@ export function CrmWorkspace({
                   disabled={isSaving}
                   className="text-xs font-bold text-material-primary"
                 >
-                  Mark all read
+                  {t("crm.notifications.markAllRead")}
                 </button>
               ) : null}
             </div>
@@ -968,26 +1059,26 @@ export function CrmWorkspace({
                         ? undefined
                         : void markNotificationsRead(false, notification.id)
                     }
-                    className={`w-full p-4 text-left ${
+                    className={`w-full p-4 text-start ${
                       notification.read_at
                         ? "bg-material-surface-container-lowest"
                         : "bg-material-primary-container"
                     }`}
                   >
                     <p className="text-xs font-bold uppercase text-muted">
-                      {label(notification.notification_kind)}
+                      {displayLabel(notification.notification_kind)}
                     </p>
                     <p className="mt-1 text-sm font-bold text-foreground">
-                      {notificationTitle(notification)}
+                      {notificationTitle(notification, t)}
                     </p>
                     <p className="mt-2 text-xs text-muted">
-                      {new Date(notification.created_at).toLocaleString()}
+                      {formatDateTime(notification.created_at)}
                     </p>
                   </button>
                 ))
               ) : (
                 <p className="p-5 text-sm text-muted">
-                  No internal notifications.
+                  {t("crm.notifications.none")}
                 </p>
               )}
             </div>

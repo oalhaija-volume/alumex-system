@@ -39,6 +39,19 @@ test("admin can open sales creation flows and every system area", async ({
   await languageButton.click();
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
 
+  await page.goto("/crm");
+  await expect(
+    page.getByRole("heading", { name: "Sales follow-ups" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /language|اللغة/i }).click();
+  await expect(
+    page.getByRole("heading", { name: "متابعات المبيعات" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "متابعة جديدة" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /language|اللغة/i }).click();
+
   await page.goto("/clients");
   await expect(page).toHaveURL(/\/intake$/);
   await expect(

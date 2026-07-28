@@ -115,7 +115,7 @@ export function DashboardView({
   if (showSalesRoleDashboard) {
     return (
       <AppShell previewRole={previewRole}>
-        <div className="space-y-6">
+        <div className="swift-dashboard space-y-6">
           {role === "Admin" ? (
             <section className="material-card border-material-primary p-4 sm:p-5">
               <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -182,7 +182,7 @@ export function DashboardView({
 
   return (
     <AppShell>
-      <div className="space-y-6">
+      <div className="swift-dashboard space-y-6">
         <PageHeader
           eyebrow={t("dashboard.eyebrow")}
           title={t("dashboard.title")}

@@ -169,8 +169,8 @@ function DashboardSection({
   children: ReactNode;
 }) {
   return (
-    <section className="material-card overflow-hidden">
-      <header className="flex flex-col gap-3 border-b border-material-outline-variant p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+    <section className="swift-dashboard-section material-card overflow-hidden">
+      <header className="flex flex-col gap-3 border-b border-material-outline-variant/60 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-bold text-foreground">{title}</h2>
@@ -187,6 +187,105 @@ function DashboardSection({
 
 function EmptyState({ children }: { children: ReactNode }) {
   return <p className="p-5 text-sm font-semibold text-muted">{children}</p>;
+}
+
+function OutdoorMobileSummary({
+  assigned,
+  today,
+  overdue,
+  corrections,
+  t,
+}: {
+  assigned: number;
+  today: number;
+  overdue: number;
+  corrections: number;
+  t: (key: string) => string;
+}) {
+  const rows = [
+    {
+      label: t("dashboard.role.outdoor.today"),
+      detail: t("dashboard.role.outdoor.todayDetail"),
+      value: today,
+      tone: "bg-success-surface text-success-text",
+    },
+    {
+      label: t("dashboard.role.outdoor.overdue"),
+      detail: t("dashboard.role.outdoor.overdueDetail"),
+      value: overdue,
+      tone: "bg-danger-surface text-danger-text",
+    },
+    {
+      label: t("dashboard.role.outdoor.corrections"),
+      detail: t("dashboard.role.outdoor.correctionsDetail"),
+      value: corrections,
+      tone: "bg-warning-surface text-warning-text",
+    },
+  ];
+
+  return (
+    <section
+      data-testid="outdoor-mobile-summary"
+      className="space-y-3 lg:hidden"
+      aria-label={t("dashboard.role.outdoor.assigned")}
+    >
+      <article className="swift-primary-metric overflow-hidden rounded-[22px] bg-material-surface-container-low p-5 text-foreground shadow-[var(--md-elevation-1)]">
+        <p className="text-sm font-semibold text-muted">
+          {t("dashboard.role.outdoor.assigned")}
+        </p>
+        <div className="mt-4 flex items-end justify-between gap-4">
+          <p className="text-5xl font-bold leading-none tabular-nums">
+            {assigned}
+          </p>
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="h-9 w-9 text-material-primary"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M4 19V8l8-4 8 4v11" />
+            <path d="M8 19v-6h8v6M3 19h18" />
+          </svg>
+        </div>
+        <p className="mt-3 text-sm leading-6 text-muted">
+          {t("dashboard.role.outdoor.assignedDetail")}
+        </p>
+      </article>
+
+      <div className="swift-status-list overflow-hidden rounded-[22px] bg-material-surface-container-low shadow-[var(--md-elevation-1)]">
+        {rows.map((row, index) => (
+          <div
+            key={row.label}
+            className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3.5 ${
+              index > 0 ? "border-t border-material-outline-variant/55" : ""
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className={`flex h-9 w-9 items-center justify-center rounded-full ${row.tone}`}
+            >
+              <span className="h-2.5 w-2.5 rounded-full bg-current" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                {row.label}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-muted">
+                {row.detail}
+              </p>
+            </div>
+            <p className="text-2xl font-bold tabular-nums text-foreground">
+              {row.value}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function ProjectList({
@@ -629,9 +728,9 @@ export function SalesRoleDashboard({
     );
 
     return (
-      <div className="space-y-5">
+      <div className="swift-role-dashboard space-y-5">
         {error ? <div className="material-alert-error">{error}</div> : null}
-        <section className="material-card p-4 sm:p-5">
+        <section className="swift-search-panel material-card p-4 sm:p-5">
           <label className="block">
             <span className="material-label">
               {t("dashboard.role.search")}
@@ -646,7 +745,15 @@ export function SalesRoleDashboard({
           </label>
         </section>
 
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <OutdoorMobileSummary
+          assigned={outdoorMeasurements.length}
+          today={todayAppointments.length}
+          overdue={overdueMeasurements.length}
+          corrections={correctionMeasurements.length}
+          t={t}
+        />
+
+        <section className="hidden grid-cols-2 gap-3 lg:grid lg:grid-cols-4">
           <MetricCard
             stat={{
               label: t("dashboard.role.outdoor.assigned"),
@@ -786,7 +893,7 @@ export function SalesRoleDashboard({
     const statuses = [...new Set(payload.projects.map((item) => item.sales_status))];
 
     return (
-      <div className="space-y-5">
+      <div className="swift-role-dashboard space-y-5">
         {error ? <div className="material-alert-error">{error}</div> : null}
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
@@ -920,7 +1027,7 @@ export function SalesRoleDashboard({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="swift-role-dashboard space-y-5">
       {error ? <div className="material-alert-error">{error}</div> : null}
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MetricCard

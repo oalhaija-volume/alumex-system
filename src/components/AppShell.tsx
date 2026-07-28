@@ -41,6 +41,7 @@ const activeNavItems = activeNavigationHrefs.flatMap((href) => {
 type LogoutButtonProps = {
   className: string;
   label?: string;
+  iconOnly?: boolean;
 };
 
 function NavLink({
@@ -65,16 +66,14 @@ function NavLink({
     return (
       <Link
         href={href}
-        className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-bold transition ${
+        aria-current={isActive ? "page" : undefined}
+        className={`flex min-h-[58px] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-1.5 text-[11px] font-semibold transition ${
           isActive
-            ? "bg-material-primary-container text-material-on-primary-container"
-            : "text-muted hover:bg-material-surface-container hover:text-foreground"
+            ? "bg-material-primary-container/70 text-material-primary"
+            : "text-muted hover:bg-material-surface-container/70 hover:text-foreground"
         }`}
       >
-        <span
-          aria-hidden="true"
-          className="h-1.5 w-1.5 rounded-full bg-current"
-        />
+        <MobileNavIcon href={href} active={isActive} />
         <span className="max-w-full truncate">{label}</span>
       </Link>
     );
@@ -97,6 +96,61 @@ function NavLink({
       />
       {label}
     </Link>
+  );
+}
+
+function MobileNavIcon({
+  href,
+  active,
+}: {
+  href: string;
+  active: boolean;
+}) {
+  const iconClass = "h-[22px] w-[22px]";
+  const strokeWidth = active ? 2.4 : 2;
+
+  if (href === "/dashboard") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={strokeWidth}>
+        <rect x="3" y="3" width="7" height="7" rx="2" />
+        <rect x="14" y="3" width="7" height="7" rx="2" />
+        <rect x="3" y="14" width="7" height="7" rx="2" />
+        <rect x="14" y="14" width="7" height="7" rx="2" />
+      </svg>
+    );
+  }
+
+  if (href === "/intake") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v8M8 12h8" />
+      </svg>
+    );
+  }
+
+  if (href === "/projects") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={strokeWidth} strokeLinejoin="round">
+        <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v8A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z" />
+      </svg>
+    );
+  }
+
+  if (href === "/crm") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 5h14v11H9l-4 3z" />
+        <path d="M8 9h8M8 12h5" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3h9l4 4v14H6z" />
+      <path d="M14 3v5h5M9 12h6M9 16h6" />
+    </svg>
   );
 }
 
@@ -138,7 +192,7 @@ export function AppShell({
     : activeNavItems;
 
   return (
-    <div className="min-h-screen max-w-[100vw] overflow-x-hidden bg-background text-foreground">
+    <div className="mobile-app-shell min-h-screen max-w-[100vw] overflow-x-hidden bg-background text-foreground">
       <PasswordChangePrompt />
       <aside
         className={`fixed inset-y-0 z-30 hidden w-72 flex-col overflow-hidden border-material-outline-variant bg-material-surface-container-low px-4 py-4 lg:flex ${
@@ -164,12 +218,15 @@ export function AppShell({
         </div>
       </aside>
 
-      <header className="sticky top-0 z-40 max-w-[100vw] border-b border-material-outline-variant bg-material-surface-container-low/95 px-4 py-3 shadow-[var(--md-elevation-1)] backdrop-blur lg:hidden">
+      <header
+        data-testid="mobile-topbar"
+        className="mobile-topbar sticky top-0 z-40 max-w-[100vw] border-b border-material-outline-variant bg-material-surface-container-low/90 px-4 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] backdrop-blur-2xl lg:hidden"
+      >
         <div className="flex items-center justify-between gap-3">
           <Link
             href="/dashboard"
             aria-label="Alumex dashboard"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-material-surface-container"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-material-surface-container"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -178,12 +235,14 @@ export function AppShell({
               className="h-8 w-8 object-contain"
             />
           </Link>
-          <div className="flex min-w-0 items-center gap-2">
-            <NotificationCenter />
+          <div className="flex min-w-0 items-center gap-1.5">
+            <NotificationCenter compact />
             <LanguageSwitcher compact />
             <ThemeToggle compact />
             <ShellLogoutButton
-              className="rounded-md border border-material-outline-variant px-3 py-2 text-xs font-bold text-muted-strong"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-material-outline-variant bg-material-surface-container-low text-muted-strong"
+              label={t("auth.logout")}
+              iconOnly
             />
           </div>
         </div>
@@ -218,7 +277,7 @@ export function AppShell({
           </div>
         </div>
         <div
-          className={`mx-auto w-full overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-8 ${
+          className={`mobile-content mx-auto w-full overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-8 ${
             isWideWorkspace ? "max-w-none" : "max-w-7xl"
           }`}
         >
@@ -226,10 +285,13 @@ export function AppShell({
         </div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-30 max-w-[100vw] overflow-x-auto border-t border-material-outline-variant bg-material-surface-container-low px-2 py-2 shadow-[var(--md-elevation-2)] lg:hidden">
-        <div className="flex min-w-max gap-1">
+      <nav
+        data-testid="mobile-tabbar"
+        className="mobile-tabbar fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-3 right-3 z-30 max-w-[calc(100vw-1.5rem)] overflow-x-auto rounded-[22px] border border-material-outline-variant bg-material-surface-container-low/88 p-1.5 shadow-[var(--md-elevation-2)] backdrop-blur-2xl lg:hidden"
+      >
+        <div className="flex w-max min-w-full gap-1">
           {visibleNavItems.map((item) => (
-            <div key={item.href} className="w-[78px] shrink-0">
+            <div key={item.href} className="w-[76px] min-w-[76px] flex-1">
               <NavLink compact {...item} />
             </div>
           ))}

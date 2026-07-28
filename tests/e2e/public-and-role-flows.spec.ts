@@ -141,6 +141,18 @@ test("Outdoor Sales sees mobile measurement actions without commercial values", 
       name: /measurement visits assigned to me|زيارات القياس المسندة إليّ/i,
     }),
   ).toBeVisible();
+  await expect(page.getByTestId("mobile-topbar")).toBeVisible();
+  await expect(page.getByTestId("mobile-tabbar")).toBeVisible();
+  await expect(page.getByTestId("outdoor-mobile-summary")).toBeVisible();
+  const tabbarBounds = await page.getByTestId("mobile-tabbar").boundingBox();
+  expect(tabbarBounds).not.toBeNull();
+  expect(tabbarBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(tabbarBounds!.x + tabbarBounds!.width).toBeLessThanOrEqual(
+    page.viewportSize()!.width,
+  );
+  await expect(
+    page.locator('nav a[href="/dashboard"][aria-current="page"]'),
+  ).toBeVisible();
   await expect(page.getByText(/contract total|إجمالي العقد/i)).toHaveCount(0);
   await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
 

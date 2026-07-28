@@ -23,8 +23,10 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
         aria-label={`${t("language.label")}: ${t(
           currentLanguage?.labelKey ?? "language.english",
         )}. ${t(nextLanguage?.labelKey ?? "language.arabic")}`}
-        className={`rounded-md border border-border bg-surface font-bold text-foreground shadow-sm outline-none transition hover:border-primary hover:bg-material-surface-container focus:border-primary focus:ring-4 focus:ring-info-surface ${
-          compact ? "h-9 min-w-20 px-3 text-xs" : "h-10 min-w-28 px-4 text-sm"
+        className={`border border-border bg-surface font-bold text-foreground shadow-sm outline-none transition hover:border-primary hover:bg-material-surface-container focus:border-primary focus:ring-4 focus:ring-info-surface ${
+          compact
+            ? "h-10 min-w-[68px] rounded-full px-3 text-xs"
+            : "h-10 min-w-28 rounded-md px-4 text-sm"
         }`}
       >
         {t(currentLanguage?.labelKey ?? "language.english")}

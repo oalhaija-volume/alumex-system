@@ -19,7 +19,7 @@ function titleForKey(key: string) {
   return "Alumex notification";
 }
 
-export function NotificationCenter() {
+export function NotificationCenter({ compact = false }: { compact?: boolean }) {
   const [items, setItems] = useState<NotificationItem[]>([]);
 
   const load = useCallback(async () => {
@@ -53,9 +53,27 @@ export function NotificationCenter() {
     <details className="relative open:z-[100]">
       <summary
         aria-label={`Notifications, ${unread.length} unread`}
-        className="relative flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-md border border-material-outline-variant bg-material-surface-container text-sm font-black text-muted-strong"
+        className={`relative flex h-10 w-10 cursor-pointer list-none items-center justify-center border border-material-outline-variant bg-material-surface-container text-sm font-black text-muted-strong ${
+          compact ? "rounded-full" : "rounded-md"
+        }`}
       >
-        N
+        {compact ? (
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+            <path d="M10 21h4" />
+          </svg>
+        ) : (
+          "N"
+        )}
         {unread.length ? (
           <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-700 px-1 text-[10px] font-black text-white">
             {Math.min(unread.length, 99)}

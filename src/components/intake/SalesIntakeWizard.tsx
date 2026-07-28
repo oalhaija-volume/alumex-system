@@ -818,8 +818,8 @@ export function SalesIntakeWizard() {
         </aside>
       </div>
 
-      <footer className="fixed bottom-[64px] left-0 right-0 z-20 flex gap-3 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6 lg:sticky lg:bottom-0 lg:z-10 lg:items-center lg:justify-between lg:px-0 lg:py-4">
-        <div aria-live="polite" className="hidden lg:block">
+      <footer className="fixed bottom-[64px] left-0 right-0 z-20 flex gap-3 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6 lg:sticky lg:bottom-4 lg:z-10 lg:mb-2 lg:items-center lg:justify-between lg:rounded-lg lg:border lg:border-slate-200 lg:bg-white lg:px-5 lg:py-4 lg:shadow-sm">
+        <div aria-live="polite" className="hidden min-w-0 lg:block">
           <p className="text-sm font-bold text-emerald-700">
             {t("intake.actions.autosaved")}
           </p>
@@ -827,10 +827,10 @@ export function SalesIntakeWizard() {
             {t("intake.actions.autosavedHelp")}
           </p>
         </div>
-        <div className="grid w-full grid-cols-[auto_minmax(0,1fr)] gap-3 lg:flex lg:w-auto">
-          <button type="button" disabled={step === 0 || isSubmitting} onClick={() => setStep((current) => Math.max(0, current - 1))} className="h-11 min-w-24 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-40">{t("intake.actions.back")}</button>
+        <div className="grid w-full grid-cols-[auto_minmax(0,1fr)] gap-3 lg:flex lg:w-auto lg:shrink-0 lg:justify-end">
+          <button type="button" disabled={step === 0 || isSubmitting} onClick={() => setStep((current) => Math.max(0, current - 1))} className="h-11 min-w-24 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-40">{t("intake.actions.back")}</button>
           {step < displayedSteps.length - 1 ? (
-            <button type="button" disabled={isCheckingSite || isSubmitting} onClick={() => void continueStep()} className="h-11 min-w-48 bg-[var(--alumex-blue)] px-5 text-sm font-bold text-white disabled:opacity-50">
+            <button type="button" disabled={isCheckingSite || isSubmitting} onClick={() => void continueStep()} className="h-11 min-w-48 rounded-md bg-[var(--alumex-blue)] px-5 text-sm font-bold text-white disabled:opacity-50">
               {isSubmitting
                 ? t("common.loading")
                 : isCheckingSite
@@ -842,7 +842,7 @@ export function SalesIntakeWizard() {
                 : t("intake.actions.reviewOpportunity")}
             </button>
           ) : (
-            <button type="button" disabled={isSubmitting} onClick={() => void submit()} className="h-11 min-w-32 bg-[var(--alumex-blue)] px-5 text-sm font-bold text-white disabled:opacity-50">{isSubmitting ? t("common.loading") : t("intake.actions.create")}</button>
+            <button type="button" disabled={isSubmitting} onClick={() => void submit()} className="h-11 min-w-32 rounded-md bg-[var(--alumex-blue)] px-5 text-sm font-bold text-white disabled:opacity-50">{isSubmitting ? t("common.loading") : t("intake.actions.create")}</button>
           )}
         </div>
       </footer>

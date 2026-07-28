@@ -59,6 +59,8 @@ test("admin can open sales creation flows and every system area", async ({
       name: /start sales intake|تسجيل فرصة بيع/i,
     }),
   ).toBeVisible();
+  await expect(page.locator("footer")).toHaveCSS("padding-left", "20px");
+  await expect(page.locator("footer")).toHaveCSS("border-radius", "8px");
 
   await page.goto("/projects");
   await expect(

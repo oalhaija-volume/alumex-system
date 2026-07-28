@@ -145,7 +145,10 @@ export function AppShell({
           isRtl ? "right-0 border-l" : "left-0 border-r"
         }`}
       >
-        <div className="shrink-0 rounded-lg bg-material-surface-container px-3 py-3 shadow-[var(--md-elevation-1)]">
+        <div
+          data-testid="sidebar-brand"
+          className="flex shrink-0 justify-center rounded-lg bg-material-surface-container px-3 py-3 shadow-[var(--md-elevation-1)]"
+        >
           <BrandMark />
         </div>
         <nav className="mt-5 min-h-0 flex-1 space-y-1 overflow-y-auto pb-2">

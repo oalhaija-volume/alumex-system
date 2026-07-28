@@ -11,6 +11,11 @@ test("public login renders without framework or console errors", async ({
   const errors = relevantConsoleErrors(page);
   await page.goto("/login");
   await expect(page).toHaveTitle(/Alumex/i);
+  const brandImageWidth = await page
+    .locator('img[alt="Alumex Experts"]')
+    .first()
+    .evaluate((image: HTMLImageElement) => image.naturalWidth);
+  expect(brandImageWidth).toBeGreaterThan(0);
   await expect(
     page.getByRole("heading", { name: /login|log in|تسجيل الدخول/i }),
   ).toBeVisible();
@@ -36,6 +41,20 @@ test("admin can open sales creation flows and every system area", async ({
   });
   await languageButton.click();
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  const brandCenterOffset = await page
+    .getByTestId("sidebar-brand")
+    .evaluate((brand) => {
+      const logo = brand.querySelector("img");
+      if (!logo) return Number.POSITIVE_INFINITY;
+      const brandBounds = brand.getBoundingClientRect();
+      const logoBounds = logo.getBoundingClientRect();
+      return Math.abs(
+        brandBounds.left +
+          brandBounds.width / 2 -
+          (logoBounds.left + logoBounds.width / 2),
+      );
+    });
+  expect(brandCenterOffset).toBeLessThanOrEqual(1);
   await languageButton.click();
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
 

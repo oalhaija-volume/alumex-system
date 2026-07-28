@@ -39,7 +39,7 @@ const baseProjectSelect =
 const projectSelectWithoutClient =
   "id, project_number, project_name, client_id, address, project_type, sales_engineer_id, status";
 const fullOpeningSelect =
-  "id, project_id, floor, room, opening_code, width, height, solid_panel_height, quantity, product_system, glass_type, aluminum_color, notes";
+  "id, project_id, floor, room, opening_code, opening_type, width, height, solid_panel_height, quantity, product_system, glass_type, aluminum_color, notes";
 const baseOpeningSelect =
   "id, project_id, floor, room, opening_code, width, height, quantity, product_system, glass_type, aluminum_color, notes";
 
@@ -166,6 +166,7 @@ async function loadOpenings(admin: ReturnType<typeof createAdminClient>) {
     return {
       openings: (baseResult.data ?? []).map((opening) => ({
         ...opening,
+        opening_type: null,
         solid_panel_height: 0,
       })),
       warning: fullResult.error,

@@ -10,6 +10,7 @@ import {
   hasSupabaseServiceRoleKey,
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
+import { isStructuralOpeningType } from "@/lib/measurements/structuralOpenings";
 import { loadOutdoorSalesProjectIds } from "@/lib/projects/access";
 
 const openingRoles = [
@@ -31,6 +32,7 @@ type OpeningPayload = {
   floor?: unknown;
   room?: unknown;
   openingCode?: unknown;
+  openingType?: unknown;
   width?: unknown;
   height?: unknown;
   solidPanelHeight?: unknown;
@@ -63,6 +65,7 @@ function normalizeOpening(body: OpeningPayload) {
     floor: textValue(body.floor) || null,
     room: textValue(body.room) || null,
     opening_code: textValue(body.openingCode),
+    opening_type: textValue(body.openingType),
     width: numberValue(body.width),
     height: numberValue(body.height),
     solid_panel_height: Math.min(
@@ -75,7 +78,9 @@ function normalizeOpening(body: OpeningPayload) {
     aluminum_color: textValue(body.aluminumColor) || null,
     notes: textValue(body.notes) || null,
   };
+  const isStructuralMeasurement = isStructuralOpeningType(opening.opening_type);
   const hasRequiredGlassDetails =
+    isStructuralMeasurement ||
     !requiresGlassDetails(opening.product_system) ||
     Boolean(opening.glass_type && opening.aluminum_color);
 
@@ -84,13 +89,13 @@ function normalizeOpening(body: OpeningPayload) {
     opening.width <= 0 ||
     opening.height <= 0 ||
     opening.quantity <= 0 ||
-    !opening.product_system ||
+    (!isStructuralMeasurement && !opening.product_system) ||
     !hasRequiredGlassDetails
   ) {
     return {
       ok: false as const,
       error:
-        "Opening code, width, height, quantity, and product system are required. Glass type and glass color are required for glazed systems.",
+        "Opening code, opening type, width, height, and quantity are required. Product and glass configuration can be completed later during quotation.",
     };
   }
 

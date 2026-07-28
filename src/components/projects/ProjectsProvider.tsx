@@ -21,6 +21,10 @@ import {
   invalidateClientData,
   loadCachedClientData,
 } from "@/lib/clientRequestCache";
+import {
+  isStructuralOpeningType,
+  nextStructuralOpeningCode,
+} from "@/lib/measurements/structuralOpenings";
 
 type ProjectInput = Omit<Project, "id" | "structuralOpenings">;
 type StructuralOpeningInput = Omit<StructuralOpening, "id">;
@@ -70,6 +74,7 @@ type OpeningRow = {
   floor: string | null;
   room: string | null;
   opening_code: string;
+  opening_type?: string | null;
   width: number | string;
   height: number | string;
   solid_panel_height?: number | string | null;
@@ -119,6 +124,7 @@ function mapOpening(row: OpeningRow): StructuralOpening {
     floor: row.floor ?? "",
     room: row.room ?? "",
     openingCode: row.opening_code,
+    openingType: row.opening_type ?? "",
     width: normalizeNumber(row.width),
     height: normalizeNumber(row.height),
     solidPanelHeight: normalizeNumber(row.solid_panel_height),
@@ -415,9 +421,18 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      const openingType = sourceOpening.openingType ?? "";
+      const openingCode = isStructuralOpeningType(openingType)
+        ? nextStructuralOpeningCode(
+            openingType,
+            sourceProject?.structuralOpenings.map((opening) => opening.openingCode) ??
+              [],
+          )
+        : `${sourceOpening.openingCode}-COPY`;
+
       await addOpening(projectId, {
         ...sourceOpening,
-        openingCode: `${sourceOpening.openingCode}-COPY`,
+        openingCode,
       });
     },
     [addOpening, projects],

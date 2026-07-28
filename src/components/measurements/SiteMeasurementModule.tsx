@@ -11,7 +11,11 @@ import {
   type OpeningDropdownOption,
 } from "@/lib/openings/dropdownOptions";
 import { centimetersToSquareMeters } from "@/lib/measurements/area";
-import { structuralOpeningTypes } from "@/lib/measurements/structuralOpenings";
+import {
+  isStructuralOpeningType,
+  nextStructuralOpeningCode,
+  structuralOpeningTypes,
+} from "@/lib/measurements/structuralOpenings";
 
 type MeasurementProject = {
   id: string;
@@ -173,15 +177,8 @@ function isOpeningValid(opening: OpeningDraft) {
   );
 }
 
-function nextOpeningCode(openings: MeasurementOpening[]) {
-  return `W-${String(openings.length + 1).padStart(2, "0")}`;
-}
-
-function openingRows(count: number, startIndex: number) {
-  return Array.from({ length: count }, (_, index) => ({
-    ...emptyOpening,
-    openingCode: `W-${String(startIndex + index + 1).padStart(2, "0")}`,
-  }));
+function openingRows(count: number) {
+  return Array.from({ length: count }, () => ({ ...emptyOpening }));
 }
 
 function optionLabels(options: OpeningDropdownOption[], currentValue: string) {
@@ -200,7 +197,7 @@ export function SiteMeasurementModule() {
   const [openings, setOpenings] = useState<MeasurementOpening[]>([]);
   const [draft, setDraft] = useState<OpeningDraft>(emptyOpening);
   const [newOpenings, setNewOpenings] = useState<OpeningDraft[]>(
-    openingRows(1, 0),
+    openingRows(1),
   );
   const [wizardIndex, setWizardIndex] = useState(0);
   const [mobileWizardStep, setMobileWizardStep] = useState(0);
@@ -272,11 +269,6 @@ export function SiteMeasurementModule() {
     setProject(body?.project ?? null);
     const loadedOpenings = body?.openings ?? [];
     setOpenings(loadedOpenings);
-    setDraft((current) =>
-      current.openingCode
-        ? current
-        : { ...current, openingCode: nextOpeningCode(loadedOpenings) },
-    );
     const localDraftKey = `alumex:measurement-draft:${projectId}`;
     const savedDraft = window.localStorage.getItem(localDraftKey);
     if (savedDraft) {
@@ -285,13 +277,13 @@ export function SiteMeasurementModule() {
         setNewOpenings(
           Array.isArray(parsedDraft) && parsedDraft.length
             ? parsedDraft
-            : openingRows(1, loadedOpenings.length),
+            : openingRows(1),
         );
       } catch {
-        setNewOpenings(openingRows(1, loadedOpenings.length));
+        setNewOpenings(openingRows(1));
       }
     } else {
-      setNewOpenings(openingRows(1, loadedOpenings.length));
+      setNewOpenings(openingRows(1));
     }
     setWizardIndex(0);
     setMobileWizardStep(0);
@@ -348,6 +340,17 @@ export function SiteMeasurementModule() {
         key === "fixedHeight"
           ? Number(value)
           : value,
+      ...(key === "openingType" && isStructuralOpeningType(value)
+        ? {
+            type: value,
+            openingCode: nextStructuralOpeningCode(
+              value,
+              openings
+                .filter((opening) => opening.id !== editingId)
+                .map((opening) => opening.openingCode),
+            ),
+          }
+        : {}),
     }));
   }
 
@@ -356,8 +359,15 @@ export function SiteMeasurementModule() {
     key: keyof OpeningDraft,
     value: string,
   ) {
-    setNewOpenings((currentOpenings) =>
-      currentOpenings.map((opening, openingIndex) =>
+    setNewOpenings((currentOpenings) => {
+      const existingCodes = [
+        ...openings.map((opening) => opening.openingCode),
+        ...currentOpenings
+          .filter((_, openingIndex) => openingIndex !== index)
+          .map((opening) => opening.openingCode),
+      ];
+
+      return currentOpenings.map((opening, openingIndex) =>
         openingIndex === index
           ? {
               ...opening,
@@ -369,10 +379,16 @@ export function SiteMeasurementModule() {
                 key === "fixedHeight"
                   ? Number(value)
                   : value,
+              ...(key === "openingType" && isStructuralOpeningType(value)
+                ? {
+                    type: value,
+                    openingCode: nextStructuralOpeningCode(value, existingCodes),
+                  }
+                : {}),
             }
           : opening,
-      ),
-    );
+      );
+    });
   }
 
   async function runMeasurementAction(
@@ -467,9 +483,8 @@ export function SiteMeasurementModule() {
         savedOpenings.push(await saveOpeningPayload(opening));
       }
 
-      const nextCount = openings.length + savedOpenings.length;
       setOpenings((current) => [...current, ...savedOpenings]);
-      setNewOpenings(openingRows(1, nextCount));
+      setNewOpenings(openingRows(1));
       setWizardIndex(0);
       setMobileWizardStep(0);
       window.localStorage.removeItem(`alumex:measurement-draft:${projectId}`);
@@ -565,7 +580,7 @@ export function SiteMeasurementModule() {
 
   function cancelEdit() {
     setEditingId(null);
-    setDraft({ ...emptyOpening, openingCode: nextOpeningCode(openings) });
+    setDraft(emptyOpening);
     setError("");
   }
 
@@ -573,7 +588,7 @@ export function SiteMeasurementModule() {
     const normalized = normalizeDraft(opening);
 
     if (step === 0) {
-      return Boolean(normalized.floor && normalized.room && normalized.openingCode);
+      return Boolean(normalized.floor && normalized.room);
     }
 
     if (step === 1) {
@@ -868,7 +883,7 @@ export function SiteMeasurementModule() {
                   onClick={() =>
                     setNewOpenings((currentOpenings) => [
                       ...currentOpenings,
-                      ...openingRows(3, openings.length + currentOpenings.length),
+                      ...openingRows(3),
                     ])
                   }
                   disabled={!isEditable || isSaving}
@@ -879,7 +894,7 @@ export function SiteMeasurementModule() {
                 <button
                   type="button"
                   onClick={() => {
-                    setNewOpenings(openingRows(1, openings.length));
+                    setNewOpenings(openingRows(1));
                     setWizardIndex(0);
                     setMobileWizardStep(0);
                   }}

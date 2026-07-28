@@ -54,6 +54,7 @@ export type StructuralOpening = {
   floor: string;
   room: string;
   openingCode: string;
+  openingType?: string;
   width: number;
   height: number;
   solidPanelHeight: number;

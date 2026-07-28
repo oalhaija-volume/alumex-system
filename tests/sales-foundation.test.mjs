@@ -23,6 +23,8 @@ import {
 import { centimetersToSquareMeters } from "../src/lib/measurements/area.ts";
 import {
   isStructuralOpeningType,
+  nextStructuralOpeningCode,
+  openingCodePrefix,
   structuralOpeningTypes,
 } from "../src/lib/measurements/structuralOpenings.ts";
 import {
@@ -188,6 +190,17 @@ test("structural measurement only accepts broad opening types", () => {
   assert.equal(isStructuralOpeningType("Door"), true);
   assert.equal(isStructuralOpeningType("Sliding"), false);
   assert.equal(isStructuralOpeningType("Clear glass"), false);
+});
+
+test("structural opening codes use the selected opening type", () => {
+  assert.equal(openingCodePrefix("Window"), "W");
+  assert.equal(openingCodePrefix("Door"), "D");
+  assert.equal(openingCodePrefix("Curtain Wall"), "CW");
+  assert.equal(openingCodePrefix("Skylight"), "SK");
+  assert.equal(nextStructuralOpeningCode("Window", ["W-01", "D-02"]), "W-02");
+  assert.equal(nextStructuralOpeningCode("Door", ["D-01", "D-03"]), "D-04");
+  assert.equal(nextStructuralOpeningCode("Curtain Wall", []), "CW-01");
+  assert.equal(nextStructuralOpeningCode("Skylight", ["SK-09"]), "SK-10");
 });
 
 test("ready Outdoor Sales intake skips confirmation for measurements", () => {

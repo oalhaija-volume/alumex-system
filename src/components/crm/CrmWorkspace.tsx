@@ -310,6 +310,19 @@ export function CrmWorkspace({
     );
   }
 
+  async function claimTask() {
+    if (!selected) return;
+    const saved = await submit({
+      action: "claim_task",
+      taskId: selected.id,
+    });
+    if (!saved) return;
+    setShowTeam(false);
+    setMessage(
+      "Follow-up assigned to you. The original project owner is unchanged.",
+    );
+  }
+
   async function submit(body: Record<string, unknown>) {
     setIsSaving(true);
     setError("");
@@ -750,6 +763,18 @@ export function CrmWorkspace({
                   >
                     Open project
                   </Link>
+                ) : null}
+                {selected.status === "open" &&
+                !selected.isMine &&
+                !selected.assignee ? (
+                  <button
+                    type="button"
+                    onClick={() => void claimTask()}
+                    disabled={isSaving}
+                    className="material-button-filled min-h-11"
+                  >
+                    {isSaving ? "Assigning…" : "Take follow-up"}
+                  </button>
                 ) : null}
               </div>
 

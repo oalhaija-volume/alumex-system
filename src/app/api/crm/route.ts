@@ -352,6 +352,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ activity: data }, { status: 201 });
   }
 
+  if (action === "claim_task") {
+    const taskId =
+      typeof body?.taskId === "string" ? body.taskId.trim() : "";
+    if (!taskId) {
+      return NextResponse.json(
+        { error: "Select a follow-up task." },
+        { status: 400 },
+      );
+    }
+
+    const { data, error } = await context.admin.rpc(
+      "claim_sales_follow_up_task",
+      {
+        target_task_id: taskId,
+        actor_user_id: context.auth.user.id,
+      },
+    );
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    return NextResponse.json({ task: data });
+  }
+
   return NextResponse.json(
     { error: "Select a valid CRM action." },
     { status: 400 },

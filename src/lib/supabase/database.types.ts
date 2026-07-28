@@ -1437,6 +1437,13 @@ export type Database = {
         };
         Returns: Database["public"]["Tables"]["follow_up_tasks"]["Row"];
       };
+      claim_sales_follow_up_task: {
+        Args: {
+          target_task_id: string;
+          actor_user_id?: string;
+        };
+        Returns: Database["public"]["Tables"]["follow_up_tasks"]["Row"];
+      };
       record_sales_follow_up_activity: {
         Args: {
           target_task_id: string;

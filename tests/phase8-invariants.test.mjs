@@ -74,6 +74,21 @@ test("quotation and contract database invariants remain transactional", () => {
   assert.match(sql, /contract_signed_operations_handoff_created/);
 });
 
+test("unquoted measured projects enter CRM without changing project ownership", () => {
+  const sql = readMigration(
+    "20260728140000_unquoted_projects_crm_followup.sql",
+  );
+  assert.match(sql, /ensure_unquoted_project_follow_up/);
+  assert.match(sql, /'unquoted-project:' \|\| new\.id::text/);
+  assert.match(sql, /claim_sales_follow_up_task/);
+  assert.match(sql, /responsible_user_id = actor_profile\.id/);
+  assert.match(
+    sql,
+    /'project_owner_id', task_row\.owner_id,[\s\S]*'followed_by', actor_profile\.id/,
+  );
+  assert.doesNotMatch(sql, /set\s+owner_id = actor_profile\.id/);
+});
+
 test("RLS hardening excludes Outdoor Sales from commercial documents", () => {
   const sql = readMigration("20260727180000_phase8_rls_hardening.sql");
   const commercialPolicyBlocks = [

@@ -234,6 +234,31 @@ test("signed projects are visible to Operations while Finance remains a gate", (
   assert.match(operationsModule, /Awaiting Finance/);
 });
 
+test("Operations receives opening measurements without commercial document values", () => {
+  const operationsRoute = readFileSync(
+    join(repositoryRoot, "src", "app", "api", "operations", "projects", "route.ts"),
+    "utf8",
+  );
+  const operationsModule = readFileSync(
+    join(
+      repositoryRoot,
+      "src",
+      "components",
+      "operations",
+      "OperationsManagerModule.tsx",
+    ),
+    "utf8",
+  );
+
+  assert.match(
+    operationsRoute,
+    /openings\(id, opening_code, floor, room, opening_type, site_readiness, width, height, quantity, area_sqm\)/,
+  );
+  assert.doesNotMatch(operationsRoute, /unit_price|discount_percent|line_total/);
+  assert.match(operationsModule, /Structural openings/);
+  assert.doesNotMatch(operationsModule, /Quotation|Contract|Unit price|Line total/);
+});
+
 test("project deletion is Admin-only and transactional", () => {
   const sql = readMigration("20260728160000_admin_project_deletion.sql");
   const projectsRoute = readFileSync(

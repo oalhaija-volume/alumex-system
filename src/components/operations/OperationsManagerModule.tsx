@@ -20,6 +20,18 @@ type OperationsProject = {
     | "Finance exception approved";
   canComplete: boolean;
   isCompleted: boolean;
+  openings: Array<{
+    id: string;
+    openingCode: string;
+    floor: string;
+    room: string;
+    openingType: string;
+    readiness: "ready" | "not_ready";
+    width: number;
+    height: number;
+    quantity: number;
+    area: number;
+  }>;
 };
 
 function ProjectSummary({ project }: { project: OperationsProject }) {
@@ -42,6 +54,68 @@ function ProjectSummary({ project }: { project: OperationsProject }) {
           </p>
         </div>
       ))}
+    </div>
+  );
+}
+
+function ProjectOpenings({ project }: { project: OperationsProject }) {
+  if (project.openings.length === 0) {
+    return (
+      <p className="rounded-md border border-dashed border-border bg-surface-muted p-4 text-sm font-semibold text-muted">
+        No structural openings have been recorded for this project.
+      </p>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-md border border-border">
+      <table className="min-w-[760px] w-full border-collapse text-start text-sm">
+        <thead className="bg-surface-muted text-xs font-bold uppercase text-muted-strong">
+          <tr>
+            <th className="px-3 py-3 text-start">Opening</th>
+            <th className="px-3 py-3 text-start">Location</th>
+            <th className="px-3 py-3 text-start">Type</th>
+            <th className="px-3 py-3 text-start">Readiness</th>
+            <th className="px-3 py-3 text-start">Width</th>
+            <th className="px-3 py-3 text-start">Height</th>
+            <th className="px-3 py-3 text-start">Quantity</th>
+            <th className="px-3 py-3 text-start">Area</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {project.openings.map((opening) => (
+            <tr key={opening.id} className="bg-surface">
+              <td className="px-3 py-3 font-bold text-foreground">
+                {opening.openingCode}
+              </td>
+              <td className="px-3 py-3 text-muted-strong">
+                {[opening.floor, opening.room].filter(Boolean).join(" · ") ||
+                  "Not added"}
+              </td>
+              <td className="px-3 py-3 text-muted-strong">
+                {opening.openingType || "Not added"}
+              </td>
+              <td className="px-3 py-3">
+                <StatusPill
+                  status={opening.readiness === "ready" ? "Ready" : "Not ready"}
+                />
+              </td>
+              <td className="px-3 py-3 text-muted-strong">
+                {opening.width > 0 ? `${opening.width} cm` : "—"}
+              </td>
+              <td className="px-3 py-3 text-muted-strong">
+                {opening.height > 0 ? `${opening.height} cm` : "—"}
+              </td>
+              <td className="px-3 py-3 text-muted-strong">
+                {opening.quantity}
+              </td>
+              <td className="px-3 py-3 font-semibold text-foreground">
+                {opening.area > 0 ? `${opening.area.toFixed(2)} sqm` : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -191,6 +265,22 @@ export function OperationsManagerModule() {
                 <div className="mt-4">
                   <ProjectSummary project={project} />
                 </div>
+
+                <section className="mt-4" aria-labelledby={`openings-${project.id}`}>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <h3
+                      id={`openings-${project.id}`}
+                      className="text-sm font-bold text-foreground"
+                    >
+                      Structural openings
+                    </h3>
+                    <span className="text-xs font-semibold text-muted">
+                      {project.openings.length} opening
+                      {project.openings.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <ProjectOpenings project={project} />
+                </section>
 
                 <div className="mt-4 flex justify-end">
                   <button

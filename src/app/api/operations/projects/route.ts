@@ -26,6 +26,10 @@ function clientName(
   return (Array.isArray(value) ? value[0] : value)?.client_name ?? "";
 }
 
+function numberValue(value: number | string | null) {
+  return Number(value ?? 0);
+}
+
 export async function GET() {
   const authCheck = await requireRole(operationsRoles);
 
@@ -49,7 +53,7 @@ export async function GET() {
       admin
         .from("projects")
         .select(
-          "id, project_number, project_name, branch, project_type, address, status, workflow_status, sales_engineer_id, clients(client_name)",
+          "id, project_number, project_name, branch, project_type, address, status, workflow_status, sales_engineer_id, clients(client_name), openings(id, opening_code, floor, room, opening_type, site_readiness, width, height, quantity, area_sqm)",
         )
         .in("workflow_status", [...operationsStatuses])
         .order("created_at", { ascending: false }),
@@ -88,6 +92,18 @@ export async function GET() {
         canComplete:
           project.workflow_status !== "finance_down_payment_pending",
         isCompleted: project.status === "Completed",
+        openings: (project.openings ?? []).map((opening) => ({
+          id: opening.id,
+          openingCode: opening.opening_code,
+          floor: opening.floor ?? "",
+          room: opening.room ?? "",
+          openingType: opening.opening_type ?? "",
+          readiness: opening.site_readiness,
+          width: numberValue(opening.width),
+          height: numberValue(opening.height),
+          quantity: numberValue(opening.quantity),
+          area: numberValue(opening.area_sqm),
+        })),
       })),
     });
   } catch (error) {

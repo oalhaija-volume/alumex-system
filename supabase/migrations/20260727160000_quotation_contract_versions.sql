@@ -1171,7 +1171,7 @@ begin
     ),
     actor_user_id
   )
-  on conflict (contract_id) do update
+  on conflict on constraint operations_handoffs_contract_unique do update
   set package_snapshot = excluded.package_snapshot
   returning * into handoff_row;
 

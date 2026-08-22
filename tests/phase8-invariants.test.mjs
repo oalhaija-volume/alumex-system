@@ -71,6 +71,11 @@ test("quotation and contract database invariants remain transactional", () => {
   );
   assert.match(sql, /sign_contract_and_create_handoff/);
   assert.match(sql, /operations_handoffs_contract_unique/);
+  assert.match(
+    sql,
+    /on conflict on constraint operations_handoffs_contract_unique do update/,
+  );
+  assert.doesNotMatch(sql, /on conflict \(contract_id\) do update/);
   assert.match(sql, /contract_signed_operations_handoff_created/);
   assert.match(sql, /where public\.profiles\.id = p_created_by/);
   assert.match(sql, /where public\.projects\.id = p_project_id/);
@@ -78,6 +83,13 @@ test("quotation and contract database invariants remain transactional", () => {
   assert.doesNotMatch(
     sql,
     /where id = p_project_id and client_id = p_client_id/,
+  );
+  const contractSigningRepair = readMigration(
+    "20260822140000_fix_contract_signing_rpc_ambiguous_contract_id.sql",
+  );
+  assert.match(
+    contractSigningRepair,
+    /on conflict on constraint operations_handoffs_contract_unique do update/,
   );
 });
 

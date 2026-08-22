@@ -130,6 +130,13 @@ function signatureWorkflowError(error: unknown) {
     return "The contract signing workflow is missing in Supabase. Apply the latest contract workflow migrations, then try again.";
   }
 
+  if (
+    normalizedMessage.includes("contract_id") &&
+    normalizedMessage.includes("ambiguous")
+  ) {
+    return "The contract signing workflow needs the latest database repair migration before signatures can be saved.";
+  }
+
   if (normalizedMessage.includes("approved quotation version")) {
     return "This contract is not linked to an approved quotation version. Reopen the contract from its approved quotation and try again.";
   }

@@ -26,6 +26,7 @@ type OpeningFamilyKey =
   | "door"
   | "curtainWall"
   | "skylight"
+  | "louver"
   | "other";
 
 type OpeningFamily = {
@@ -54,6 +55,11 @@ const openingFamilies: OpeningFamily[] = [
     key: "skylight",
     openingType: "Skylight",
     labelKey: "projects.openings.families.skylight",
+  },
+  {
+    key: "louver",
+    openingType: "Louver",
+    labelKey: "projects.openings.families.louver",
   },
 ];
 
@@ -218,6 +224,7 @@ function createOpeningRowsByFamily() {
     door: rows(5, "Door"),
     curtainWall: rows(5, "Curtain Wall"),
     skylight: rows(5, "Skylight"),
+    louver: rows(5, "Louver"),
     other: rows(5),
   } satisfies Record<OpeningFamilyKey, StructuralOpeningValues[]>;
 }
@@ -229,10 +236,12 @@ function openingFamilyKeyForOpening(
   if (opening.openingType === "Door") return "door";
   if (opening.openingType === "Curtain Wall") return "curtainWall";
   if (opening.openingType === "Skylight") return "skylight";
+  if (opening.openingType === "Louver") return "louver";
 
   const code = opening.openingCode.trim().toUpperCase();
   if (code.startsWith("CW-")) return "curtainWall";
   if (code.startsWith("SK-")) return "skylight";
+  if (code.startsWith("L-")) return "louver";
   if (code.startsWith("D-")) return "door";
   if (code.startsWith("W-")) return "window";
 
@@ -253,6 +262,10 @@ function openingFamilyKeyForOpening(
 
   if (normalizedSystem.includes("skylight")) {
     return "skylight";
+  }
+
+  if (normalizedSystem.includes("louver")) {
+    return "louver";
   }
 
   return "other";
@@ -392,6 +405,7 @@ export function StructuralOpenings({
       door: [],
       curtainWall: [],
       skylight: [],
+      louver: [],
       other: [],
     };
 
@@ -662,7 +676,7 @@ export function StructuralOpenings({
           <div
             role="tablist"
             aria-label={t("projects.openings.familySelectorTitle")}
-            className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4"
+            className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5"
           >
             {displayedFamilies.map((family) => {
               const isActive = activeFamilyKey === family.key;

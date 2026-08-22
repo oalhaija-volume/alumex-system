@@ -26,6 +26,7 @@ function inferredOpeningType(line: OpeningAddonLine) {
   if (/^W-\d+/.test(code)) return "Window";
   if (/^D-\d+/.test(code)) return "Door";
   if (/^SK-\d+/.test(code)) return "Skylight";
+  if (/^L-\d+/.test(code)) return "Louver";
 
   return "";
 }

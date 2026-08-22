@@ -34,11 +34,11 @@ const projectWriteRoles = [
   "Branch Manager",
 ] as const;
 const fullProjectSelect =
-  "id, project_number, project_name, client_id, address, location_latitude, location_longitude, geofence_radius_meters, project_type, branch, sales_engineer_id, status, clients(client_name)";
+  "id, project_number, project_name, client_id, address, location_latitude, location_longitude, geofence_radius_meters, project_type, branch, sales_engineer_id, status, sales_status, structure_readiness, clients(client_name)";
 const baseProjectSelect =
-  "id, project_number, project_name, client_id, address, project_type, sales_engineer_id, status, clients(client_name)";
+  "id, project_number, project_name, client_id, address, project_type, sales_engineer_id, status, sales_status, structure_readiness, clients(client_name)";
 const projectSelectWithoutClient =
-  "id, project_number, project_name, client_id, address, project_type, sales_engineer_id, status";
+  "id, project_number, project_name, client_id, address, project_type, sales_engineer_id, status, sales_status, structure_readiness";
 const fullOpeningSelect =
   "id, project_id, floor, room, opening_code, opening_type, width, height, solid_panel_height, quantity, product_system, glass_type, aluminum_color, notes";
 const baseOpeningSelect =

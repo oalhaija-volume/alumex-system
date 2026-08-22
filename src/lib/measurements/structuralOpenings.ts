@@ -3,6 +3,7 @@ export const structuralOpeningTypes = [
   "Door",
   "Curtain Wall",
   "Skylight",
+  "Louver",
 ] as const;
 
 export type StructuralOpeningType = (typeof structuralOpeningTypes)[number];
@@ -18,6 +19,7 @@ const openingCodePrefixes: Record<StructuralOpeningType, string> = {
   Door: "D",
   "Curtain Wall": "CW",
   Skylight: "SK",
+  Louver: "L",
 };
 
 export function openingCodePrefix(type: StructuralOpeningType) {

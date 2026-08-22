@@ -29,6 +29,10 @@ import {
   structuralOpeningTypes,
 } from "../src/lib/measurements/structuralOpenings.ts";
 import {
+  canCreateQuotationForRole,
+  isProjectReadyForQuotation,
+} from "../src/lib/quotations/creation.ts";
+import {
   canCreateContractFromQuotationVersion,
   canRunQuotationVersionAction,
 } from "../src/lib/quotations/versionWorkflow.ts";
@@ -203,6 +207,38 @@ test("measurement handoff separates field capture from Indoor Sales review", () 
   assert.equal(roleHasCapability("Indoor Sales", "measurements:review"), true);
 });
 
+test("Indoor Sales owns quotation creation with an Admin override", () => {
+  assert.equal(canCreateQuotationForRole("Indoor Sales"), true);
+  assert.equal(canCreateQuotationForRole("Admin"), true);
+  assert.equal(canCreateQuotationForRole("Outdoor Sales"), false);
+  assert.equal(canCreateQuotationForRole("Sales Rep"), false);
+
+  assert.equal(
+    isProjectReadyForQuotation({
+      salesStatus: "ready_for_quotation",
+      structureReadiness: "ready",
+      openingCount: 2,
+    }),
+    true,
+  );
+  assert.equal(
+    isProjectReadyForQuotation({
+      salesStatus: "measurement_required",
+      structureReadiness: "ready",
+      openingCount: 2,
+    }),
+    false,
+  );
+  assert.equal(
+    isProjectReadyForQuotation({
+      salesStatus: "ready_for_quotation",
+      structureReadiness: "partially_ready",
+      openingCount: 1,
+    }),
+    false,
+  );
+});
+
 test("opening dimensions convert from centimeters to exact square meters", () => {
   assert.equal(
     centimetersToSquareMeters({ width: 100, height: 100, quantity: 1 }),
@@ -224,8 +260,10 @@ test("structural measurement only accepts broad opening types", () => {
     "Door",
     "Curtain Wall",
     "Skylight",
+    "Louver",
   ]);
   assert.equal(isStructuralOpeningType("Door"), true);
+  assert.equal(isStructuralOpeningType("Louver"), true);
   assert.equal(isStructuralOpeningType("Sliding"), false);
   assert.equal(isStructuralOpeningType("Clear glass"), false);
 });
@@ -235,10 +273,12 @@ test("structural opening codes use the selected opening type", () => {
   assert.equal(openingCodePrefix("Door"), "D");
   assert.equal(openingCodePrefix("Curtain Wall"), "CW");
   assert.equal(openingCodePrefix("Skylight"), "SK");
+  assert.equal(openingCodePrefix("Louver"), "L");
   assert.equal(nextStructuralOpeningCode("Window", ["W-01", "D-02"]), "W-02");
   assert.equal(nextStructuralOpeningCode("Door", ["D-01", "D-03"]), "D-04");
   assert.equal(nextStructuralOpeningCode("Curtain Wall", []), "CW-01");
   assert.equal(nextStructuralOpeningCode("Skylight", ["SK-09"]), "SK-10");
+  assert.equal(nextStructuralOpeningCode("Louver", ["L-01"]), "L-02");
 });
 
 test("measurable Outdoor Sales intake skips confirmation for measurements", () => {

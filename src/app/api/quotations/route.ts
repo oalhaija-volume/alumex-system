@@ -9,6 +9,15 @@ import { discountLimitForRoleFromSettings } from "@/lib/pricing/discountPolicySe
 import { friendlyDatabaseError, isDuplicateError } from "@/lib/friendlyErrors";
 import { canViewSalesPrices, normalizeAppRole } from "@/lib/auth/roles";
 import type { AppRole } from "@/lib/auth/roles";
+import {
+  canCreateQuotationForRole,
+  isProjectReadyForQuotation,
+} from "@/lib/quotations/creation";
+import {
+  normalizeProductName,
+  productCatalogKind,
+  productPricingSource,
+} from "@/lib/pricing/productPricing";
 
 const duplicateQuotationNumberMessage =
   "This quotation number already exists. Please try saving again.";
@@ -249,6 +258,83 @@ function pricingSourceForItems(items: ReturnType<typeof mapItems>) {
     : "catalog";
 }
 
+function quotationTotalsForItems(
+  items: ReturnType<typeof mapItems>,
+  quotationDiscountPercent: number,
+) {
+  const subtotal = items.reduce((sum, item) => {
+    const area = (item.width / 100) * (item.height / 100) * item.quantity;
+    return sum + area * item.unit_price;
+  }, 0);
+  const lineDiscountTotal = items.reduce((sum, item) => {
+    if (!item.is_discountable) {
+      return sum;
+    }
+
+    const area = (item.width / 100) * (item.height / 100) * item.quantity;
+    return sum + area * item.unit_price * (item.discount_percent / 100);
+  }, 0);
+  const quotationDiscountTotal =
+    (subtotal - lineDiscountTotal) * (quotationDiscountPercent / 100);
+
+  return {
+    subtotal,
+    lineDiscountTotal,
+    quotationDiscountTotal,
+    grandTotal: subtotal - lineDiscountTotal - quotationDiscountTotal,
+  };
+}
+
+async function loadConfiguredOpeningSystemPrices(
+  admin: ReturnType<typeof createAdminClient>,
+) {
+  const { data, error } = await admin
+    .from("product_price_settings")
+    .select("product_name, category, unit, unit_price, is_active")
+    .eq("is_active", true);
+
+  if (error) {
+    throw error;
+  }
+
+  return new Map(
+    (data ?? [])
+      .filter(
+        (system) =>
+          productCatalogKind(system.category) === "aluminum_system" &&
+          productPricingSource(system) === "catalog" &&
+          Number(system.unit_price) > 0,
+      )
+      .map((system) => [
+        normalizeProductName(system.product_name),
+        Number(system.unit_price),
+      ]),
+  );
+}
+
+function applyConfiguredOpeningSystemPrices(
+  items: ReturnType<typeof mapItems>,
+  systemPrices: Map<string, number>,
+) {
+  for (const item of items) {
+    if (item.line_type !== "base") {
+      continue;
+    }
+
+    const configuredPrice = systemPrices.get(
+      normalizeProductName(item.product_system ?? ""),
+    );
+
+    if (configuredPrice === undefined) {
+      return false;
+    }
+
+    item.unit_price = configuredPrice;
+  }
+
+  return true;
+}
+
 export async function GET() {
   const authCheck = await requireQuotationUser();
 
@@ -345,6 +431,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: authCheck.error }, { status: 401 });
   }
 
+  if (!canCreateQuotationForRole(authCheck.role)) {
+    return NextResponse.json(
+      { error: "Only Indoor Sales can create a quotation." },
+      { status: 403 },
+    );
+  }
+
   if (!hasSupabaseServiceRoleKey()) {
     return NextResponse.json(
       { error: supabaseServiceRoleError },
@@ -373,7 +466,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const { data: quotationProject, error: quotationProjectError } = await admin
     .from("projects")
-    .select("structure_readiness")
+    .select("sales_status, structure_readiness")
     .eq("id", body.project_id)
     .eq("client_id", body.client_id)
     .maybeSingle();
@@ -383,23 +476,54 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if (
-    quotationProject.structure_readiness === "partially_ready" ||
-    quotationProject.structure_readiness === "not_ready"
-  ) {
+  if (!isProjectReadyForQuotation({
+    salesStatus: quotationProject.sales_status,
+    structureReadiness: quotationProject.structure_readiness,
+    openingCount: items.filter((item) => item.line_type === "base").length,
+  })) {
     return NextResponse.json(
       { error: "Complete all opening measurements before creating a quotation." },
       { status: 409 },
     );
   }
+
+
+  let systemPrices: Map<string, number>;
+  try {
+    systemPrices = await loadConfiguredOpeningSystemPrices(admin);
+  } catch (configuredSystemsError) {
+    return quotationErrorResponse(
+      configuredSystemsError,
+      "Unable to load aluminum system prices.",
+      500,
+    );
+  }
+
+  if (!applyConfiguredOpeningSystemPrices(items, systemPrices)) {
+    return NextResponse.json(
+      {
+        error:
+          "Select an active aluminum system with a configured price for every opening.",
+      },
+      { status: 409 },
+    );
+  }
   const pricingSource = pricingSourceForItems(items);
+  const quotationDiscountPercent = numberValue(
+    body.quotation_discount_percent,
+  );
   const discountLimit = await discountLimitForRoleFromSettings(
     authCheck.role,
     admin,
   );
   const hasInvalidDiscount =
-    numberValue(body.quotation_discount_percent) > discountLimit ||
-    items.some((item) => item.is_discountable && item.discount_percent > discountLimit);
+    quotationDiscountPercent < 0 ||
+    quotationDiscountPercent > discountLimit ||
+    items.some(
+      (item) =>
+        item.is_discountable &&
+        (item.discount_percent < 0 || item.discount_percent > discountLimit),
+    );
 
   if (hasInvalidDiscount) {
     return NextResponse.json(
@@ -407,6 +531,10 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+  const serverTotals = quotationTotalsForItems(
+    items,
+    quotationDiscountPercent,
+  );
 
   for (let attempt = 0; attempt < 10; attempt += 1) {
     let rpcResult:
@@ -418,11 +546,11 @@ export async function POST(request: Request) {
         p_quotation_id: null,
         p_project_id: body.project_id,
         p_client_id: body.client_id,
-        p_quotation_discount_percent: numberValue(body.quotation_discount_percent),
-        p_subtotal: numberValue(body.subtotal),
-        p_line_discount_total: numberValue(body.line_discount_total),
-        p_quotation_discount_total: numberValue(body.quotation_discount_total),
-        p_grand_total: numberValue(body.grand_total),
+        p_quotation_discount_percent: quotationDiscountPercent,
+        p_subtotal: serverTotals.subtotal,
+        p_line_discount_total: serverTotals.lineDiscountTotal,
+        p_quotation_discount_total: serverTotals.quotationDiscountTotal,
+        p_grand_total: serverTotals.grandTotal,
         p_pricing_source: pricingSource,
         p_notes: nullableText(body.notes),
         p_prepared_by_text: nullableText(body.prepared_by_text),
@@ -480,6 +608,13 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: authCheck.error }, { status: 401 });
   }
 
+  if (!canCreateQuotationForRole(authCheck.role)) {
+    return NextResponse.json(
+      { error: "Quotation editing is assigned to Indoor Sales." },
+      { status: 403 },
+    );
+  }
+
   if (!hasSupabaseServiceRoleKey()) {
     return NextResponse.json(
       { error: supabaseServiceRoleError },
@@ -508,14 +643,42 @@ export async function PATCH(request: Request) {
   }
 
   const admin = createAdminClient();
+  let systemPrices: Map<string, number>;
+  try {
+    systemPrices = await loadConfiguredOpeningSystemPrices(admin);
+  } catch (configuredSystemsError) {
+    return quotationErrorResponse(
+      configuredSystemsError,
+      "Unable to load aluminum system prices.",
+      500,
+    );
+  }
+
+  if (!applyConfiguredOpeningSystemPrices(items, systemPrices)) {
+    return NextResponse.json(
+      {
+        error:
+          "Select an active aluminum system with a configured price for every opening.",
+      },
+      { status: 409 },
+    );
+  }
   const pricingSource = pricingSourceForItems(items);
+  const quotationDiscountPercent = numberValue(
+    body.quotation_discount_percent,
+  );
   const discountLimit = await discountLimitForRoleFromSettings(
     authCheck.role,
     admin,
   );
   const hasInvalidDiscount =
-    numberValue(body.quotation_discount_percent) > discountLimit ||
-    items.some((item) => item.is_discountable && item.discount_percent > discountLimit);
+    quotationDiscountPercent < 0 ||
+    quotationDiscountPercent > discountLimit ||
+    items.some(
+      (item) =>
+        item.is_discountable &&
+        (item.discount_percent < 0 || item.discount_percent > discountLimit),
+    );
 
   if (hasInvalidDiscount) {
     return NextResponse.json(
@@ -523,16 +686,20 @@ export async function PATCH(request: Request) {
       { status: 400 },
     );
   }
+  const serverTotals = quotationTotalsForItems(
+    items,
+    quotationDiscountPercent,
+  );
 
   const { data, error } = await admin.rpc("save_quotation_version_with_items", {
     p_quotation_id: body.id,
     p_project_id: body.project_id,
     p_client_id: body.client_id,
-    p_quotation_discount_percent: numberValue(body.quotation_discount_percent),
-    p_subtotal: numberValue(body.subtotal),
-    p_line_discount_total: numberValue(body.line_discount_total),
-    p_quotation_discount_total: numberValue(body.quotation_discount_total),
-    p_grand_total: numberValue(body.grand_total),
+    p_quotation_discount_percent: quotationDiscountPercent,
+    p_subtotal: serverTotals.subtotal,
+    p_line_discount_total: serverTotals.lineDiscountTotal,
+    p_quotation_discount_total: serverTotals.quotationDiscountTotal,
+    p_grand_total: serverTotals.grandTotal,
     p_pricing_source: pricingSource,
     p_notes: nullableText(body.notes),
     p_prepared_by_text: nullableText(body.prepared_by_text),

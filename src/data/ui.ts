@@ -46,6 +46,8 @@ export type Project = {
   salesEngineer: string;
   status: ProjectStatus;
   workflowStatus?: ProjectWorkflowStatus;
+  salesStatus?: string;
+  structureReadiness?: string;
   structuralOpenings: StructuralOpening[];
 };
 

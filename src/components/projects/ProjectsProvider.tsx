@@ -65,6 +65,8 @@ type ProjectRow = {
   sales_engineer_id: string | null;
   sales_engineer_name?: string | null;
   status: ProjectStatus;
+  sales_status?: string | null;
+  structure_readiness?: string | null;
   clients?: { client_name: string | null } | Array<{ client_name: string | null }> | null;
 };
 
@@ -167,6 +169,8 @@ function mapProject(
     salesEngineerId: project.sales_engineer_id ?? undefined,
     salesEngineer: project.sales_engineer_name ?? "",
     status: project.status,
+    salesStatus: project.sales_status ?? undefined,
+    structureReadiness: project.structure_readiness ?? undefined,
     structuralOpenings: openingsByProject.get(project.id) ?? [],
   };
 }

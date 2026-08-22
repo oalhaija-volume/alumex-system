@@ -738,7 +738,7 @@
       "addRowsRequired": "Fill at least one opening row before saving.",
       "savedOpenings": "Saved openings",
       "familySelectorTitle": "Opening families",
-      "familySelectorDescription": "Structural openings are Window, Door, Curtain Wall, or Skylight. Product systems and add-on services are selected later during quotation.",
+      "familySelectorDescription": "Structural openings are Window, Door, Curtain Wall, Skylight, or Louver. Product systems and add-on services are selected later during quotation.",
       "familySummary": "{count} openings · {area} m²",
       "familySheet": "{family} opening sheet",
       "familySheetDescription": "Enter only the location and structural size for {family}.",
@@ -751,6 +751,7 @@
         "door": "Door",
         "curtainWall": "Curtain Wall",
         "skylight": "Skylight",
+        "louver": "Louver",
         "other": "Needs classification"
       },
       "fields": {
@@ -806,6 +807,10 @@
     "noClientsPrerequisite": "Create a client first, then create a project for that client.",
     "noProjectsPrerequisite": "Create a project first, then add structural openings from the project details page.",
     "noOpeningsPrerequisite": "Add at least one structural opening to a project before creating a quotation.",
+    "noReadyProjectsPrerequisite": "Complete the initial measurement in full before Indoor Sales creates the quotation.",
+    "indoorSalesOnly": "Quotation creation is assigned to Indoor Sales.",
+    "selectOpeningSystem": "Select aluminum system",
+    "openingSystemRequired": "Select a priced aluminum system for every opening before saving the quotation.",
     "savedQuotation": "Saved quotation locally.",
     "validationRequired": "Select a project with at least one opening before generating a quotation.",
     "quotationPreview": "Quotation Preview",

@@ -51,6 +51,10 @@ import {
   openingAddonProducts,
   projectServiceProducts,
 } from "@/lib/quotations/openingAddons";
+import {
+  canCreateQuotationForRole,
+  isProjectReadyForQuotation,
+} from "@/lib/quotations/creation";
 
 function createQuotationLines(
   projectId: string,
@@ -65,7 +69,9 @@ function createQuotationLines(
 
   return project.structuralOpenings.map((opening) => ({
     ...opening,
-    unitPrice: productPriceForSystem(opening.productSystem, products),
+    unitPrice: opening.productSystem
+      ? productPriceForSystem(opening.productSystem, products)
+      : 0,
     discountPercent: 0,
     lineType: "base",
     isDiscountable: true,
@@ -204,9 +210,20 @@ export function QuotationBuilder() {
   const builderFormRef = useRef<HTMLDivElement | null>(null);
   const generatedLineIdRef = useRef(0);
   const requestedProjectId = searchParams.get("projectId") ?? "";
+  const quotationReadyProjects = useMemo(
+    () =>
+      projects.filter((project) =>
+        isProjectReadyForQuotation({
+          salesStatus: project.salesStatus,
+          structureReadiness: project.structureReadiness,
+          openingCount: project.structuralOpenings.length,
+        }),
+      ),
+    [projects],
+  );
   const initialProjectId =
-    projects.find((project) => project.id === requestedProjectId)?.id ??
-    projects[0]?.id ??
+    quotationReadyProjects.find((project) => project.id === requestedProjectId)?.id ??
+    quotationReadyProjects[0]?.id ??
     "";
   const [projectId, setProjectId] = useState(initialProjectId);
   const [quotationNumber, setQuotationNumber] = useState(() =>
@@ -244,13 +261,15 @@ export function QuotationBuilder() {
     createQuotationLines(initialProjectId, projects, []),
   );
   const selectedProject = projects.find((project) => project.id === projectId);
+  const canCreateForRole = canCreateQuotationForRole(role);
   const hasClients = clients.length > 0;
   const hasProjects = projects.length > 0;
   const hasProjectsWithOpenings = projects.some(
     (project) => project.structuralOpenings.length > 0,
   );
+  const hasQuotationReadyProjects = quotationReadyProjects.length > 0;
   const canCreateQuotation =
-    hasClients && hasProjects && hasProjectsWithOpenings;
+    canCreateForRole && hasClients && hasQuotationReadyProjects;
   const existingProjectQuotation = selectedProject
     ? savedQuotations.find((quotation) => quotation.project.id === selectedProject.id)
     : undefined;
@@ -272,6 +291,14 @@ export function QuotationBuilder() {
   const systemPrices = useMemo(
     () => productsForCatalog(productPrices, "aluminum_system", true),
     [productPrices],
+  );
+  const openingSystemPrices = useMemo(
+    () =>
+      systemPrices.filter(
+        (system) =>
+          productPricingSource(system) === "catalog" && system.unit_price > 0,
+      ),
+    [systemPrices],
   );
   const serviceVariants = useMemo(
     () => productsForCatalog(productPrices, "service_variant", true),
@@ -375,10 +402,10 @@ export function QuotationBuilder() {
       }
 
       const nextProjectId =
-        projects.find((project) => project.id === requestedProjectId)?.id ??
-        (projectId && projects.some((project) => project.id === projectId)
+        quotationReadyProjects.find((project) => project.id === requestedProjectId)?.id ??
+        (projectId && quotationReadyProjects.some((project) => project.id === projectId)
           ? projectId
-          : projects[0]?.id ?? "");
+          : quotationReadyProjects[0]?.id ?? "");
 
       if (nextProjectId !== projectId) {
         loadProject(nextProjectId);
@@ -386,7 +413,13 @@ export function QuotationBuilder() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [editingQuotationId, loadProject, projectId, projects, requestedProjectId]);
+  }, [
+    editingQuotationId,
+    loadProject,
+    projectId,
+    quotationReadyProjects,
+    requestedProjectId,
+  ]);
 
   useEffect(() => {
     const timer = window.setTimeout(async () => {
@@ -460,6 +493,25 @@ export function QuotationBuilder() {
         line.id === lineId ? { ...line, [key]: value } : line,
       ),
     );
+  }
+
+  function updateOpeningSystem(lineId: string, systemName: string) {
+    const system = openingSystemPrices.find(
+      (item) => item.product_name === systemName,
+    );
+
+    setLines((currentLines) =>
+      currentLines.map((line) =>
+        line.id === lineId
+          ? {
+              ...line,
+              productSystem: system?.product_name ?? "",
+              unitPrice: system?.unit_price ?? 0,
+            }
+          : line,
+      ),
+    );
+    setError("");
   }
 
   function updateScopeQuantity(lineId: string, quantity: number) {
@@ -806,6 +858,21 @@ export function QuotationBuilder() {
       return;
     }
 
+    if (
+      lines.some(
+        (line) =>
+          (line.lineType ?? "base") === "base" &&
+          (!line.productSystem ||
+            line.unitPrice <= 0 ||
+            !openingSystemPrices.some(
+              (system) => system.product_name === line.productSystem,
+            )),
+      )
+    ) {
+      setError(t("quotations.openingSystemRequired"));
+      return;
+    }
+
     if (!selectedProject.clientId) {
       setError(t("quotations.missingClient"));
       return;
@@ -1112,13 +1179,15 @@ export function QuotationBuilder() {
                     >
                       {t("quotations.viewQuotation")}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => void editQuotation(quotation)}
-                      className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground transition hover:border-primary"
-                    >
-                      {t("quotations.editQuotation")}
-                    </button>
+                    {canCreateForRole ? (
+                      <button
+                        type="button"
+                        onClick={() => void editQuotation(quotation)}
+                        className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground transition hover:border-primary"
+                      >
+                        {t("quotations.editQuotation")}
+                      </button>
+                    ) : null}
                     {quotation.versionStatus === "draft" ? (
                       <button
                         type="button"
@@ -1201,11 +1270,15 @@ export function QuotationBuilder() {
               {t("quotations.prerequisitesTitle")}
             </p>
             <p className="text-sm leading-6 text-muted">
-              {!hasClients
+              {!canCreateForRole
+                ? t("quotations.indoorSalesOnly")
+                : !hasClients
                 ? t("quotations.noClientsPrerequisite")
                 : !hasProjects
                   ? t("quotations.noProjectsPrerequisite")
-                  : t("quotations.noOpeningsPrerequisite")}
+                  : !hasProjectsWithOpenings
+                    ? t("quotations.noOpeningsPrerequisite")
+                    : t("quotations.noReadyProjectsPrerequisite")}
             </p>
             <div className="flex flex-wrap gap-2">
               {!hasClients ? (
@@ -1255,7 +1328,10 @@ export function QuotationBuilder() {
               onChange={(event) => loadProject(event.target.value)}
               className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-[var(--alumex-blue)] focus:ring-4 focus:ring-blue-100"
             >
-              {projects.map((project) => (
+              {(isEditingExistingQuotation && selectedProject
+                ? [selectedProject]
+                : quotationReadyProjects
+              ).map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.projectNumber} - {term(project.projectName)}
                 </option>
@@ -1558,7 +1634,34 @@ export function QuotationBuilder() {
                       </td>
                       <td className="px-3 py-4 text-slate-700">
                         {isBaseLine ? (
-                          term(line.productSystem)
+                          <select
+                            value={line.productSystem}
+                            onChange={(event) =>
+                              updateOpeningSystem(line.id, event.target.value)
+                            }
+                            aria-label={`${t("quotations.selectOpeningSystem")} ${line.openingCode}`}
+                            className="h-9 w-52 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-700"
+                          >
+                            <option value="">
+                              {t("quotations.selectOpeningSystem")}
+                            </option>
+                            {line.productSystem &&
+                            !openingSystemPrices.some(
+                              (system) => system.product_name === line.productSystem,
+                            ) ? (
+                              <option value={line.productSystem} disabled>
+                                {line.productSystem}
+                              </option>
+                            ) : null}
+                            {openingSystemPrices.map((system) => (
+                              <option
+                                key={system.id ?? system.product_name}
+                                value={system.product_name}
+                              >
+                                {system.product_name} — {formatCurrency(system.unit_price)} / {system.unit}
+                              </option>
+                            ))}
+                          </select>
                         ) : (
                           <input
                             value={line.productSystem}
@@ -1616,6 +1719,7 @@ export function QuotationBuilder() {
                           type="number"
                           min="0"
                           value={line.unitPrice}
+                          readOnly={isBaseLine}
                           onChange={(event) =>
                             updateLine(
                               line.id,
@@ -1623,7 +1727,7 @@ export function QuotationBuilder() {
                               Number(event.target.value),
                             )
                           }
-                          className="h-9 w-28 rounded-md border border-slate-300 px-2 text-sm"
+                          className="h-9 w-28 rounded-md border border-slate-300 px-2 text-sm read-only:bg-slate-50 read-only:font-semibold"
                         />
                       </td>
                       <td className="px-3 py-4">
@@ -1727,7 +1831,40 @@ export function QuotationBuilder() {
                   </p>
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  {!isBaseLine ? (
+                  {isBaseLine ? (
+                    <label className="sm:col-span-2">
+                      <span className="text-xs font-bold uppercase text-slate-500">
+                        {t("quotations.selectOpeningSystem")}
+                      </span>
+                      <select
+                        value={line.productSystem}
+                        onChange={(event) =>
+                          updateOpeningSystem(line.id, event.target.value)
+                        }
+                        className="mt-2 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"
+                      >
+                        <option value="">
+                          {t("quotations.selectOpeningSystem")}
+                        </option>
+                        {line.productSystem &&
+                        !openingSystemPrices.some(
+                          (system) => system.product_name === line.productSystem,
+                        ) ? (
+                          <option value={line.productSystem} disabled>
+                            {line.productSystem}
+                          </option>
+                        ) : null}
+                        {openingSystemPrices.map((system) => (
+                          <option
+                            key={system.id ?? system.product_name}
+                            value={system.product_name}
+                          >
+                            {system.product_name} — {formatCurrency(system.unit_price)} / {system.unit}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
                     <>
                       <label className="sm:col-span-2">
                         <span className="text-xs font-bold uppercase text-slate-500">
@@ -1757,7 +1894,7 @@ export function QuotationBuilder() {
                         />
                       </label>
                     </>
-                  ) : null}
+                  )}
                   <label>
                     <span className="text-xs font-bold uppercase text-slate-500">
                       {t("settings.unitPrice")}
@@ -1766,6 +1903,7 @@ export function QuotationBuilder() {
                       type="number"
                       min="0"
                       value={line.unitPrice}
+                      readOnly={isBaseLine}
                       onChange={(event) =>
                         updateLine(
                           line.id,
@@ -1773,7 +1911,7 @@ export function QuotationBuilder() {
                           Number(event.target.value),
                         )
                       }
-                      className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                      className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm read-only:bg-slate-50 read-only:font-semibold"
                     />
                   </label>
                   <label>

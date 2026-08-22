@@ -16,6 +16,7 @@ import {
 import { roleHasCapability } from "../src/lib/auth/capabilities.ts";
 import {
   distanceBetweenCoordinatesMeters,
+  hasNearbyProjectSite,
   normalizeGeofenceRadius,
   outdoorSiteDuplicateRadiusMeters,
   parseProjectLocation,
@@ -39,7 +40,10 @@ import {
   isMissingDatabaseObjectError,
   isOutdoorSiteDuplicateError,
 } from "../src/lib/friendlyErrors.ts";
-import { intakeMovesDirectlyToMeasurements } from "../src/lib/intake/nextStage.ts";
+import {
+  intakeMovesDirectlyToMeasurements,
+  readinessNeedsFollowUp,
+} from "../src/lib/intake/nextStage.ts";
 import {
   canAttachAddonToOpening,
   openingAddonProducts,
@@ -151,6 +155,32 @@ test("project pins reject missing or out-of-range coordinates", () => {
   );
 });
 
+test("Outdoor Sales blocks a repeated site but allows different locations", () => {
+  const existingSites = [{ latitude: 33.3152, longitude: 44.3661 }];
+
+  assert.equal(
+    hasNearbyProjectSite(
+      { latitude: 33.3152, longitude: 44.3661 },
+      existingSites,
+    ),
+    true,
+  );
+  assert.equal(
+    hasNearbyProjectSite(
+      { latitude: 33.316, longitude: 44.3661 },
+      existingSites,
+    ),
+    true,
+  );
+  assert.equal(
+    hasNearbyProjectSite(
+      { latitude: 33.318, longitude: 44.3661 },
+      existingSites,
+    ),
+    false,
+  );
+});
+
 test("measurement handoff separates field capture from Indoor Sales review", () => {
   assert.deepEqual(
     [
@@ -211,7 +241,7 @@ test("structural opening codes use the selected opening type", () => {
   assert.equal(nextStructuralOpeningCode("Skylight", ["SK-09"]), "SK-10");
 });
 
-test("ready Outdoor Sales intake skips confirmation for measurements", () => {
+test("measurable Outdoor Sales intake skips confirmation for measurements", () => {
   assert.equal(
     intakeMovesDirectlyToMeasurements({
       role: "Outdoor Sales",
@@ -240,10 +270,21 @@ test("ready Outdoor Sales intake skips confirmation for measurements", () => {
     intakeMovesDirectlyToMeasurements({
       role: "Outdoor Sales",
       source: "outdoor_sales",
+      readiness: "partially_ready",
+    }),
+    true,
+  );
+  assert.equal(
+    intakeMovesDirectlyToMeasurements({
+      role: "Outdoor Sales",
+      source: "outdoor_sales",
       readiness: "not_ready",
     }),
     false,
   );
+  assert.equal(readinessNeedsFollowUp("ready"), false);
+  assert.equal(readinessNeedsFollowUp("partially_ready"), true);
+  assert.equal(readinessNeedsFollowUp("not_ready"), true);
 });
 
 test("completed field measurements can move directly to quotation", () => {

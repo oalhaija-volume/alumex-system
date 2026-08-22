@@ -664,7 +664,7 @@ export function CrmWorkspace({
         className={
           embedded
             ? "grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]"
-            : "grid gap-4 2xl:grid-cols-[380px_minmax(0,1fr)_280px]"
+            : "grid gap-4 2xl:grid-cols-[340px_minmax(0,1fr)_280px]"
         }
       >
         <section className="material-card min-w-0 overflow-hidden">

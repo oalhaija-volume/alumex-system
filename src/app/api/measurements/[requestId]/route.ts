@@ -66,6 +66,37 @@ async function completeMeasurementsForQuotation(
     return measurementRequest;
   }
 
+  const { data: project, error: projectError } = await admin
+    .from("projects")
+    .select("sales_status, structure_readiness")
+    .eq("id", measurementRequest.project_id)
+    .maybeSingle();
+  if (projectError || !project) {
+    throw new Error(projectError?.message ?? "Project was not found.");
+  }
+
+  if (project.structure_readiness === "partially_ready") {
+    const { data: projectOpenings, error: openingsError } = await admin
+      .from("openings")
+      .select("site_readiness, width, height")
+      .eq("measurement_request_id", requestId)
+      .is("measurement_submission_id", null);
+    if (openingsError) throw openingsError;
+    if (
+      !projectOpenings?.length ||
+      projectOpenings.some(
+        (opening) =>
+          opening.site_readiness !== "ready" ||
+          opening.width <= 0 ||
+          opening.height <= 0,
+      )
+    ) {
+      throw new Error(
+        "Save the partial visit and measure every not-ready opening before completing the project.",
+      );
+    }
+  }
+
   let currentStatus = measurementRequest.status;
   if (["in_progress", "draft_saved"].includes(currentStatus)) {
     const { error: submitError } = await admin.rpc(
@@ -116,20 +147,62 @@ async function completeMeasurementsForQuotation(
     .eq("id", requestId);
   if (completionError) throw completionError;
 
-  const { data: project, error: projectError } = await admin
-    .from("projects")
-    .select("sales_status")
-    .eq("id", measurementRequest.project_id)
-    .maybeSingle();
-  if (projectError || !project) {
-    throw new Error(projectError?.message ?? "Project was not found.");
+  const previousStatus = project.sales_status;
+  let nextFollowUpAt: string | null | undefined;
+  if (project.structure_readiness === "partially_ready") {
+    const {
+      data: completedFollowUps,
+      error: followUpCompletionError,
+    } = await admin
+      .from("follow_up_tasks")
+      .update({
+        status: "completed",
+        completed_at: completedAt,
+        completed_by: actor.id,
+        completion_outcome: "all_openings_ready",
+      })
+      .eq("project_id", measurementRequest.project_id)
+      .eq("task_type", "structure_readiness")
+      .eq("status", "open")
+      .select("id");
+    if (followUpCompletionError) throw followUpCompletionError;
+
+    const completedFollowUpIds = (completedFollowUps ?? []).map(
+      (followUp) => followUp.id,
+    );
+    if (completedFollowUpIds.length > 0) {
+      const { error: notificationUpdateError } = await admin
+        .from("notifications")
+        .update({ read_at: completedAt })
+        .eq("entity_type", "follow_up_task")
+        .in("entity_id", completedFollowUpIds)
+        .is("read_at", null);
+      if (notificationUpdateError) throw notificationUpdateError;
+    }
+
+    const { data: remainingFollowUps, error: remainingFollowUpsError } =
+      await admin
+        .from("follow_up_tasks")
+        .select("due_at")
+        .eq("project_id", measurementRequest.project_id)
+        .eq("status", "open")
+        .order("due_at", { ascending: true })
+        .limit(1);
+    if (remainingFollowUpsError) throw remainingFollowUpsError;
+    nextFollowUpAt = remainingFollowUps?.[0]?.due_at ?? null;
   }
 
-  const previousStatus = project.sales_status;
   const { error: projectUpdateError } = await admin
     .from("projects")
     .update({
       sales_status: "ready_for_quotation",
+      structure_readiness:
+        project.structure_readiness === "partially_ready"
+          ? "ready"
+          : project.structure_readiness,
+      ...(nextFollowUpAt !== undefined
+        ? { next_follow_up_at: nextFollowUpAt }
+        : {}),
       last_updated_by: actor.id,
       updated_at: completedAt,
     })
@@ -157,7 +230,14 @@ async function completeMeasurementsForQuotation(
     entity_type: "measurement_request",
     entity_id: requestId,
     previous_value: { status: currentStatus },
-    new_value: { status: "approved", project_status: "ready_for_quotation" },
+    new_value: {
+      status: "approved",
+      project_status: "ready_for_quotation",
+      structure_readiness:
+        project.structure_readiness === "partially_ready"
+          ? "ready"
+          : project.structure_readiness,
+    },
     reason: "Measurements saved and completed for quotation.",
   });
   if (auditError) throw auditError;

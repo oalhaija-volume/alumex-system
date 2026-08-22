@@ -464,7 +464,7 @@
       "opportunityQuestion": "Tell us about the opportunity",
       "opportunityHelp": "Add the project essentials now. You can complete the remaining details later.",
       "siteReady": "Is the site ready for measurement?",
-      "followUpHelp": "Indoor Sales will receive this project in the follow-up queue at the selected time.",
+      "followUpHelp": "Indoor Sales will receive this project to follow up on full or remaining site readiness.",
       "moreOpportunity": "Add contacts, value, files, or notes (optional)"
     },
     "sections": {
@@ -523,6 +523,7 @@
     },
     "readiness": {
       "ready": "Ready",
+      "partially_ready": "Partially ready",
       "not_ready": "Not ready"
     },
     "priority": {
@@ -551,7 +552,7 @@
       "useCurrentLocation": "Use current location",
       "locating": "Getting location...",
       "currentLocationError": "Location access failed. Allow location permission or add the pin on the map.",
-      "duplicateRadius": "Outdoor Sales duplicate protection checks this customer’s active projects within a fixed 200 m radius.",
+      "duplicateRadius": "Outdoor Sales duplicate protection checks all active team projects within a fixed 200 m radius.",
       "gpsAddress": "GPS location:",
       "pin": "Saved map pin"
     },
@@ -597,7 +598,7 @@
       "project": "Project name, branch, type, and address are required.",
       "location": "Outdoor Sales must add the project pin on the map or use the current location.",
       "locationCheck": "Unable to check this project location. Try again.",
-      "siteDuplicate": "A project for this client already exists within 200 m. Open the existing project or contact your manager.",
+      "siteDuplicate": "Outdoor Sales already registered an active project within 200 m of this site. Open the existing project or contact your manager.",
       "readiness": "Select when Indoor Sales should follow up.",
       "save": "Unable to save the sales intake.",
       "attachment": "The intake was created, but an attachment could not be uploaded."
@@ -1088,6 +1089,10 @@
     "saveAndComplete": "Save and complete measurements",
     "savingAndCompleting": "Saving and completing...",
     "savedAndReadyForQuotation": "Measurements saved. The project is now ready for quotation.",
+    "savePartialVisit": "Save partial visit",
+    "partialVisitSaved": "Partial measurements saved. The project remains in Mini CRM for a readiness follow-up and return visit.",
+    "openingReadiness": "Opening readiness",
+    "partialOpeningHelp": "Add every known opening. Measure ready openings now; mark the remaining openings Not ready and leave their dimensions blank.",
     "workflowDetails": "Workflow details",
     "editOpening": "Edit opening",
     "newOpenings": "New openings",

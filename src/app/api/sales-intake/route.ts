@@ -11,7 +11,11 @@ import {
   outdoorSiteDuplicateRadiusMeters,
   parseProjectLocation,
 } from "@/lib/location/coordinates";
-import { intakeMovesDirectlyToMeasurements } from "@/lib/intake/nextStage";
+import {
+  intakeMovesDirectlyToMeasurements,
+  readinessNeedsFollowUp,
+  type StructureReadiness,
+} from "@/lib/intake/nextStage";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   hasSupabaseServiceRoleKey,
@@ -142,7 +146,7 @@ export async function POST(request: Request) {
     !address ||
     !["Rasafa", "Karkh"].includes(branch) ||
     !sourceValues.has(source) ||
-    !["ready", "not_ready"].includes(readiness)
+    !["ready", "partially_ready", "not_ready"].includes(readiness)
   ) {
     return NextResponse.json(
       { error: "Complete all required project and readiness fields." },
@@ -184,11 +188,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Select a valid client." }, { status: 400 });
   }
 
-  const followUpAt =
-    readiness === "not_ready" ? text(project?.followUpAt) : "";
+  const typedReadiness = readiness as StructureReadiness;
+  const needsReadinessFollowUp = readinessNeedsFollowUp(typedReadiness);
+  const followUpAt = needsReadinessFollowUp ? text(project?.followUpAt) : "";
   const followUpTime = Date.parse(followUpAt);
   if (
-    readiness === "not_ready" &&
+    needsReadinessFollowUp &&
     (!followUpAt ||
       !Number.isFinite(followUpTime) ||
       followUpTime <= Date.now())
@@ -198,8 +203,9 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  const followUpDueAt =
-    readiness === "not_ready" ? new Date(followUpTime).toISOString() : null;
+  const followUpDueAt = needsReadinessFollowUp
+    ? new Date(followUpTime).toISOString()
+    : null;
 
   const admin = createAdminClient();
   let clientId = existingClientId;
@@ -240,6 +246,7 @@ export async function POST(request: Request) {
         ? estimatedValueRaw
         : null;
     const projectNumber = await nextProjectNumber();
+    const canMeasureNow = readiness !== "not_ready";
     const department =
       readiness === "not_ready"
         ? "indoor_sales"
@@ -263,12 +270,12 @@ export async function POST(request: Request) {
             : normalizeGeofenceRadius(project?.geofenceRadiusMeters),
         project_type: projectType,
         branch: branch as "Rasafa" | "Karkh",
-        status: readiness === "ready" ? "Measuring" : "Draft",
+        status: canMeasureNow ? "Measuring" : "Draft",
         sales_status:
-          readiness === "ready"
+          canMeasureNow
             ? "measurement_required"
             : "waiting_for_follow_up",
-        structure_readiness: readiness as "ready" | "not_ready",
+        structure_readiness: typedReadiness,
         expected_structure_ready_date: null,
         next_follow_up_at: followUpDueAt,
         original_source: source as
@@ -303,7 +310,7 @@ export async function POST(request: Request) {
 
     if (projectError) throw projectError;
 
-    if (readiness === "not_ready") {
+    if (needsReadinessFollowUp) {
       const reminderAt = new Date(
         Math.max(Date.now(), followUpTime - 24 * 60 * 60 * 1000),
       ).toISOString();
@@ -328,7 +335,7 @@ export async function POST(request: Request) {
     const startsOwnMeasurement = intakeMovesDirectlyToMeasurements({
       role: auth.role,
       source,
-      readiness: readiness as "ready" | "not_ready",
+      readiness: typedReadiness,
     });
     if (startsOwnMeasurement) {
       const { error: measurementRequestError } = await admin
@@ -419,7 +426,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "A project for this client already exists within 200 m. Open the existing project or contact your manager.",
+            "Outdoor Sales already registered an active project within 200 m of this site. Open the existing project or contact your manager.",
         },
         { status: 409 },
       );

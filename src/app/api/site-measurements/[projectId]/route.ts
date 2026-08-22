@@ -27,6 +27,7 @@ type ProjectRow = {
   address: string | null;
   workflow_status: string | null;
   sales_status: string | null;
+  structure_readiness: string;
   project_engineer_id: string | null;
   site_engineer_id: string | null;
   clients:
@@ -49,6 +50,7 @@ type OpeningRow = {
   floor: string | null;
   room: string | null;
   opening_code: string;
+  site_readiness?: "ready" | "not_ready";
   width: number | string;
   height: number | string;
   solid_panel_height?: number | string | null;
@@ -87,6 +89,7 @@ type OpeningPayload = {
   floor?: unknown;
   room?: unknown;
   openingCode?: unknown;
+  siteReadiness?: unknown;
   width?: unknown;
   height?: unknown;
   length?: unknown;
@@ -124,6 +127,7 @@ function mapOpening(opening: OpeningRow) {
     floor: opening.floor ?? "",
     room: opening.room ?? "",
     openingCode: opening.opening_code,
+    siteReadiness: opening.site_readiness ?? "ready",
     width: Number(opening.width) || 0,
     height: Number(opening.height) || 0,
     length: Number(opening.height) || 0,
@@ -144,15 +148,26 @@ function mapOpening(opening: OpeningRow) {
   };
 }
 
-function normalizeOpeningPayload(body: OpeningPayload) {
+function normalizeOpeningPayload(
+  body: OpeningPayload,
+  projectReadiness: string,
+) {
   const length = numberValue(body.length ?? body.height);
   const openingType = textValue(body.openingType ?? body.type);
+  const siteReadiness = body.siteReadiness === "not_ready" ? "not_ready" : "ready";
+  if (siteReadiness === "not_ready" && projectReadiness !== "partially_ready") {
+    return {
+      ok: false as const,
+      error: "Only partially ready projects can include not-ready openings.",
+    };
+  }
   const opening = {
     floor: textValue(body.floor),
     room: textValue(body.room),
     opening_code: textValue(body.openingCode),
-    width: numberValue(body.width),
-    height: length,
+    site_readiness: siteReadiness,
+    width: siteReadiness === "not_ready" ? 0 : numberValue(body.width),
+    height: siteReadiness === "not_ready" ? 0 : length,
     quantity: 1,
     opening_type: openingType,
   };
@@ -161,14 +176,16 @@ function normalizeOpeningPayload(body: OpeningPayload) {
     !opening.floor ||
     !opening.room ||
     !opening.opening_code ||
-    opening.width <= 0 ||
-    opening.height <= 0 ||
+    (siteReadiness === "ready" &&
+      (opening.width <= 0 || opening.height <= 0)) ||
     !isStructuralOpeningType(opening.opening_type)
   ) {
     return {
       ok: false as const,
       error:
-        "Floor, room, width, height, and opening type are required.",
+        siteReadiness === "ready"
+          ? "Floor, room, width, height, and opening type are required."
+          : "Floor, room, and opening type are required.",
     };
   }
 
@@ -237,7 +254,7 @@ async function loadProjectForUser(projectId: string) {
   const { data, error } = await admin
     .from("projects")
     .select(
-      "id, project_number, project_name, client_id, address, workflow_status, sales_status, project_engineer_id, site_engineer_id, clients(client_name, mobile, email)",
+      "id, project_number, project_name, client_id, address, workflow_status, sales_status, structure_readiness, project_engineer_id, site_engineer_id, clients(client_name, mobile, email)",
     )
     .eq("id", projectId)
     .maybeSingle();
@@ -340,7 +357,7 @@ async function loadOpenings(
   const extendedResult = await admin
     .from("openings")
     .select(
-      "id, project_id, floor, room, opening_code, width, height, solid_panel_height, fixed_height, quantity, area_sqm, product_system, glass_type, aluminum_color, shape, opening_type, bottom_frame, opening_direction, glass_color, measurement_request_id, measurement_visit_id, measurement_submission_id, measurement_version, notes, created_at",
+      "id, project_id, floor, room, opening_code, site_readiness, width, height, solid_panel_height, fixed_height, quantity, area_sqm, product_system, glass_type, aluminum_color, shape, opening_type, bottom_frame, opening_direction, glass_color, measurement_request_id, measurement_visit_id, measurement_submission_id, measurement_version, notes, created_at",
     )
     .eq("project_id", projectId)
     .order("created_at", { ascending: true });
@@ -354,6 +371,7 @@ async function loadOpenings(
 
   const message = extendedResult.error.message?.toLowerCase() ?? "";
   if (
+    !message.includes("site_readiness") &&
     !message.includes("fixed_height") &&
     !message.includes("shape") &&
     !message.includes("opening_type") &&
@@ -401,6 +419,7 @@ function projectResponse(
     address: project.address ?? "",
     workflowStatus,
     salesStatus: project.sales_status ?? "",
+    structureReadiness: project.structure_readiness,
     measurementRequest: measurementRequest
       ? {
           id: measurementRequest.id,
@@ -505,7 +524,10 @@ export async function POST(
   }
 
   const body = (await request.json().catch(() => null)) as OpeningPayload | null;
-  const normalized = normalizeOpeningPayload(body ?? {});
+  const normalized = normalizeOpeningPayload(
+    body ?? {},
+    loaded.project.structure_readiness,
+  );
   if (!normalized.ok) {
     return NextResponse.json({ error: normalized.error }, { status: 400 });
   }
@@ -520,7 +542,7 @@ export async function POST(
       created_by: loaded.authCheck.user.id,
     })
     .select(
-      "id, project_id, floor, room, opening_code, width, height, solid_panel_height, fixed_height, quantity, area_sqm, product_system, glass_type, aluminum_color, shape, opening_type, bottom_frame, opening_direction, glass_color, notes, created_at",
+      "id, project_id, floor, room, opening_code, site_readiness, width, height, solid_panel_height, fixed_height, quantity, area_sqm, product_system, glass_type, aluminum_color, shape, opening_type, bottom_frame, opening_direction, glass_color, notes, created_at",
     )
     .single();
 
@@ -557,7 +579,10 @@ export async function PATCH(
     return NextResponse.json({ error: "Opening id is required." }, { status: 400 });
   }
 
-  const normalized = normalizeOpeningPayload(body ?? {});
+  const normalized = normalizeOpeningPayload(
+    body ?? {},
+    loaded.project.structure_readiness,
+  );
   if (!normalized.ok) {
     return NextResponse.json({ error: normalized.error }, { status: 400 });
   }
@@ -570,7 +595,7 @@ export async function PATCH(
     .eq("measurement_request_id", loaded.measurementRequest.id)
     .is("measurement_submission_id", null)
     .select(
-      "id, project_id, floor, room, opening_code, width, height, solid_panel_height, fixed_height, quantity, area_sqm, product_system, glass_type, aluminum_color, shape, opening_type, bottom_frame, opening_direction, glass_color, notes, created_at",
+      "id, project_id, floor, room, opening_code, site_readiness, width, height, solid_panel_height, fixed_height, quantity, area_sqm, product_system, glass_type, aluminum_color, shape, opening_type, bottom_frame, opening_direction, glass_color, notes, created_at",
     )
     .maybeSingle();
 

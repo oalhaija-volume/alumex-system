@@ -24,6 +24,7 @@ type MeasurementProject = {
   address: string;
   workflowStatus: string;
   salesStatus: string;
+  structureReadiness: string;
   measurementRequest: {
     id: string;
     status: string;
@@ -44,6 +45,7 @@ type MeasurementOpening = {
   floor: string;
   room: string;
   openingCode: string;
+  siteReadiness: "ready" | "not_ready";
   width: number;
   height: number;
   length: number;
@@ -69,6 +71,7 @@ const emptyOpening: OpeningDraft = {
   floor: "",
   room: "",
   openingCode: "",
+  siteReadiness: "ready",
   width: 100,
   height: 100,
   length: 100,
@@ -111,6 +114,7 @@ function openingToDraft(opening: MeasurementOpening): OpeningDraft {
     floor: opening.floor,
     room: opening.room,
     openingCode: opening.openingCode,
+    siteReadiness: opening.siteReadiness,
     width: opening.width,
     height: opening.height,
     length: opening.length || opening.height,
@@ -135,9 +139,10 @@ function normalizeDraft(opening: OpeningDraft): OpeningDraft {
     floor: opening.floor.trim(),
     room: opening.room.trim(),
     openingCode: opening.openingCode.trim(),
-    width: Number(opening.width) || 0,
-    height: Number(opening.height) || 0,
-    length: Number(opening.height) || 0,
+    siteReadiness: opening.siteReadiness,
+    width: opening.siteReadiness === "not_ready" ? 0 : Number(opening.width) || 0,
+    height: opening.siteReadiness === "not_ready" ? 0 : Number(opening.height) || 0,
+    length: opening.siteReadiness === "not_ready" ? 0 : Number(opening.height) || 0,
     shape: "",
     type: (opening.openingType || opening.type).trim(),
     openingType: (opening.openingType || opening.type).trim(),
@@ -169,8 +174,8 @@ function isOpeningValid(opening: OpeningDraft) {
     opening.floor &&
       opening.room &&
       opening.openingCode &&
-      opening.width > 0 &&
-      opening.height > 0 &&
+      (opening.siteReadiness === "not_ready" ||
+        (opening.width > 0 && opening.height > 0)) &&
       (opening.openingType || opening.type),
   );
 }
@@ -212,17 +217,26 @@ export function SiteMeasurementModule() {
     () =>
       openings.reduce(
         (sum, opening) =>
-          sum +
-          centimetersToSquareMeters({
-            width: opening.width,
-            height: opening.height,
-            quantity: opening.quantity,
-          }),
+          opening.siteReadiness === "ready"
+            ? sum +
+              centimetersToSquareMeters({
+                width: opening.width,
+                height: opening.height,
+                quantity: opening.quantity,
+              })
+            : sum,
         0,
       ),
     [openings],
   );
   const measurementRequest = project?.measurementRequest ?? null;
+  const isPartialProject = project?.structureReadiness === "partially_ready";
+  const hasNotReadyOpenings =
+    openings.some((opening) => opening.siteReadiness === "not_ready") ||
+    newOpenings.some(
+      (opening) =>
+        hasOpeningContent(opening) && opening.siteReadiness === "not_ready",
+    );
   const canStart = Boolean(
     measurementRequest &&
       [
@@ -275,7 +289,12 @@ export function SiteMeasurementModule() {
         const parsedDraft = JSON.parse(savedDraft) as OpeningDraft[];
         setNewOpenings(
           Array.isArray(parsedDraft) && parsedDraft.length
-            ? parsedDraft
+            ? parsedDraft.map((opening) => ({
+                ...emptyOpening,
+                ...opening,
+                siteReadiness:
+                  opening.siteReadiness === "not_ready" ? "not_ready" : "ready",
+              }))
             : openingRows(1),
         );
       } catch {
@@ -348,6 +367,9 @@ export function SiteMeasurementModule() {
             ),
           }
         : {}),
+      ...(key === "siteReadiness" && value === "not_ready"
+        ? { width: 0, height: 0, length: 0 }
+        : {}),
     }));
   }
 
@@ -381,6 +403,9 @@ export function SiteMeasurementModule() {
                     type: value,
                     openingCode: nextStructuralOpeningCode(value, existingCodes),
                   }
+                : {}),
+              ...(key === "siteReadiness" && value === "not_ready"
+                ? { width: 0, height: 0, length: 0 }
                 : {}),
             }
           : opening,
@@ -595,6 +620,17 @@ export function SiteMeasurementModule() {
         window.localStorage.removeItem(`alumex:measurement-draft:${projectId}`);
       }
 
+      const visitOpenings = [...openings, ...savedPendingOpenings];
+      if (
+        visitOpenings.some(
+          (opening) => opening.siteReadiness === "not_ready",
+        )
+      ) {
+        await runMeasurementAction("save_draft", { quiet: true });
+        setMessage(t("measurements.partialVisitSaved"));
+        return;
+      }
+
       const response = await fetch(`/api/measurements/${measurementRequest.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -767,7 +803,9 @@ export function SiteMeasurementModule() {
             >
               {workflowSaving === "complete"
                 ? t("measurements.savingAndCompleting")
-                : t("measurements.saveAndComplete")}
+                : hasNotReadyOpenings
+                  ? t("measurements.savePartialVisit")
+                  : t("measurements.saveAndComplete")}
             </button>
           ) : null}
           <Link
@@ -804,6 +842,11 @@ export function SiteMeasurementModule() {
             <p className="mt-1 text-sm text-muted">
               {t("measurements.structuralOnlyHelp")}
             </p>
+            {isPartialProject ? (
+              <p className="mt-2 text-sm font-semibold text-amber-800">
+                {t("measurements.partialOpeningHelp")}
+              </p>
+            ) : null}
           </div>
           {editingId ? (
             <button
@@ -861,6 +904,27 @@ export function SiteMeasurementModule() {
                 </select>
               </label>
 
+              {isPartialProject ? (
+                <label className="block">
+                  <span className="material-label">
+                    {t("measurements.openingReadiness")}
+                  </span>
+                  <select
+                    value={draft.siteReadiness}
+                    onChange={(event) =>
+                      updateDraft("siteReadiness", event.target.value)
+                    }
+                    disabled={!isEditable}
+                    className="material-field mt-2 min-h-12"
+                  >
+                    <option value="ready">{t("intake.readiness.ready")}</option>
+                    <option value="not_ready">
+                      {t("intake.readiness.not_ready")}
+                    </option>
+                  </select>
+                </label>
+              ) : null}
+
               {numberFields.map((field) => (
                 <label key={field.key} className="block">
                   <span className="material-label">{term(field.label)}</span>
@@ -870,9 +934,9 @@ export function SiteMeasurementModule() {
                       min="0"
                       inputMode="decimal"
                       step={field.step}
-                      value={draft[field.key]}
+                      value={draft[field.key] || ""}
                       onChange={(event) => updateDraft(field.key, event.target.value)}
-                      disabled={!isEditable}
+                      disabled={!isEditable || draft.siteReadiness === "not_ready"}
                       className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
                     />
                     <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
@@ -912,9 +976,11 @@ export function SiteMeasurementModule() {
               <div className="material-card-muted p-3">
                 <p className="text-xs font-bold uppercase text-muted">{t("measurements.areaEstimate")}</p>
                 <p className="mt-1 text-2xl font-bold text-foreground">
-                  {t("common.areaValue", {
-                    value: centimetersToSquareMeters(draft).toFixed(2),
-                  })}
+                  {draft.siteReadiness === "not_ready"
+                    ? t("intake.readiness.not_ready")
+                    : t("common.areaValue", {
+                        value: centimetersToSquareMeters(draft).toFixed(2),
+                      })}
                 </p>
               </div>
               <button
@@ -966,6 +1032,7 @@ export function SiteMeasurementModule() {
                       {[
                         "Floor",
                         "Room",
+                        ...(isPartialProject ? ["Readiness"] : []),
                         "Width",
                         "Height",
                         "Type",
@@ -1008,17 +1075,43 @@ export function SiteMeasurementModule() {
                             ))}
                           </select>
                         </td>
+                        {isPartialProject ? (
+                          <td className="w-36 px-2 py-2">
+                            <select
+                              value={opening.siteReadiness}
+                              onChange={(event) =>
+                                updateNewOpening(
+                                  index,
+                                  "siteReadiness",
+                                  event.target.value,
+                                )
+                              }
+                              disabled={!isEditable}
+                              className="material-field h-10 px-2"
+                            >
+                              <option value="ready">
+                                {t("intake.readiness.ready")}
+                              </option>
+                              <option value="not_ready">
+                                {t("intake.readiness.not_ready")}
+                              </option>
+                            </select>
+                          </td>
+                        ) : null}
                         {numberFields.map((field) => (
                           <td key={field.key} className="w-28 px-2 py-2">
                             <input
                               type="number"
                               min="0"
                               step={field.step}
-                              value={opening[field.key]}
+                              value={opening[field.key] || ""}
                               onChange={(event) =>
                                 updateNewOpening(index, field.key, event.target.value)
                               }
-                              disabled={!isEditable}
+                              disabled={
+                                !isEditable ||
+                                opening.siteReadiness === "not_ready"
+                              }
                               className="material-field h-10 px-2"
                             />
                           </td>
@@ -1041,9 +1134,11 @@ export function SiteMeasurementModule() {
                           </select>
                         </td>
                         <td className="w-28 bg-material-primary-container px-2 py-2 text-sm font-bold text-material-on-primary-container">
-                          {t("common.areaValue", {
-                            value: centimetersToSquareMeters(opening).toFixed(2),
-                          })}
+                          {opening.siteReadiness === "not_ready"
+                            ? t("intake.readiness.not_ready")
+                            : t("common.areaValue", {
+                                value: centimetersToSquareMeters(opening).toFixed(2),
+                              })}
                         </td>
                         <td className="w-28 px-2 py-2">
                           <button
@@ -1081,9 +1176,11 @@ export function SiteMeasurementModule() {
                       </p>
                     </div>
                     <span className="material-status">
-                      {t("common.areaValue", {
-                        value: centimetersToSquareMeters(opening).toFixed(2),
-                      })}
+                      {opening.siteReadiness === "not_ready"
+                        ? t("intake.readiness.not_ready")
+                        : t("common.areaValue", {
+                            value: centimetersToSquareMeters(opening).toFixed(2),
+                          })}
                     </span>
                   </div>
 
@@ -1129,20 +1226,53 @@ export function SiteMeasurementModule() {
                       </select>
                     </label>
 
+                    {isPartialProject ? (
+                      <label className="block">
+                        <span className="material-label">
+                          {t("measurements.openingReadiness")}
+                        </span>
+                        <select
+                          value={opening.siteReadiness}
+                          onChange={(event) =>
+                            updateNewOpening(
+                              0,
+                              "siteReadiness",
+                              event.target.value,
+                            )
+                          }
+                          disabled={!isEditable}
+                          className="material-field mt-2 min-h-12"
+                        >
+                          <option value="ready">
+                            {t("intake.readiness.ready")}
+                          </option>
+                          <option value="not_ready">
+                            {t("intake.readiness.not_ready")}
+                          </option>
+                        </select>
+                      </label>
+                    ) : null}
+
                     {numberFields.map((field) => (
                       <label key={field.key} className="block">
-                        <span className="material-label">{term(field.label)} *</span>
+                        <span className="material-label">
+                          {term(field.label)}
+                          {opening.siteReadiness === "ready" ? " *" : ""}
+                        </span>
                         <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container-low">
                           <input
                             type="number"
                             min="0"
                             inputMode="decimal"
                             step={field.step}
-                            value={opening[field.key]}
+                            value={opening[field.key] || ""}
                             onChange={(event) =>
                               updateNewOpening(0, field.key, event.target.value)
                             }
-                            disabled={!isEditable}
+                            disabled={
+                              !isEditable ||
+                              opening.siteReadiness === "not_ready"
+                            }
                             className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
                           />
                           <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
@@ -1196,7 +1326,9 @@ export function SiteMeasurementModule() {
                     >
                       {workflowSaving === "complete"
                         ? t("measurements.savingAndCompleting")
-                        : t("measurements.doneSendToIndoor")}
+                        : hasNotReadyOpenings
+                          ? t("measurements.savePartialVisit")
+                          : t("measurements.doneSendToIndoor")}
                     </button>
                   </div>
                 </div>
@@ -1244,20 +1376,30 @@ export function SiteMeasurementModule() {
                   </p>
                 </div>
                 <span className="material-status">
-                  {t("common.areaValue", {
-                    value: centimetersToSquareMeters(opening).toFixed(2),
-                  })}
+                  {opening.siteReadiness === "not_ready"
+                    ? t("intake.readiness.not_ready")
+                    : t("common.areaValue", {
+                        value: centimetersToSquareMeters(opening).toFixed(2),
+                      })}
                 </span>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-3">
                 <div className="material-card-muted p-2">
                   <p className="text-[11px] font-bold uppercase text-muted">{term("Width")}</p>
-                  <p className="text-sm font-bold text-foreground">{t("common.cmValue", { value: opening.width })}</p>
+                  <p className="text-sm font-bold text-foreground">
+                    {opening.siteReadiness === "not_ready"
+                      ? "—"
+                      : t("common.cmValue", { value: opening.width })}
+                  </p>
                 </div>
                 <div className="material-card-muted p-2">
                   <p className="text-[11px] font-bold uppercase text-muted">{term("Height")}</p>
-                  <p className="text-sm font-bold text-foreground">{t("common.cmValue", { value: opening.height })}</p>
+                  <p className="text-sm font-bold text-foreground">
+                    {opening.siteReadiness === "not_ready"
+                      ? "—"
+                      : t("common.cmValue", { value: opening.height })}
+                  </p>
                 </div>
                 <div className="material-card-muted p-2">
                   <p className="text-[11px] font-bold uppercase text-muted">{term("Type")}</p>

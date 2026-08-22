@@ -244,7 +244,11 @@ export type Database = {
             | "sales"
             | "unassigned";
           sales_status: string;
-          structure_readiness: "unknown" | "ready" | "not_ready";
+          structure_readiness:
+            | "unknown"
+            | "ready"
+            | "partially_ready"
+            | "not_ready";
           expected_structure_ready_date: string | null;
           next_follow_up_at: string | null;
           priority: "low" | "normal" | "high" | "urgent";
@@ -286,7 +290,11 @@ export type Database = {
           responsible_user_id?: string | null;
           responsible_department?: Database["public"]["Tables"]["projects"]["Row"]["responsible_department"];
           sales_status?: string;
-          structure_readiness?: "unknown" | "ready" | "not_ready";
+          structure_readiness?:
+            | "unknown"
+            | "ready"
+            | "partially_ready"
+            | "not_ready";
           expected_structure_ready_date?: string | null;
           next_follow_up_at?: string | null;
           priority?: "low" | "normal" | "high" | "urgent";
@@ -312,6 +320,7 @@ export type Database = {
           floor: string | null;
           room: string | null;
           opening_code: string;
+          site_readiness: "ready" | "not_ready";
           width: number;
           height: number;
           solid_panel_height: number;
@@ -341,6 +350,7 @@ export type Database = {
           floor?: string | null;
           room?: string | null;
           opening_code: string;
+          site_readiness?: "ready" | "not_ready";
           width: number;
           height: number;
           solid_panel_height?: number;

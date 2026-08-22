@@ -7,7 +7,11 @@ import { useClients } from "@/components/clients/ClientsProvider";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { ProjectLocationPicker } from "@/components/projects/ProjectLocationPicker";
 import { useProjects } from "@/components/projects/ProjectsProvider";
-import { intakeMovesDirectlyToMeasurements } from "@/lib/intake/nextStage";
+import {
+  intakeMovesDirectlyToMeasurements,
+  readinessNeedsFollowUp,
+  type StructureReadiness,
+} from "@/lib/intake/nextStage";
 import { outdoorSiteDuplicateRadiusMeters } from "@/lib/location/coordinates";
 
 type ContactDraft = {
@@ -42,7 +46,7 @@ type IntakeDraft = {
   projectLongitude: number | null;
   geofenceRadiusMeters: number;
   source: string;
-  readiness: "ready" | "not_ready";
+  readiness: StructureReadiness;
   followUpAt: string;
   priority: "low" | "normal" | "high" | "urgent";
   estimatedValue: string;
@@ -253,7 +257,7 @@ export function SalesIntakeWizard() {
     }
     if (
       step === 1 &&
-      draft.readiness === "not_ready" &&
+      readinessNeedsFollowUp(draft.readiness) &&
       !draft.followUpAt
     ) {
       return t("intake.errors.readiness");
@@ -271,8 +275,6 @@ export function SalesIntakeWizard() {
     if (
       step === 1 &&
       isOutdoorSales &&
-      draft.mode === "existing" &&
-      draft.existingClientId &&
       hasProjectPin
     ) {
       setIsCheckingSite(true);
@@ -281,7 +283,6 @@ export function SalesIntakeWizard() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            clientId: draft.existingClientId,
             latitude: draft.projectLatitude,
             longitude: draft.projectLongitude,
           }),
@@ -355,7 +356,7 @@ export function SalesIntakeWizard() {
             source: draft.source || sourceDefault,
             structureReadiness: draft.readiness,
             followUpAt:
-              draft.readiness === "not_ready" && draft.followUpAt
+              readinessNeedsFollowUp(draft.readiness) && draft.followUpAt
                 ? new Date(draft.followUpAt).toISOString()
                 : null,
             priority: draft.priority,
@@ -686,8 +687,8 @@ export function SalesIntakeWizard() {
                 <legend className={labelClass}>
                   {t("intake.guided.siteReady")} *
                 </legend>
-                <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                  {(["ready", "not_ready"] as const).map((value) => (
+                <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                  {(["ready", "partially_ready", "not_ready"] as const).map((value) => (
                     <button
                       key={value}
                       type="button"
@@ -704,7 +705,7 @@ export function SalesIntakeWizard() {
                   ))}
                 </div>
               </fieldset>
-              {draft.readiness === "not_ready" ? (
+              {readinessNeedsFollowUp(draft.readiness) ? (
                 <div className="max-w-md">
                   <Field required type="datetime-local" min={nextAvailableLocalDateTime()} label={t("intake.fields.followUpAt")} value={draft.followUpAt} onChange={(value) => update("followUpAt", value)} />
                   <p className="mt-2 text-xs leading-5 text-slate-500">
@@ -771,7 +772,7 @@ export function SalesIntakeWizard() {
                     : []),
                   [t("intake.location.pin"), hasProjectPin ? `${draft.projectLatitude?.toFixed(6)}, ${draft.projectLongitude?.toFixed(6)}` : t("common.notAdded")],
                   [t("intake.fields.readiness"), t(`intake.readiness.${draft.readiness}`)],
-                  ...(draft.readiness === "not_ready"
+                  ...(readinessNeedsFollowUp(draft.readiness)
                     ? [[t("intake.fields.followUpAt"), draft.followUpAt.replace("T", " ")]]
                     : []),
                   [t("intake.attachments.title"), String(files.length)],

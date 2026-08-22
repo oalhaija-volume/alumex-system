@@ -371,6 +371,27 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
+  const { data: quotationProject, error: quotationProjectError } = await admin
+    .from("projects")
+    .select("structure_readiness")
+    .eq("id", body.project_id)
+    .eq("client_id", body.client_id)
+    .maybeSingle();
+  if (quotationProjectError || !quotationProject) {
+    return NextResponse.json(
+      { error: quotationProjectError?.message ?? "Project was not found." },
+      { status: 400 },
+    );
+  }
+  if (
+    quotationProject.structure_readiness === "partially_ready" ||
+    quotationProject.structure_readiness === "not_ready"
+  ) {
+    return NextResponse.json(
+      { error: "Complete all opening measurements before creating a quotation." },
+      { status: 409 },
+    );
+  }
   const pricingSource = pricingSourceForItems(items);
   const discountLimit = await discountLimitForRoleFromSettings(
     authCheck.role,

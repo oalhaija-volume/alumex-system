@@ -182,7 +182,8 @@ export function AppShell({
   const { isLoaded: isRoleLoaded, pageAccess, role } = useCurrentRole();
   const pathname = usePathname();
   const isRtl = direction === "rtl";
-  const isWideWorkspace = pathname.startsWith("/site-measurements");
+  const isWideWorkspace =
+    pathname.startsWith("/site-measurements") || pathname.startsWith("/crm");
   const effectiveRole =
     role === "Admin" && previewRole ? previewRole : role;
 

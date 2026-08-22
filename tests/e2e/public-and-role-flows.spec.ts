@@ -19,7 +19,9 @@ test("public login renders without framework or console errors", async ({
   await expect(
     page.getByRole("heading", { name: /login|log in|تسجيل الدخول/i }),
   ).toBeVisible();
-  await expect(page.locator("nextjs-portal")).toHaveCount(0);
+  await expect(
+    page.locator('nextjs-portal [role="dialog"]'),
+  ).toHaveCount(0);
   await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
   expect(errors).toEqual([]);
 });

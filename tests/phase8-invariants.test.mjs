@@ -240,3 +240,31 @@ test("project deletion is Admin-only and transactional", () => {
   assert.match(projectDetails, /\{isAdmin \? \([\s\S]*setIsDeleteDialogOpen\(true\)/);
   assert.match(projectDetails, /<ProjectDeleteDialog/);
 });
+
+test("partial projects preserve unmeasured openings and CRM follow-up", () => {
+  const sql = readMigration(
+    "20260810140000_partial_opening_readiness.sql",
+  );
+  const intakeRoute = readFileSync(
+    join(repositoryRoot, "src", "app", "api", "sales-intake", "route.ts"),
+    "utf8",
+  );
+  const measurementRoute = readFileSync(
+    join(
+      repositoryRoot,
+      "src",
+      "app",
+      "api",
+      "measurements",
+      "[requestId]",
+      "route.ts",
+    ),
+    "utf8",
+  );
+
+  assert.match(sql, /add column if not exists site_readiness/);
+  assert.match(sql, /site_readiness in \('ready', 'not_ready'\)/);
+  assert.match(intakeRoute, /if \(needsReadinessFollowUp\)/);
+  assert.match(measurementRoute, /opening\.site_readiness !== "ready"/);
+  assert.match(measurementRoute, /completion_outcome: "all_openings_ready"/);
+});

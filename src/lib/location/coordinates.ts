@@ -7,9 +7,11 @@ function parseCoordinate(value: unknown) {
 
 export const outdoorSiteDuplicateRadiusMeters = 200;
 
+type Coordinates = { latitude: number; longitude: number };
+
 export function distanceBetweenCoordinatesMeters(
-  first: { latitude: number; longitude: number },
-  second: { latitude: number; longitude: number },
+  first: Coordinates,
+  second: Coordinates,
 ) {
   const earthRadiusMeters = 6_371_000;
   const toRadians = (value: number) => (value * Math.PI) / 180;
@@ -24,6 +26,17 @@ export function distanceBetweenCoordinatesMeters(
       Math.sin(longitudeDelta / 2) ** 2;
 
   return earthRadiusMeters * 2 * Math.asin(Math.sqrt(haversine));
+}
+
+export function hasNearbyProjectSite(
+  location: Coordinates,
+  projectSites: Coordinates[],
+  radiusMeters = outdoorSiteDuplicateRadiusMeters,
+) {
+  return projectSites.some(
+    (projectSite) =>
+      distanceBetweenCoordinatesMeters(location, projectSite) <= radiusMeters,
+  );
 }
 
 export function parseProjectLocation(latitude: unknown, longitude: unknown) {

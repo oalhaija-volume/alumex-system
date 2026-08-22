@@ -524,7 +524,7 @@ function SchedulePage({
       totalPages={totalPages}
       isArabic={isArabic}
     >
-      <LegalSection title={`ثانياً : ${t("contracts.openingSchedule")}`}>
+      <LegalSection title={t("contracts.openingSchedule")}>
         <div className="overflow-hidden rounded-md border border-slate-200">
           <table className="w-full border-collapse text-[9px] leading-tight">
             <thead className="bg-slate-100 text-slate-600">
@@ -609,7 +609,7 @@ function FinancialAndFirstPartyPage({
     >
       <div className="grid gap-3">
         {showFinanceValues ? (
-          <LegalSection title={`ثانياً : ${t("contracts.financialSummary")}`} compact>
+          <LegalSection title={t("contracts.financialSummary")} compact>
             <div className="grid gap-2 md:grid-cols-2">
               <InfoBox label={t("contracts.totalArea")} value={t("common.areaValue", { value: totalArea.toFixed(2) })} />
               <InfoBox label={t("contracts.totalAmount")} value={formatIqd(draft.totalAmount, locale)} />
@@ -909,7 +909,7 @@ export function ContractPreview() {
     [
       {
         key: "system-specifications",
-        title: "ثانياً : المواصفات والأسعار الخاصة بالمقاطع",
+        title: "تفاصيل المواصفات الفنية المعتمدة",
         text: specificationsForContractKind(
           contractKind,
           orderedTerms.specifications,

@@ -294,11 +294,7 @@ export function QuotationBuilder() {
     [productPrices],
   );
   const openingSystemPrices = useMemo(
-    () =>
-      systemPrices.filter(
-        (system) =>
-          productPricingSource(system) === "catalog" && system.unit_price > 0,
-      ),
+    () => systemPrices,
     [systemPrices],
   );
   const serviceVariants = useMemo(
@@ -1638,8 +1634,11 @@ export function QuotationBuilder() {
                               <option
                                 key={system.id ?? system.product_name}
                                 value={system.product_name}
+                                disabled={system.unit_price <= 0}
                               >
-                                {system.product_name} — {formatCurrency(system.unit_price)} / {system.unit}
+                                {system.unit_price > 0
+                                  ? `${system.product_name} — ${formatCurrency(system.unit_price)} / ${system.unit}`
+                                  : `${system.product_name} — ${t("quotations.priceNotConfigured")}`}
                               </option>
                             ))}
                           </select>
@@ -1822,8 +1821,11 @@ export function QuotationBuilder() {
                           <option
                             key={system.id ?? system.product_name}
                             value={system.product_name}
+                            disabled={system.unit_price <= 0}
                           >
-                            {system.product_name} — {formatCurrency(system.unit_price)} / {system.unit}
+                            {system.unit_price > 0
+                              ? `${system.product_name} — ${formatCurrency(system.unit_price)} / ${system.unit}`
+                              : `${system.product_name} — ${t("quotations.priceNotConfigured")}`}
                           </option>
                         ))}
                       </select>

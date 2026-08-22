@@ -5,7 +5,11 @@ import {
   hasSupabaseServiceRoleKey,
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
-import { friendlyDatabaseError } from "@/lib/friendlyErrors";
+import {
+  friendlyDatabaseError,
+  isMissingDatabaseObjectError,
+  technicalErrorMessage,
+} from "@/lib/friendlyErrors";
 import { discountLimitForRoleFromSettings } from "@/lib/pricing/discountPolicyServer";
 
 type SupabaseError = {
@@ -116,6 +120,33 @@ function isMissingSignatureColumnError(error: unknown) {
       details.code === "PGRST204" ||
       message.toLowerCase().includes("schema cache"))
   );
+}
+
+function signatureWorkflowError(error: unknown) {
+  const technicalMessage = technicalErrorMessage(error);
+  const normalizedMessage = technicalMessage.toLowerCase();
+
+  if (isMissingDatabaseObjectError(error)) {
+    return "The contract signing workflow is missing in Supabase. Apply the latest contract workflow migrations, then try again.";
+  }
+
+  if (normalizedMessage.includes("approved quotation version")) {
+    return "This contract is not linked to an approved quotation version. Reopen the contract from its approved quotation and try again.";
+  }
+
+  if (normalizedMessage.includes("cannot sign a sales contract")) {
+    return "Your account is not authorized to sign sales contracts.";
+  }
+
+  if (normalizedMessage.includes("contract was not found")) {
+    return "The saved contract could not be found. Return to Contracts and reopen it.";
+  }
+
+  if (normalizedMessage.includes("client and sales signatures are required")) {
+    return "Client and sales signatures are required.";
+  }
+
+  return "";
 }
 
 function isMissingColumnError(error: unknown) {
@@ -294,6 +325,11 @@ export async function PATCH(
           },
           { status: 409 },
         );
+      }
+
+      const workflowError = signatureWorkflowError(error);
+      if (workflowError) {
+        return NextResponse.json({ error: workflowError }, { status: 409 });
       }
 
       logContractSupabaseError("/api/contracts/[id]", "update", error);

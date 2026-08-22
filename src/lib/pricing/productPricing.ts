@@ -142,22 +142,16 @@ export function isGeorgianBarsName(value: string) {
   return normalizedName === "georgian bars" || normalizedName === "georgien bars";
 }
 
-export function aluminumSystemPricingSource(
-  productName: string,
-): ProductPricingSource {
-  const normalizedName = normalizeProductName(productName);
-
-  return normalizedName.includes("alumex") &&
-    !normalizedName.includes("the address")
-    ? "catalog"
-    : "project_costing";
+export function aluminumSystemPricingSource(): ProductPricingSource {
+  return "catalog";
 }
 
 export function productPricingSource(
-  product: Pick<ProductPrice, "product_name" | "category">,
+  product: Pick<ProductPrice, "product_name" | "category"> &
+    Partial<Pick<ProductPrice, "unit">>,
 ): ProductPricingSource {
   return productCatalogKind(product.category) === "aluminum_system"
-    ? aluminumSystemPricingSource(product.product_name)
+    ? aluminumSystemPricingSource()
     : "catalog";
 }
 

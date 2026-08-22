@@ -10,7 +10,7 @@ export const arabicContractTemplateDefaults: ContractTemplate = {
     "يلتزم الطرف الاول بتقديم كفالة مدتها عشرة سنوات بعد تسديد كافة المستحقات المالية عند تسليم المشروع للطرف الثاني مقابل توقيع ورقة استلام وحسب شروط بطاقة الكفالة الخاصة بالطرف الاول.",
   executionTerms: [
     "يلتزم الطرف الاول بالمباشرة بالعمل في الموقع التابع للطرف الثاني خلال فترة اقصاها سبعة ايام عمل من تاريخ تسديد الدفعة النهائية.",
-    "مدة تنفيذ المشروع هي (45) خمسة واربعون يوم عمل باستثناء الظروف القاهرة والعطل الرسمية والتوقفات التأخيرية التي تكون بسبب الطرف الثاني.",
+    "مدة تنفيذ المشروع هي (60) ستون يوم عمل باستثناء الظروف القاهرة والعطل الرسمية والتوقفات التأخيرية التي تكون بسبب الطرف الثاني.",
     "تحسب مدة تجهيز المشروع من تاريخ الموافقة والتوقيع على مخططات المشروع بعد اخذ القياسات النهائية مع وجوب جاهزية كافة الفتحات الانشائية لتركيب الألمنيوم بالصورة الصحيحة، وليس من تاريخ توقيع هذا العقد.",
   ].join("\n"),
   contractTerms: [
@@ -81,5 +81,15 @@ export function replaceLegacyEnglishContractTemplate(
     combinedText.includes("The Second Party shall") ||
     combinedText.includes("approved shop drawings");
 
-  return hasLegacyEnglishDefaults ? arabicContractTemplateDefaults : template;
+  if (hasLegacyEnglishDefaults) {
+    return arabicContractTemplateDefaults;
+  }
+
+  return {
+    ...template,
+    executionTerms: template.executionTerms.replace(
+      "مدة تنفيذ المشروع هي (45) خمسة واربعون يوم عمل",
+      "مدة تنفيذ المشروع هي (60) ستون يوم عمل",
+    ),
+  };
 }

@@ -26,6 +26,10 @@ import {
   arabicContractTemplateDefaults,
   replaceLegacyEnglishContractTemplate,
 } from "@/lib/contracts/templateDefaults";
+import {
+  contractKindFromProjectType,
+  paymentTermsForContractKind,
+} from "@/lib/contracts/documentOrder";
 import { friendlyDatabaseError } from "@/lib/friendlyErrors";
 import {
   clampDiscount,
@@ -310,6 +314,15 @@ export function ContractGenerator() {
     (quotation) => quotation.quotationNumber === quotationNumber,
   );
   const selectedProject = selectedQuotation?.project;
+  const selectedContractKind = selectedProject
+    ? contractKindFromProjectType(selectedProject.projectType)
+    : "residential";
+  const usesStandardCommercialPayments =
+    selectedContractKind === "commercial" && !editingContractId;
+  const displayedPaymentTerms = paymentTermsForContractKind(
+    usesStandardCommercialPayments ? "commercial" : "residential",
+    contractTemplate.paymentTerms,
+  );
   const selectedExistingContract = selectedQuotation
     ? savedContracts.find(
         (contract) =>
@@ -551,6 +564,7 @@ export function ContractGenerator() {
     }
 
     setError("");
+    const paymentTerms = displayedPaymentTerms;
     let nextContractNumber = contractNumber;
 
     if (!editingContractId) {
@@ -585,7 +599,10 @@ export function ContractGenerator() {
           contract_discount_percent: contractDiscountPercent,
           contract_discount_total: contractDiscountTotal,
           contract_date: contractDate,
-          ...payloadFromTemplate(contractTemplate),
+          ...payloadFromTemplate({
+            ...contractTemplate,
+            paymentTerms,
+          }),
           prepared_by_text: preparedBy || null,
           language,
           notes,
@@ -631,7 +648,7 @@ export function ContractGenerator() {
       sourceTotalAmount,
       contractDiscountPercent,
       contractDiscountTotal,
-      paymentTerms: contractTemplate.paymentTerms,
+      paymentTerms,
       warrantyTerms: contractTemplate.warrantyTerms,
       executionTerms: contractTemplate.executionTerms,
       contractTerms: contractTemplate.contractTerms,
@@ -830,6 +847,14 @@ export function ContractGenerator() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <SummaryItem label="اسم العميل" value={term(selectedProject.client)} />
               <SummaryItem label="اسم المشروع" value={term(selectedProject.projectName)} />
+              <SummaryItem
+                label="نوع العقد"
+                value={
+                  selectedContractKind === "commercial"
+                    ? "مشروع تجاري"
+                    : "مشروع سكني"
+                }
+              />
               <SummaryItem label="رقم عرض السعر" value={selectedQuotation.quotationNumber} />
               <SummaryItem label="إجمالي عرض السعر" value={formatCurrency(sourceTotalAmount)} />
               <SummaryItem
@@ -963,9 +988,14 @@ export function ContractGenerator() {
               <SectionCard title={t("contracts.contractTerms")}>
                 <div className="grid gap-4 lg:grid-cols-2">
                   <ContractTextField
-                    label={t("contracts.paymentTerms")}
-                    value={contractTemplate.paymentTerms}
+                    label={`${t("contracts.paymentTerms")}${
+                      usesStandardCommercialPayments
+                        ? " — حسب نموذج المشروع التجاري"
+                        : ""
+                    }`}
+                    value={displayedPaymentTerms}
                     onChange={(value) => updateTemplate("paymentTerms", value)}
+                    readOnly={usesStandardCommercialPayments}
                   />
                   <ContractTextField
                     label={t("contracts.warrantyTerms")}
@@ -1067,10 +1097,12 @@ function ContractTextField({
   label,
   value,
   onChange,
+  readOnly = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  readOnly?: boolean;
 }) {
   return (
     <label>
@@ -1078,8 +1110,9 @@ function ContractTextField({
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        readOnly={readOnly}
         rows={4}
-        className="mt-2 w-full rounded-md border border-border bg-surface px-3 py-3 text-sm leading-6 text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-info-surface"
+        className="mt-2 w-full rounded-md border border-border bg-surface px-3 py-3 text-sm leading-6 text-foreground outline-none transition read-only:bg-surface-muted focus:border-primary focus:ring-4 focus:ring-info-surface"
       />
     </label>
   );

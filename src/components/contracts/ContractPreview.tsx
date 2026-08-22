@@ -8,7 +8,6 @@ import { PdfDownloadButton } from "@/components/pdf/PdfDownloadButton";
 import { SignaturePad } from "@/components/contracts/SignaturePad";
 import {
   contractStorageKey,
-  getProductSystems,
   type ContractDraft,
 } from "@/components/contracts/contractTypes";
 import {
@@ -18,6 +17,13 @@ import {
 } from "@/components/quotations/quotationTypes";
 import { canViewFinanceValues, canViewSalesPrices } from "@/lib/auth/roles";
 import { messagesByLocale, type Locale, type Messages } from "@/lib/i18n";
+import {
+  arabicContractTitle,
+  contractKindFromProjectType,
+  firstPartyTermsInDocumentOrder,
+  specificationsForContractKind,
+  splitContractTermsForDocument,
+} from "@/lib/contracts/documentOrder";
 
 const scheduleRowsPerPage = 14;
 const legalPageWeightLimit = 28;
@@ -332,90 +338,61 @@ function LegalTextStack({ sections }: { sections: LegalPrintSection[] }) {
 function CoverPage({
   draft,
   isArabic,
-  showFinanceValues,
   totalPages,
 }: {
   draft: ContractDraft;
   isArabic: boolean;
-  showFinanceValues: boolean;
   totalPages: number;
 }) {
-  const { formatDate, locale, t, term } = useContractDocumentI18n(
+  const { formatDate, t, term } = useContractDocumentI18n(
     isArabic ? "ar" : "en",
   );
+  const contractKind = contractKindFromProjectType(draft.project.projectType);
+  const contractTitle = arabicContractTitle(contractKind);
+  const orderedTerms = splitContractTermsForDocument(draft.contractTerms);
 
   return (
     <PageShell
-      title={t("contracts.contractPackage")}
+      title={contractTitle}
       clientName={term(draft.project.client)}
       contractNumber={draft.contractNumber}
       page={1}
       totalPages={totalPages}
       isArabic={isArabic}
     >
-      <div className="grid content-start gap-5">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-6">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--alumex-red)]">
-            {t("app.name")}
-          </p>
-          <h1 className="mt-4 max-w-[140mm] text-3xl font-black leading-tight text-slate-950">
-            {t("contracts.supplyInstallationContract")}
-          </h1>
-          <p className="mt-4 max-w-[140mm] text-sm leading-6 text-slate-600">
-            {t("contracts.coverDescription")}
-          </p>
-        </div>
+      <div className="grid content-start gap-4">
+        <h1 className="text-center text-2xl font-black text-slate-950">
+          {contractTitle}
+        </h1>
 
-        <div className="grid gap-3 md:grid-cols-2">
-          <InfoBox label={t("contracts.clientName")} value={term(draft.project.client)} />
-          <InfoBox
-            label={t("projects.fields.projectName")}
-            value={term(draft.project.projectName)}
-          />
-          <InfoBox label={t("contracts.contractNumber")} value={draft.contractNumber} />
-          <InfoBox label={t("quotations.quotationNumber")} value={draft.quotationNumber} />
-          <InfoBox
-            label={locale === "ar" ? "نوع العقد" : "Contract type"}
-            value={
-              draft.pricingSource === "project_costing"
-                ? locale === "ar"
-                  ? "عقد مبني على التكلفة"
-                  : "Costing-based contract"
-                : locale === "ar"
-                  ? "عقد من دليل الأسعار"
-                  : "Catalog contract"
-            }
-          />
-          <InfoBox label={t("common.date")} value={formatDate(draft.contractDate)} />
-          {showFinanceValues ? (
-            <InfoBox
-              label={t("contracts.totalAmount")}
-              value={formatIqd(draft.totalAmount, locale)}
-            />
-          ) : null}
-          <InfoBox label={t("contracts.salesEngineer")} value={term(draft.salesEngineer)} />
-          <InfoBox label={t("contracts.preparedBy")} value={draft.preparedBy} />
-        </div>
+        <LegalSection title="الطرف الثاني">
+          <p className="font-semibold text-slate-950">
+            السيد/ة / السادة: {term(draft.project.client)} المحترم/ين.
+          </p>
+          <p className="mt-2">
+            مالك العقار الواقع في: {term(draft.clientAddress || draft.project.address)}
+          </p>
+          <p className="mt-2">رقم الهاتف: {draft.clientPhone || t("common.notAdded")}</p>
+        </LegalSection>
 
-        <div className="grid gap-4 border-t border-slate-200 pt-4 md:grid-cols-2">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-              {t("contracts.productSystems")}
-            </p>
-            <p className="mt-2 text-sm font-bold text-slate-950">
-              {getProductSystems(draft.project).map((system) => term(system)).join(" | ") ||
-                t("common.notSpecified")}
-            </p>
-          </div>
-          <div className={isArabic ? "text-left" : "text-right"}>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-              {t("contracts.projectLocation")}
-            </p>
-            <p className="mt-2 text-sm font-bold text-slate-950">
-              {term(draft.clientAddress || draft.project.address)}
-            </p>
-          </div>
-        </div>
+        <LegalSection title="الطرف الأول">
+          <p className="font-semibold text-slate-950">
+            السادة شركة خبراء ألومكس لصناعة وتجارة الألمنيوم المحدودة (ALUMEX EXPERTS)
+          </p>
+          <p className="mt-2">بغداد / فرع الرصافة / كرادة / شارع مجمع المشن</p>
+          <p>بغداد / فرع الكرخ / القادسية / مجاور ساحة النسور</p>
+        </LegalSection>
+
+        <p className="text-xs leading-6 text-slate-700">
+          بعد مشيئة الله تم الاتفاق بين الطرفين في اليوم الموافق ({formatDate(draft.contractDate)}) وهما في الحالة المعتبرة شرعا وقانونا على توريد اعمال الألمنيوم للطرف الثاني وفقا للشروط والأحكام التالية:
+        </p>
+
+        <LegalSection title="أولاً">
+          <p className="whitespace-pre-wrap">
+            {orderedTerms.introduction ||
+              "تعتبر مقدمة هذا العقد جزءا لا يتجزأ منه وهي ناطقة بما فيه ويرجع اليها في تفسير احكامه وبنوده."}
+          </p>
+        </LegalSection>
       </div>
     </PageShell>
   );
@@ -434,7 +411,7 @@ function PartiesAndSpecsPage({
   totalPages: number;
   lines: QuotationLine[];
 }) {
-  const { formatDate, t, term } = useContractDocumentI18n(
+  const { t, term } = useContractDocumentI18n(
     isArabic ? "ar" : "en",
   );
   const specs = Array.from(
@@ -456,38 +433,7 @@ function PartiesAndSpecsPage({
       isArabic={isArabic}
     >
       <div className="grid gap-4">
-        {isArabic ? (
-          <LegalSection title="تمهيد العقد">
-            <p className="whitespace-pre-wrap">
-              بعد مشيئة الله تم الاتفاق بين الطرفين وهما في الحالة المعتبرة شرعا وقانونا على توريد وتركيب اعمال الالمنيوم للطرف الثاني وفق الشروط والاحكام الواردة في هذا العقد. وتعد مقدمة هذا العقد جزءا لا يتجزأ منه ويرجع اليها في تفسير احكامه وبنوده.
-            </p>
-          </LegalSection>
-        ) : null}
-
-        <LegalSection title={`أ. ${t("contracts.contractParties")}`}>
-          <dl className="grid gap-2 md:grid-cols-2">
-            <div>
-              <dt className="font-bold text-slate-500">{t("contracts.firstParty")}</dt>
-              <dd className="mt-1 font-semibold text-slate-950">{t("contracts.firstPartyName")}</dd>
-            </div>
-            <div>
-              <dt className="font-bold text-slate-500">{t("contracts.secondParty")}</dt>
-              <dd className="mt-1 font-semibold text-slate-950">{term(draft.project.client)}</dd>
-            </div>
-            <div>
-              <dt className="font-bold text-slate-500">{t("contracts.projectLocation")}</dt>
-              <dd className="mt-1 font-semibold text-slate-950">
-                {term(draft.clientAddress || draft.project.address)}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-bold text-slate-500">{t("contracts.contractDate")}</dt>
-              <dd className="mt-1 font-semibold text-slate-950">{formatDate(draft.contractDate)}</dd>
-            </div>
-          </dl>
-        </LegalSection>
-
-        <LegalSection title={`ب. ${t("contracts.productSpecifications")}`}>
+        <LegalSection title="ثانياً : المواصفات والأسعار الخاصة بالمقاطع">
           <div className="overflow-hidden rounded-md border border-slate-200">
             <table className="w-full border-collapse text-[10px]">
               <thead className="bg-slate-100 text-slate-600">
@@ -578,7 +524,7 @@ function SchedulePage({
       totalPages={totalPages}
       isArabic={isArabic}
     >
-      <LegalSection title={`ج. ${t("contracts.openingSchedule")}`}>
+      <LegalSection title={`ثانياً : ${t("contracts.openingSchedule")}`}>
         <div className="overflow-hidden rounded-md border border-slate-200">
           <table className="w-full border-collapse text-[9px] leading-tight">
             <thead className="bg-slate-100 text-slate-600">
@@ -637,7 +583,7 @@ function FinancialAndFirstPartyPage({
   showFinanceValues,
   totalPages,
   lines,
-  firstPartyText,
+  measurementNotes,
 }: {
   draft: ContractDraft;
   isArabic: boolean;
@@ -645,14 +591,12 @@ function FinancialAndFirstPartyPage({
   showFinanceValues: boolean;
   totalPages: number;
   lines: QuotationLine[];
-  firstPartyText: string;
+  measurementNotes: string;
 }) {
   const { locale, t, term } = useContractDocumentI18n(
     isArabic ? "ar" : "en",
   );
   const totalArea = lines.reduce((sum, line) => sum + calculateArea(line), 0);
-  const advancePayment = draft.totalAmount * 0.4;
-  const remainingBalance = draft.totalAmount - advancePayment;
 
   return (
     <PageShell
@@ -665,20 +609,20 @@ function FinancialAndFirstPartyPage({
     >
       <div className="grid gap-3">
         {showFinanceValues ? (
-          <LegalSection title={`د. ${t("contracts.financialSummary")}`} compact>
+          <LegalSection title={`ثانياً : ${t("contracts.financialSummary")}`} compact>
             <div className="grid gap-2 md:grid-cols-2">
               <InfoBox label={t("contracts.totalArea")} value={t("common.areaValue", { value: totalArea.toFixed(2) })} />
               <InfoBox label={t("contracts.totalAmount")} value={formatIqd(draft.totalAmount, locale)} />
               <InfoBox label={t("contracts.currency")} value={t("settings.currencyValue")} />
-              <InfoBox label={t("contracts.advancePayment")} value={formatIqd(advancePayment, locale)} />
-              <InfoBox label={t("contracts.remainingBalance")} value={formatIqd(remainingBalance, locale)} />
             </div>
           </LegalSection>
         ) : null}
 
-        <LegalSection title={`ح. ${t("contracts.firstPartyObligations")}`} compact>
-          <p className="whitespace-pre-wrap">{toArabicContractText(firstPartyText)}</p>
-        </LegalSection>
+        {measurementNotes ? (
+          <LegalSection title="ملاحظات مهمة" compact>
+            <p className="whitespace-pre-wrap">{toArabicContractText(measurementNotes)}</p>
+          </LegalSection>
+        ) : null}
       </div>
     </PageShell>
   );
@@ -729,20 +673,18 @@ function SignaturePage({
   const { formatDate, t, term } = useContractDocumentI18n(isArabic ? "ar" : "en");
   const signatureRows = [
     {
-      label: t("contracts.clientRepresentative"),
-      name: draft.clientSignedName || term(draft.project.client),
-      signatureDataUrl: draft.clientSignatureDataUrl,
-      signedAt: draft.clientSignedAt,
-    },
-    {
-      label: t("contracts.alumexRepresentative"),
-      name: draft.preparedBy,
-    },
-    {
-      label: t("contracts.salesEngineer"),
+      label: t("contracts.firstParty"),
       name: draft.salesSignedName || term(draft.salesEngineer),
       signatureDataUrl: draft.salesSignatureDataUrl,
       signedAt: draft.salesSignedAt,
+      details: `السادة شركة خبراء ألومكس لصناعة وتجارة الألمنيوم المحدودة — ${draft.preparedBy}`,
+    },
+    {
+      label: t("contracts.secondParty"),
+      name: draft.clientSignedName || term(draft.project.client),
+      signatureDataUrl: draft.clientSignatureDataUrl,
+      signedAt: draft.clientSignedAt,
+      details: `أرقام الهاتف ووسائل التواصل: ${draft.clientPhone || t("common.notAdded")}`,
     },
   ];
 
@@ -756,7 +698,7 @@ function SignaturePage({
       isArabic={isArabic}
     >
       <div className="flex h-full flex-col">
-        <LegalSection title={`ك. ${t("common.signatures")}`}>
+        <LegalSection title={t("common.signatures")}>
           <p>{t("contracts.signatureConfirmation")}</p>
           {isArabic ? (
             <p className="mt-2">
@@ -773,6 +715,9 @@ function SignaturePage({
                   {row.label}
                 </p>
                 <p className="mt-2 text-sm font-bold text-slate-950">{row.name}</p>
+                <p className="mt-1 text-[10px] leading-4 text-slate-500">
+                  {row.details}
+                </p>
                 {row.signedAt ? (
                   <p className="mt-1 text-[10px] font-semibold text-slate-500">
                     تم التوقيع رقميا: {formatDate(row.signedAt)}
@@ -958,53 +903,76 @@ export function ContractPreview() {
   const isArabic = true;
   const showSalesPrices = canViewSalesPrices(role);
   const showFinanceValues = canViewFinanceValues(role);
-  const commercialSections = [
-    {
-      key: "payment-terms",
-      title: `هـ. ${t("contracts.paymentTerms")}`,
-      text: toArabicContractText(draft.paymentTerms),
-    },
-    {
-      key: "warranty-terms",
-      title: `و. ${t("contracts.warrantyTerms")}`,
-      text: toArabicContractText(draft.warrantyTerms),
-    },
-    {
-      key: "execution-period",
-      title: `ز. ${t("contracts.executionPeriod")}`,
-      text: toArabicContractText(draft.executionTerms),
-    },
-  ];
-  const commercialPages = packLegalSections(
-    commercialSections,
-    "commercial-page",
+  const contractKind = contractKindFromProjectType(draft.project.projectType);
+  const orderedTerms = splitContractTermsForDocument(draft.contractTerms);
+  const specificationPages = packLegalSections(
+    [
+      {
+        key: "system-specifications",
+        title: "ثانياً : المواصفات والأسعار الخاصة بالمقاطع",
+        text: specificationsForContractKind(
+          contractKind,
+          orderedTerms.specifications,
+        ),
+      },
+    ],
+    "specification-page",
   );
-  const baseLegalSections = [
-    {
-      key: "second-party-obligations",
-      title: `ط. ${t("contracts.secondPartyObligations")}`,
-      text: toArabicContractText(draft.secondPartyObligations),
-    },
+  const paymentPages = packLegalSections(
+    [
+      {
+        key: "payment-terms",
+        title: "ثالثاً : طريقة الدفعات",
+        text: toArabicContractText(draft.paymentTerms),
+      },
+    ],
+    "payment-page",
+  );
+  const firstPartyPages = packLegalSections(
+    [
+      {
+        key: "first-party-obligations",
+        title: "رابعاً : التزامات الطرف الأول",
+        text: toArabicContractText(
+          firstPartyTermsInDocumentOrder(
+            draft.executionTerms,
+            draft.warrantyTerms,
+            draft.firstPartyObligations,
+          ),
+        ),
+      },
+    ],
+    "first-party-page",
+  );
+  const secondPartyPages = packLegalSections(
+    [
+      {
+        key: "second-party-obligations",
+        title: "خامساً : التزامات الطرف الثاني",
+        text: toArabicContractText(draft.secondPartyObligations),
+      },
+    ],
+    "second-party-page",
+  );
+  const fixedPageCount = 4 + scheduleChunks.length;
+  const legalPageCount =
+    specificationPages.length +
+    paymentPages.length +
+    firstPartyPages.length +
+    secondPartyPages.length;
+  const generalTermsForPageCount = (pageCount: number): LegalPrintSection[] => [
     {
       key: "general-terms",
-      title: `ي. ${t("contracts.generalTermsAndConditions")}`,
-      text: toArabicContractText(draft.contractTerms),
+      title: "سادساً : الشروط والأحكام",
+      text: toArabicContractText(
+        orderedTerms.generalTerms || draft.contractTerms,
+      ),
     },
-  ];
-  const firstLegalPages = packLegalSections(baseLegalSections);
-  const fixedPageCount = 4 + scheduleChunks.length + commercialPages.length;
-  const firstTotalPages = fixedPageCount + firstLegalPages.length;
-  const buildFullLegalSections = (pageCount: number): LegalPrintSection[] => [
-    ...baseLegalSections,
-    ...(isArabic
-      ? [
-          {
-            key: "acceptance",
-            title: "التحرير والقبول",
-            text: `يتكون هذا العقد من البنود الاساسية الموضحة فيه ويقع على ${pageCount} صفحات. تم توقيع هذا العقد بايجاب وقبول الطرفين وفي مجلس واحد بتاريخ العقد.`,
-          },
-        ]
-      : []),
+    {
+      key: "acceptance",
+      title: "التحرير والقبول",
+      text: `يتكون هذا العقد من ستة بنود أساسية ويقع على ${pageCount} صفحات. تم توقيع هذا العقد بإيجاب وقبول الطرفين وفي مجلس واحد بتاريخ العقد.`,
+    },
     ...(draft.notes
       ? [
           {
@@ -1015,12 +983,15 @@ export function ContractPreview() {
         ]
       : []),
   ];
-  const secondLegalPages = packLegalSections(
-    buildFullLegalSections(firstTotalPages),
+  const firstGeneralPages = packLegalSections(
+    generalTermsForPageCount(fixedPageCount + legalPageCount + 1),
+    "general-page",
   );
-  const secondTotalPages = fixedPageCount + secondLegalPages.length;
-  const legalPages = packLegalSections(buildFullLegalSections(secondTotalPages));
-  const totalPages = fixedPageCount + legalPages.length;
+  const totalPages = fixedPageCount + legalPageCount + firstGeneralPages.length;
+  const generalPages = packLegalSections(
+    generalTermsForPageCount(totalPages),
+    "general-page",
+  );
   let page = 1;
 
   return (
@@ -1118,7 +1089,6 @@ export function ContractPreview() {
         <CoverPage
           draft={draft}
           isArabic={isArabic}
-          showFinanceValues={showFinanceValues}
           totalPages={totalPages}
         />
         <PartiesAndSpecsPage
@@ -1128,12 +1098,12 @@ export function ContractPreview() {
           totalPages={totalPages}
           lines={lines}
         />
-        {commercialPages.map((commercialPage) => (
+        {specificationPages.map((specificationPage) => (
           <ContractBodyTextPage
-            key={commercialPage.key}
+            key={specificationPage.key}
             draft={draft}
             isArabic={isArabic}
-            legalPage={commercialPage}
+            legalPage={specificationPage}
             page={++page}
             totalPages={totalPages}
           />
@@ -1156,9 +1126,42 @@ export function ContractPreview() {
           showFinanceValues={showFinanceValues}
           totalPages={totalPages}
           lines={lines}
-          firstPartyText={draft.firstPartyObligations}
+          measurementNotes={orderedTerms.measurementNotes}
         />
-        {legalPages.map((legalPage) => (
+        {paymentPages.map((legalPage) => (
+          <LegalStackPage
+            key={legalPage.key}
+            draft={draft}
+            isArabic={isArabic}
+            page={++page}
+            totalPages={totalPages}
+            legalPage={legalPage}
+            shellTitle={t("contracts.contractBody")}
+          />
+        ))}
+        {firstPartyPages.map((legalPage) => (
+          <LegalStackPage
+            key={legalPage.key}
+            draft={draft}
+            isArabic={isArabic}
+            page={++page}
+            totalPages={totalPages}
+            legalPage={legalPage}
+            shellTitle={t("contracts.contractBody")}
+          />
+        ))}
+        {secondPartyPages.map((legalPage) => (
+          <LegalStackPage
+            key={legalPage.key}
+            draft={draft}
+            isArabic={isArabic}
+            page={++page}
+            totalPages={totalPages}
+            legalPage={legalPage}
+            shellTitle={t("contracts.contractBody")}
+          />
+        ))}
+        {generalPages.map((legalPage) => (
           <LegalStackPage
             key={legalPage.key}
             draft={draft}

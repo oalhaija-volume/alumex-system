@@ -33,6 +33,13 @@ import {
   isProjectReadyForQuotation,
 } from "../src/lib/quotations/creation.ts";
 import {
+  contractKindFromProjectType,
+  firstPartyTermsInDocumentOrder,
+  paymentTermsForContractKind,
+  specificationsForContractKind,
+  splitContractTermsForDocument,
+} from "../src/lib/contracts/documentOrder.ts";
+import {
   canCreateContractFromQuotationVersion,
   canRunQuotationVersionAction,
 } from "../src/lib/quotations/versionWorkflow.ts";
@@ -352,6 +359,62 @@ test("quotation versions preserve approval as the contract boundary", () => {
   assert.equal(canRunQuotationVersionAction("approved", "send"), false);
   assert.equal(canCreateContractFromQuotationVersion("sent"), false);
   assert.equal(canCreateContractFromQuotationVersion("approved"), true);
+});
+
+test("generated contracts follow residential and commercial source documents", () => {
+  assert.equal(contractKindFromProjectType("Commercial"), "commercial");
+  assert.equal(contractKindFromProjectType("مشروع تجاري"), "commercial");
+  assert.equal(contractKindFromProjectType("Villa"), "residential");
+  assert.match(
+    paymentTermsForContractKind("commercial", "residential payments"),
+    /25%/,
+  );
+  assert.equal(
+    paymentTermsForContractKind("residential", "residential payments"),
+    "residential payments",
+  );
+  assert.doesNotMatch(
+    specificationsForContractKind(
+      "commercial",
+      "ALUMEX 16\nTHE ADDRESS AS18",
+    ),
+    /THE ADDRESS/,
+  );
+  assert.match(
+    specificationsForContractKind("commercial", "ALUMEX 16"),
+    /كاب او سيليكون/,
+  );
+  assert.equal(
+    firstPartyTermsInDocumentOrder(
+      "مدة التنفيذ 60 يوما.",
+      "الكفالة عشر سنوات.",
+      "يلتزم الطرف الاول بالمباشرة بالعمل.\nيلتزم الطرف الاول بتوريد وتركيب الاعمال.",
+    ),
+    "مدة التنفيذ 60 يوما.\nالكفالة عشر سنوات.\nيلتزم الطرف الاول بتوريد وتركيب الاعمال.",
+  );
+
+  assert.deepEqual(
+    splitContractTermsForDocument(
+      [
+        "تعتبر مقدمة هذا العقد جزءا لا يتجزأ منه.",
+        "اتفق الطرف الاول على توريد اعمال الالمنيوم.",
+        "مقطع السحاب (ALUMEX 16).",
+        "يحسب القياس بالمتر المربع.",
+        "اسعار الاضافيات في حال طلبها الزبون لاحقا.",
+        "يتم تجهيز بضاعة المشروع بناء على الموافقة.",
+        "هذا العقد غير خاضع لأي تخفيض.",
+        "يتكون هذا العقد من ستة بنود.",
+      ].join("\n"),
+    ),
+    {
+      introduction: "تعتبر مقدمة هذا العقد جزءا لا يتجزأ منه.",
+      specifications:
+        "اتفق الطرف الاول على توريد اعمال الالمنيوم.\nمقطع السحاب (ALUMEX 16).\nاسعار الاضافيات في حال طلبها الزبون لاحقا.",
+      measurementNotes: "يحسب القياس بالمتر المربع.",
+      generalTerms:
+        "يتم تجهيز بضاعة المشروع بناء على الموافقة.\nهذا العقد غير خاضع لأي تخفيض.",
+    },
+  );
 });
 
 test("quotation add-ons attach only to eligible aluminum openings", () => {

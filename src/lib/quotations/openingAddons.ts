@@ -17,6 +17,10 @@ const legacyOpeningAddonNames = new Set([
   "a swing door",
   "louver",
 ]);
+const standaloneQuotationProductNames = new Set([
+  "cladding",
+  "spider system",
+]);
 
 function inferredOpeningType(line: OpeningAddonLine) {
   if (line.openingType) return line.openingType;
@@ -56,5 +60,15 @@ export function projectServiceProducts<T extends CatalogProduct>(products: T[]) 
         product.category?.trim().toLowerCase() ?? "",
       ) &&
       !legacyOpeningAddonNames.has(product.product_name.trim().toLowerCase()),
+  );
+}
+
+export function standaloneQuotationProducts<T extends CatalogProduct>(
+  products: T[],
+) {
+  return projectServiceProducts(products).filter((product) =>
+    standaloneQuotationProductNames.has(
+      product.product_name.trim().toLowerCase(),
+    ),
   );
 }

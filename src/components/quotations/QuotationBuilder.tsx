@@ -49,7 +49,7 @@ import {
 import {
   canAttachAddonToOpening,
   openingAddonProducts,
-  projectServiceProducts,
+  standaloneQuotationProducts,
 } from "@/lib/quotations/openingAddons";
 import {
   canCreateQuotationForRole,
@@ -245,7 +245,8 @@ export function QuotationBuilder() {
   const [customSystemName, setCustomSystemName] = useState("");
   const [selectedVariantName, setSelectedVariantName] = useState("");
   const [serviceSpecification, setServiceSpecification] = useState("");
-  const [serviceQuantity, setServiceQuantity] = useState(1);
+  const [serviceWidth, setServiceWidth] = useState(100);
+  const [serviceHeight, setServiceHeight] = useState(100);
   const [selectedAddonName, setSelectedAddonName] = useState("");
   const [selectedAddonVariantName, setSelectedAddonVariantName] = useState("");
   const [addonTargetLineId, setAddonTargetLineId] = useState("");
@@ -285,7 +286,7 @@ export function QuotationBuilder() {
     [lines, discountPercent],
   );
   const servicePrices = useMemo(
-    () => projectServiceProducts(productPrices),
+    () => standaloneQuotationProducts(productPrices),
     [productPrices],
   );
   const systemPrices = useMemo(
@@ -459,24 +460,16 @@ export function QuotationBuilder() {
     t,
   ]);
 
-  function updateLine(
-    lineId: string,
-    key: "unitPrice" | "discountPercent",
-    value: number,
-  ) {
+  function updateLine(lineId: string, value: number) {
     setLines((currentLines) =>
       currentLines.map((line) =>
         line.id === lineId
           ? {
               ...line,
-              [key]:
-                key === "discountPercent"
-                  ? (line.isDiscountable ?? line.lineType === "base")
-                    ? clampDiscount(value, discountLimit)
-                    : 0
-                  : Number.isFinite(value)
-                    ? value
-                    : 0,
+              discountPercent:
+                (line.isDiscountable ?? line.lineType === "base")
+                  ? clampDiscount(value, discountLimit)
+                  : 0,
             }
           : line,
       ),
@@ -485,7 +478,7 @@ export function QuotationBuilder() {
 
   function updateScopeLine(
     lineId: string,
-    key: "openingCode" | "productSystem" | "notes",
+    key: "openingCode",
     value: string,
   ) {
     setLines((currentLines) =>
@@ -531,42 +524,16 @@ export function QuotationBuilder() {
     );
   }
 
-  function addScopeLine(
-    lineType: "addon" | "accessory",
-    targetLine: QuotationLine,
-  ) {
-    generatedLineIdRef.current += 1;
-    const id = `${lineType}-local-${generatedLineIdRef.current}`;
-
-    setLines((currentLines) => [
-      ...currentLines,
-      {
-        id,
-        floor: targetLine.floor,
-        room: lineType === "addon" ? "Add-on" : "Accessory",
-        openingCode: lineType === "addon" ? "ADD-ON" : "ACC",
-        width: 100,
-        height: 100,
-        solidPanelHeight: 0,
-        quantity: 1,
-        productSystem: "",
-        glassType: "",
-        aluminumColor: "",
-        notes: "",
-        unitPrice: 0,
-        discountPercent: 0,
-        lineType,
-        isDiscountable: false,
-        parentOpeningId: targetLine.id,
-      },
-    ]);
-  }
-
   function addCatalogService() {
     const service = selectedService;
 
     if (!service) {
       setError(t("quotations.selectServiceRequired"));
+      return;
+    }
+
+    if (serviceWidth <= 0 || serviceHeight <= 0) {
+      setError(t("quotations.productDimensionsRequired"));
       return;
     }
 
@@ -630,6 +597,16 @@ export function QuotationBuilder() {
       return;
     }
 
+    const configuredUnitPrice =
+      service.unit_price +
+      (system?.unit_price ?? 0) +
+      (variant?.unit_price ?? 0);
+
+    if (!usesProjectCosting && configuredUnitPrice <= 0) {
+      setError(t("quotations.productPriceRequired"));
+      return;
+    }
+
     if (
       ["Frontek", "Natural Stone", "Swiss Pearl"].includes(
         variant?.product_name ?? "",
@@ -650,12 +627,10 @@ export function QuotationBuilder() {
       {
         id,
         floor: t("quotations.projectScope"),
-        room: t("settings.services"),
-        openingCode: "SRV",
-        width: 100,
-        height: usesProjectCosting
-          ? 100
-          : Math.max(serviceQuantity, 0.01) * 100,
+        room: t("quotations.products"),
+        openingCode: "PRD",
+        width: serviceWidth,
+        height: serviceHeight,
         solidPanelHeight: 0,
         quantity: 1,
         productSystem: [
@@ -678,9 +653,7 @@ export function QuotationBuilder() {
           .join("; "),
         unitPrice: usesProjectCosting
           ? projectCostingPrice?.totalPrice ?? 0
-          : service.unit_price +
-            (system?.unit_price ?? 0) +
-            (variant?.unit_price ?? 0),
+          : configuredUnitPrice,
         discountPercent: 0,
         lineType: "service",
         isDiscountable: true,
@@ -691,7 +664,8 @@ export function QuotationBuilder() {
     setCustomSystemName("");
     setSelectedVariantName("");
     setServiceSpecification("");
-    setServiceQuantity(1);
+    setServiceWidth(100);
+    setServiceHeight(100);
     setError("");
   }
 
@@ -1097,26 +1071,6 @@ export function QuotationBuilder() {
           >
             {t("quotations.addSelectedAddon")}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              addScopeLine("addon", targetLine);
-              setAddonTargetLineId("");
-            }}
-            className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-bold text-[var(--alumex-blue)]"
-          >
-            {t("quotations.addCustomAddon")}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              addScopeLine("accessory", targetLine);
-              setAddonTargetLineId("");
-            }}
-            className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-bold text-[var(--alumex-blue)]"
-          >
-            {t("quotations.addAccessory")}
-          </button>
         </div>
       </div>
     );
@@ -1520,17 +1474,32 @@ export function QuotationBuilder() {
                   ))}
                 </select>
               ) : null}
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={selectedSystemUsesCosting ? 1 : serviceQuantity}
-                disabled={selectedSystemUsesCosting}
-                onChange={(event) => setServiceQuantity(Math.max(Number(event.target.value) || 1, 0.01))}
-                aria-label={selectedSystemUsesCosting ? "Project costing quantity" : "Service billable quantity"}
-                placeholder={selectedSystemUsesCosting ? "Priced per project" : "Billable quantity"}
-                className="h-10 rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground disabled:bg-blue-100 disabled:text-blue-700"
-              />
+              <label>
+                <span className="mb-1 block text-xs font-bold text-blue-800">
+                  {t("projects.openings.fields.width")}
+                </span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={serviceWidth}
+                  onChange={(event) => setServiceWidth(Math.max(Number(event.target.value) || 1, 1))}
+                  className="h-10 w-full rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-blue-800">
+                  {t("projects.openings.fields.height")}
+                </span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={serviceHeight}
+                  onChange={(event) => setServiceHeight(Math.max(Number(event.target.value) || 1, 1))}
+                  className="h-10 w-full rounded-md border border-blue-200 bg-white px-3 text-sm font-semibold text-foreground"
+                />
+              </label>
               <input
                 value={serviceSpecification}
                 onChange={(event) => setServiceSpecification(event.target.value)}
@@ -1550,6 +1519,13 @@ export function QuotationBuilder() {
                 {t("quotations.addService")}
               </button>
             </div>
+            {selectedService ? (
+              <p className="mt-3 text-sm font-bold text-blue-800">
+                {t("quotations.billableBasis")}: {t("common.areaValue", {
+                  value: ((serviceWidth / 100) * (serviceHeight / 100)).toFixed(2),
+                })}
+              </p>
+            ) : null}
             {selectedSystemUsesCosting ? (
               <p className="mt-3 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800">
                 {projectCostingPrice && projectCostingPrice.totalPrice > 0 ? (
@@ -1602,6 +1578,7 @@ export function QuotationBuilder() {
                 {lines.map((line) => {
                   const lineTotal = calculateLineTotal(line);
                   const isBaseLine = (line.lineType ?? "base") === "base";
+                  const isProductLine = line.lineType === "service";
                   const pricingUnit = pricingUnitForLine(line);
                   const acceptsAddons = canAttachAddonToOpening(line);
                   const attachedAddonCount = lines.filter(
@@ -1626,7 +1603,11 @@ export function QuotationBuilder() {
                       </td>
                       <td className="px-3 py-4">
                         <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold uppercase text-slate-600">
-                          {line.lineType ?? "base"}
+                          {isBaseLine
+                            ? term(line.openingType || "Opening")
+                            : isProductLine
+                              ? t("quotations.product")
+                              : line.lineType}
                         </span>
                       </td>
                       <td className="px-3 py-4 text-slate-700">
@@ -1662,27 +1643,18 @@ export function QuotationBuilder() {
                               </option>
                             ))}
                           </select>
-                        ) : (
-                          <input
-                            value={line.productSystem}
-                            onChange={(event) =>
-                              updateScopeLine(line.id, "productSystem", event.target.value)
-                            }
-                            placeholder="Description"
-                            className="h-9 w-44 rounded-md border border-slate-300 px-2 text-sm"
-                          />
-                        )}
+                        ) : line.productSystem}
                       </td>
                       <td className="px-3 py-4 text-slate-700">
                         {term(line.glassType)}
                       </td>
                       <td className="px-3 py-4 text-slate-700">
-                        {isBaseLine
+                        {isBaseLine || isProductLine
                           ? t("common.cmValue", { value: line.width })
                           : "—"}
                       </td>
                       <td className="px-3 py-4 text-slate-700">
-                        {isBaseLine
+                        {isBaseLine || isProductLine
                           ? t("common.cmValue", { value: line.height })
                           : "—"}
                       </td>
@@ -1694,7 +1666,7 @@ export function QuotationBuilder() {
                           : "—"}
                       </td>
                       <td className="px-3 py-4 text-slate-700">
-                        {isBaseLine ? (
+                        {isBaseLine || isProductLine ? (
                           line.quantity
                         ) : (
                           <input
@@ -1715,20 +1687,11 @@ export function QuotationBuilder() {
                           : t("common.areaValue", { value: lineTotal.area.toFixed(2) })}
                       </td>
                       <td className="px-3 py-4">
-                        <input
-                          type="number"
-                          min="0"
-                          value={line.unitPrice}
-                          readOnly={isBaseLine}
-                          onChange={(event) =>
-                            updateLine(
-                              line.id,
-                              "unitPrice",
-                              Number(event.target.value),
-                            )
-                          }
-                          className="h-9 w-28 rounded-md border border-slate-300 px-2 text-sm read-only:bg-slate-50 read-only:font-semibold"
-                        />
+                        <span className="inline-flex min-h-9 items-center rounded-md bg-slate-50 px-3 text-sm font-semibold text-slate-700">
+                          {line.unitPrice > 0
+                            ? formatCurrency(line.unitPrice)
+                            : t("quotations.priceNotConfigured")}
+                        </span>
                       </td>
                       <td className="px-3 py-4">
                         <input
@@ -1738,11 +1701,7 @@ export function QuotationBuilder() {
                           value={line.discountPercent}
                           disabled={!lineTotal.isDiscountable}
                           onChange={(event) =>
-                            updateLine(
-                              line.id,
-                              "discountPercent",
-                              Number(event.target.value),
-                            )
+                            updateLine(line.id, Number(event.target.value))
                           }
                           className="h-9 w-24 rounded-md border border-slate-300 px-2 text-sm disabled:bg-slate-100 disabled:text-slate-400"
                         />
@@ -1803,6 +1762,7 @@ export function QuotationBuilder() {
           {lines.map((line) => {
             const lineTotal = calculateLineTotal(line);
             const isBaseLine = (line.lineType ?? "base") === "base";
+            const isProductLine = line.lineType === "service";
             const pricingUnit = pricingUnitForLine(line);
             const acceptsAddons = canAttachAddonToOpening(line);
             const attachedAddonCount = lines.filter(
@@ -1823,7 +1783,11 @@ export function QuotationBuilder() {
                       {line.openingCode}
                     </h3>
                     <p className="mt-1 text-xs font-bold uppercase text-slate-500">
-                      {line.lineType ?? "base"}
+                      {isBaseLine
+                        ? term(line.openingType || "Opening")
+                        : isProductLine
+                          ? t("quotations.product")
+                          : line.lineType}
                     </p>
                   </div>
                   <p className="rounded-md bg-blue-50 px-3 py-2 text-sm font-bold text-[var(--alumex-blue)]">
@@ -1864,20 +1828,28 @@ export function QuotationBuilder() {
                         ))}
                       </select>
                     </label>
+                  ) : isProductLine ? (
+                    <>
+                      <p className="text-sm font-semibold text-slate-700 sm:col-span-2">
+                        {line.productSystem}
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        {t("projects.openings.fields.width")}: {t("common.cmValue", { value: line.width })}
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        {t("projects.openings.fields.height")}: {t("common.cmValue", { value: line.height })}
+                      </p>
+                    </>
                   ) : (
                     <>
-                      <label className="sm:col-span-2">
+                      <div className="sm:col-span-2">
                         <span className="text-xs font-bold uppercase text-slate-500">
                           {t("quotations.scopeDescription")}
                         </span>
-                        <input
-                          value={line.productSystem}
-                          onChange={(event) =>
-                            updateScopeLine(line.id, "productSystem", event.target.value)
-                          }
-                          className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                        />
-                      </label>
+                        <p className="mt-2 text-sm font-semibold text-slate-700">
+                          {line.productSystem}
+                        </p>
+                      </div>
                       <label>
                         <span className="text-xs font-bold uppercase text-slate-500">
                           {t("projects.openings.fields.quantity")}
@@ -1895,25 +1867,16 @@ export function QuotationBuilder() {
                       </label>
                     </>
                   )}
-                  <label>
+                  <div>
                     <span className="text-xs font-bold uppercase text-slate-500">
                       {t("settings.unitPrice")}
                     </span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={line.unitPrice}
-                      readOnly={isBaseLine}
-                      onChange={(event) =>
-                        updateLine(
-                          line.id,
-                          "unitPrice",
-                          Number(event.target.value),
-                        )
-                      }
-                      className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm read-only:bg-slate-50 read-only:font-semibold"
-                    />
-                  </label>
+                    <p className="mt-2 flex min-h-10 items-center rounded-md bg-slate-50 px-3 text-sm font-semibold text-slate-700">
+                      {line.unitPrice > 0
+                        ? formatCurrency(line.unitPrice)
+                        : t("quotations.priceNotConfigured")}
+                    </p>
+                  </div>
                   <label>
                     <span className="text-xs font-bold uppercase text-slate-500">
                       {t("quotations.discountPercent")}
@@ -1925,11 +1888,7 @@ export function QuotationBuilder() {
                       value={line.discountPercent}
                       disabled={!lineTotal.isDiscountable}
                       onChange={(event) =>
-                        updateLine(
-                          line.id,
-                          "discountPercent",
-                          Number(event.target.value),
-                        )
+                        updateLine(line.id, Number(event.target.value))
                       }
                       className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm disabled:bg-slate-100 disabled:text-slate-400"
                     />

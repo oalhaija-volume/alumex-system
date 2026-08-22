@@ -237,6 +237,35 @@ export function ProjectForm({
             geofenceRadiusMeters: radius,
           }))
         }
+        enableSearch
+        title={t("intake.location.title")}
+        editableDescription={t("intake.location.description")}
+        mapAriaLabel={t("intake.location.mapAriaLabel")}
+        searchLabel={t("intake.location.searchLabel")}
+        searchPlaceholder={t("intake.location.searchPlaceholder")}
+        searchButtonLabel={t("common.search")}
+        searchingLabel={t("intake.location.searching")}
+        noResultsLabel={t("intake.location.noResults")}
+        searchErrorLabel={t("intake.location.searchError")}
+        currentLocationLabel={t("intake.location.useCurrentLocation")}
+        locatingLabel={t("intake.location.locating")}
+        currentLocationErrorLabel={t(
+          "intake.location.currentLocationError",
+        )}
+        onSearchSelect={(address) =>
+          setValues((currentValues) => ({
+            ...currentValues,
+            address,
+          }))
+        }
+        onCurrentLocationSelect={({ latitude, longitude }) =>
+          setValues((currentValues) => ({
+            ...currentValues,
+            address:
+              currentValues.address.trim() ||
+              `${t("intake.location.gpsAddress")} ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+          }))
+        }
       />
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <button

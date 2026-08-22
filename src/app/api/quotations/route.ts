@@ -285,9 +285,14 @@ function quotationTotalsForItems(
   };
 }
 
-async function loadConfiguredOpeningSystemPrices(
+type ConfiguredCatalogPrices = {
+  openingSystems: Map<string, number>;
+  products: Map<string, number>;
+};
+
+async function loadConfiguredCatalogPrices(
   admin: ReturnType<typeof createAdminClient>,
-) {
+): Promise<ConfiguredCatalogPrices> {
   const { data, error } = await admin
     .from("product_price_settings")
     .select("product_name, category, unit, unit_price, is_active")
@@ -297,8 +302,11 @@ async function loadConfiguredOpeningSystemPrices(
     throw error;
   }
 
-  return new Map(
-    (data ?? [])
+  const activeProducts = data ?? [];
+
+  return {
+    openingSystems: new Map(
+      activeProducts
       .filter(
         (system) =>
           productCatalogKind(system.category) === "aluminum_system" &&
@@ -309,23 +317,59 @@ async function loadConfiguredOpeningSystemPrices(
         normalizeProductName(system.product_name),
         Number(system.unit_price),
       ]),
-  );
+    ),
+    products: new Map(
+      activeProducts.map((product) => [
+        normalizeProductName(product.product_name),
+        Number(product.unit_price),
+      ]),
+    ),
+  };
 }
 
-function applyConfiguredOpeningSystemPrices(
+function applyConfiguredCatalogPrices(
   items: ReturnType<typeof mapItems>,
-  systemPrices: Map<string, number>,
+  catalogPrices: ConfiguredCatalogPrices,
 ) {
   for (const item of items) {
-    if (item.line_type !== "base") {
+    if (
+      item.line_type !== "base" &&
+      (item.notes ?? "").toLowerCase().includes("price source: project costing")
+    ) {
       continue;
     }
 
-    const configuredPrice = systemPrices.get(
-      normalizeProductName(item.product_system ?? ""),
-    );
+    if (item.line_type === "base") {
+      const configuredPrice = catalogPrices.openingSystems.get(
+        normalizeProductName(item.product_system ?? ""),
+      );
 
-    if (configuredPrice === undefined) {
+      if (configuredPrice === undefined || configuredPrice <= 0) {
+        return false;
+      }
+
+      item.unit_price = configuredPrice;
+      continue;
+    }
+
+    const productNames = (item.product_system ?? "")
+      .split("—")
+      .map(normalizeProductName)
+      .filter(Boolean);
+    if (productNames.length === 0) {
+      return false;
+    }
+
+    let configuredPrice = 0;
+    for (const productName of productNames) {
+      const productPrice = catalogPrices.products.get(productName);
+      if (productPrice === undefined) {
+        return false;
+      }
+      configuredPrice += productPrice;
+    }
+
+    if (configuredPrice <= 0) {
       return false;
     }
 
@@ -488,9 +532,9 @@ export async function POST(request: Request) {
   }
 
 
-  let systemPrices: Map<string, number>;
+  let catalogPrices: ConfiguredCatalogPrices;
   try {
-    systemPrices = await loadConfiguredOpeningSystemPrices(admin);
+    catalogPrices = await loadConfiguredCatalogPrices(admin);
   } catch (configuredSystemsError) {
     return quotationErrorResponse(
       configuredSystemsError,
@@ -499,11 +543,11 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!applyConfiguredOpeningSystemPrices(items, systemPrices)) {
+  if (!applyConfiguredCatalogPrices(items, catalogPrices)) {
     return NextResponse.json(
       {
         error:
-          "Select an active aluminum system with a configured price for every opening.",
+          "Select a priced aluminum system for every opening and use only configured catalog products.",
       },
       { status: 409 },
     );
@@ -643,9 +687,9 @@ export async function PATCH(request: Request) {
   }
 
   const admin = createAdminClient();
-  let systemPrices: Map<string, number>;
+  let catalogPrices: ConfiguredCatalogPrices;
   try {
-    systemPrices = await loadConfiguredOpeningSystemPrices(admin);
+    catalogPrices = await loadConfiguredCatalogPrices(admin);
   } catch (configuredSystemsError) {
     return quotationErrorResponse(
       configuredSystemsError,
@@ -654,11 +698,11 @@ export async function PATCH(request: Request) {
     );
   }
 
-  if (!applyConfiguredOpeningSystemPrices(items, systemPrices)) {
+  if (!applyConfiguredCatalogPrices(items, catalogPrices)) {
     return NextResponse.json(
       {
         error:
-          "Select an active aluminum system with a configured price for every opening.",
+          "Select a priced aluminum system for every opening and use only configured catalog products.",
       },
       { status: 409 },
     );

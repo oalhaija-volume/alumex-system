@@ -59,6 +59,7 @@ import {
   canAttachAddonToOpening,
   openingAddonProducts,
   projectServiceProducts,
+  standaloneQuotationProducts,
 } from "../src/lib/quotations/openingAddons.ts";
 
 test("every configured project transition points to a known status", () => {
@@ -478,6 +479,22 @@ test("opening add-on catalog excludes migrated items from project services", () 
   assert.deepEqual(
     openingAddonProducts(products).map((item) => item.product_name),
     ["A Swing Door", "Georgian Bars"],
+  );
+  assert.deepEqual(
+    standaloneQuotationProducts([
+      ...products,
+      {
+        product_name: "Spider System",
+        category: "service",
+        is_active: true,
+      },
+      {
+        product_name: "Curtain Wall",
+        category: "service",
+        is_active: true,
+      },
+    ]).map((item) => item.product_name),
+    ["Cladding", "Spider System"],
   );
 });
 

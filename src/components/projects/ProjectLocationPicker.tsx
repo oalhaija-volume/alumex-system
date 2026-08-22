@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { FormEvent, MouseEvent } from "react";
 
 const tileSize = 256;
@@ -129,8 +129,10 @@ export function ProjectLocationPicker({
   const [searchResults, setSearchResults] = useState<LocationSearchResult[]>([]);
   const [searchError, setSearchError] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  const [isResolvingAddress, setIsResolvingAddress] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
+  const reverseLookupRequestId = useRef(0);
   const [center, setCenter] = useState({
     latitude: hasPin ? latitude : defaultLocation.latitude,
     longitude: hasPin ? longitude : defaultLocation.longitude,
@@ -175,6 +177,55 @@ export function ProjectLocationPicker({
     onChange(nextLocation);
   }
 
+  function cancelReverseLookup() {
+    reverseLookupRequestId.current += 1;
+    setIsResolvingAddress(false);
+  }
+
+  async function resolveAddress(nextLatitude: number, nextLongitude: number) {
+    if (!onSearchSelect) {
+      return;
+    }
+
+    const requestId = reverseLookupRequestId.current + 1;
+    reverseLookupRequestId.current = requestId;
+    setIsResolvingAddress(true);
+    setSearchError("");
+
+    try {
+      const response = await fetch(
+        `/api/location-search?lat=${encodeURIComponent(nextLatitude)}&lng=${encodeURIComponent(nextLongitude)}`,
+      );
+      const body = (await response.json().catch(() => null)) as
+        | { result?: LocationSearchResult | null; error?: string }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(body?.error ?? searchErrorLabel);
+      }
+
+      const label = body?.result?.label;
+      if (!label) {
+        throw new Error(searchErrorLabel);
+      }
+
+      if (reverseLookupRequestId.current === requestId) {
+        setSearchQuery(label);
+        onSearchSelect(label);
+      }
+    } catch (error) {
+      if (reverseLookupRequestId.current === requestId) {
+        setSearchError(
+          error instanceof Error ? error.message : searchErrorLabel,
+        );
+      }
+    } finally {
+      if (reverseLookupRequestId.current === requestId) {
+        setIsResolvingAddress(false);
+      }
+    }
+  }
+
   function handleMapClick(event: MouseEvent<HTMLButtonElement>) {
     if (readOnly) {
       return;
@@ -186,10 +237,12 @@ export function ProjectLocationPicker({
     const nextWorldX = centerWorldX + offsetX;
     const nextWorldY = centerWorldY + offsetY;
 
-    setPin(
-      worldYToLatitude(nextWorldY, zoom),
-      worldXToLongitude(nextWorldX, zoom),
-    );
+    const nextLatitude = worldYToLatitude(nextWorldY, zoom);
+    const nextLongitude = worldXToLongitude(nextWorldX, zoom);
+
+    setPin(nextLatitude, nextLongitude);
+    setSearchResults([]);
+    void resolveAddress(nextLatitude, nextLongitude);
   }
 
   function useCurrentLocation() {
@@ -209,21 +262,9 @@ export function ProjectLocationPicker({
           latitude: nextLatitude,
           longitude: nextLongitude,
         });
-        void fetch(
-          `/api/location-search?lat=${encodeURIComponent(nextLatitude)}&lng=${encodeURIComponent(nextLongitude)}`,
-        )
-          .then(async (response) => {
-            const body = (await response.json().catch(() => null)) as
-              | { result?: LocationSearchResult | null }
-              | null;
-            const label = body?.result?.label;
-            if (response.ok && label) {
-              setSearchQuery(label);
-              onSearchSelect?.(label);
-            }
-          })
-          .catch(() => undefined)
-          .finally(() => setIsLocating(false));
+        void resolveAddress(nextLatitude, nextLongitude).finally(() =>
+          setIsLocating(false),
+        );
       },
       () => {
         setLocationError(currentLocationErrorLabel);
@@ -247,6 +288,7 @@ export function ProjectLocationPicker({
 
     setIsSearching(true);
     setSearchError("");
+    cancelReverseLookup();
 
     try {
       const response = await fetch(
@@ -276,6 +318,7 @@ export function ProjectLocationPicker({
   }
 
   function selectSearchResult(result: LocationSearchResult) {
+    cancelReverseLookup();
     setPin(result.latitude, result.longitude);
     setSearchQuery(result.label);
     setSearchResults([]);
@@ -339,6 +382,7 @@ export function ProjectLocationPicker({
                 type="search"
                 value={searchQuery}
                 onChange={(event) => {
+                  cancelReverseLookup();
                   setSearchQuery(event.target.value);
                   setSearchError("");
                 }}
@@ -361,6 +405,11 @@ export function ProjectLocationPicker({
               role="status"
             >
               {searchError}
+            </p>
+          ) : null}
+          {isResolvingAddress ? (
+            <p className="mt-2 text-xs font-semibold text-muted" role="status">
+              {searchingLabel}
             </p>
           ) : null}
           {searchResults.length > 0 ? (
@@ -440,7 +489,10 @@ export function ProjectLocationPicker({
         {!readOnly ? (
           <button
             type="button"
-            onClick={() => onChange({ latitude: null, longitude: null })}
+            onClick={() => {
+              cancelReverseLookup();
+              onChange({ latitude: null, longitude: null });
+            }}
             className="h-9 rounded-md border border-border bg-surface px-3 text-xs font-bold text-muted-strong"
           >
             Clear pin

@@ -624,6 +624,7 @@ function canRoleSeeProject({
 
   if (role === "Operations Manager") {
     return [
+      "finance_down_payment_pending",
       "finance_down_payment_confirmed",
       "finance_payment_exception",
       "operations_manager_review",

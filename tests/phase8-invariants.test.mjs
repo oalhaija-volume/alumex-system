@@ -208,6 +208,32 @@ test("Admin remains an unrestricted system testing role", () => {
   assert.doesNotMatch(appShell, /max-w-full truncate/);
 });
 
+test("signed projects are visible to Operations while Finance remains a gate", () => {
+  const operationsRoute = readFileSync(
+    join(repositoryRoot, "src", "app", "api", "operations", "projects", "route.ts"),
+    "utf8",
+  );
+  const operationsModule = readFileSync(
+    join(
+      repositoryRoot,
+      "src",
+      "components",
+      "operations",
+      "OperationsManagerModule.tsx",
+    ),
+    "utf8",
+  );
+
+  assert.match(operationsRoute, /"finance_down_payment_pending"/);
+  assert.match(operationsRoute, /"Awaiting down payment"/);
+  assert.match(
+    operationsRoute,
+    /Finance must confirm the down payment or approve an exception/,
+  );
+  assert.match(operationsModule, /!project\.canComplete/);
+  assert.match(operationsModule, /Awaiting Finance/);
+});
+
 test("project deletion is Admin-only and transactional", () => {
   const sql = readMigration("20260728160000_admin_project_deletion.sql");
   const projectsRoute = readFileSync(

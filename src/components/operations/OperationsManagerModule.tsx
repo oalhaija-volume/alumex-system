@@ -14,7 +14,11 @@ type OperationsProject = {
   address: string;
   clientName: string;
   salesOwner: string;
-  paymentStatus: "Payment received" | "Finance exception approved";
+  paymentStatus:
+    | "Awaiting down payment"
+    | "Payment received"
+    | "Finance exception approved";
+  canComplete: boolean;
   isCompleted: boolean;
 };
 
@@ -133,7 +137,7 @@ export function OperationsManagerModule() {
       <PageHeader
         eyebrow="Operations"
         title="Operations Manager"
-        description="Projects received from Finance. Commercial documents, prices, amounts, and payment terms are not available in this workspace."
+        description="Signed projects appear here immediately. Execution remains locked until Finance confirms the down payment or approves an exception."
       />
 
       {error ? (
@@ -173,7 +177,13 @@ export function OperationsManagerModule() {
                   <div className="flex flex-wrap gap-2">
                     <StatusPill status={project.paymentStatus} />
                     <StatusPill
-                      status={project.isCompleted ? "Completed" : "In Operations"}
+                      status={
+                        project.isCompleted
+                          ? "Completed"
+                          : project.canComplete
+                            ? "Ready for Operations"
+                            : "Handoff received"
+                      }
                     />
                   </div>
                 </div>
@@ -186,11 +196,17 @@ export function OperationsManagerModule() {
                   <button
                     type="button"
                     onClick={() => void markCompleted(project)}
-                    disabled={project.isCompleted || completingId === project.id}
+                    disabled={
+                      project.isCompleted ||
+                      !project.canComplete ||
+                      completingId === project.id
+                    }
                     className="h-11 rounded-md bg-primary px-5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {project.isCompleted
                       ? "Completed"
+                      : !project.canComplete
+                        ? "Awaiting Finance"
                       : completingId === project.id
                         ? "Completing..."
                         : "Mark completed"}

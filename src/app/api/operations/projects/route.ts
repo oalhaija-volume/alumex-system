@@ -9,6 +9,7 @@ import {
 
 const operationsRoles = ["Admin", "Operations Manager"] as const;
 const operationsStatuses = [
+  "finance_down_payment_pending",
   "finance_down_payment_confirmed",
   "finance_payment_exception",
   "operations_manager_review",
@@ -79,9 +80,13 @@ export async function GET() {
         salesOwner:
           salesOwners.get(project.sales_engineer_id ?? "") ?? "",
         paymentStatus:
-          project.workflow_status === "finance_payment_exception"
-            ? "Finance exception approved"
-            : "Payment received",
+          project.workflow_status === "finance_down_payment_pending"
+            ? "Awaiting down payment"
+            : project.workflow_status === "finance_payment_exception"
+              ? "Finance exception approved"
+              : "Payment received",
+        canComplete:
+          project.workflow_status !== "finance_down_payment_pending",
         isCompleted: project.status === "Completed",
       })),
     });
@@ -162,6 +167,16 @@ export async function PATCH(request: Request) {
 
   if (project.status === "Completed") {
     return NextResponse.json({ project: { id: projectId, isCompleted: true } });
+  }
+
+  if (project.workflow_status === "finance_down_payment_pending") {
+    return NextResponse.json(
+      {
+        error:
+          "Finance must confirm the down payment or approve an exception before Operations can complete this project.",
+      },
+      { status: 409 },
+    );
   }
 
   const completedAt = new Date().toISOString();

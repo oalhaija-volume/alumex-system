@@ -607,7 +607,7 @@
   "clients": {
     "eyebrow": "Accounts",
     "title": "Clients",
-    "description": "Create, search, edit, delete, and review client contact details before database integration.",
+    "description": "Search and review client contact details, open full profiles, and safely manage client records.",
     "searchLabel": "Search clients",
     "searchPlaceholder": "Search by name, mobile, province, city, email, or notes",
     "createClient": "Create client",

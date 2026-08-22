@@ -136,6 +136,15 @@ function MobileNavIcon({
     );
   }
 
+  if (href === "/clients") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4.5 21a7.5 7.5 0 0 1 15 0" />
+      </svg>
+    );
+  }
+
   if (href === "/projects") {
     return (
       <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={strokeWidth} strokeLinejoin="round">

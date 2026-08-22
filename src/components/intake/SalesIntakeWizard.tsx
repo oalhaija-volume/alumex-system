@@ -14,14 +14,6 @@ import {
 } from "@/lib/intake/nextStage";
 import { outdoorSiteDuplicateRadiusMeters } from "@/lib/location/coordinates";
 
-type ContactDraft = {
-  contactName: string;
-  roleTitle: string;
-  mobile: string;
-  email: string;
-  isPrimary: boolean;
-};
-
 type IntakeDraft = {
   mode: "new" | "existing";
   existingClientId: string;
@@ -37,7 +29,6 @@ type IntakeDraft = {
   city: string;
   companyLatitude: number | null;
   companyLongitude: number | null;
-  contacts: ContactDraft[];
   projectName: string;
   branch: "" | "Rasafa" | "Karkh";
   projectType: string;
@@ -56,14 +47,6 @@ type IntakeDraft = {
   notes: string;
 };
 
-const emptyContact: ContactDraft = {
-  contactName: "",
-  roleTitle: "",
-  mobile: "",
-  email: "",
-  isPrimary: true,
-};
-
 const initialDraft: IntakeDraft = {
   mode: "existing",
   existingClientId: "",
@@ -79,7 +62,6 @@ const initialDraft: IntakeDraft = {
   city: "",
   companyLatitude: null,
   companyLongitude: null,
-  contacts: [],
   projectName: "",
   branch: "",
   projectType: "",
@@ -165,7 +147,6 @@ export function SalesIntakeWizard() {
       return initialDraft;
     }
   });
-  const [files, setFiles] = useState<File[]>([]);
   const [clientSearch, setClientSearch] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -344,7 +325,6 @@ export function SalesIntakeWizard() {
                   locationLongitude: draft.companyLongitude,
                 }
               : null,
-          contacts: draft.contacts,
           project: {
             projectName: draft.projectName,
             branch: draft.branch,
@@ -375,22 +355,6 @@ export function SalesIntakeWizard() {
       } | null;
       if (!response.ok || !result?.projectId) {
         throw new Error(result?.error ?? t("intake.errors.save"));
-      }
-
-      for (const file of files) {
-        const formData = new FormData();
-        formData.set("file", file);
-        formData.set("category", "general");
-        const upload = await fetch(
-          `/api/projects/${result.projectId}/attachments`,
-          { method: "POST", body: formData },
-        );
-        if (!upload.ok) {
-          const uploadResult = (await upload.json().catch(() => null)) as {
-            error?: string;
-          } | null;
-          throw new Error(uploadResult?.error ?? t("intake.errors.attachment"));
-        }
       }
 
       window.localStorage.removeItem(draftKey);
@@ -726,26 +690,6 @@ export function SalesIntakeWizard() {
                     <Field label={t("intake.fields.contractor")} value={draft.contractorName} onChange={(value) => update("contractorName", value)} />
                     <label className={`${labelClass} md:col-span-2`}>{t("intake.fields.notes")}<textarea value={draft.notes} onChange={(event) => update("notes", event.target.value)} rows={4} className={`${inputClass} h-auto py-3`} /></label>
                   </div>
-                  <div className="space-y-4 border-t border-slate-200 pt-5">
-                    <h3 className="text-sm font-extrabold text-slate-900">
-                      {t("intake.sections.contacts")}
-                    </h3>
-                    {draft.contacts.map((contact, index) => (
-                      <div key={index} className="grid gap-4 border-b border-slate-200 pb-5 md:grid-cols-2">
-                        <Field label={t("intake.fields.contactName")} value={contact.contactName} onChange={(value) => update("contacts", draft.contacts.map((item, itemIndex) => itemIndex === index ? { ...item, contactName: value } : item))} />
-                        <Field label={t("intake.fields.roleTitle")} value={contact.roleTitle} onChange={(value) => update("contacts", draft.contacts.map((item, itemIndex) => itemIndex === index ? { ...item, roleTitle: value } : item))} />
-                        <Field type="tel" label={t("intake.fields.mobile")} value={contact.mobile} onChange={(value) => update("contacts", draft.contacts.map((item, itemIndex) => itemIndex === index ? { ...item, mobile: value } : item))} />
-                        <Field type="email" label={t("intake.fields.email")} value={contact.email} onChange={(value) => update("contacts", draft.contacts.map((item, itemIndex) => itemIndex === index ? { ...item, email: value } : item))} />
-                        <button type="button" onClick={() => update("contacts", draft.contacts.filter((_, itemIndex) => itemIndex !== index))} className="min-h-11 justify-self-start text-sm font-bold text-red-700">{t("intake.removeContact")}</button>
-                      </div>
-                    ))}
-                    <button type="button" onClick={() => update("contacts", [...draft.contacts, { ...emptyContact, isPrimary: draft.contacts.length === 0 }])} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700">+ {t("intake.addContact")}</button>
-                  </div>
-                  <label className="block rounded-md border border-dashed border-slate-400 p-5 text-sm text-slate-700">
-                    <span className="font-extrabold text-[var(--alumex-blue)]">{t("intake.attachments.title")}</span>
-                    <span className="mt-1 block text-xs text-slate-500">{t("intake.attachments.help")}</span>
-                    <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} className="mt-3 block w-full text-sm" />
-                  </label>
                 </div>
               </details>
             </div>
@@ -775,7 +719,6 @@ export function SalesIntakeWizard() {
                   ...(readinessNeedsFollowUp(draft.readiness)
                     ? [[t("intake.fields.followUpAt"), draft.followUpAt.replace("T", " ")]]
                     : []),
-                  [t("intake.attachments.title"), String(files.length)],
                 ].map(([label, value]) => <div key={label} className="grid gap-1 py-3 sm:grid-cols-[180px_1fr]"><dt className="text-sm font-bold text-slate-500">{label}</dt><dd className="text-sm font-semibold text-slate-950">{term(value || t("common.notAdded"))}</dd></div>)}
               </dl>
             </div>

@@ -259,6 +259,29 @@ test("Operations receives opening measurements without commercial document value
   assert.doesNotMatch(operationsModule, /Quotation|Contract|Unit price|Line total/);
 });
 
+test("sales dashboard distinguishes project status from sales stage", () => {
+  const dashboardRoute = readFileSync(
+    join(repositoryRoot, "src", "app", "api", "dashboard", "sales", "route.ts"),
+    "utf8",
+  );
+  const dashboardModule = readFileSync(
+    join(
+      repositoryRoot,
+      "src",
+      "components",
+      "dashboard",
+      "SalesRoleDashboard.tsx",
+    ),
+    "utf8",
+  );
+
+  assert.match(dashboardRoute, /responsible_user_id, status, sales_status/);
+  assert.match(dashboardModule, /dashboard\.role\.projectStatus/);
+  assert.match(dashboardModule, /dashboard\.role\.stage/);
+  assert.match(dashboardModule, /term\(project\.status\)/);
+  assert.match(dashboardModule, /localizedStatus\(t, project\.sales_status\)/);
+});
+
 test("project deletion is Admin-only and transactional", () => {
   const sql = readMigration("20260728160000_admin_project_deletion.sql");
   const projectsRoute = readFileSync(

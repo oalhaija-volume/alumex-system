@@ -39,6 +39,13 @@ type ProjectSummary = {
   original_creator_id: string | null;
   owner_id: string | null;
   responsible_user_id: string | null;
+  status:
+    | "Draft"
+    | "Measuring"
+    | "Quotation"
+    | "Contract"
+    | "Production"
+    | "Completed";
   sales_status: string;
   structure_readiness: string;
   expected_structure_ready_date: string | null;
@@ -295,7 +302,7 @@ function ProjectList({
   projects: ProjectSummary[];
   outdoorActions?: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, term } = useI18n();
 
   if (!projects.length) {
     return <EmptyState>{t("dashboard.role.empty.projects")}</EmptyState>;
@@ -321,9 +328,22 @@ function ProjectList({
                 </h3>
                 <p className="mt-1 text-sm text-muted">
                   {project.client?.client_name ??
-                    t("dashboard.role.unknownClient")}{" "}
-                  · {localizedStatus(t, project.sales_status)}
+                    t("dashboard.role.unknownClient")}
                 </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="material-status">
+                    <span className="font-semibold text-muted">
+                      {t("dashboard.role.projectStatus")}:
+                    </span>{" "}
+                    {term(project.status)}
+                  </span>
+                  <span className="material-status">
+                    <span className="font-semibold text-muted">
+                      {t("dashboard.role.stage")}:
+                    </span>{" "}
+                    {localizedStatus(t, project.sales_status)}
+                  </span>
+                </div>
                 <p className="mt-1 truncate text-xs text-muted">
                   {project.address || t("dashboard.role.noAddress")}
                 </p>

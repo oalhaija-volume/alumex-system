@@ -33,6 +33,7 @@ type ProjectRow = Pick<
   | "original_creator_id"
   | "owner_id"
   | "responsible_user_id"
+  | "status"
   | "sales_status"
   | "structure_readiness"
   | "expected_structure_ready_date"
@@ -42,7 +43,7 @@ type ProjectRow = Pick<
 >;
 
 const projectSelect =
-  "id, project_number, project_name, client_id, address, location_latitude, location_longitude, original_creator_id, owner_id, responsible_user_id, sales_status, structure_readiness, expected_structure_ready_date, next_follow_up_at, priority, updated_at";
+  "id, project_number, project_name, client_id, address, location_latitude, location_longitude, original_creator_id, owner_id, responsible_user_id, status, sales_status, structure_readiness, expected_structure_ready_date, next_follow_up_at, priority, updated_at";
 
 async function loadContext() {
   const auth = await requireRole(dashboardRoles);

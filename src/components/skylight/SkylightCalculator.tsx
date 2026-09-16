@@ -18,7 +18,6 @@ export function SkylightCalculator() {
   const [steelAmount, setSteelAmount] = useState("");
   const [exchangeRate, setExchangeRate] = useState("");
   const [convertToIqd, setConvertToIqd] = useState(false);
-  const [laminated, setLaminated] = useState(false);
   const [customer, setCustomer] = useState("");
   const [salesperson, setSalesperson] = useState("");
   const [attachments, setAttachments] = useState<SkylightAttachment[]>([]);
@@ -39,7 +38,7 @@ export function SkylightCalculator() {
     setQuote({
       number: `SK-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getTime()).slice(-6)}`,
       date: now.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-      customer: customer.trim(), salesperson: salesperson.trim(), attachments, project: project.trim(), notes: notes.trim(), laminated, calculation, currency,
+      customer: customer.trim(), salesperson: salesperson.trim(), attachments, project: project.trim(), notes: notes.trim(), calculation, currency,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -57,7 +56,7 @@ export function SkylightCalculator() {
       {quote ? (
         <section className="mx-auto max-w-6xl px-4 py-8 sm:px-8">
           <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-4">
-            <div><h1 className="text-2xl font-bold">Quotation preview</h1><p className="mt-1 text-sm text-muted">{quote.laminated ? "Laminated glass" : "Standard glass"} · {quote.number}</p></div>
+            <div><h1 className="text-2xl font-bold">Quotation preview</h1><p className="mt-1 text-sm text-muted">Standard & laminated glass options · {quote.number}</p></div>
             <div className="flex flex-wrap gap-3">
               <button type="button" className="material-button-outlined" onClick={() => setQuote(null)}>Edit calculation</button>
               <SkylightPdfButton number={quote.number} attachments={quote.attachments} />
@@ -125,7 +124,7 @@ export function SkylightCalculator() {
 
               <section className="material-card p-5" aria-labelledby="total-heading">
                 <h2 id="total-heading" className="text-lg font-bold">Grand total</h2>
-                <p className="mt-1 text-sm text-muted">Choose the glass for your quotation.</p>
+                <p className="mt-1 text-sm text-muted">Both glass options will appear in your quotation.</p>
                 <div className="mt-4 rounded-md border border-border bg-surface-muted p-3">
                   <label htmlFor="exchange-rate" className="block text-sm font-semibold">Exchange rate (IQD per 1 USD)</label>
                   <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -137,15 +136,14 @@ export function SkylightCalculator() {
                   </div>
                   <p id="exchange-rate-help" className="mt-2 text-xs leading-5 text-muted">{rate === null ? "Enter a rate greater than 0, up to 1,000,000, with at most 2 decimal places to convert." : skylightRateLabel(rate)} Manual item amounts stay in USD.</p>
                 </div>
-                <fieldset className="mt-4 grid grid-cols-2 gap-3">
-                  <legend className="sr-only">Glass option</legend>
+                <div className="mt-4 grid grid-cols-2 gap-3">
                   {[false, true].map((option) => (
-                    <label key={String(option)} className={`cursor-pointer rounded-lg border p-3 ${laminated === option ? "border-primary bg-info-surface" : "border-border"}`}>
-                      <span className="flex min-h-10 items-center gap-2 text-sm font-semibold sm:min-h-0"><input type="radio" name="glass-option" checked={laminated === option} onChange={() => setLaminated(option)} className="accent-primary" />{option ? "Laminated glass" : "Standard glass"}</span>
+                    <div key={String(option)} className="rounded-lg border border-border p-3">
+                      <span className="flex min-h-10 items-center gap-2 text-sm font-semibold sm:min-h-0">{option ? "Laminated glass" : "Standard glass"}</span>
                       <span className="mt-2 block break-words text-lg font-bold tabular-nums sm:text-xl" data-testid={option ? "laminated-total" : "standard-total"}>{calculation.valid && currency ? skylightTotal(option ? calculation.laminatedTotalCents : calculation.standardTotalCents, currency) : "—"}</span>
-                    </label>
+                    </div>
                   ))}
-                </fieldset>
+                </div>
                 <p className="mt-4 text-xs leading-5 text-muted">{convertToIqd ? "Totals are in IQD, rounded to the nearest whole dinar." : "All totals are in USD."}</p>
               </section>
             </div>

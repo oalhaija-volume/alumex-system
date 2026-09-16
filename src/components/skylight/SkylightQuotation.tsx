@@ -9,13 +9,12 @@ export type SkylightQuotationData = {
   attachments: SkylightAttachment[];
   project: string;
   notes: string;
-  laminated: boolean;
   currency: SkylightCurrency;
   calculation: ReturnType<typeof calculateSkylight>;
 };
 
 export function SkylightQuotation({ quote }: { quote: SkylightQuotationData }) {
-  const { calculation, laminated } = quote;
+  const { calculation } = quote;
   return (
     <div id="skylight-quotation" dir="ltr" lang="en">
       <article className="pdf-page flex flex-col bg-white p-6 text-slate-900 sm:p-10" style={{ colorScheme: "light" }}>
@@ -35,13 +34,12 @@ export function SkylightQuotation({ quote }: { quote: SkylightQuotationData }) {
             <p className="mt-1">Currency: {quote.currency.code}</p>
           </div>
         </header>
-        <h2 className="mt-6 text-2xl font-bold">Skylight quotation</h2>
+        <h2 className="mt-4 text-2xl font-bold">Skylight quotation</h2>
         <dl className="mt-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-3 text-[11px]">
           <div><dt className="text-slate-500">Prepared for</dt><dd className="mt-1 break-words font-bold">{quote.customer || "—"}</dd></div>
           <div><dt className="text-slate-500">Project</dt><dd className="mt-1 break-words font-bold">{quote.project || "—"}</dd></div>
           <div className="col-span-2"><dt className="text-slate-500">Prepared by</dt><dd className="mt-1 break-words font-bold">{quote.salesperson}</dd></div>
         </dl>
-        <p className="mt-4 text-[11px] font-semibold">Glass specification: {laminated ? "Laminated glass" : "Standard glass"}</p>
         <table className="mt-4 w-full table-fixed border-collapse text-[10px]">
           <thead className="bg-[#0057a8] text-white">
             <tr>
@@ -53,7 +51,7 @@ export function SkylightQuotation({ quote }: { quote: SkylightQuotationData }) {
           <tbody>
             {calculation.lines.filter((line) => line.quantity > 0).map((line) => (
               <tr key={line.id} className="border-b border-slate-200">
-                <td className="px-2 py-1.5">{line.name}{line.id === "glass" && laminated ? " (laminated)" : ""}</td>
+                <td className="px-2 py-1.5">{line.name}</td>
                 <td className="px-1 py-1.5 text-end tabular-nums">{line.quantity}</td>
                 <td className="px-1 py-1.5 text-center">{line.unit}</td>
               </tr>
@@ -74,13 +72,22 @@ export function SkylightQuotation({ quote }: { quote: SkylightQuotationData }) {
             )}
           </tbody>
         </table>
-        <div className="mt-5 ms-auto w-full max-w-72 text-[11px]">
-          {quote.currency.code === "IQD" && <p className="mb-2 text-end">{skylightRateLabel(quote.currency.rate)} · Rounded to whole IQD</p>}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-[#0057a8] p-4 text-white">
-            <span className="font-bold">Grand total</span>
-            <strong className="break-all text-lg tabular-nums">{skylightTotal(laminated ? calculation.laminatedTotalCents : calculation.standardTotalCents, quote.currency)}</strong>
+        <section className="mt-4 text-[11px]" aria-label="Suggested glass options">
+          <h3 className="font-bold">Suggested glass options — choose one</h3>
+          {quote.currency.code === "IQD" && <p className="mt-1">{skylightRateLabel(quote.currency.rate)} · Rounded to whole IQD</p>}
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <div className="min-w-0 rounded-md bg-[#0057a8] p-3 text-white">
+              <p className="font-bold">Standard glass</p>
+              <p className="mt-1 text-[10px]">Grand total</p>
+              <strong className="mt-1 block break-words text-base tabular-nums" data-testid="quotation-standard-total">{skylightTotal(calculation.standardTotalCents, quote.currency)}</strong>
+            </div>
+            <div className="min-w-0 rounded-md bg-[#0057a8] p-3 text-white">
+              <p className="font-bold">Laminated glass</p>
+              <p className="mt-1 text-[10px]">Grand total</p>
+              <strong className="mt-1 block break-words text-base tabular-nums" data-testid="quotation-laminated-total">{skylightTotal(calculation.laminatedTotalCents, quote.currency)}</strong>
+            </div>
           </div>
-        </div>
+        </section>
         {quote.notes && <div className="mt-5 text-[11px]"><h3 className="font-bold">Notes</h3><p className="mt-1 break-words leading-5">{quote.notes}</p></div>}
         <footer className="mt-auto border-t border-slate-200 pt-3 text-[10px] text-slate-500">
           <div className="flex justify-between gap-4"><span>Alumex Experts · Skylight quotation</span><span>1 / {1 + quote.attachments.reduce((total, attachment) => total + attachment.pageCount, 0)}</span></div>

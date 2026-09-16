@@ -48,7 +48,6 @@ test("standalone skylight calculator creates a branded PDF without opening syste
   await expect(page.locator("#quantity-screws")).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByRole("button", { name: "Generate quotation" })).toBeDisabled();
   await page.locator("#quantity-screws").fill("2");
-  await page.getByRole("radio", { name: "Laminated glass", exact: false }).check();
   await expect(page.getByRole("button", { name: "Generate quotation" })).toBeDisabled();
   await page.getByLabel("Customer name").fill("Skylight Test Customer");
   await page.getByLabel("Salesperson name").fill("Ahmed Hassan");
@@ -59,7 +58,9 @@ test("standalone skylight calculator creates a branded PDF without opening syste
   await page.getByRole("button", { name: "Generate quotation" }).click();
   const quotation = page.locator("#skylight-quotation");
   await expect(quotation.getByText("$1,996.25", { exact: true })).toBeVisible();
-  await expect(quotation.getByText("Glass (laminated)")).toBeVisible();
+  await expect(quotation.getByTestId("quotation-standard-total")).toHaveText("$1,446.25");
+  await expect(quotation.getByTestId("quotation-laminated-total")).toHaveText("$1,996.25");
+  await expect(quotation.getByText("Glass", { exact: true })).toBeVisible();
   await expect(quotation.getByText("Skylight Test Customer")).toBeVisible();
   await expect(quotation.getByText("Ahmed Hassan")).toBeVisible();
   await expect(quotation.getByRole("columnheader", { name: "Unit price" })).toHaveCount(0);
@@ -81,9 +82,9 @@ test("standalone skylight calculator creates a branded PDF without opening syste
   expect(pdf.length).toBeGreaterThan(10000);
   await page.getByRole("button", { name: "Edit calculation" }).click();
   await expect(page.locator("#quantity-glass")).toHaveValue("10");
-  await page.getByRole("radio", { name: "Standard glass", exact: false }).check();
   await page.getByRole("button", { name: "Generate quotation" }).click();
   await expect(quotation.getByText("$1,446.25", { exact: true })).toBeVisible();
+  await expect(quotation.getByTestId("quotation-laminated-total")).toHaveText("$1,996.25");
   expect(errors).toEqual([]);
 
   const protectedPage = await context.newPage();
@@ -108,7 +109,6 @@ test("all materials and manual amounts fit one A4 quotation", async ({ page }) =
   await page.getByLabel("Salesperson name").fill("Salesperson ".repeat(9));
   await page.getByLabel("Project name").fill("Skylight project ".repeat(6));
   await page.getByLabel("Notes").fill("Quotation notes for skylight materials. ".repeat(9));
-  await page.getByRole("radio", { name: "Laminated glass", exact: false }).check();
   await page.getByLabel("Exchange rate (IQD per 1 USD)").fill("1540");
   await page.getByRole("switch", { name: "Convert totals to IQD" }).click();
   await page.getByRole("button", { name: "Generate quotation" }).click();
@@ -156,7 +156,8 @@ test("manual currency conversion updates both totals and the quotation without c
   await page.getByRole("button", { name: "Generate quotation" }).click();
   const quotation = page.locator("#skylight-quotation");
   await expect(quotation.getByText("Currency: IQD")).toBeVisible();
-  await expect(quotation.getByText("IQD 2,380,560", { exact: true })).toBeVisible();
+  await expect(quotation.getByTestId("quotation-standard-total")).toHaveText("IQD 2,380,560");
+  await expect(quotation.getByTestId("quotation-laminated-total")).toHaveText("IQD 3,238,560");
   await expect(quotation.getByText(/1 USD = 1,560 IQD/)).toBeVisible();
   const pending = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download quotation PDF" }).click();

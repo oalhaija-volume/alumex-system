@@ -7,6 +7,11 @@ export async function exportElementToPdf({
   elementId,
   fileName,
 }: ExportPdfOptions) {
+  const pdf = await createElementPdf(elementId);
+  pdf.save(fileName);
+}
+
+export async function createElementPdf(elementId: string) {
   const element = document.getElementById(elementId);
 
   if (!element) {
@@ -78,7 +83,7 @@ export async function exportElementToPdf({
     pdf.addImage(image, "PNG", 0, 0, pageWidth, pageHeight);
   }
 
-  pdf.save(fileName);
+  return pdf;
 }
 
 async function waitForImages(element: HTMLElement) {

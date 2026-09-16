@@ -17,7 +17,17 @@ export type SkylightItemId = (typeof skylightItems)[number]["id"];
 export type SkylightQuantities = Partial<Record<SkylightItemId, string>>;
 export const laminationPriceCents = 5500;
 
-export function calculateSkylight(quantities: SkylightQuantities) {
+function manualAmount(value: string) {
+  const raw = value.trim();
+  const amount = raw === "" ? 0 : Number(raw);
+  const valid = (raw === "" || /^\d+(?:\.\d{1,2})?$/.test(raw)) &&
+    Number.isFinite(amount) && amount >= 0 && amount <= 1_000_000;
+  return { valid, cents: valid ? Math.round(amount * 100) : 0 };
+}
+
+export function calculateSkylight(quantities: SkylightQuantities, otherAmount = "", steelAmount = "") {
+  const { valid: otherValid, cents: otherCents } = manualAmount(otherAmount);
+  const { valid: steelValid, cents: steelCents } = manualAmount(steelAmount);
   const lines = skylightItems.map((item) => {
     const raw = quantities[item.id]?.trim() ?? "";
     const quantity = raw === "" ? 0 : Number(raw);
@@ -39,12 +49,16 @@ export function calculateSkylight(quantities: SkylightQuantities) {
         : 0,
     };
   });
-  const standardTotalCents = lines.reduce((total, line) => total + line.totalCents, 0);
+  const standardTotalCents = lines.reduce((total, line) => total + line.totalCents, otherCents + steelCents);
   const laminationCents = lines.reduce((total, line) => total + line.laminationCents, 0);
 
   return {
     lines,
-    valid: lines.every((line) => line.valid),
+    valid: otherValid && steelValid && lines.every((line) => line.valid),
+    otherValid,
+    otherCents,
+    steelValid,
+    steelCents,
     standardTotalCents,
     laminationCents,
     laminatedTotalCents: standardTotalCents + laminationCents,

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PDFDocument } from "pdf-lib";
 
 test("standalone skylight calculator creates a branded PDF without opening system access", async ({ page, context }) => {
   const errors: string[] = [];
@@ -20,15 +21,39 @@ test("standalone skylight calculator creates a branded PDF without opening syste
   await page.locator("#quantity-glass").fill("10");
   await page.locator("#quantity-brackets").fill("4");
   await page.locator("#quantity-screws").fill("2");
-  await expect(page.getByTestId("line-connector").locator("output")).toHaveText("$86.25");
+  await expect(page.getByTestId("line-connector").locator("output")).toHaveCount(0);
+  await expect(page.getByText("Item total", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("$86.25", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("standard-total")).toHaveText("$1,446.25");
   await expect(page.getByTestId("laminated-total")).toHaveText("$1,996.25");
+  const other = page.locator("#other-amount");
+  await expect(other).toHaveValue("");
+  await other.fill("125.75");
+  await expect(page.getByTestId("standard-total")).toHaveText("$1,572.00");
+  await expect(page.getByTestId("laminated-total")).toHaveText("$2,122.00");
+  await other.fill("-1");
+  await expect(other).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByTestId("standard-total")).toHaveText("—");
+  await other.fill("");
+  await expect(page.getByTestId("standard-total")).toHaveText("$1,446.25");
+  const steel = page.getByLabel("Steel reinforcement", { exact: false });
+  await expect(steel).toHaveValue("");
+  await steel.fill("200.25");
+  await expect(page.getByTestId("standard-total")).toHaveText("$1,646.50");
+  await expect(page.getByTestId("laminated-total")).toHaveText("$2,196.50");
+  await steel.fill("-1");
+  await expect(steel).toHaveAttribute("aria-invalid", "true");
+  await steel.fill("");
   await page.locator("#quantity-screws").fill("1.5");
   await expect(page.locator("#quantity-screws")).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByRole("button", { name: "Generate quotation" })).toBeDisabled();
   await page.locator("#quantity-screws").fill("2");
   await page.getByRole("radio", { name: "Laminated glass", exact: false }).check();
+  await expect(page.getByRole("button", { name: "Generate quotation" })).toBeDisabled();
   await page.getByLabel("Customer name").fill("Skylight Test Customer");
+  await page.getByLabel("Salesperson name").fill("Ahmed Hassan");
+  await expect(page.getByText("Unit price", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("$34.50", { exact: false })).toHaveCount(0);
   await page.getByLabel("Project name").fill("Baghdad Skylight");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole("button", { name: "Generate quotation" }).click();
@@ -36,6 +61,11 @@ test("standalone skylight calculator creates a branded PDF without opening syste
   await expect(quotation.getByText("$1,996.25", { exact: true })).toBeVisible();
   await expect(quotation.getByText("Glass (laminated)")).toBeVisible();
   await expect(quotation.getByText("Skylight Test Customer")).toBeVisible();
+  await expect(quotation.getByText("Ahmed Hassan")).toBeVisible();
+  await expect(quotation.getByRole("columnheader", { name: "Unit price" })).toHaveCount(0);
+  await expect(quotation.getByRole("columnheader", { name: "Total", exact: true })).toHaveCount(0);
+  await expect(quotation.getByText("$86.25", { exact: true })).toHaveCount(0);
+  await expect(quotation.getByText(/\$175.00\/m²|\$55.00\/m²/)).toHaveCount(0);
   expect(await quotation.locator("img").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   const downloadPromise = page.waitForEvent("download");
@@ -61,19 +91,30 @@ test("standalone skylight calculator creates a branded PDF without opening syste
   await expect(protectedPage).toHaveURL(/\/login\?/);
 });
 
-test("all twelve materials and full customer details fit one A4 quotation", async ({ page }) => {
+test("all materials and manual amounts fit one A4 quotation", async ({ page }) => {
   await page.goto("/skylight");
-  for (const input of await page.locator('input[type="number"]').all()) {
+  for (const input of await page.locator('input[id^="quantity-"]').all()) {
     await input.fill("10");
   }
   await expect(page.getByTestId("standard-total")).toHaveText("$3,219.00");
   await expect(page.getByTestId("laminated-total")).toHaveText("$3,769.00");
+  await page.getByLabel("Other", { exact: false }).fill("125.75");
+  await expect(page.getByTestId("standard-total")).toHaveText("$3,344.75");
+  await expect(page.getByTestId("laminated-total")).toHaveText("$3,894.75");
+  await page.getByLabel("Steel reinforcement", { exact: false }).fill("200.25");
+  await expect(page.getByTestId("standard-total")).toHaveText("$3,545.00");
+  await expect(page.getByTestId("laminated-total")).toHaveText("$4,095.00");
   await page.getByLabel("Customer name").fill("Customer ".repeat(11));
+  await page.getByLabel("Salesperson name").fill("Salesperson ".repeat(9));
   await page.getByLabel("Project name").fill("Skylight project ".repeat(6));
   await page.getByLabel("Notes").fill("Quotation notes for skylight materials. ".repeat(9));
   await page.getByRole("radio", { name: "Laminated glass", exact: false }).check();
   await page.getByRole("button", { name: "Generate quotation" }).click();
-  await expect(page.locator("#skylight-quotation tbody tr")).toHaveCount(12);
+  await expect(page.locator("#skylight-quotation tbody tr")).toHaveCount(14);
+  await expect(page.locator("#skylight-quotation").getByText("Other", { exact: true })).toBeVisible();
+  await expect(page.locator("#skylight-quotation").getByText("Steel reinforcement", { exact: true })).toBeVisible();
+  await expect(page.locator("#skylight-quotation").getByText("$4,095.00", { exact: true })).toBeVisible();
+  await expect(page.locator("#skylight-quotation").getByText("$125.75", { exact: true })).toHaveCount(0);
   // Match the fixed A4 dimensions applied by the existing PDF exporter.
   const dimensions = await page.locator(".pdf-page").evaluate((element) => {
     const page = element as HTMLElement;
@@ -81,4 +122,56 @@ test("all twelve materials and full customer details fit one A4 quotation", asyn
     return { height: page.clientHeight, content: page.scrollHeight };
   });
   expect(dimensions.content).toBeLessThanOrEqual(dimensions.height);
+});
+
+test("PDF and JPG attachments are appended in order and can be removed", async ({ page }) => {
+  await page.goto("/skylight");
+  await page.locator("#quantity-glass").fill("10");
+  await page.getByLabel("Customer name").fill("Attachment customer");
+  await page.getByLabel("Salesperson name").fill("Sara Ahmed");
+  const source = await PDFDocument.create();
+  source.addPage([420, 595]).drawText("Drawing page one");
+  source.addPage([595, 420]).drawText("Drawing page two");
+  const sourceBytes = Buffer.from(await source.save());
+  const jpeg = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 400;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#0057a8";
+    context.fillRect(0, 0, 640, 400);
+    return canvas.toDataURL("image/jpeg").split(",")[1];
+  });
+  const picker = page.getByLabel("Attachments", { exact: false });
+  await picker.setInputFiles({ name: "invalid.txt", mimeType: "text/plain", buffer: Buffer.from("invalid") });
+  await expect(page.locator("main").getByRole("alert")).toContainText("valid PDF or JPG");
+  await picker.setInputFiles([
+    { name: "drawing.pdf", mimeType: "application/pdf", buffer: sourceBytes },
+    { name: "site.jpg", mimeType: "image/jpeg", buffer: Buffer.from(jpeg, "base64") },
+  ]);
+  await expect(page.getByRole("list", { name: "Quotation attachments" }).getByRole("listitem")).toHaveCount(2);
+  await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+  await page.getByRole("button", { name: "Generate quotation" }).click();
+  await expect(page.getByRole("region", { name: "Included attachments" })).toContainText("drawing.pdf · 2 pages");
+  await expect(page.locator("#skylight-quotation footer")).toContainText("1 / 4");
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download quotation PDF" }).click();
+  const download = await downloadPromise;
+  expect(await download.failure()).toBeNull();
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+  const result = await PDFDocument.load(Buffer.concat(chunks));
+  expect(result.getPageCount()).toBe(4);
+  expect(result.getPage(1).getSize()).toEqual({ width: 420, height: 595 });
+  expect(result.getPage(2).getSize()).toEqual({ width: 595, height: 420 });
+  expect(result.getPage(3).getWidth()).toBeGreaterThan(result.getPage(3).getHeight());
+  expect(result.getPage(3).node.Resources()?.toString()).toContain("Image-");
+  await page.getByRole("button", { name: "Edit calculation" }).click();
+  await expect(page.getByLabel("Salesperson name")).toHaveValue("Sara Ahmed");
+  await page.getByRole("button", { name: "Remove drawing.pdf" }).click();
+  await expect(page.getByRole("list", { name: "Quotation attachments" }).getByRole("listitem")).toHaveCount(1);
+  await page.getByRole("button", { name: "Generate quotation" }).click();
+  await expect(page.getByRole("region", { name: "Included attachments" })).not.toContainText("drawing.pdf");
+  await expect(page.locator("#skylight-quotation footer")).toContainText("1 / 2");
 });

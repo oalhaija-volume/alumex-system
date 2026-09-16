@@ -109,11 +109,13 @@ test("all materials and manual amounts fit one A4 quotation", async ({ page }) =
   await page.getByLabel("Project name").fill("Skylight project ".repeat(6));
   await page.getByLabel("Notes").fill("Quotation notes for skylight materials. ".repeat(9));
   await page.getByRole("radio", { name: "Laminated glass", exact: false }).check();
+  await page.getByLabel("Exchange rate (IQD per 1 USD)").fill("1540");
+  await page.getByRole("switch", { name: "Convert totals to IQD" }).click();
   await page.getByRole("button", { name: "Generate quotation" }).click();
   await expect(page.locator("#skylight-quotation tbody tr")).toHaveCount(14);
   await expect(page.locator("#skylight-quotation").getByText("Other", { exact: true })).toBeVisible();
   await expect(page.locator("#skylight-quotation").getByText("Steel reinforcement", { exact: true })).toBeVisible();
-  await expect(page.locator("#skylight-quotation").getByText("$4,095.00", { exact: true })).toBeVisible();
+  await expect(page.locator("#skylight-quotation").getByText("IQD 6,306,300", { exact: true })).toBeVisible();
   await expect(page.locator("#skylight-quotation").getByText("$125.75", { exact: true })).toHaveCount(0);
   // Match the fixed A4 dimensions applied by the existing PDF exporter.
   const dimensions = await page.locator(".pdf-page").evaluate((element) => {
@@ -122,6 +124,50 @@ test("all materials and manual amounts fit one A4 quotation", async ({ page }) =
     return { height: page.clientHeight, content: page.scrollHeight };
   });
   expect(dimensions.content).toBeLessThanOrEqual(dimensions.height);
+});
+
+test("manual currency conversion updates both totals and the quotation without changing USD inputs", async ({ page }) => {
+  await page.goto("/skylight");
+  await page.locator("#quantity-glass").fill("10");
+  await page.locator("#other-amount").fill("125.75");
+  await page.locator("#steel-amount").fill("200.25");
+  await page.getByLabel("Salesperson name").fill("Currency test salesperson");
+  const toggle = page.getByRole("switch", { name: "Convert totals to IQD" });
+  const rate = page.getByLabel("Exchange rate (IQD per 1 USD)");
+  await expect(rate).toHaveValue("");
+  await expect(toggle).toBeDisabled();
+  await rate.fill("0");
+  await expect(toggle).toBeDisabled();
+  await rate.fill("1540");
+  await expect(page.getByTestId("standard-total")).toHaveText("$1,526.00");
+  await toggle.click();
+  await expect(page.getByTestId("standard-total")).toHaveText("IQD 2,350,040");
+  await expect(page.getByTestId("laminated-total")).toHaveText("IQD 3,197,040");
+  await rate.fill("1560");
+  await expect(page.getByTestId("standard-total")).toHaveText("IQD 2,380,560");
+  await expect(page.getByTestId("laminated-total")).toHaveText("IQD 3,238,560");
+  await rate.fill("");
+  await expect(page.getByTestId("standard-total")).toHaveText("—");
+  await expect(page.getByRole("button", { name: "Generate quotation" })).toBeDisabled();
+  await toggle.click();
+  await expect(page.getByTestId("standard-total")).toHaveText("$1,526.00");
+  await rate.fill("1560");
+  await toggle.click();
+  await page.getByRole("button", { name: "Generate quotation" }).click();
+  const quotation = page.locator("#skylight-quotation");
+  await expect(quotation.getByText("Currency: IQD")).toBeVisible();
+  await expect(quotation.getByText("IQD 2,380,560", { exact: true })).toBeVisible();
+  await expect(quotation.getByText(/1 USD = 1,560 IQD/)).toBeVisible();
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download quotation PDF" }).click();
+  expect(await (await pending).failure()).toBeNull();
+  await page.getByRole("button", { name: "Edit calculation" }).click();
+  await expect(rate).toHaveValue("1560");
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#other-amount")).toHaveValue("125.75");
+  await expect(page.locator("#steel-amount")).toHaveValue("200.25");
+  await toggle.click();
+  await expect(page.getByTestId("standard-total")).toHaveText("$1,526.00");
 });
 
 test("PDF and JPG attachments are appended in order and can be removed", async ({ page }) => {

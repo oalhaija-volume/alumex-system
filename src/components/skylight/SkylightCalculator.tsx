@@ -5,7 +5,7 @@ import { SkylightPdfButton } from "@/components/skylight/SkylightPdfButton";
 import { SkylightAttachments } from "@/components/skylight/SkylightAttachments";
 import type { SkylightAttachment } from "@/lib/pdf/skylightAttachments";
 import { SkylightQuotation, type SkylightQuotationData } from "@/components/skylight/SkylightQuotation";
-import { calculateSkylight, skylightMoney, type SkylightQuantities } from "@/lib/skylight";
+import { calculateSkylight, parseSkylightExchangeRate, skylightRateLabel, skylightTotal, type SkylightCurrency, type SkylightQuantities } from "@/lib/skylight";
 
 const subscribe = () => () => {};
 const clientReady = () => true;
@@ -16,6 +16,8 @@ export function SkylightCalculator() {
   const [quantities, setQuantities] = useState<SkylightQuantities>({});
   const [otherAmount, setOtherAmount] = useState("");
   const [steelAmount, setSteelAmount] = useState("");
+  const [exchangeRate, setExchangeRate] = useState("");
+  const [convertToIqd, setConvertToIqd] = useState(false);
   const [laminated, setLaminated] = useState(false);
   const [customer, setCustomer] = useState("");
   const [salesperson, setSalesperson] = useState("");
@@ -25,15 +27,19 @@ export function SkylightCalculator() {
   const [notes, setNotes] = useState("");
   const [quote, setQuote] = useState<SkylightQuotationData | null>(null);
   const calculation = calculateSkylight(quantities, otherAmount, steelAmount);
-  const canGenerate = calculation.valid && calculation.standardTotalCents > 0 && salesperson.trim().length > 0 && !checkingAttachments;
+  const rate = parseSkylightExchangeRate(exchangeRate);
+  const currency: SkylightCurrency | null = convertToIqd
+    ? rate === null ? null : { code: "IQD", rate }
+    : { code: "USD" };
+  const canGenerate = currency !== null && calculation.valid && calculation.standardTotalCents > 0 && salesperson.trim().length > 0 && !checkingAttachments;
 
   function generateQuotation() {
-    if (!canGenerate) return;
+    if (!canGenerate || !currency) return;
     const now = new Date();
     setQuote({
       number: `SK-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getTime()).slice(-6)}`,
       date: now.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-      customer: customer.trim(), salesperson: salesperson.trim(), attachments, project: project.trim(), notes: notes.trim(), laminated, calculation,
+      customer: customer.trim(), salesperson: salesperson.trim(), attachments, project: project.trim(), notes: notes.trim(), laminated, calculation, currency,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -44,7 +50,7 @@ export function SkylightCalculator() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5 sm:px-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logos/AlumexLogo.svg" width={145} height={60} alt="Alumex Experts" className="w-32 rounded bg-white p-1 sm:w-36" />
-          <span className="text-sm font-semibold text-muted">Skylight estimator · USD</span>
+          <span className="text-sm font-semibold text-muted">Skylight estimator · {convertToIqd ? "IQD" : "USD"}</span>
         </div>
       </header>
 
@@ -120,16 +126,27 @@ export function SkylightCalculator() {
               <section className="material-card p-5" aria-labelledby="total-heading">
                 <h2 id="total-heading" className="text-lg font-bold">Grand total</h2>
                 <p className="mt-1 text-sm text-muted">Choose the glass for your quotation.</p>
+                <div className="mt-4 rounded-md border border-border bg-surface-muted p-3">
+                  <label htmlFor="exchange-rate" className="block text-sm font-semibold">Exchange rate (IQD per 1 USD)</label>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <input id="exchange-rate" type="number" min="0.01" max="1000000" step="0.01" inputMode="decimal" value={exchangeRate} onChange={(event) => setExchangeRate(event.currentTarget.value)} placeholder="e.g. 1540" aria-invalid={rate === null && (exchangeRate !== "" || convertToIqd)} aria-describedby="exchange-rate-help" className="h-11 min-w-0 flex-1 rounded-md border border-border bg-surface px-3 text-sm tabular-nums" />
+                    <button type="button" role="switch" aria-checked={convertToIqd} aria-label="Convert totals to IQD" disabled={!convertToIqd && rate === null} onClick={() => setConvertToIqd((current) => !current)} className="flex min-h-11 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50">
+                      <span aria-hidden="true" className={`flex h-6 w-10 items-center rounded-full p-0.5 ${convertToIqd ? "justify-end bg-primary" : "justify-start bg-muted"}`}><span className="h-5 w-5 rounded-full bg-white" /></span>
+                      Convert to IQD
+                    </button>
+                  </div>
+                  <p id="exchange-rate-help" className="mt-2 text-xs leading-5 text-muted">{rate === null ? "Enter a rate greater than 0, up to 1,000,000, with at most 2 decimal places to convert." : skylightRateLabel(rate)} Manual item amounts stay in USD.</p>
+                </div>
                 <fieldset className="mt-4 grid grid-cols-2 gap-3">
                   <legend className="sr-only">Glass option</legend>
                   {[false, true].map((option) => (
                     <label key={String(option)} className={`cursor-pointer rounded-lg border p-3 ${laminated === option ? "border-primary bg-info-surface" : "border-border"}`}>
                       <span className="flex min-h-10 items-center gap-2 text-sm font-semibold sm:min-h-0"><input type="radio" name="glass-option" checked={laminated === option} onChange={() => setLaminated(option)} className="accent-primary" />{option ? "Laminated glass" : "Standard glass"}</span>
-                      <span className="mt-2 block break-words text-lg font-bold tabular-nums sm:text-xl" data-testid={option ? "laminated-total" : "standard-total"}>{calculation.valid ? skylightMoney(option ? calculation.laminatedTotalCents : calculation.standardTotalCents) : "—"}</span>
+                      <span className="mt-2 block break-words text-lg font-bold tabular-nums sm:text-xl" data-testid={option ? "laminated-total" : "standard-total"}>{calculation.valid && currency ? skylightTotal(option ? calculation.laminatedTotalCents : calculation.standardTotalCents, currency) : "—"}</span>
                     </label>
                   ))}
                 </fieldset>
-                <p className="mt-4 text-xs leading-5 text-muted">All totals are in USD.</p>
+                <p className="mt-4 text-xs leading-5 text-muted">{convertToIqd ? "Totals are in IQD, rounded to the nearest whole dinar." : "All totals are in USD."}</p>
               </section>
             </div>
 
@@ -144,7 +161,7 @@ export function SkylightCalculator() {
                   <label className="block text-sm font-semibold">Notes <span className="font-normal text-muted">(optional)</span><textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={350} rows={3} className="mt-1.5 w-full resize-y rounded-md border border-border bg-surface p-3 font-normal" /></label>
                   <SkylightAttachments attachments={attachments} onChange={setAttachments} busy={checkingAttachments} onBusyChange={setCheckingAttachments} />
                   <button type="button" disabled={!canGenerate} onClick={generateQuotation} className="min-h-11 w-full rounded-md bg-primary px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Generate quotation</button>
-                  {!canGenerate && <p className="text-xs text-muted">{checkingAttachments ? "Wait for the attachments to finish checking." : !calculation.valid ? "Correct the highlighted values to continue." : calculation.standardTotalCents <= 0 ? "Enter a quantity or a manual amount to generate a quotation." : "Enter the salesperson’s name to generate a quotation."}</p>}
+                  {!canGenerate && <p className="text-xs text-muted">{checkingAttachments ? "Wait for the attachments to finish checking." : !currency ? "Enter a valid exchange rate or switch back to USD." : !calculation.valid ? "Correct the highlighted values to continue." : calculation.standardTotalCents <= 0 ? "Enter a quantity or a manual amount to generate a quotation." : "Enter the salesperson’s name to generate a quotation."}</p>}
                 </div>
               </section>
             </aside>

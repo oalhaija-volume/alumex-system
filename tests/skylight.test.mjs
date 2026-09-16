@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateSkylight } from "../src/lib/skylight.ts";
+import { calculateSkylight, parseSkylightExchangeRate, skylightTotal } from "../src/lib/skylight.ts";
 
 test("skylight totals use the supplied rates and add lamination per square meter", () => {
   const result = calculateSkylight({ connector: "2.5", glass: "10", brackets: "4", screws: "2" });
@@ -54,4 +54,17 @@ test("invalid, negative, excessive, and fractional piece quantities cannot be qu
   assert.equal(calculateSkylight({ screws: "1.5" }).valid, false);
   assert.equal(calculateSkylight({ brackets: "2.5" }).valid, false);
   assert.equal(calculateSkylight({ screws: "2" }).valid, true);
+});
+
+test("manual exchange rates convert USD totals once and round to whole dinars", () => {
+  assert.equal(parseSkylightExchangeRate("1540"), 1540);
+  assert.equal(parseSkylightExchangeRate("1560.25"), 1560.25);
+  for (const value of ["", "0", "-1", "NaN", "Infinity", "1000001", "1540.001"]) {
+    assert.equal(parseSkylightExchangeRate(value), null, value);
+  }
+  assert.equal(skylightTotal(152600, { code: "IQD", rate: 1540 }), "IQD 2,350,040");
+  assert.equal(skylightTotal(152600, { code: "IQD", rate: 1560 }), "IQD 2,380,560");
+  assert.equal(skylightTotal(29, { code: "IQD", rate: 1540 }), "IQD 447");
+  assert.equal(skylightTotal(100, { code: "IQD", rate: 1540.5 }), "IQD 1,541");
+  assert.equal(skylightTotal(152600, { code: "USD" }), "$1,526.00");
 });

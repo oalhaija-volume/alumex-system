@@ -71,3 +71,25 @@ export function skylightMoney(cents: number) {
     currency: "USD",
   }).format(cents / 100);
 }
+
+export type SkylightCurrency = { code: "USD" } | { code: "IQD"; rate: number };
+
+export function parseSkylightExchangeRate(value: string): number | null {
+  const raw = value.trim();
+  const rate = Number(raw);
+  return /^\d+(?:\.\d{1,2})?$/.test(raw) && Number.isFinite(rate) && rate > 0 && rate <= 1_000_000
+    ? rate
+    : null;
+}
+
+export function skylightTotal(cents: number, currency: SkylightCurrency) {
+  if (currency.code === "USD") return skylightMoney(cents);
+  // Work in hundredths of the entered rate, then round once to whole dinars.
+  const scaledRate = BigInt(Math.round(currency.rate * 100));
+  const dinars = (BigInt(cents) * scaledRate + BigInt(5000)) / BigInt(10000);
+  return `IQD ${new Intl.NumberFormat("en-US").format(dinars)}`;
+}
+
+export function skylightRateLabel(rate: number) {
+  return `1 USD = ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(rate)} IQD`;
+}

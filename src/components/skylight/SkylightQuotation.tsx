@@ -1,5 +1,5 @@
 import type { SkylightAttachment } from "@/lib/pdf/skylightAttachments";
-import { skylightMoney, type calculateSkylight } from "@/lib/skylight";
+import { skylightRateLabel, skylightTotal, type SkylightCurrency, type calculateSkylight } from "@/lib/skylight";
 
 export type SkylightQuotationData = {
   number: string;
@@ -10,6 +10,7 @@ export type SkylightQuotationData = {
   project: string;
   notes: string;
   laminated: boolean;
+  currency: SkylightCurrency;
   calculation: ReturnType<typeof calculateSkylight>;
 };
 
@@ -31,7 +32,7 @@ export function SkylightQuotation({ quote }: { quote: SkylightQuotationData }) {
             <p className="font-bold uppercase tracking-widest text-[#0057a8]">Quotation</p>
             <p className="mt-2 font-bold">{quote.number}</p>
             <p className="mt-1">{quote.date}</p>
-            <p className="mt-1">Currency: USD</p>
+            <p className="mt-1">Currency: {quote.currency.code}</p>
           </div>
         </header>
         <h2 className="mt-6 text-2xl font-bold">Skylight quotation</h2>
@@ -74,9 +75,10 @@ export function SkylightQuotation({ quote }: { quote: SkylightQuotationData }) {
           </tbody>
         </table>
         <div className="mt-5 ms-auto w-full max-w-72 text-[11px]">
-          <div className="flex items-center justify-between gap-4 rounded-md bg-[#0057a8] p-4 text-white">
+          {quote.currency.code === "IQD" && <p className="mb-2 text-end">{skylightRateLabel(quote.currency.rate)} · Rounded to whole IQD</p>}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-[#0057a8] p-4 text-white">
             <span className="font-bold">Grand total</span>
-            <strong className="text-lg tabular-nums">{skylightMoney(laminated ? calculation.laminatedTotalCents : calculation.standardTotalCents)}</strong>
+            <strong className="break-all text-lg tabular-nums">{skylightTotal(laminated ? calculation.laminatedTotalCents : calculation.standardTotalCents, quote.currency)}</strong>
           </div>
         </div>
         {quote.notes && <div className="mt-5 text-[11px]"><h3 className="font-bold">Notes</h3><p className="mt-1 break-words leading-5">{quote.notes}</p></div>}

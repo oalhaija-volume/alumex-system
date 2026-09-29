@@ -87,10 +87,6 @@ const inputClass =
 const labelClass = "text-sm font-bold text-slate-700";
 const draftKey = "alumex:sales-intake:draft:v2";
 
-function normalize(value: string) {
-  return value.trim().toLowerCase().replace(/\D/g, "");
-}
-
 function nextAvailableLocalDateTime() {
   const date = new Date(Date.now() + 60_000);
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
@@ -150,7 +146,6 @@ export function SalesIntakeWizard() {
   const [clientSearch, setClientSearch] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCheckingSite, setIsCheckingSite] = useState(false);
   const selectedClient = clients.find(
     (client) => client.id === draft.existingClientId,
   );
@@ -184,23 +179,16 @@ export function SalesIntakeWizard() {
 
   const candidates = useMemo(() => {
     const query = clientSearch.trim().toLowerCase();
-    const mobile = normalize(draft.mobile);
-    const email = draft.email.trim().toLowerCase();
+    if (draft.mode !== "existing" || !query) return [];
     return clients
-      .filter((client) => {
-        if (draft.mode === "existing" && query) {
-          return [client.clientName, client.mobile, client.email]
-            .join(" ")
-            .toLowerCase()
-            .includes(query);
-        }
-        return (
-          (mobile && normalize(client.mobile) === mobile) ||
-          (email && client.email.toLowerCase() === email)
-        );
-      })
+      .filter((client) =>
+        [client.clientName, client.mobile, client.email]
+          .join(" ")
+          .toLowerCase()
+          .includes(query),
+      )
       .slice(0, 4);
-  }, [clientSearch, clients, draft.email, draft.mobile, draft.mode]);
+  }, [clientSearch, clients, draft.mode]);
 
   function update<K extends keyof IntakeDraft>(key: K, value: IntakeDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -251,41 +239,6 @@ export function SalesIntakeWizard() {
     if (validationError) {
       setError(validationError);
       return;
-    }
-
-    if (
-      step === 1 &&
-      isOutdoorSales &&
-      hasProjectPin
-    ) {
-      setIsCheckingSite(true);
-      try {
-        const response = await fetch("/api/sales-intake/site-duplicate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            latitude: draft.projectLatitude,
-            longitude: draft.projectLongitude,
-          }),
-        });
-        const result = (await response.json().catch(() => null)) as
-          | { duplicate?: boolean; error?: string }
-          | null;
-
-        if (!response.ok) {
-          setError(result?.error ?? t("intake.errors.locationCheck"));
-          return;
-        }
-        if (result?.duplicate) {
-          setError(t("intake.errors.siteDuplicate"));
-          return;
-        }
-      } catch {
-        setError(t("intake.errors.locationCheck"));
-        return;
-      } finally {
-        setIsCheckingSite(false);
-      }
     }
 
     if (step === 1 && isDirectMeasurement) {
@@ -400,9 +353,6 @@ export function SalesIntakeWizard() {
         isOutdoorSales
           ? t("intake.location.outdoorRequired")
           : t("intake.location.description")
-      }
-      radiusDescription={
-        isOutdoorSales ? t("intake.location.duplicateRadius") : undefined
       }
       mapAriaLabel={t("intake.location.mapAriaLabel")}
       searchLabel={t("intake.location.searchLabel")}
@@ -560,22 +510,6 @@ export function SalesIntakeWizard() {
                       </label>
                     ))}
                   </div>
-                  {candidates.length > 0 ? (
-                    <div className="border border-amber-300 bg-amber-50 p-4">
-                      <p className="text-sm font-extrabold text-amber-900">{t("intake.duplicates.title", { count: candidates.length })}</p>
-                      {candidates.map((client) => (
-                        <button
-                          type="button"
-                          key={client.id}
-                          onClick={() => setDraft((current) => ({ ...current, mode: "existing", existingClientId: client.id }))}
-                          className="mt-3 flex w-full justify-between border-t border-amber-200 pt-3 text-start text-sm"
-                        >
-                          <span className="font-bold">{term(client.clientName)}</span>
-                          <span>{client.mobile}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
                   <div className="grid gap-4 md:grid-cols-2">
                     <Field required label={t("intake.fields.clientName")} value={draft.clientName} onChange={(value) => update("clientName", value)} />
                     <Field required type="tel" label={t("intake.fields.mobile")} value={draft.mobile} onChange={(value) => update("mobile", value)} />
@@ -774,11 +708,9 @@ export function SalesIntakeWizard() {
         <div className="grid w-full grid-cols-[auto_minmax(0,1fr)] gap-3 lg:flex lg:w-auto lg:shrink-0 lg:justify-end">
           <button type="button" disabled={step === 0 || isSubmitting} onClick={() => setStep((current) => Math.max(0, current - 1))} className="h-11 min-w-24 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-40">{t("intake.actions.back")}</button>
           {step < displayedSteps.length - 1 ? (
-            <button type="button" disabled={isCheckingSite || isSubmitting} onClick={() => void continueStep()} className="h-11 min-w-48 rounded-md bg-[var(--alumex-blue)] px-5 text-sm font-bold text-white disabled:opacity-50">
+            <button type="button" disabled={isSubmitting} onClick={() => void continueStep()} className="h-11 min-w-48 rounded-md bg-[var(--alumex-blue)] px-5 text-sm font-bold text-white disabled:opacity-50">
               {isSubmitting
                 ? t("common.loading")
-                : isCheckingSite
-                ? t("intake.actions.checkingLocation")
                 : step === 0
                 ? t("intake.actions.continueOpportunity")
                 : isDirectMeasurement

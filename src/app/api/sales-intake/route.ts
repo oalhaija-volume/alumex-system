@@ -6,6 +6,7 @@ import {
   isOutdoorSiteDuplicateError,
 } from "@/lib/friendlyErrors";
 import { generateNextProjectNumber } from "@/lib/projects/numbering";
+import { intakeCompanyName } from "@/lib/intake/companyName";
 import {
   normalizeGeofenceRadius,
   outdoorSiteDuplicateRadiusMeters,
@@ -209,6 +210,7 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
   let clientId = existingClientId;
+  let operation = "create-client";
 
   try {
     if (!clientId && client) {
@@ -218,7 +220,11 @@ export async function POST(request: Request) {
         .insert({
           client_name: text(client.clientName),
           client_type: clientType as "individual" | "company",
-          company_name: text(client.companyName) || null,
+          company_name: intakeCompanyName(
+            clientType,
+            text(client.clientName),
+            text(client.companyName),
+          ),
           mobile: text(client.mobile),
           whatsapp: text(client.whatsapp) || null,
           address: text(client.address) || null,
@@ -245,6 +251,7 @@ export async function POST(request: Request) {
       Number.isFinite(estimatedValueRaw) && estimatedValueRaw >= 0
         ? estimatedValueRaw
         : null;
+    operation = "generate-project-number";
     const projectNumber = await nextProjectNumber();
     const canMeasureNow = readiness !== "not_ready";
     const department =
@@ -255,6 +262,7 @@ export async function POST(request: Request) {
         : auth.role === "Sales Manager"
           ? "sales_management"
           : "indoor_sales";
+    operation = "create-project";
     const { data: savedProject, error: projectError } = await admin
       .from("projects")
       .insert({
@@ -311,6 +319,7 @@ export async function POST(request: Request) {
     if (projectError) throw projectError;
 
     if (needsReadinessFollowUp) {
+      operation = "create-follow-up";
       const reminderAt = new Date(
         Math.max(Date.now(), followUpTime - 24 * 60 * 60 * 1000),
       ).toISOString();
@@ -338,6 +347,7 @@ export async function POST(request: Request) {
       readiness: typedReadiness,
     });
     if (startsOwnMeasurement) {
+      operation = "create-measurement-request";
       const { error: measurementRequestError } = await admin
         .from("measurement_requests")
         .insert({
@@ -353,6 +363,7 @@ export async function POST(request: Request) {
 
       if (measurementRequestError) throw measurementRequestError;
 
+      operation = "assign-measurement-project";
       const { error: measurementProjectError } = await admin
         .from("projects")
         .update({
@@ -389,12 +400,14 @@ export async function POST(request: Request) {
       .map((contact, index) => ({ ...contact, is_primary: index === 0 }));
 
     if (contactRows.length > 0) {
+      operation = "create-contacts";
       const { error: contactsError } = await admin
         .from("client_contacts")
         .insert(contactRows);
       if (contactsError) throw contactsError;
     }
 
+    operation = "record-audit-event";
     await admin.from("audit_events").insert({
       actor_id: auth.user.id,
       actor_role: auth.role,
@@ -422,6 +435,16 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
+    const databaseCode =
+      error && typeof error === "object" && "code" in error &&
+      typeof error.code === "string" && /^[A-Z0-9]+$/.test(error.code)
+        ? error.code
+        : "UNKNOWN";
+    console.error("[api/sales-intake] save failed", {
+      operation,
+      code: databaseCode,
+      message: error && typeof error === "object" && "message" in error ? error.message : "Unknown error",
+    });
     if (isOutdoorSiteDuplicateError(error)) {
       return NextResponse.json(
         {
@@ -436,7 +459,7 @@ export async function POST(request: Request) {
       {
         error: friendlyDatabaseError(
           error,
-          "Unable to save the sales intake.",
+          `Unable to save the sales intake. Reference: ${operation}/${databaseCode}.`,
           isDuplicateError(error) ? "A duplicate record already exists." : undefined,
         ),
       },

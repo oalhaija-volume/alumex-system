@@ -89,9 +89,10 @@ function NavLink({
   return (
     <Link
       href={href}
+      aria-current={isActive ? "page" : undefined}
       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition ${
         isActive
-          ? "bg-material-primary-container text-material-on-primary-container shadow-[var(--md-elevation-1)]"
+          ? "bg-material-primary-container text-material-primary"
           : "text-muted hover:bg-material-surface-container hover:text-foreground"
       }`}
     >
@@ -218,7 +219,7 @@ export function AppShell({
       >
         <div
           data-testid="sidebar-brand"
-          className="flex shrink-0 justify-center rounded-lg bg-material-surface-container px-3 py-3 shadow-[var(--md-elevation-1)]"
+          className="flex shrink-0 justify-center border-b border-border px-3 pb-5 pt-2"
         >
           <BrandMark />
         </div>
@@ -270,7 +271,7 @@ export function AppShell({
           isRtl ? "lg:mr-72" : "lg:ml-72"
         }`}
       >
-        <div className="relative z-40 hidden max-w-full border-b border-material-outline-variant bg-material-surface-container-low px-8 py-4 shadow-[var(--md-elevation-1)] lg:block">
+        <div className="relative z-40 hidden max-w-full border-b border-material-outline-variant bg-material-surface-container-low px-8 py-4 lg:block">
           <div className={`flex min-w-0 items-center justify-between gap-4 ${isRtl ? "flex-row-reverse" : ""}`}>
             <div className="min-w-0">
               <p className="text-sm font-bold text-foreground">
@@ -295,7 +296,7 @@ export function AppShell({
         </div>
         <div
           className={`mobile-content mx-auto w-full overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-8 ${
-            isWideWorkspace ? "max-w-none" : "max-w-7xl"
+            isWideWorkspace ? "max-w-none" : "max-w-[1480px]"
           }`}
         >
           {children}
@@ -304,7 +305,7 @@ export function AppShell({
 
       <nav
         data-testid="mobile-tabbar"
-        className="mobile-tabbar fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-3 right-3 z-30 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-[22px] border border-material-outline-variant bg-material-surface-container-low/88 p-1.5 shadow-[var(--md-elevation-2)] backdrop-blur-2xl lg:hidden"
+        className="mobile-tabbar fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-3 right-3 z-30 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-material-outline-variant bg-material-surface-container-low/88 p-1.5 shadow-[var(--md-elevation-2)] backdrop-blur-2xl lg:hidden"
       >
         <div
           className="grid w-full items-stretch gap-1"

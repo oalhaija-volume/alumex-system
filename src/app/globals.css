@@ -2,39 +2,40 @@
 
 :root {
   color-scheme: light;
-  --background: #f6f8fb;
-  --foreground: #0f172a;
+  --button-foreground: #ffffff;
+  --background: #f5f7fa;
+  --foreground: #1c3042;
   --surface: #ffffff;
-  --surface-muted: #f1f5f9;
-  --surface-elevated: #ffffff;
+  --surface-muted: #f5f7fa;
+  --surface-elevated: #e8edf3;
   --muted: #64748b;
   --muted-strong: #334155;
-  --border: #dbe3ef;
-  --alumex-blue: #0057a8;
-  --alumex-blue-dark: #003f7d;
+  --border: #dce5ef;
+  --alumex-blue: #2563eb;
+  --alumex-blue-dark: #1d4ed8;
   --alumex-red: #d71920;
   --alumex-steel: #64748b;
-  --alumex-line: #dbe3ef;
-  --md-primary: #0057a8;
-  --md-on-primary: #ffffff;
-  --md-primary-container: #d6e3ff;
-  --md-on-primary-container: #001b3d;
+  --alumex-line: #dce5ef;
+  --md-primary: var(--alumex-blue);
+  --md-on-primary: var(--button-foreground);
+  --md-primary-container: var(--info-surface);
+  --md-on-primary-container: var(--info-text);
   --md-secondary: #526070;
   --md-on-secondary: #ffffff;
   --md-secondary-container: #d6e4f7;
   --md-on-secondary-container: #0f1d2a;
   --md-error: #ba1a1a;
   --md-on-error: #ffffff;
-  --md-surface: #f8fafd;
-  --md-on-surface: #191c20;
-  --md-surface-container-low: #ffffff;
-  --md-surface-container: #eef3f8;
-  --md-surface-container-high: #e8edf3;
+  --md-surface: var(--background);
+  --md-on-surface: var(--foreground);
+  --md-surface-container-low: var(--surface);
+  --md-surface-container: var(--surface-muted);
+  --md-surface-container-high: var(--surface-elevated);
   --md-outline: #73777f;
-  --md-outline-variant: #c3c7cf;
+  --md-outline-variant: var(--border);
   --md-state-hover: color-mix(in srgb, var(--md-primary) 8%, transparent);
   --md-state-focus: color-mix(in srgb, var(--md-primary) 12%, transparent);
-  --md-elevation-1: 0 1px 2px rgba(15, 23, 42, 0.1), 0 1px 3px rgba(15, 23, 42, 0.08);
+  --md-elevation-1: 0 1px 2px rgba(15, 23, 42, 0.025);
   --md-elevation-2: 0 2px 6px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.08);
   --success-surface: #ecfdf5;
   --success-text: #047857;
@@ -43,11 +44,12 @@
   --danger-surface: #fef2f2;
   --danger-text: #b91c1c;
   --info-surface: #eff6ff;
-  --info-text: #0057a8;
+  --info-text: #2563eb;
 }
 
 .dark {
   color-scheme: dark;
+  --button-foreground: #0f172a;
   --background: #0f172a;
   --foreground: #f8fafc;
   --surface: #111827;
@@ -61,23 +63,23 @@
   --alumex-red: #ff5a63;
   --alumex-steel: #cbd5e1;
   --alumex-line: #334155;
-  --md-primary: #9ecaff;
-  --md-on-primary: #00325c;
-  --md-primary-container: #004880;
-  --md-on-primary-container: #d3e4ff;
+  --md-primary: var(--alumex-blue);
+  --md-on-primary: var(--button-foreground);
+  --md-primary-container: var(--info-surface);
+  --md-on-primary-container: var(--info-text);
   --md-secondary: #bbc7d7;
   --md-on-secondary: #263140;
   --md-secondary-container: #3c4756;
   --md-on-secondary-container: #d7e3f4;
   --md-error: #ffb4ab;
   --md-on-error: #690005;
-  --md-surface: #101418;
-  --md-on-surface: #e0e2e8;
-  --md-surface-container-low: #181c20;
-  --md-surface-container: #1c2024;
-  --md-surface-container-high: #272a2f;
+  --md-surface: var(--background);
+  --md-on-surface: var(--foreground);
+  --md-surface-container-low: var(--surface);
+  --md-surface-container: var(--surface-muted);
+  --md-surface-container-high: var(--surface-elevated);
   --md-outline: #8d9199;
-  --md-outline-variant: #43474e;
+  --md-outline-variant: var(--border);
   --md-state-hover: color-mix(in srgb, var(--md-primary) 10%, transparent);
   --md-state-focus: color-mix(in srgb, var(--md-primary) 14%, transparent);
   --md-elevation-1: 0 1px 2px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
@@ -192,14 +194,14 @@ textarea {
   .material-card {
     max-width: 100%;
     overflow: hidden;
-    border-radius: 8px;
+    border-radius: 12px;
     border: 1px solid var(--md-outline-variant);
     background: var(--md-surface-container-low);
     box-shadow: var(--md-elevation-1);
   }
 
   .material-card-muted {
-    border-radius: 8px;
+    border-radius: 12px;
     border: 1px solid var(--md-outline-variant);
     background: var(--md-surface-container);
   }
@@ -209,14 +211,14 @@ textarea {
   .material-button-outlined,
   .material-button-danger {
     display: inline-flex;
-    min-height: 40px;
+    min-height: 44px;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 0.625rem 1rem;
     font-size: 0.875rem;
-    font-weight: 700;
+    font-weight: 600;
     line-height: 1.25rem;
     transition:
       background-color 160ms ease,
@@ -232,7 +234,7 @@ textarea {
   }
 
   .material-button-filled:hover {
-    background: var(--alumex-blue-dark);
+    background: color-mix(in srgb, var(--md-primary) 92%, #000000);
   }
 
   .material-button-tonal {
@@ -275,14 +277,14 @@ textarea {
     margin-bottom: 0.5rem;
     display: block;
     font-size: 0.875rem;
-    font-weight: 700;
+    font-weight: 600;
     color: var(--md-on-surface);
   }
 
   .material-field {
     min-height: 44px;
     width: 100%;
-    border-radius: 6px;
+    border-radius: 8px;
     border: 1px solid var(--md-outline-variant);
     background: var(--md-surface-container-low);
     padding: 0.625rem 0.75rem;
@@ -301,7 +303,7 @@ textarea {
 
   .material-alert-success,
   .material-alert-error {
-    border-radius: 8px;
+    border-radius: 12px;
     border: 1px solid;
     padding: 0.875rem 1rem;
     font-size: 0.875rem;
@@ -338,20 +340,17 @@ textarea {
 
 @media (max-width: 1023px) {
   .mobile-app-shell {
-    --ios-grouped-background: #f2f2f7;
-    --ios-surface: rgba(255, 255, 255, 0.94);
-    --ios-hairline: rgba(60, 60, 67, 0.16);
+    --ios-grouped-background: var(--background);
+    --ios-surface: var(--surface);
+    --ios-hairline: var(--border);
     --ios-shadow:
       0 1px 2px rgba(15, 23, 42, 0.04),
-      0 8px 24px rgba(15, 23, 42, 0.07);
+      0 2px 4px rgba(15, 23, 42, 0.025);
     background: var(--ios-grouped-background);
   }
 
   .dark .mobile-app-shell {
-    --ios-grouped-background: #000000;
-    --ios-surface: rgba(28, 28, 30, 0.94);
-    --ios-hairline: rgba(84, 84, 88, 0.65);
-    --ios-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+    --ios-shadow: var(--md-elevation-1);
   }
 
   .mobile-topbar {
@@ -384,9 +383,9 @@ textarea {
   }
 
   .swift-page-header h1 {
-    font-size: clamp(2rem, 9vw, 2.5rem);
-    font-weight: 750;
-    letter-spacing: -0.035em;
+    font-size: 1.875rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
   }
 
   .rtl .swift-page-header h1 {
@@ -395,15 +394,15 @@ textarea {
 
   .swift-page-header p:last-child {
     max-width: 34rem;
-    font-size: 0.9375rem;
-    line-height: 1.65;
+    font-size: 0.875rem;
+    line-height: 1.5rem;
   }
 
   .swift-search-panel,
   .swift-dashboard-section,
   .swift-role-dashboard > .material-card {
     border-color: var(--ios-hairline);
-    border-radius: 22px;
+    border-radius: 12px;
     background: var(--ios-surface);
     box-shadow: var(--ios-shadow);
   }
@@ -413,10 +412,10 @@ textarea {
   }
 
   .swift-search-panel .material-field {
-    min-height: 50px;
-    border-color: transparent;
-    border-radius: 14px;
-    background: var(--ios-grouped-background);
+    min-height: 44px;
+    border-color: var(--border);
+    border-radius: 8px;
+    background: var(--surface);
     padding-inline: 1rem;
     font-size: 1rem;
     box-shadow: 0 0 0 1px var(--ios-hairline) inset;
@@ -435,8 +434,8 @@ textarea {
   }
 
   .swift-dashboard-section > header h2 {
-    font-size: 1.125rem;
-    font-weight: 700;
+    font-size: 1rem;
+    font-weight: 600;
     letter-spacing: -0.015em;
   }
 
@@ -460,7 +459,7 @@ textarea {
   .swift-dashboard-section .material-button-tonal,
   .swift-dashboard-section .material-button-outlined {
     min-height: 44px;
-    border-radius: 12px;
+    border-radius: 8px;
   }
 
   .swift-primary-metric {

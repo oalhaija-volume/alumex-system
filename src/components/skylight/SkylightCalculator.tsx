@@ -46,15 +46,15 @@ export function SkylightCalculator() {
   return (
     <main dir="ltr" lang="en" className="min-h-screen bg-background text-foreground">
       <header className="no-print border-b border-border bg-surface">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5 sm:px-8">
+        <div className="mx-auto flex max-w-[1480px] items-center justify-between gap-4 px-4 py-5 sm:px-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logos/AlumexLogo.svg" width={145} height={60} alt="Alumex Experts" className="w-32 rounded bg-white p-1 sm:w-36" />
+          <img src="/logos/AlumexLogo.svg" width={145} height={60} alt="Alumex Experts" className="h-12 w-auto rounded bg-white object-contain" />
           <span className="text-sm font-semibold text-muted">Skylight estimator · {convertToIqd ? "IQD" : "USD"}</span>
         </div>
       </header>
 
       {quote ? (
-        <section className="mx-auto max-w-6xl px-4 py-8 sm:px-8">
+        <section className="mx-auto max-w-[1480px] px-4 py-8 sm:px-8">
           <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-4">
             <div><h1 className="text-2xl font-bold">Quotation preview</h1><p className="mt-1 text-sm text-muted">Standard & laminated glass options · {quote.number}</p></div>
             <div className="flex flex-wrap gap-3">
@@ -74,15 +74,31 @@ export function SkylightCalculator() {
           <div className="flex justify-center"><SkylightQuotation quote={quote} /></div>
         </section>
       ) : (
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-8 sm:py-10">
-          <div className="mb-7 border-b border-border pb-6">
+        <div className="mx-auto max-w-[1480px] px-4 py-8 sm:px-8 sm:py-10">
+          <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+            <div>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary">Alumex · Skylight workspace</p>
             <h1 className="text-3xl font-bold tracking-tight">Skylight cost calculator</h1>
             <p className="mt-2 text-sm leading-6 text-muted">Enter the required quantities. Grand totals and glass options update automatically.</p>
+            </div>
+            <span className="rounded-full border border-primary/20 bg-info-surface px-3 py-2 text-xs font-medium text-info-text">Live calculation</span>
           </div>
-          <fieldset disabled={!ready} aria-label="Skylight calculation" className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <section aria-label="Calculation summary" className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+            {calculation.lines.filter((line) => ["glass", "mullion", "transom", "fix4500"].includes(line.id)).map((line) => (
+              <article key={line.id} className="material-card px-5 py-5 sm:py-6">
+                <p className="text-sm text-muted">{line.name}</p>
+                <p className="mt-4 flex flex-wrap items-baseline gap-1.5 text-3xl font-semibold tracking-tight tabular-nums">
+                  {line.valid ? line.quantity.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : "—"}
+                  <span className="text-xs font-normal text-muted">{line.unit}</span>
+                </p>
+                <p className="mt-3 text-xs text-muted">{line.id === "glass" ? "Total glass area" : "Total profile length"}</p>
+              </article>
+            ))}
+          </section>
+          <fieldset disabled={!ready} aria-label="Skylight calculation" className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0 space-y-5">
               <section className="material-card overflow-hidden" aria-labelledby="materials-heading">
-                <div className="border-b border-border px-5 py-4"><h2 id="materials-heading" className="text-lg font-bold">Materials & quantities</h2><p className="mt-1 text-sm text-muted">Lengths in meters · glass in m² · hardware in pieces</p></div>
+                <div className="border-b border-border px-5 py-4"><h2 id="materials-heading" className="text-base font-semibold">Materials & quantities</h2><p className="mt-1 text-sm text-muted">Lengths in meters · glass in m² · hardware in pieces</p></div>
                 <div className="hidden grid-cols-[minmax(0,1fr)_108px] gap-3 border-b border-border bg-surface-muted px-5 py-3 text-xs font-bold text-muted sm:grid" aria-hidden="true"><span>Item</span><span>Quantity</span></div>
                 <div className="divide-y divide-border">
                   {calculation.lines.map((line, index) => (
@@ -150,7 +166,7 @@ export function SkylightCalculator() {
 
             <aside className="space-y-5 lg:sticky lg:top-6">
               <section className="material-card p-5" aria-labelledby="quotation-heading">
-                <h2 id="quotation-heading" className="text-lg font-bold">Prepare a quotation</h2>
+                <h2 id="quotation-heading" className="text-base font-semibold">Prepare a quotation</h2>
                 <p className="mt-1 text-sm text-muted">Add customer details for the branded PDF.</p>
                 <div className="mt-4 space-y-4">
                   <label className="block text-sm font-semibold">Customer name<input value={customer} onChange={(event) => setCustomer(event.target.value)} maxLength={100} className="mt-1.5 h-11 w-full rounded-md border border-border bg-surface px-3 font-normal" placeholder="Customer or company" /></label>

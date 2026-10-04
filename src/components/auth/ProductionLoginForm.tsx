@@ -138,7 +138,7 @@ export function ProductionLoginForm() {
         <button
           type="submit"
           disabled={isLoading}
-          className="flex h-12 w-full items-center justify-center rounded-md bg-primary text-sm font-bold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
+          className="material-button-filled h-12 w-full"
         >
           {isLoading ? t("auth.signingIn") : t("auth.loginButton")}
         </button>

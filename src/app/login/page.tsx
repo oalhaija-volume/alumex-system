@@ -14,7 +14,7 @@ export default function LoginPage() {
         <section className="hidden lg:block">
           <div className="max-w-xl">
             <BrandMark />
-            <p className="mt-10 text-xs font-bold uppercase tracking-[0.2em] text-accent">
+            <p className="mt-10 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
               {t("auth.commercialOperations")}
             </p>
             <h1 className="mt-3 text-5xl font-bold tracking-tight text-foreground">
@@ -26,12 +26,12 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <section className="rounded-lg border border-border bg-surface p-5 shadow-sm sm:p-7">
+        <section className="material-card p-5 sm:p-7">
           <div className="lg:hidden">
             <BrandMark />
           </div>
           <div className="mt-8 lg:mt-0">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
               {t("auth.secureAccess")}
             </p>
             <h2 className="mt-2 text-2xl font-bold text-foreground">

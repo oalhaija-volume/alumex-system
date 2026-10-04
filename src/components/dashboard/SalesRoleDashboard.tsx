@@ -236,7 +236,7 @@ function OutdoorMobileSummary({
       className="space-y-3 lg:hidden"
       aria-label={t("dashboard.role.outdoor.assigned")}
     >
-      <article className="swift-primary-metric overflow-hidden rounded-[22px] bg-material-surface-container-low p-5 text-foreground shadow-[var(--md-elevation-1)]">
+      <article className="swift-primary-metric material-card p-5 text-foreground">
         <p className="text-sm font-semibold text-muted">
           {t("dashboard.role.outdoor.assigned")}
         </p>
@@ -263,7 +263,7 @@ function OutdoorMobileSummary({
         </p>
       </article>
 
-      <div className="swift-status-list overflow-hidden rounded-[22px] bg-material-surface-container-low shadow-[var(--md-elevation-1)]">
+      <div className="swift-status-list material-card">
         {rows.map((row, index) => (
           <div
             key={row.label}

@@ -4,7 +4,7 @@ import { hasSupabaseConfig } from "@/lib/supabase/config";
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
-  const next = requestUrl.searchParams.get("next") ?? "/dashboard";
+  const next = requestUrl.searchParams.get("next") ?? "/intake";
 
   if (!hasSupabaseConfig()) {
     const loginUrl = new URL("/login", request.url);

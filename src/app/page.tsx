@@ -1,10 +1,3 @@
-import { AppDataProviders } from "@/components/AppDataProviders";
-import { DashboardView } from "@/components/views/DashboardView";
+import { redirect } from "next/navigation";
 
-export default function Home() {
-  return (
-    <AppDataProviders>
-      <DashboardView />
-    </AppDataProviders>
-  );
-}
+export default function Home() { redirect("/intake"); }

@@ -23,7 +23,7 @@ export function ProductionLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t } = useI18n();
-  const redirectTo = searchParams.get("redirectTo") ?? "/dashboard";
+  const redirectTo = searchParams.get("redirectTo") ?? "/intake";
   const hasMissingConfiguration =
     searchParams.get("configuration") === "missing";
   const [username, setUsername] = useState("");

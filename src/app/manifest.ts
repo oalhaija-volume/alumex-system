@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: enMessages.app.title,
     short_name: "Alumex",
     description: enMessages.app.description,
-    start_url: "/dashboard",
+    start_url: "/intake",
     scope: "/",
     display: "standalone",
     background_color: "#f3f6fa",

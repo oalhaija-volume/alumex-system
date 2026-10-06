@@ -43,14 +43,11 @@ function measurementProjectIdFromPath(pathname: string) {
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-
-  // This standalone calculator has no system data or navigation. Keep the
-  // exception exact so every other page retains its existing access checks.
-  if (pathname === "/skylight") {
-    const response = NextResponse.next();
-    response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
-    return response;
+  // Retired pages cannot expose the old UI, even through saved URLs.
+  if (!["/", "/intake", "/login", "/auth/callback", "/auth/logout", "/mobile-required", "/unauthorized"].includes(pathname)) {
+    return NextResponse.redirect(new URL("/intake", request.url));
   }
+  if (pathname === "/unauthorized") return NextResponse.next();
 
   if (!hasSupabaseConfig()) {
     if (isPublicRoute(pathname) || pathname === "/unauthorized") {

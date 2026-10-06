@@ -1,34 +1,5 @@
-export const activeNavigationHrefs = [
-  "/dashboard",
-  "/intake",
-  "/measurements",
-  "/clients",
-  "/projects",
-  "/crm",
-  "/quotations",
-  "/settings",
-  "/hr",
-  "/commercial",
-  "/operations-manager",
-  "/costing",
-] as const;
-
-const supportingRoutePrefixes = [
-  "/contracts",
-  "/site-measurements",
-  "/operation-manager",
-  "/pricing",
-  "/workflow",
-] as const;
-
+export const activeNavigationHrefs = ["/intake"] as const;
 export const postOperationsWorkflowEnabled = false;
-
 export function isActiveSystemRoute(pathname: string) {
-  if (pathname === "/" || pathname.startsWith("/unauthorized")) {
-    return true;
-  }
-
-  return [...activeNavigationHrefs, ...supportingRoutePrefixes].some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
+  return ["/", "/intake", "/unauthorized"].includes(pathname);
 }

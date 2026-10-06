@@ -1,21 +1,18 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { ProjectLocationPicker } from "@/components/projects/ProjectLocationPicker";
 
 export function OutdoorIntake() {
   const { t } = useI18n();
-  const router = useRouter();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [location, setLocation] = useState<{ latitude: number | null; longitude: number | null }>({ latitude: null, longitude: null });
   const [readiness, setReadiness] = useState<"ready" | "not_ready" | "">("ready");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [savedToCrm, setSavedToCrm] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   async function submit() {
     if (saving) return;
@@ -42,8 +39,7 @@ export function OutdoorIntake() {
       });
       const result = await response.json() as { error?: string; projectId?: string; nextPath?: string };
       if (!response.ok || !result.projectId) throw new Error(result.error || t("intake.errors.save"));
-      if (readiness === "ready") router.push(result.nextPath || `/site-measurements/${result.projectId}`);
-      else setSavedToCrm(true);
+      setSaved(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("intake.errors.save"));
     } finally {
@@ -51,11 +47,11 @@ export function OutdoorIntake() {
     }
   }
 
-  if (savedToCrm) return (
+  if (saved) return (
     <section className="mx-auto max-w-xl space-y-4 rounded-lg border border-slate-200 bg-white p-5" role="status">
-      <h1 className="text-xl font-bold text-slate-950">{t("mobileIntake.saved")}</h1>
-      <p className="text-slate-600">{t("mobileIntake.savedHelp")}</p>
-      <Link href="/projects" className="flex min-h-12 items-center justify-center rounded-md bg-[var(--alumex-blue)] px-4 font-bold text-white">{t("nav.projects")}</Link>
+      <h1 className="text-xl font-bold text-slate-950">{t("registration.saved")}</h1>
+      <p className="text-slate-600">{t("registration.savedHelp")}</p>
+      <button type="button" onClick={() => { setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setReadiness("ready"); setSaved(false); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
     </section>
   );
 
@@ -99,7 +95,7 @@ export function OutdoorIntake() {
         <p className="flex items-start gap-2 text-xs leading-5 text-slate-500"><span aria-hidden="true">ⓘ</span>{t("registration.audit")}</p>
         {error ? <p role="alert" className="rounded-md bg-red-50 p-3 text-sm font-medium text-red-700">{error}</p> : null}
         <button type="button" onClick={() => void submit()} className="flex min-h-12 w-full items-center justify-center gap-3 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600 disabled:opacity-50">
-          {saving ? t("common.loading") : readiness === "not_ready" ? t("mobileIntake.sendCrm") : t("registration.continue")}
+          {saving ? t("common.loading") : t("registration.save")}
           {!saving ? <span aria-hidden="true" className="rtl:rotate-180">→</span> : null}
         </button>
       </fieldset>

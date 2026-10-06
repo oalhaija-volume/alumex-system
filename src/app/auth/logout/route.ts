@@ -3,7 +3,7 @@ import { hasSupabaseConfig } from "@/lib/supabase/config";
 
 export async function POST(request: NextRequest) {
   if (!hasSupabaseConfig()) {
-    const response = NextResponse.redirect(new URL("/login", request.url));
+    const response = NextResponse.redirect(new URL("/login", request.url), 303);
     response.cookies.delete("alumex_dev_session");
     return response;
   }
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient();
   await supabase.auth.signOut();
 
-  const response = NextResponse.redirect(new URL("/login", request.url));
+  const response = NextResponse.redirect(new URL("/login", request.url), 303);
   response.cookies.delete("alumex_dev_session");
   return response;
 }

@@ -19,10 +19,10 @@ export default function UnauthorizedPage() {
           {t("errors.accessDeniedDescription")}
         </p>
         <Link
-          href="/dashboard"
+          href="/login"
           className="mt-6 inline-flex h-11 items-center rounded-md bg-primary px-4 text-sm font-bold text-white"
         >
-          {t("errors.backToDashboard")}
+          {t("auth.login")}
         </Link>
       </section>
     </main>

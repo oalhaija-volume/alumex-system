@@ -1578,11 +1578,15 @@
     "pinPrompt": "Tap the map to choose the project location",
     "readiness": "Is the site ready?",
     "ready": "Ready for measurements",
-    "readyHelp": "Enter initial measurements next.",
+    "readyHelp": "Site is ready for initial measurements.",
     "not_ready": "Not ready yet",
-    "not_readyHelp": "Send to mini CRM for follow-up.",
+    "not_readyHelp": "Site will need a follow-up.",
     "audit": "Your name and registration time are saved automatically.",
     "close": "Close registration",
-    "continue": "Continue to measurements"
+    "continue": "Continue to measurements",
+    "saved": "Registration saved",
+    "savedHelp": "Client details and site readiness are saved. This is the end of the current step.",
+    "another": "Register another client",
+    "save": "Save registration"
   }
 }

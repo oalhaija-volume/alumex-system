@@ -14,6 +14,14 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const name = typeof body?.client?.clientName === "string" ? body.client.clientName.trim() : "";
   const phone = typeof body?.client?.mobile === "string" ? body.client.mobile.trim() : "";
+  const clientType = body?.client?.clientType;
+  if (clientType !== "individual" && clientType !== "company") {
+    return NextResponse.json({error:"Select Individual or Corporate."}, {status:400});
+  }
+  const companyLocation = parseProjectLocation(body?.client?.locationLatitude, body?.client?.locationLongitude);
+  if (clientType === "company" && !companyLocation.isValid) {
+    return NextResponse.json({error:"Choose the company location as well as the project site."}, {status:400});
+  }
   const readiness = body?.project?.structureReadiness;
   const location = parseProjectLocation(body?.project?.locationLatitude, body?.project?.locationLongitude);
   if (!name || !phone || !location.isValid || !["ready", "not_ready"].includes(readiness)) {
@@ -26,7 +34,10 @@ export async function POST(request: Request) {
   if (numberError) return NextResponse.json({error:"Unable to prepare registration. Please try again."}, {status:500});
   const projectNumber = generateNextProjectNumber({projectNumbers:(numbers ?? []).map(row => row.project_number),date});
   const {data:client,error:clientError} = await admin.from("clients").insert({
-    client_name:name, mobile:phone, client_type:"individual", created_by:auth.user.id,
+    client_name:name, mobile:phone, client_type:clientType, created_by:auth.user.id,
+    company_name:clientType === "company" ? name : null,
+    location_latitude:clientType === "company" ? companyLocation.latitude : null,
+    location_longitude:clientType === "company" ? companyLocation.longitude : null,
   }).select("id").single();
   if (clientError) return NextResponse.json({error:"Unable to save the client. Please check the details and try again."}, {status:500});
   const {data:project,error:projectError} = await admin.from("projects").insert({

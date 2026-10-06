@@ -66,12 +66,39 @@ for (const role of ['Admin','Indoor Sales','Outdoor Sales']) for (const readines
     return {select(){return this;},like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table}})};
    }})},
   });
-  const response=await route.POST({json:async()=>({client:{clientName:'Test',mobile:'07700000000'},project:{structureReadiness:readiness},created_by:'forged'})});
+  const response=await route.POST({json:async()=>({client:{clientType:'individual',clientName:'Test',mobile:'07700000000'},project:{structureReadiness:readiness},created_by:'forged'})});
   assert.equal(response.status,201);assert.equal(response.body.nextPath,undefined);
   assert.equal(writes.length,2);
   assert.equal(writes[0].value.created_by,'actor');
   assert.equal(writes[1].value.original_creator_id,'actor');
   assert.equal(writes[1].value.status,'Draft');
   assert.equal(writes[1].value.structure_readiness,readiness);
+ });
+}
+
+for (const scenario of ['corporate','individual','missing-company','missing-site','invalid-type']) {
+ test(`registration separates company and site locations: ${scenario}`, async () => {
+  const writes=[];
+  const coordinates=loadModule('../src/lib/location/coordinates.ts',{});
+  const route=loadModule('../src/app/api/sales-intake/route.ts',{
+   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
+   '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Indoor Sales',user:{id:'sales'}})},
+   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
+   '@/lib/location/coordinates':coordinates,
+   '@/lib/projects/numbering':{generateNextProjectNumber:()=> 'PRJ-TEST'},
+   '@/lib/supabase/admin':{createAdminClient:()=>({from(table){return {select(){return this;},like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table}})};}})},
+  });
+  const response=await route.POST({json:async()=>({
+   client:{clientType:scenario==='invalid-type'?'unknown':scenario==='individual'?'individual':'company',clientName:'Example',mobile:'07701234567',locationLatitude:scenario==='missing-company'?null:33.1,locationLongitude:44.1},
+   project:{structureReadiness:'ready',locationLatitude:scenario==='missing-site'?null:33.9,locationLongitude:44.9},
+  })});
+  if(['missing-company','missing-site','invalid-type'].includes(scenario)) {assert.equal(response.status,400);assert.equal(writes.length,0);return;}
+  assert.equal(response.status,201);
+  const client=writes.find(w=>w.table==='clients').value,project=writes.find(w=>w.table==='projects').value;
+  assert.equal(client.client_type,scenario==='corporate'?'company':'individual');
+  assert.equal(client.company_name,scenario==='corporate'?'Example':null);
+  assert.equal(client.location_latitude,scenario==='corporate'?33.1:null);
+  assert.equal(client.location_longitude,scenario==='corporate'?44.1:null);
+  assert.equal(project.location_latitude,33.9);assert.equal(project.location_longitude,44.9);
  });
 }

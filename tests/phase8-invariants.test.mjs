@@ -9,9 +9,9 @@ function files(dir, prefix='') {
 }
 test('only registration and authentication pages remain after the reset', () => {
  assert.deepEqual(files(root).filter(p=>p.endsWith('/page.tsx') || p==='page.tsx').sort(),
-  ['intake/page.tsx','login/page.tsx','mobile-required/page.tsx','page.tsx','unauthorized/page.tsx']);
+  ['initial-measurements/[projectId]/page.tsx','intake/page.tsx','login/page.tsx','mobile-required/page.tsx','page.tsx','unauthorized/page.tsx']);
 });
 test('legacy workflow APIs are absent, including projects, HR, CRM and measurements', () => {
  assert.deepEqual(files(new URL('api/',root)).filter(p=>p.endsWith('route.ts')).sort(),
-  ['auth/bootstrap-profile/route.ts','auth/resolve-login/route.ts','location-search/route.ts','sales-intake/route.ts']);
+  ['auth/bootstrap-profile/route.ts','auth/resolve-login/route.ts','initial-measurements/[projectId]/route.ts','location-search/route.ts','sales-intake/route.ts']);
 });

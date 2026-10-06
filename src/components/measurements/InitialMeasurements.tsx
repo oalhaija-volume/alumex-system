@@ -1,4 +1,5 @@
 "use client";
+import { ProjectRecord } from '@/components/workflow/ProjectRecord';
 import Link from "next/link";
 import { readFieldState } from "@/lib/offline/store";
 import { fieldFetch } from "@/lib/offline/client";
@@ -67,7 +68,7 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
     <p className="mt-2 text-sm leading-6 text-slate-500">{project ? `${project.project_name} · ${project.project_number}` : t("initialStep.description")}</p>
     {loading ? <p className="mt-6" role="status">{t("common.loading")}</p> : null}
     {error ? <p role="alert" className="mt-5 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-    {project && !finished ? <>
+    <ProjectRecord projectId={projectId}/>{project && !finished ? <>
       <form onSubmit={save} className="mt-7 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
         <fieldset disabled={saving} className="min-w-0 space-y-5">
           <legend className="mb-5 text-lg font-semibold text-slate-900">{t("initialStep.opening",{number:openings.length+1})}</legend>

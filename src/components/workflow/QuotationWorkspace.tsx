@@ -1,4 +1,5 @@
 "use client";
+import { ProjectRecord } from './ProjectRecord';
 import Link from 'next/link';
 import { DocumentHeader,DocumentParties,OpeningSchedule,DocumentFooter,DocumentPaper } from './CommercialDocument';
 import { useState } from 'react';
@@ -20,5 +21,5 @@ function QuoteEditor({data,projectId,reload}:{data:QuoteData;projectId:string;re
 }
 export function QuotationWorkspace({projectId}:{projectId:string}){
  const resource=useResource<QuoteData>(`/api/sales-flow/${projectId}`);
- return <Workspace title="Quotation" description="Prepare the client’s quotation from completed initial measurements and preset prices."><Notice error={resource.error}/>{resource.loading?<p>Loading quotation…</p>:resource.data?<QuoteEditor key={resource.data.flow?.revision??0} data={resource.data} projectId={projectId} reload={resource.reload}/>:null}</Workspace>;
+ return <Workspace title="Quotation" description="Prepare the client’s quotation from completed initial measurements and preset prices."><ProjectRecord projectId={projectId}/><Notice error={resource.error}/>{resource.loading?<p>Loading quotation…</p>:resource.data?<QuoteEditor key={resource.data.flow?.revision??0} data={resource.data} projectId={projectId} reload={resource.reload}/>:null}</Workspace>;
 }

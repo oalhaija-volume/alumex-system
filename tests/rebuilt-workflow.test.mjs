@@ -124,3 +124,8 @@ test('follow-up history uses each saved note rather than the current overwritten
  const route=load('../src/app/api/projects/[projectId]/follow-ups/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({project,admin})}});
  const result=await route.GET({}, {params:Promise.resolve({projectId:'project'})});assert.equal(result.status,200);assert.deepEqual(result.body.entries.map(e=>e.note),['Latest note','First call']);assert.equal(result.body.entries[1].recordedBy,'Sales employee');
 });
+for(const [role,id,allowed] of [['Outdoor Sales','assigned',true],['Outdoor Sales','other',false],['Indoor Sales','assigned',false],['Indoor Sales','creator',true]])test(`${role} ${id} project assignment access`,async()=>{
+ const project={id:'project',created_by:'creator',assigned_outdoor_sales_id:'assigned'};
+ const access=load('../src/lib/workflow/access.ts',{'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,user:{id}})},'@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},'@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:project,error:null})})})}});
+ const result=await access.salesProject('project');assert.equal(!result.response,allowed);
+});

@@ -63,7 +63,10 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
   let projects=[...s.projects];const openings=[...s.openings];let p=projects.find(p=>p.id===projectId);
   if(action==='register'){
    const client=payload.client as Record<string,unknown>,project=payload.project as Record<string,unknown>;
-   p={id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,project_notes:null,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
+   const assigned=typeof project.assignedOutdoorSalesId==='string'?project.assignedOutdoorSalesId:'';
+   if(s.actor.role==='Indoor Sales'&&!assigned)throw new Error('Assign an Outdoor Sales employee to collect measurements.');
+   if(assigned&&!s.outdoorSales?.some(e=>e.id===assigned))throw new Error('Choose an Outdoor Sales employee from the list. Connect online to refresh employees.');
+   p={assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,project_notes:null,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
   }else{
    if(!p)throw new Error('Open this project online once before working on it offline.');
    if(['opening','finish','reopen'].includes(action)&&!['new_lead','ready_for_quotation'].includes(p.sales_status))throw new Error('Measurements are locked after quotation creation.');

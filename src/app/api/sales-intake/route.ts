@@ -5,8 +5,7 @@ import { hasSupabaseServiceRoleKey, supabaseServiceRoleError } from "@/lib/supab
 import { parseProjectLocation } from "@/lib/location/coordinates";
 import { generateNextProjectNumber } from "@/lib/projects/numbering";
 
-// Step one only: save registration. No assignments, workflow transitions,
-// measurement requests, CRM tasks, notifications, or next-page navigation.
+// Registration retains the creator and validates measurement assignment.
 export async function POST(request: Request) {
   const auth = await requireRole(["Admin", "Indoor Sales", "Outdoor Sales"]);
   if (!auth.ok) return NextResponse.json({error: auth.error}, {status: auth.status});
@@ -27,7 +26,12 @@ export async function POST(request: Request) {
   if (!name || !phone || !location.isValid || !["ready", "not_ready"].includes(readiness)) {
     return NextResponse.json({error:"Enter the client name, phone number, location pin, and site readiness."}, {status:400});
   }
+  const assignee=body?.project?.assignedOutdoorSalesId;
+  if(assignee&&(typeof assignee!=='string'||!/^[0-9a-f-]{36}$/i.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
+  if(auth.role==='Indoor Sales'&&!assignee)return NextResponse.json({error:'Indoor Sales must assign an Outdoor Sales employee for measurements.'},{status:400});
   const admin = createAdminClient();
+  if(assignee){const employee=await admin.from('profiles').select('id').eq('id',assignee).eq('role','Outdoor Sales').eq('is_active',true).eq('status','Active').maybeSingle();if(employee.error||!employee.data)return NextResponse.json({error:'Choose an active Outdoor Sales employee.'},{status:400});}
+
   const date = new Date();
   const prefix = `PRJ-${date.getFullYear()}${String(date.getMonth()+1).padStart(2,"0")}-`;
   const {data:numbers,error:numberError} = await admin.from("projects").select("project_number").like("project_number",`${prefix}%`);
@@ -41,7 +45,7 @@ export async function POST(request: Request) {
   }).select("id").single();
   if (clientError) return NextResponse.json({error:"Unable to save the client. Please check the details and try again."}, {status:500});
   const {data:project,error:projectError} = await admin.from("projects").insert({
-    project_number:projectNumber, project_name:name, client_id:client.id,
+    project_number:projectNumber, project_name:name, client_id:client.id, assigned_outdoor_sales_id:assignee||null,
     address:typeof body?.project?.address === "string" && body.project.address.trim()
       ? body.project.address.trim().slice(0, 2000)
       : `${location.latitude}, ${location.longitude}`,

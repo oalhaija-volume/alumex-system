@@ -62,15 +62,16 @@ for (const role of ['Admin','Indoor Sales','Outdoor Sales']) for (const readines
    '@/lib/location/coordinates':{parseProjectLocation:()=>({isValid:true,latitude:33.3,longitude:44.4})},
    '@/lib/projects/numbering':{generateNextProjectNumber:()=> 'PRJ-TEST'},
    '@/lib/supabase/admin':{createAdminClient:()=>({from(table){
-    assert.ok(['clients','projects'].includes(table));
-    return {select(){return this;},like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table}})};
+    assert.ok(['clients','projects','profiles'].includes(table));
+    return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'}}),like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table}})};
    }})},
   });
-  const response=await route.POST({json:async()=>({client:{clientType:'individual',clientName:'Test',mobile:'07700000000'},project:{structureReadiness:readiness},created_by:'forged'})});
+  const response=await route.POST({json:async()=>({client:{clientType:'individual',clientName:'Test',mobile:'07700000000'},project:{structureReadiness:readiness,assignedOutdoorSalesId:role==='Indoor Sales'?'dddddddd-dddd-4ddd-8ddd-dddddddddddd':null},created_by:'forged'})});
   assert.equal(response.status,201);assert.equal(response.body.nextPath,undefined);
   assert.equal(writes.length,2);
   assert.equal(writes[0].value.created_by,'actor');
   assert.equal(writes[1].value.original_creator_id,'actor');
+  assert.equal(writes[1].value.assigned_outdoor_sales_id,role==='Indoor Sales'?'dddddddd-dddd-4ddd-8ddd-dddddddddddd':null);
   assert.equal(writes[1].value.status,'Draft');
   assert.equal(writes[1].value.structure_readiness,readiness);
  });
@@ -86,11 +87,11 @@ for (const scenario of ['corporate','individual','missing-company','missing-site
    '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
    '@/lib/location/coordinates':coordinates,
    '@/lib/projects/numbering':{generateNextProjectNumber:()=> 'PRJ-TEST'},
-   '@/lib/supabase/admin':{createAdminClient:()=>({from(table){return {select(){return this;},like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table}})};}})},
+   '@/lib/supabase/admin':{createAdminClient:()=>({from(table){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'}}),like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table}})};}})},
   });
   const response=await route.POST({json:async()=>({
    client:{clientType:scenario==='invalid-type'?'unknown':scenario==='individual'?'individual':'company',clientName:'Example',mobile:'07701234567',locationLatitude:scenario==='missing-company'?null:33.1,locationLongitude:44.1},
-   project:{address:'Selected project address',structureReadiness:'ready',locationLatitude:scenario==='missing-site'?null:33.9,locationLongitude:44.9},
+   project:{assignedOutdoorSalesId:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',address:'Selected project address',structureReadiness:'ready',locationLatitude:scenario==='missing-site'?null:33.9,locationLongitude:44.9},
   })});
   if(['missing-company','missing-site','invalid-type'].includes(scenario)) {assert.equal(response.status,400);assert.equal(writes.length,0);return;}
   assert.equal(response.status,201);

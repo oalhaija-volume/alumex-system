@@ -9,6 +9,8 @@ function load(path,dependencies={}){
 const termsData=JSON.parse(readFileSync(new URL('../src/lib/contracts/uploadedTerms.json',import.meta.url),'utf8'));
 const uploadedTerms=load('../src/lib/contracts/uploadedTerms.ts',{'./uploadedTerms.json':{default:termsData}});
 const pricing=load('../src/lib/workflow/pricing.ts');
+const registration=load('../src/lib/measurements/registrationOpening.ts');
+const quotationOpenings=load('../src/lib/workflow/quotationOpenings.ts',{'@/lib/measurements/registrationOpening':registration});
 const opening={id:'opening',floor:'Ground',room:'Kitchen',width:120,height:150,opening_type:'Window',opening_direction:'Sliding'};
 const catalog=[{id:'alumex',name:'Alumex System',category:'aluminum_system',unit:'sqm',unit_price:270000,is_active:true},{id:'glass',name:'Low-E Glass',category:'addon',unit:'sqm',unit_price:25000,is_active:true},{id:'closer',name:'Closer',category:'addon',unit:'item',unit_price:10000,is_active:true},{id:'unpriced',name:'Other System',category:'aluminum_system',unit:'sqm',unit_price:0,is_active:true}];
 const choice={openingId:'opening',systemId:'alumex',glassId:'glass',extras:[{id:'closer',quantity:2}]};
@@ -45,7 +47,7 @@ test('HR has employee workspace only and legacy routes remain inaccessible',()=>
 });
 const json={NextResponse:{json:(body,options)=>({body,status:options?.status??200})}};
 for(const role of ['Operations Manager','Project Manager'])test(`${role} is rejected by commercial API before database access`,async()=>{
- const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({response:{status:403}})},'@/lib/workflow/pricing':pricing,'@/lib/contracts/uploadedTerms':uploadedTerms});
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({response:{status:403}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
  const context={params:Promise.resolve({projectId:'project'})};assert.equal((await route.GET(new Request('https://example.test'),context)).status,403);assert.equal((await route.POST(new Request('https://example.test',{method:'POST'}),context)).status,403);
 });
 test('operations acceptance never returns the commercial RPC record',async()=>{
@@ -55,14 +57,14 @@ test('operations acceptance never returns the commercial RPC record',async()=>{
 test('stale quotation revision never reaches the transition RPC',async()=>{
  let calls=0;
  const admin={from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{revision:4,stage:'quotation'},error:null})};},rpc:()=>{calls++;}};
- const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project'}})},'@/lib/workflow/pricing':pricing,'@/lib/contracts/uploadedTerms':uploadedTerms});
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project'}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
  const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'approve',revision:3,confirmed:true})}),{params:Promise.resolve({projectId:'project'})});
  assert.equal(result.status,409);assert.equal(calls,0);
 });
 for(const body of [{method:'digital',signature:''},{method:'upload'},{method:'digital',signature:'data:image/png;base64,forged'}])test(`unsigned/invalid ${body.method} evidence cannot trigger handoff`,async()=>{
  let calls=0;
  const admin={from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{revision:4,stage:'contract'},error:null})};},rpc:()=>{calls++;}};
- const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project'}})},'@/lib/workflow/pricing':pricing,'@/lib/contracts/uploadedTerms':uploadedTerms});
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project'}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
  const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'sign',revision:4,signer:'Client',consent:true,...body})}),{params:Promise.resolve({projectId:'project'})});
  assert.equal(result.status,400);assert.equal(calls,0);
 });
@@ -98,7 +100,7 @@ test('operations specification projection excludes all monetary and contractual 
 for(const template of ['residential','commercial'])test(`${template} contract generation saves its uploaded terms and selected template`,async()=>{
  let input;
  const admin={from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{revision:2,stage:'approved'},error:null}),single:async()=>({data:{name:'Client',mobile:'07000',client_type:'individual'},error:null})};},rpc:async(name,args)=>{input=args;return {data:{},error:null};}};
- const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project',client_id:'client',project_name:'Site',project_number:'PRJ-1',address:'Baghdad'}})},'@/lib/workflow/pricing':pricing,'@/lib/contracts/uploadedTerms':uploadedTerms});
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project',client_id:'client',project_name:'Site',project_number:'PRJ-1',address:'Baghdad'}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
  const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'contract',revision:2,template})}),{params:Promise.resolve({projectId:'project'})});
  assert.equal(result.status,200);assert.equal(input.p_payload.template,template);assert.deepEqual(input.p_payload.terms,termsData[template]);
  const payments=input.p_payload.terms.find(x=>x.title==='payment terms').text;
@@ -135,4 +137,53 @@ for(const [sales_status,stage,open]of [['new_lead','measurements',true],['ready_
 });
 test('Operations acceptance and site readiness remain separate dashboard stages',()=>{
  assert.equal(stages.projectStage({structure_readiness:'not_ready',sales_status:'new_lead'}),'site');assert.equal(stages.projectStage({structure_readiness:'ready',sales_status:'transferred_to_operations',status:'Production'}),'operations');
+});
+
+test('additional product and service rows use catalog rates and explicit quantities/areas',()=>{
+ const items=[...catalog,{id:'install',name:'Installation',category:'service',unit:'project',unit_price:75000,is_active:true},{id:'product',name:'Cladding panel',category:'cladding_material',unit:'sqm',unit_price:12000,is_active:true}];
+ const quote=pricing.priceQuotation([opening],[choice],items,'actor',[{id:'install',quantity:1,rate:1},{id:'product',quantity:3.5,total:1}]);
+ assert.equal(quote.total,551000+75000+42000);
+ assert.deepEqual(quote.additionalItems.map(item=>[item.rate,item.quantity,item.total]),[[75000,1,75000],[12000,3.5,42000]]);
+ const safe=load('../src/lib/workflow/operations.ts').operationalAdditionalItems(quote);
+ assert.deepEqual(safe,[{name:'Installation',quantity:1,unit:'project'},{name:'Cladding panel',quantity:3.5,unit:'sqm'}]);
+ assert.equal(/rate|price|total|contract/.test(JSON.stringify(safe)),false);
+});
+test('additional rows reject forged items, unsupported units, duplicate rows and invalid amounts',()=>{
+ for(const rows of [[{id:'alumex',quantity:1}],[{id:'missing',quantity:1}],[{id:'closer',quantity:0}],[{id:'closer',quantity:NaN}],[{id:'closer',quantity:1000001}],[{id:'closer',quantity:1},{id:'closer',quantity:2}],{},[null]])assert.throws(()=>pricing.priceQuotation([opening],[choice],catalog,'actor',rows));
+ assert.throws(()=>pricing.priceQuotation([opening],[choice],[...catalog,{id:'bad',name:'Bad unit',category:'product',unit:'unknown',unit_price:100,is_active:true}],'actor',[{id:'bad',quantity:1}]));
+});
+test('new quotation openings require complete individual measurements and preserve structural rules',()=>{
+ const input={id:'11111111-1111-4111-8111-111111111111',floor:'2',room:'Other',otherRoom:'Atrium',width:150,height:100,structuralType:'Skylight',openingType:'Sliding'};
+ const combined=quotationOpenings.quotationOpenings([opening],[input]);
+ assert.equal(combined.length,2);assert.equal(combined[1].opening_direction,null);assert.equal(combined[1].room,'Atrium');
+ assert.throws(()=>quotationOpenings.quotationOpenings([opening],[{...input,otherRoom:''}]));
+ assert.throws(()=>quotationOpenings.quotationOpenings([opening],[input,input]));
+ assert.throws(()=>quotationOpenings.quotationOpenings([combined[1]],[input]));
+ assert.throws(()=>quotationOpenings.quotationOpenings([],[{...input,structuralType:'Window',openingType:null}]));
+ assert.equal(quotationOpenings.quotationOpenings([],[{...input,structuralType:'Louver',openingType:'Sliding'}])[0].opening_direction,'Hinged');
+});
+function revisionRoute(flow){
+ const inputs=[];
+ const admin={from(table){return {select(){return this;},eq(){return this;},order(){return this;},maybeSingle:async()=>({data:flow,error:null}),then(resolve){return Promise.resolve({data:table==='openings'?[opening]:catalog,error:null}).then(resolve);}};},rpc:async(name,args)=>{inputs.push(args);return {data:{},error:null};}};
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project'}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
+ return {inputs,post:body=>route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),{params:Promise.resolve({projectId:'project'})})};
+}
+test('unsigned contract revision requires confirmation and sends complete server-priced snapshot atomically',async()=>{
+ const {post,inputs}=revisionRoute({revision:3,stage:'contract',signed_at:null});
+ const newOpening={id:'11111111-1111-4111-8111-111111111111',floor:'1',room:'Bedroom',width:100,height:100,structuralType:'Window',openingType:'Hinged'};
+ const body={action:'save',revision:3,choices:[choice,{openingId:newOpening.id,systemId:'alumex',extras:[]}],newOpenings:[newOpening],additionalItems:[{id:'closer',quantity:2,rate:1}],total:1};
+ assert.equal((await post(body)).status,400);assert.equal(inputs.length,0);
+ assert.equal((await post({...body,replaceUnsignedContract:true})).status,200);
+ assert.equal(inputs.length,1);assert.equal(inputs[0].p_payload.lines.length,2);assert.equal(inputs[0].p_payload.total,551000+270000+20000);
+});
+for(const stage of ['signed','operations'])test(`${stage} quotation remains immutable`,async()=>{
+ const {post,inputs}=revisionRoute({revision:4,stage,signed_at:'2026-10-07T01:00:00Z'});
+ assert.equal((await post({action:'save',revision:4,choices:[choice],replaceUnsignedContract:true})).status,400);assert.equal(inputs.length,0);
+});
+test('invalid new opening or missing new opening price never triggers a save',async()=>{
+ const {post,inputs}=revisionRoute({revision:1,stage:'quotation'});
+ const row={id:'11111111-1111-4111-8111-111111111111',floor:'1',room:'Bedroom',width:100,height:100,structuralType:'Window',openingType:'Hinged'};
+ assert.equal((await post({action:'save',revision:1,choices:[choice],newOpenings:[{...row,width:0}]})).status,400);
+ assert.equal((await post({action:'save',revision:1,choices:[choice],newOpenings:[row]})).status,400);
+ assert.equal(inputs.length,0);
 });

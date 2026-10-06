@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { uploadedContractTerms } from '@/lib/contracts/uploadedTerms';
 import { salesProject } from '@/lib/workflow/access';
-import { priceQuotation, type CatalogItem, type OpeningChoice } from '@/lib/workflow/pricing';
+import { priceQuotation, type CatalogItem, type OpeningChoice, type AdditionalChoice } from '@/lib/workflow/pricing';
+import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
 import type { Json } from '@/lib/supabase/database.types';
 import type { SalesFlow } from '@/lib/workflow/types';
 type Context={params:Promise<{projectId:string}>};
@@ -9,13 +10,14 @@ const unavailable='The sales workflow database update is required. Ask the admin
 export async function GET(request:Request,context:Context){
  const {projectId}=await context.params;const access=await salesProject(projectId);if(access.response)return access.response;
  const {admin,project}=access;
- const [flow,openings,catalog,client]=await Promise.all([
+ const [flow,openings,catalog,client,history]=await Promise.all([
   admin.from('sales_workflows').select('*').eq('project_id',projectId).maybeSingle(),
   admin.from('openings').select('id,floor,room,width,height,opening_type,opening_direction').eq('project_id',projectId).order('created_at'),
   admin.from('product_price_settings').select('id,name:product_name,category,unit,unit_price,is_active').eq('is_active',true).order('product_name'),
-  admin.from('clients').select('name:client_name,mobile,client_type').eq('id',project.client_id).single()
+  admin.from('clients').select('name:client_name,mobile,client_type').eq('id',project.client_id).single(),
+  admin.from('quotation_revisions').select('version,quotation,contract,previous_stage,superseded_at').eq('project_id',projectId).order('version',{ascending:false})
  ]);
- if(flow.error)return NextResponse.json({error:unavailable},{status:503});
+ if(flow.error||history.error)return NextResponse.json({error:unavailable},{status:503});
  if(openings.error||catalog.error||client.error)return NextResponse.json({error:'Unable to load quotation information.'},{status:500});
  if(new URL(request.url).searchParams.get('download')==='signed'){
   const evidence=(flow.data as unknown as SalesFlow|null)?.evidence;
@@ -24,7 +26,7 @@ export async function GET(request:Request,context:Context){
   if(file.error||!file.data)return NextResponse.json({error:'Unable to retrieve signed file.'},{status:500});
   return new Response(file.data,{headers:{'Content-Type':file.data.type,'Content-Disposition':'attachment; filename="signed-contract"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
  }
- return NextResponse.json({project,client:client.data,flow:flow.data,openings:openings.data,catalog:catalog.data},{headers:{'Cache-Control':'private, no-store'}});
+ return NextResponse.json({project,client:client.data,flow:flow.data,openings:openings.data,catalog:catalog.data,history:history.data},{headers:{'Cache-Control':'private, no-store'}});
 }
 export async function POST(request:Request,context:Context){
  const {projectId}=await context.params;const access=await salesProject(projectId);if(access.response)return access.response;
@@ -44,11 +46,13 @@ export async function POST(request:Request,context:Context){
  let payload:Json={};let uploadedPath:string|null=null;
  try{
   if(action==='save'){
-   if(flow && !['quotation','approved'].includes(flow.stage))throw new Error('The contract is locked.');
+   if(flow && (flow.signed_at || !['quotation','approved','contract'].includes(flow.stage)))throw new Error('Signed contracts cannot be changed.');
+   if(flow?.stage==='contract' && body.replaceUnsignedContract!==true)throw new Error('Confirm that this revision replaces the unsigned contract and requires new client approval.');
    const [openings,catalog]=await Promise.all([admin.from('openings').select('id,floor,room,width,height,opening_type,opening_direction').eq('project_id',projectId).order('created_at'),admin.from('product_price_settings').select('id,name:product_name,category,unit,unit_price,is_active').eq('is_active',true)]);
    if(openings.error||catalog.error)throw new Error('Unable to load pricing.');
    if(!Array.isArray(body.choices))throw new Error('Select a system for every opening.');
-   payload=priceQuotation(openings.data??[],body.choices as OpeningChoice[],catalog.data as CatalogItem[],auth.user.id) as unknown as Json;
+   const measured=quotationOpenings(openings.data??[],body.newOpenings??[]);
+   payload=priceQuotation(measured,body.choices as OpeningChoice[],catalog.data as CatalogItem[],auth.user.id,(body.additionalItems??[]) as AdditionalChoice[]) as unknown as Json;
   }
   if(action==='approve' && body.confirmed!==true)throw new Error('Confirm that the client approved this quotation.');
   if(action==='contract'){

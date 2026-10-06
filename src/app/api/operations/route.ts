@@ -1,4 +1,4 @@
-import { operationalSpecifications } from '@/lib/workflow/operations';
+import { operationalSpecifications,operationalAdditionalItems } from '@/lib/workflow/operations';
 import type { QuoteSnapshot } from '@/lib/workflow/pricing';
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth/adminServer';
@@ -9,7 +9,7 @@ export async function GET(){
  const admin=createAdminClient();
  const flows=await admin.from('sales_workflows').select('project_id,stage,revision,signed_at,accepted_at,quotation').in('stage',['signed','operations']).not('signed_at','is',null).order('signed_at',{ascending:false});
  if(flows.error)return NextResponse.json({error:'The operations database update is required.'},{status:503});
- const safeFlows=(flows.data??[]).map(f=>({project_id:f.project_id,stage:f.stage,revision:f.revision,signed_at:f.signed_at,accepted_at:f.accepted_at,specifications:operationalSpecifications(f.quotation as unknown as QuoteSnapshot)}));
+ const safeFlows=(flows.data??[]).map(f=>({project_id:f.project_id,stage:f.stage,revision:f.revision,signed_at:f.signed_at,accepted_at:f.accepted_at,specifications:operationalSpecifications(f.quotation as unknown as QuoteSnapshot),additionalItems:operationalAdditionalItems(f.quotation as unknown as QuoteSnapshot)}));
  const ids=safeFlows.map(f=>f.project_id);
  if(!ids.length)return NextResponse.json({projects:[],canAccept:auth.role!=='Project Manager'});
  const [projects,openings]=await Promise.all([

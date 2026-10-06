@@ -101,6 +101,12 @@ export type Database = {
         Relationships: [];
       };
 
+      quotation_revisions: {
+        Row: {project_id:string;version:number;workflow_revision:number;quotation:Json;contract:Json|null;previous_stage:string;approved_by:string|null;approved_at:string|null;superseded_by:string|null;superseded_at:string};
+        Insert: {project_id:string;version:number;workflow_revision:number;quotation:Json;contract?:Json|null;previous_stage:string;approved_by?:string|null;approved_at?:string|null;superseded_by?:string|null;superseded_at?:string};
+        Update: never;
+        Relationships: [];
+      };
       sales_workflows: {
         Row: { project_id: string; revision: number; stage: string; quotation: Json; contract: Json | null; evidence: Json | null; approved_by: string | null; approved_at: string | null; signed_at: string | null; accepted_by: string | null; accepted_at: string | null; updated_at: string };
         Insert: { project_id: string; revision?: number; stage: string; quotation: Json; contract?: Json | null; evidence?: Json | null };

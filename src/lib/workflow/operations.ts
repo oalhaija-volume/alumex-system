@@ -8,3 +8,6 @@ export function operationalSpecifications(quotation:QuoteSnapshot){
   extras:line.extras.map(extra=>({name:extra.name,quantity:extra.quantity,unit:extra.unit})),
  }));
 }
+export function operationalAdditionalItems(quotation:QuoteSnapshot){
+ return (quotation.additionalItems??[]).map(item=>({name:item.name,quantity:item.quantity,unit:item.unit}));
+}

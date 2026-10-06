@@ -87,6 +87,13 @@ export type Database = {
         | "document";
     };
     Tables: {
+      project_file_cleanup: {
+        Row: {project_id:string;path:string};
+        Insert: {project_id:string;path:string};
+        Update: {project_id?:string;path?:string};
+        Relationships: [];
+      };
+
       sales_workflows: {
         Row: { project_id: string; revision: number; stage: string; quotation: Json; contract: Json | null; evidence: Json | null; approved_by: string | null; approved_at: string | null; signed_at: string | null; accepted_by: string | null; accepted_at: string | null; updated_at: string };
         Insert: { project_id: string; revision?: number; stage: string; quotation: Json; contract?: Json | null; evidence?: Json | null };

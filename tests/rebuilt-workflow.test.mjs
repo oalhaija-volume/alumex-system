@@ -105,3 +105,11 @@ for(const template of ['residential','commercial'])test(`${template} contract ge
  assert.match(payments,template==='commercial'?/25%/:/50/);
  assert.ok(input.p_payload.terms.some(x=>x.text.includes('عشرة سنوات')));
 });
+test('project deletion rejects unauthorized roles and missing confirmation before mutation',async()=>{
+ const access={'@/lib/workflow/access':{salesRoles:['Admin','Indoor Sales','Outdoor Sales']}};
+ let calls=0;const admin={rpc:()=>{calls++;}};
+ function route(ok){return load('../src/app/api/workspace/route.ts',{'next/server':json,...access,'@/lib/auth/adminServer':{requireRole:async roles=>{assert.deepEqual(roles,['Admin']);return ok?{ok:true,user:{id:'actor'}}:{ok:false,status:403,error:'Denied'};}},'@/lib/supabase/admin':{createAdminClient:()=>admin}});}
+ assert.equal((await route(false).DELETE({json:async()=>({})})).status,403);
+ assert.equal((await route(true).DELETE({json:async()=>({projectId:'11111111-1111-4111-8111-111111111111'})})).status,400);
+ assert.equal(calls,0);
+});

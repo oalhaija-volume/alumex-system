@@ -29,3 +29,25 @@ export async function PATCH(request:Request){
  const {error}=await access.admin.from('projects').update(ready?{structure_readiness:'ready',sales_status:'new_lead',next_follow_up_at:null}:{next_follow_up_at:next!.toISOString(),project_notes:note}).eq('id',body.projectId).eq('structure_readiness','not_ready');
  return error?NextResponse.json({error:'Unable to update follow-up.'},{status:500}):NextResponse.json({ok:true});
 }
+
+export async function DELETE(request:Request){
+ const auth=await requireRole(['Admin']);
+ if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
+ const body=await request.json().catch(()=>null);
+ if(typeof body?.projectId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.projectId)||body.confirmed!==true)
+  return NextResponse.json({error:'Confirm the project you want to delete.'},{status:400});
+ const admin=createAdminClient();
+ const result=await admin.rpc('delete_projects_as_admin',{target_project_ids:[body.projectId],actor_user_id:auth.user.id});
+ if(result.error)return NextResponse.json({error:'Unable to delete this project. Refresh and try again.'},{status:409});
+ // Storage is outside the database transaction. Retain failed cleanup entries
+ // for retry, rather than losing the path after the project has been deleted.
+ const pending=await admin.from('project_file_cleanup').select('project_id,path').eq('project_id',body.projectId);
+ let cleanupPending=!!pending.error;
+ for(const item of pending.data??[]){
+  const removed=await admin.storage.from('signed-contracts-private').remove([item.path]);
+  if(removed.error){cleanupPending=true;continue;}
+  const cleared=await admin.from('project_file_cleanup').delete().eq('project_id',item.project_id).eq('path',item.path);
+  if(cleared.error)cleanupPending=true;
+ }
+ return NextResponse.json({ok:true,cleanupPending});
+}

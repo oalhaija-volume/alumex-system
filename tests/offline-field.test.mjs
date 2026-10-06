@@ -26,3 +26,11 @@ test('server conflicts remain visible and never discard local work',async()=>{
 test('uncompleted and locked measurements cannot be queued as finished or extended',async()=>{
  const x=setup();await x.client.saveFieldChange('register',projectId,payload);await assert.rejects(x.client.saveFieldChange('finish',projectId,{}),/at least one/);assert.equal(x.state.queue.length,1);
 });
+test('deletion requires online access and never discards unsynced project work',async()=>{
+ const x=setup();await x.client.saveFieldChange('register',projectId,payload);
+ await assert.rejects(x.client.deleteOnlineProject(projectId),/Connect/);
+ navigator.onLine=true;
+ let calls=0;globalThis.fetch=async()=>{calls++;return Response.json({ok:true});};
+ await assert.rejects(x.client.deleteOnlineProject(projectId),/Sync/);
+ assert.equal(calls,0);assert.equal(x.state.queue.length,1);
+});

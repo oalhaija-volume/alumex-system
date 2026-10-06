@@ -4,5 +4,5 @@ import { RegistrationShell } from '@/components/intake/RegistrationShell';
 import { ProjectWorkspace } from '@/components/workflow/ProjectWorkspace';
 export default async function Page(){
  const auth=await requireRole(["Admin", "Indoor Sales", "Outdoor Sales"]);if(!auth.ok)redirect('/unauthorized');
- return <RegistrationShell role={auth.role}><ProjectWorkspace/></RegistrationShell>;
+ return <RegistrationShell role={auth.role}><ProjectWorkspace canDelete={auth.role==='Admin'}/></RegistrationShell>;
 }

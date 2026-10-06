@@ -131,3 +131,14 @@ export async function keepReviewedServerVersion(review:Awaited<ReturnType<typeof
  const id=activeFieldUser();if(!id)throw new Error('Sign in before resolving saved work.');
  await updateFieldState(id,s=>({...s!,queue:s!.queue.filter(c=>c.projectId!==review.project.id),projects:s!.projects.map(p=>p.id===review.project.id?{...review.project,pending:false}:p),openings:[...s!.openings.filter(o=>o.projectId!==review.project.id),...review.openings]}));
 }
+
+export async function deleteOnlineProject(projectId:string){
+ if(!isFieldOnline())throw new Error('Connect to the internet before deleting a project.');
+ const state=await readFieldState();
+ if(state?.queue.some(change=>change.projectId===projectId))throw new Error('Sync this project’s saved changes before deleting it.');
+ const response=await fetch('/api/workspace',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId,confirmed:true})});
+ const result=await response.json();if(!response.ok)throw new Error(result.error??'Unable to delete project.');
+ const id=activeFieldUser();
+ if(state&&id===state.actor.id)await updateFieldState(id,s=>({...s!,projects:s!.projects.filter(p=>p.id!==projectId),openings:s!.openings.filter(o=>o.projectId!==projectId)}));
+ return result as {ok:boolean;cleanupPending:boolean};
+}

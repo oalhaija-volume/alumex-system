@@ -16,7 +16,7 @@ export async function prepareOffline():Promise<FieldState>{
   const remote=await response.json() as FieldState;
   const state=await updateFieldState(remote.actor.id,old=>{
    const pending=new Set(old?.queue.map(c=>c.projectId)??[]);
-   return {...remote,queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id))??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
+   return {...remote,followUpHistories:Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remote.projects.some(p=>p.id===id)||pending.has(id))),queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id))??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
   });
   setFieldUser(remote.actor.id);return state;
  })();
@@ -139,6 +139,6 @@ export async function deleteOnlineProject(projectId:string){
  const response=await fetch('/api/workspace',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId,confirmed:true})});
  const result=await response.json();if(!response.ok)throw new Error(result.error??'Unable to delete project.');
  const id=activeFieldUser();
- if(state&&id===state.actor.id)await updateFieldState(id,s=>({...s!,projects:s!.projects.filter(p=>p.id!==projectId),openings:s!.openings.filter(o=>o.projectId!==projectId)}));
+ if(state&&id===state.actor.id)await updateFieldState(id,s=>({...s!,followUpHistories:Object.fromEntries(Object.entries(s!.followUpHistories??{}).filter(([key])=>key!==projectId)),projects:s!.projects.filter(p=>p.id!==projectId),openings:s!.openings.filter(o=>o.projectId!==projectId)}));
  return result as {ok:boolean;cleanupPending:boolean};
 }

@@ -113,3 +113,14 @@ test('project deletion rejects unauthorized roles and missing confirmation befor
  assert.equal((await route(true).DELETE({json:async()=>({projectId:'11111111-1111-4111-8111-111111111111'})})).status,400);
  assert.equal(calls,0);
 });
+test('follow-up history checks project access before reading receipts',async()=>{
+ const route=load('../src/app/api/projects/[projectId]/follow-ups/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({response:{status:404}})}});
+ assert.equal((await route.GET({}, {params:Promise.resolve({projectId:'other-project'})})).status,404);
+});
+test('follow-up history uses each saved note rather than the current overwritten project note',async()=>{
+ const project={id:'project',project_name:'Client',project_number:'PRJ-1',structure_readiness:'not_ready',project_notes:'Latest note',next_follow_up_at:null};
+ const rows=[{operation_id:'new',actor_id:'actor',action:'follow-up',recorded_at:'2026-10-07T10:00:00Z',result:{project_notes:'Latest note',next_follow_up_at:'2026-10-10T10:00:00Z'}},{operation_id:'old',actor_id:'actor',action:'follow-up',recorded_at:'2026-10-06T10:00:00Z',result:{project_notes:'First call',next_follow_up_at:'2026-10-07T10:00:00Z'}}];
+ const admin={from(table){return {select(){return this;},eq(column,id){assert.equal(id,'project');return this;},in(){return table==='profiles'?Promise.resolve({data:[{id:'actor',full_name:'Sales employee'}]}):this;},order(){return this;},range:async()=>({data:rows,error:null})};}};
+ const route=load('../src/app/api/projects/[projectId]/follow-ups/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({project,admin})}});
+ const result=await route.GET({}, {params:Promise.resolve({projectId:'project'})});assert.equal(result.status,200);assert.deepEqual(result.body.entries.map(e=>e.note),['Latest note','First call']);assert.equal(result.body.entries[1].recordedBy,'Sales employee');
+});

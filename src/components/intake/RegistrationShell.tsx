@@ -41,7 +41,7 @@ export function RegistrationShell({ children, role }: { children: React.ReactNod
   function navigation() {
     return <nav aria-label={menuLabel} className="space-y-1 px-4 py-5">
       {links.filter(([href]) => canAccessRoute(href, role)).map(([href, en, ar]) => {
-        const active = pathname === href || (href === "/projects" && /^\/(initial-measurements|quotation|contract)\//.test(pathname));
+        const active = pathname === href || (href === "/mini-crm" && /^\/projects\/[^/]+\/follow-ups$/.test(pathname)) || (href === "/projects" && /^\/(initial-measurements|quotation|contract)\//.test(pathname));
         return <Link key={href} href={href} onClick={event=>{closeMenu();if(!isFieldOnline()){event.preventDefault();window.location.assign("/offline?path="+encodeURIComponent(href));}}} aria-current={active ? "page" : undefined}
           className={`flex min-h-12 items-center rounded-md border-s-4 px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${active ? "border-blue-600 bg-blue-50 text-blue-700" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
           {locale === "ar" ? ar : en}

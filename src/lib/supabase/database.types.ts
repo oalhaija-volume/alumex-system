@@ -87,6 +87,13 @@ export type Database = {
         | "document";
     };
     Tables: {
+      field_sync_receipts: {
+        Row: {operation_id:string;actor_id:string;project_id:string;action:string;payload_hash:string;recorded_at:string;synced_at:string;result:Json};
+        Insert: {operation_id:string;actor_id:string;project_id:string;action:string;payload_hash:string;recorded_at:string;synced_at?:string;result:Json};
+        Update: {result?:Json};
+        Relationships: [];
+      };
+
       project_file_cleanup: {
         Row: {project_id:string;path:string};
         Insert: {project_id:string;path:string};

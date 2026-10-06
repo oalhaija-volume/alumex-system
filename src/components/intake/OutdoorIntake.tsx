@@ -12,6 +12,7 @@ export function OutdoorIntake() {
   const [companyLocation, setCompanyLocation] = useState<{latitude:number|null;longitude:number|null}>({latitude:null,longitude:null});
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [siteAddress, setSiteAddress] = useState("");
   const [location, setLocation] = useState<{ latitude: number | null; longitude: number | null }>({ latitude: null, longitude: null });
   const [readiness, setReadiness] = useState<"ready" | "not_ready" | "">("ready");
   const [saving, setSaving] = useState(false);
@@ -42,6 +43,7 @@ export function OutdoorIntake() {
           },
           project: {
             projectName: name.trim(),
+            address: siteAddress,
             locationLatitude: location.latitude,
             locationLongitude: location.longitude,
             structureReadiness: readiness,
@@ -51,7 +53,7 @@ export function OutdoorIntake() {
       const result = await response.json() as { error?: string; projectId?: string; nextPath?: string };
       if (!response.ok || !result.projectId) throw new Error(result.error || t("intake.errors.save"));
       if (readiness === "ready") router.push(`/initial-measurements/${result.projectId}`);
-      else setSaved(true);
+      else router.push("/mini-crm");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("intake.errors.save"));
     } finally {
@@ -63,7 +65,7 @@ export function OutdoorIntake() {
     <section className="mx-auto max-w-xl space-y-4 rounded-lg border border-slate-200 bg-white p-5" role="status">
       <h1 className="text-xl font-bold text-slate-950">{t("registration.saved")}</h1>
       <p className="text-slate-600">{t("registration.savedHelp")}</p>
-      <button type="button" onClick={() => { setClientType("individual"); setCompanyLocation({latitude:null,longitude:null}); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setReadiness("ready"); setSaved(false); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
+      <button type="button" onClick={() => { setClientType("individual"); setCompanyLocation({latitude:null,longitude:null}); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setReadiness("ready"); setSaved(false); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
     </section>
   );
 
@@ -103,7 +105,7 @@ export function OutdoorIntake() {
           searchingLabel={t("common.loading")} locatingLabel={t("common.loading")}
           pinPrompt={t("registration.companyPinPrompt")}
         /> : null}
-        <ProjectLocationPicker key="project-location" latitude={location.latitude} longitude={location.longitude} onChange={setLocation}
+        <ProjectLocationPicker key="project-location" latitude={location.latitude} longitude={location.longitude} onChange={setLocation} onSearchSelect={setSiteAddress}
           compact enableSearch allowRadiusChange={false} showGeofence={false}
           title={t("registration.location")} editableDescription=""
           currentLocationLabel={t("registration.useLocation")}

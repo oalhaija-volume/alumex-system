@@ -1617,9 +1617,9 @@
     "saved": "Opening saved. Add the next opening below.",
     "invalid": "Enter the floor, room, positive dimensions, and required types.",
     "failed": "Unable to save opening. Please try again.",
-    "finish": "Finish measurements",
+    "finish": "Finish measurements — ready for quotation",
     "unsaved": "Save the current opening before finishing.",
-    "done": "All openings are saved. This step is complete.",
+    "done": "Measurements complete. This project is ready for quotation.",
     "another": "Add another opening",
     "types": {
       "Window": "Window",
@@ -1646,6 +1646,7 @@
       "Balcony": "Balcony",
       "Storage room": "Storage room",
       "Other": "Other"
-    }
+    },
+    "reopen": "Reopen measurements"
   }
 }

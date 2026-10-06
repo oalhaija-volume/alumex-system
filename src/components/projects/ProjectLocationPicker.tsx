@@ -177,8 +177,14 @@ export function ProjectLocationPicker({
       latitude: clampLatitude(nextLatitude),
       longitude: nextLongitude,
     };
+    cancelReverseLookup();
     setCenter(nextLocation);
     onChange(nextLocation);
+    if (onSearchSelect) {
+      const fallback = `${nextLocation.latitude.toFixed(6)}, ${nextLocation.longitude.toFixed(6)}`;
+      setSearchQuery(fallback);
+      onSearchSelect(fallback);
+    }
   }
 
   function cancelReverseLookup() {
@@ -496,6 +502,8 @@ export function ProjectLocationPicker({
             onClick={() => {
               cancelReverseLookup();
               onChange({ latitude: null, longitude: null });
+              setSearchQuery("");
+              onSearchSelect?.("");
             }}
             className="h-9 rounded-md border border-border bg-surface px-3 text-xs font-bold text-muted-strong"
           >

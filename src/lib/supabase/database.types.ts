@@ -87,6 +87,12 @@ export type Database = {
         | "document";
     };
     Tables: {
+      sales_workflows: {
+        Row: { project_id: string; revision: number; stage: string; quotation: Json; contract: Json | null; evidence: Json | null; approved_by: string | null; approved_at: string | null; signed_at: string | null; accepted_by: string | null; accepted_at: string | null; updated_at: string };
+        Insert: { project_id: string; revision?: number; stage: string; quotation: Json; contract?: Json | null; evidence?: Json | null };
+        Update: { stage?: string; revision?: number; quotation?: Json; contract?: Json | null; evidence?: Json | null };
+        Relationships: [];
+      };
       profiles: {
         Row: {
           id: string;
@@ -1407,6 +1413,8 @@ export type Database = {
       };
     };
     Functions: {
+      commercial_privacy_ready: { Args: Record<string, never>; Returns: boolean };
+      advance_sales_flow: { Args: { p_project: string; p_action: string; p_revision: number; p_payload: Json; p_actor: string }; Returns: Database["public"]["Tables"]["sales_workflows"]["Row"] };
       delete_projects_as_admin: {
         Args: {
           target_project_ids: string[];

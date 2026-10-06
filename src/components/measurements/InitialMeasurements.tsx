@@ -28,7 +28,7 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
     fetch(endpoint,{signal:controller.signal}).then(async response=>{
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      setProject(data.project);setOpenings(data.openings);setDraftId(crypto.randomUUID());
+      setProject(data.project);setOpenings(data.openings);setFinished(data.project.sales_status !== "new_lead");setDraftId(crypto.randomUUID());
     }).catch(cause=>{if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Unable to load measurements.");})
       .finally(()=>{if (!controller.signal.aborted) setLoading(false);});
     return ()=>controller.abort();
@@ -46,6 +46,17 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
       setFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setDraftId(crypto.randomUUID());
       setNotice(t("initialStep.saved"));
     } catch(cause) {setError(cause instanceof Error?cause.message:t("initialStep.failed"));}
+    finally {setSaving(false);}
+  }
+  async function updateMeasurementStatus(action: "finish" | "reopen") {
+    if (saving) return;
+    setSaving(true);setError("");
+    try {
+      const response = await fetch(endpoint,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({action})});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      setFinished(data.salesStatus === "ready_for_quotation");setNotice("");
+    } catch(cause) {setError(cause instanceof Error ? cause.message : t("initialStep.failed"));}
     finally {setSaving(false);}
   }
   const dirty = Boolean(width || height || structuralType || floor || room || otherRoom);
@@ -100,8 +111,8 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
         <span className="w-full text-slate-500">{opening.floor} · {opening.room === "Other" ? opening.otherRoom : t(`initialStep.rooms.${opening.room}`)}</span>
         <span className="text-slate-600">{opening.width} × {opening.height} {t("initialStep.cm")}</span>
       </li>)}</ol>
-      {!finished ? <><button type="button" disabled={saving || dirty} onClick={()=>setFinished(true)} className="mt-5 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50">{t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
+      {!finished ? <><button type="button" disabled={saving || dirty} onClick={()=>void updateMeasurementStatus("finish")} className="mt-5 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50">{saving ? t("common.loading") : t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
     </div>:null}
-    {finished ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{t("initialStep.done")}</p><button onClick={()=>setFinished(false)} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{t("initialStep.another")}</button><Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
+    {finished ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{t("initialStep.done")}</p><button disabled={saving} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button><Link href={`/quotation/${projectId}`} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">Continue to quotation</Link><Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
   </section>;
 }

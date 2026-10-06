@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { isActiveSystemRoute } from "@/lib/systemScope";
 import { requiresMobileWorkspace } from "@/lib/auth/mobileAccess";
 import {
   canAccessRouteWithOverrides,
@@ -44,7 +45,7 @@ function measurementProjectIdFromPath(pathname: string) {
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   // Retired pages cannot expose the old UI, even through saved URLs.
-  if (!/^\/initial-measurements\/[0-9a-f-]{36}$/i.test(pathname) && !["/", "/intake", "/login", "/auth/callback", "/auth/logout", "/mobile-required", "/unauthorized"].includes(pathname)) {
+  if (!isActiveSystemRoute(pathname) && !["/login", "/auth/callback", "/auth/logout", "/mobile-required"].includes(pathname)) {
     return NextResponse.redirect(new URL("/intake", request.url));
   }
   if (pathname === "/unauthorized") return NextResponse.next();

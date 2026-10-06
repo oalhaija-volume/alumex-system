@@ -42,7 +42,9 @@ export async function POST(request: Request) {
   if (clientError) return NextResponse.json({error:"Unable to save the client. Please check the details and try again."}, {status:500});
   const {data:project,error:projectError} = await admin.from("projects").insert({
     project_number:projectNumber, project_name:name, client_id:client.id,
-    address:`${location.latitude}, ${location.longitude}`,
+    address:typeof body?.project?.address === "string" && body.project.address.trim()
+      ? body.project.address.trim().slice(0, 2000)
+      : `${location.latitude}, ${location.longitude}`,
     location_latitude:location.latitude, location_longitude:location.longitude,
     structure_readiness:readiness, status:"Draft", sales_status:"new_lead",
     original_source:auth.role === "Outdoor Sales" ? "outdoor_sales" : "showroom_walk_in",

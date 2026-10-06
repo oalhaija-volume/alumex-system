@@ -746,3 +746,8 @@ textarea {
     break-after: page;
   }
 }
+
+@media print {
+  @page sales-document { size: A4; margin: 14mm; }
+  .sales-document { page: sales-document; background: white; color: #0f172a; }
+}

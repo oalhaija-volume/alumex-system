@@ -30,8 +30,8 @@ export async function GET(request: Request) {
 
   const requestUrl = new URL(request.url);
   const query = requestUrl.searchParams.get("q")?.trim() ?? "";
-  const latitude = Number(requestUrl.searchParams.get("lat"));
-  const longitude = Number(requestUrl.searchParams.get("lng"));
+  const latitude = Number(requestUrl.searchParams.get("lat") ?? Number.NaN);
+  const longitude = Number(requestUrl.searchParams.get("lng") ?? Number.NaN);
   const isReverseLookup =
     Number.isFinite(latitude) &&
     latitude >= -90 &&

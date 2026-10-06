@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { requiresMobileWorkspace } from "@/lib/auth/mobileAccess";
 import {
   canAccessRouteWithOverrides,
   defaultRouteForRole,
@@ -8,7 +9,7 @@ import { normalizeAppRole } from "@/lib/auth/roles";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { createProxyClient } from "@/lib/supabase/proxy";
 
-const publicRoutes = ["/login", "/auth/callback"];
+const publicRoutes = ["/login", "/auth/callback", "/mobile-required"];
 const supabaseAuthCookiePattern = /^sb-.+-auth-token(?:\.\d+)?$/;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -103,6 +104,9 @@ export async function proxy(request: NextRequest) {
           ? "Admin"
           : normalizeAppRole(profileData?.role);
 
+    if (requiresMobileWorkspace(role, request.headers)) {
+      return NextResponse.redirect(new URL("/mobile-required", request.url));
+    }
     return NextResponse.redirect(new URL(defaultRouteForRole(role), request.url));
   }
 
@@ -140,6 +144,11 @@ export async function proxy(request: NextRequest) {
       : isAdminEmail
         ? "Admin"
       : normalizeAppRole(profileData?.role);
+
+  if (pathname === "/auth/logout") return response;
+  if (requiresMobileWorkspace(role, request.headers)) {
+    return NextResponse.redirect(new URL("/mobile-required", request.url));
+  }
 
   if (pathname === "/") {
     return NextResponse.redirect(new URL(defaultRouteForRole(role), request.url));

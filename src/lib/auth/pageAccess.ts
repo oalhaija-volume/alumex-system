@@ -10,6 +10,7 @@ export type EmployeePageAccess = {
 };
 
 export const pageAccessItems: PageAccessItem[] = [
+  { labelKey: "nav.measurements", routePath: "/measurements" },
   { labelKey: "nav.dashboard", routePath: "/dashboard" },
   { labelKey: "nav.projects", routePath: "/projects" },
   { labelKey: "nav.quotations", routePath: "/quotations" },

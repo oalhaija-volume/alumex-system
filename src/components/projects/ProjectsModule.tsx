@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { roleHasCapability } from "@/lib/auth/capabilities";
 import { useMemo, useState } from "react";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useI18n } from "@/components/i18n/I18nProvider";
@@ -139,7 +140,7 @@ export function ProjectsModule() {
     updateProject,
     deleteProjects,
   } = useProjects();
-  const { isAdmin } = useCurrentRole();
+  const { isAdmin, role } = useCurrentRole();
   const { t, term } = useI18n();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
@@ -287,12 +288,14 @@ export function ProjectsModule() {
             ))}
           </select>
         </label>
+        {roleHasCapability(role, "clients:create") ? (
         <Link
           href="/intake"
           className="flex h-11 items-center justify-center rounded-md bg-[var(--alumex-blue)] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[var(--alumex-blue-dark)]"
         >
           {t("projects.startIntake")}
         </Link>
+        ) : null}
       </div>
 
       {error ? (

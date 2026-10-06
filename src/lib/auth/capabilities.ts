@@ -16,14 +16,7 @@ export type AppCapability =
   | "workflow:configure";
 
 const capabilityRoles: Record<AppCapability, readonly AppRole[]> = {
-  "clients:create": [
-    "Admin",
-    "Sales Manager",
-    "Indoor Sales",
-    "Outdoor Sales",
-    "Sales Rep",
-    "Branch Manager",
-  ],
+  "clients:create": ["Admin", "Indoor Sales", "Outdoor Sales"],
   "clients:update": [
     "Admin",
     "Sales Manager",

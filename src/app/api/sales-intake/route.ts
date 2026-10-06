@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { notifyMeasurementAssignment, validateOutdoorAssignee } from "@/lib/measurements/assignment";
 import { requireRole } from "@/lib/auth/adminServer";
 import {
   friendlyDatabaseError,
@@ -13,7 +14,6 @@ import {
   parseProjectLocation,
 } from "@/lib/location/coordinates";
 import {
-  intakeMovesDirectlyToMeasurements,
   readinessNeedsFollowUp,
   type StructureReadiness,
 } from "@/lib/intake/nextStage";
@@ -23,13 +23,7 @@ import {
   supabaseServiceRoleError,
 } from "@/lib/supabase/config";
 
-const intakeRoles = [
-  "Admin",
-  "Sales Manager",
-  "Indoor Sales",
-  "Outdoor Sales",
-  "Sales Rep",
-] as const;
+const intakeRoles = ["Admin", "Indoor Sales", "Outdoor Sales"] as const;
 const sourceValues = new Set([
   "outdoor_sales",
   "showroom_walk_in",
@@ -55,6 +49,7 @@ type IntakeContact = {
 };
 
 type IntakeBody = {
+  registrationMode?: unknown;
   existingClientId?: unknown;
   client?: {
     clientType?: unknown;
@@ -74,6 +69,7 @@ type IntakeBody = {
   contacts?: unknown;
   project?: {
     projectName?: unknown;
+    outdoorSalesId?: unknown;
     branch?: unknown;
     projectType?: unknown;
     address?: unknown;
@@ -111,6 +107,20 @@ async function nextProjectNumber() {
   });
 }
 
+export async function GET() {
+  const auth = await requireRole(["Admin", "Indoor Sales"]);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (!hasSupabaseServiceRoleKey()) {
+    return NextResponse.json({ error: supabaseServiceRoleError }, { status: 500 });
+  }
+  const { data, error } = await createAdminClient().from("profiles")
+    .select("id, full_name, email, status")
+    .eq("role", "Outdoor Sales").eq("is_active", true).order("full_name");
+  if (error) return NextResponse.json({ error: "Unable to load Outdoor Sales employees." }, { status: 500 });
+  return NextResponse.json({ assignees: (data ?? []).filter(person => person.status !== "Inactive")
+    .map(person => ({ id: person.id, name: person.full_name?.trim() || person.email })) });
+}
+
 export async function POST(request: Request) {
   const auth = await requireRole(intakeRoles);
   if (!auth.ok) {
@@ -125,17 +135,20 @@ export async function POST(request: Request) {
   const project = body?.project;
   const existingClientId = text(body?.existingClientId);
   const client = body?.client;
-  const projectName = text(project?.projectName);
+  const isOutdoor = auth.role === "Outdoor Sales";
+  const simpleRegistration = body?.registrationMode === "simple";
+  const minimal = isOutdoor || simpleRegistration;
+  const projectName = text(project?.projectName) || (minimal ? text(client?.clientName) : "");
   const branch = text(project?.branch);
   const projectType = text(project?.projectType);
-  const address = text(project?.address);
-  const source = text(project?.source);
+  const address = text(project?.address) || (minimal ? `${project?.locationLatitude}, ${project?.locationLongitude}` : "");
+  const source = isOutdoor ? "outdoor_sales" : text(project?.source) || (simpleRegistration ? "showroom_walk_in" : "");
   const readiness = text(project?.structureReadiness);
   const projectLocation = parseProjectLocation(
     project?.locationLatitude,
     project?.locationLongitude,
   );
-  const clientType = text(client?.clientType);
+  const clientType = text(client?.clientType) || (minimal ? "individual" : "");
   const companyLocation = parseProjectLocation(
     client?.locationLatitude,
     client?.locationLongitude,
@@ -143,9 +156,9 @@ export async function POST(request: Request) {
 
   if (
     !projectName ||
-    !projectType ||
+    (!minimal && !projectType) ||
     !address ||
-    !["Rasafa", "Karkh"].includes(branch) ||
+    ((!minimal || branch) && !["Rasafa", "Karkh"].includes(branch)) ||
     !sourceValues.has(source) ||
     !["ready", "partially_ready", "not_ready"].includes(readiness)
   ) {
@@ -154,11 +167,11 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if (auth.role === "Outdoor Sales" && !projectLocation.isValid) {
+  if (minimal && !projectLocation.isValid) {
     return NextResponse.json(
       {
         error:
-          "Outdoor Sales must save the project location using a map pin or current location.",
+          "Save the project location using a map pin or current location.",
       },
       { status: 400 },
     );
@@ -191,7 +204,9 @@ export async function POST(request: Request) {
 
   const typedReadiness = readiness as StructureReadiness;
   const needsReadinessFollowUp = readinessNeedsFollowUp(typedReadiness);
-  const followUpAt = needsReadinessFollowUp ? text(project?.followUpAt) : "";
+  const followUpAt = needsReadinessFollowUp
+    ? text(project?.followUpAt) || (minimal ? new Date(Date.now() + 86400000).toISOString() : "")
+    : "";
   const followUpTime = Date.parse(followUpAt);
   if (
     needsReadinessFollowUp &&
@@ -209,6 +224,10 @@ export async function POST(request: Request) {
     : null;
 
   const admin = createAdminClient();
+  const outdoorSalesId = isOutdoor ? auth.user.id : simpleRegistration ? "" : text(project?.outdoorSalesId);
+  const assigneeError = simpleRegistration && !isOutdoor ? null : await validateOutdoorAssignee(admin, outdoorSalesId);
+  if (assigneeError) return NextResponse.json({ error: assigneeError }, { status: 400 });
+  let assignmentWarning: string | undefined;
   let clientId = existingClientId;
   let operation = "create-client";
 
@@ -276,8 +295,8 @@ export async function POST(request: Request) {
           auth.role === "Outdoor Sales"
             ? outdoorSiteDuplicateRadiusMeters
             : normalizeGeofenceRadius(project?.geofenceRadiusMeters),
-        project_type: projectType,
-        branch: branch as "Rasafa" | "Karkh",
+        project_type: projectType || null,
+        branch: (branch || null) as "Rasafa" | "Karkh" | null,
         status: canMeasureNow ? "Measuring" : "Draft",
         sales_status:
           canMeasureNow
@@ -341,39 +360,43 @@ export async function POST(request: Request) {
       if (followUpError) throw followUpError;
     }
 
-    const startsOwnMeasurement = intakeMovesDirectlyToMeasurements({
-      role: auth.role,
-      source,
-      readiness: typedReadiness,
-    });
-    if (startsOwnMeasurement) {
-      operation = "create-measurement-request";
-      const { error: measurementRequestError } = await admin
-        .from("measurement_requests")
-        .insert({
-          project_id: savedProject.id,
-          requested_by: auth.user.id,
-          return_to_user_id:
-            auth.role === "Admin" ? auth.user.id : null,
-          assigned_to: auth.user.id,
-          status: "assigned",
-          instructions: "Capture structural opening measurements.",
-          assigned_at: new Date().toISOString(),
-        });
-
-      if (measurementRequestError) throw measurementRequestError;
-
-      operation = "assign-measurement-project";
-      const { error: measurementProjectError } = await admin
-        .from("projects")
-        .update({
-          sales_status: "measurement_assigned",
-          responsible_user_id: auth.user.id,
-          responsible_department: "outdoor_sales",
-        })
-        .eq("id", savedProject.id);
-
-      if (measurementProjectError) throw measurementProjectError;
+    operation = "assign-outdoor-sales";
+    if (canMeasureNow && minimal) {
+      const { error: requestError } = await admin.from("measurement_requests").insert({
+        project_id: savedProject.id,
+        requested_by: auth.user.id,
+        assigned_to: auth.user.id,
+        status: "assigned",
+        instructions: "Capture initial structural opening measurements.",
+        assigned_at: new Date().toISOString(),
+      });
+      if (requestError) throw requestError;
+      const { error: statusError } = await admin.from("projects").update({
+        sales_status: "measurement_assigned",
+        responsible_user_id: auth.user.id,
+        responsible_department: isOutdoor ? "outdoor_sales" : "indoor_sales",
+      }).eq("id", savedProject.id);
+      if (statusError) throw statusError;
+    } else if (canMeasureNow) {
+      const { data: measurementRequest, error: measurementError } = await admin.rpc(
+        "create_measurement_request", {
+          target_project_id: savedProject.id,
+          target_assignee_id: outdoorSalesId,
+          request_instructions: "Collect initial structural opening measurements.",
+          actor_user_id: auth.user.id,
+        },
+      );
+      if (measurementError) throw measurementError;
+      if (measurementRequest) assignmentWarning = await notifyMeasurementAssignment(measurementRequest);
+    } else if (outdoorSalesId) {
+      const { error: assignmentError } = await admin.from("project_assignments").insert({
+        project_id: savedProject.id,
+        assignment_type: "measurement",
+        assignee_id: outdoorSalesId,
+        assigned_by: auth.user.id,
+        reason: "Initial measurement assignee selected during intake; awaiting site readiness",
+      });
+      if (assignmentError) throw assignmentError;
     }
 
     const contacts = Array.isArray(body?.contacts)
@@ -419,6 +442,7 @@ export async function POST(request: Request) {
         project_number: savedProject.project_number,
         source,
         structure_readiness: readiness,
+        outdoor_sales_id: outdoorSalesId,
         follow_up_at: followUpDueAt,
       },
     });
@@ -428,8 +452,9 @@ export async function POST(request: Request) {
         clientId,
         projectId: savedProject.id,
         projectNumber: savedProject.project_number,
-        nextPath: startsOwnMeasurement
-          ? `/site-measurements/${savedProject.id}`
+        warning: assignmentWarning,
+        nextPath: minimal
+          ? canMeasureNow ? `/site-measurements/${savedProject.id}` : "/dashboard?intake=crm"
           : `/projects/${savedProject.id}`,
       },
       { status: 201 },

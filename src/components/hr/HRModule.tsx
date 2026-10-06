@@ -5,11 +5,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { SectionCard } from "@/components/SectionCard";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { useI18n } from "@/components/i18n/I18nProvider";
-import {
-  canAccessRoute,
-  type AppRole,
-} from "@/lib/auth/permissions";
-import { pageAccessItems } from "@/lib/auth/pageAccess";
+import type { AppRole } from "@/lib/auth/permissions";
 import { appRoles, normalizeAppRole } from "@/lib/auth/roles";
 
 type Employee = {
@@ -23,15 +19,6 @@ type Employee = {
   created_at: string;
   updated_at: string;
 };
-
-type PageAccessRow = {
-  id?: string;
-  user_id: string;
-  route_path: string;
-  can_access: boolean;
-};
-
-type PageAccessMode = "role" | "grant" | "deny";
 
 async function readError(response: Response, fallback: string) {
   const body = (await response.json().catch(() => null)) as {
@@ -59,25 +46,12 @@ async function fetchEmployees() {
   };
 }
 
-async function fetchPageAccess() {
-  const response = await fetch("/api/hr/page-access", { cache: "no-store" });
-
-  if (!response.ok) {
-    throw new Error(await readError(response, "Unable to load page access."));
-  }
-
-  const body = (await response.json()) as { access?: PageAccessRow[] };
-  return body.access ?? [];
-}
-
 export function HRModule({ embedded = false }: { embedded?: boolean }) {
   const { formatDate, t, term } = useI18n();
   const { isAdmin } = useCurrentRole();
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [pageAccessRows, setPageAccessRows] = useState<PageAccessRow[]>([]);
   const [fullName, setFullName] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [credentials, setCredentials] = useState<{ username: string; temporaryPassword: string } | null>(null);
   const [role, setRole] = useState<AppRole>("Indoor Sales");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -90,13 +64,9 @@ export function HRModule({ embedded = false }: { embedded?: boolean }) {
     setIsLoading(true);
 
     try {
-      const [employeeResult, nextPageAccess] = await Promise.all([
-        fetchEmployees(),
-        fetchPageAccess(),
-      ]);
+      const employeeResult = await fetchEmployees();
       setEmployees(employeeResult.employees);
       setSetupWarning(employeeResult.warning);
-      setPageAccessRows(nextPageAccess);
     } catch (loadError) {
       setError(
         loadError instanceof Error ? loadError.message : "Unable to load HR data.",
@@ -119,8 +89,8 @@ export function HRModule({ embedded = false }: { embedded?: boolean }) {
     setError("");
     setNotice("");
 
-    if (!username.trim() || !password.trim()) {
-      setError(t("settings.emailRequired"));
+    if (!fullName.trim()) {
+      setError("Employee name is required.");
       return;
     }
 
@@ -135,16 +105,16 @@ export function HRModule({ embedded = false }: { embedded?: boolean }) {
       const response = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, role, fullName }),
+        body: JSON.stringify({ role, fullName }),
       });
 
       if (!response.ok) {
         throw new Error(await readError(response, t("settings.createUserError")));
       }
 
+      const result = await response.json() as { credentials: { username: string; temporaryPassword: string } };
+      setCredentials(result.credentials);
       setFullName("");
-      setUsername("");
-      setPassword("");
       setRole("Indoor Sales");
       setNotice("Employee created.");
       await loadHRData();
@@ -188,35 +158,6 @@ export function HRModule({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
-  async function updateEmployeePageAccess(
-    employeeId: string,
-    access: Array<{ route_path: string; can_access: boolean }>,
-  ) {
-    setError("");
-    setNotice("");
-
-    try {
-      const response = await fetch("/api/hr/page-access", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: employeeId, access }),
-      });
-
-      if (!response.ok) {
-        throw new Error(await readError(response, "Unable to save page access."));
-      }
-
-      setNotice("Page access updated.");
-      await loadHRData();
-    } catch (updateError) {
-      setError(
-        updateError instanceof Error
-          ? updateError.message
-          : "Unable to save page access.",
-      );
-    }
-  }
-
   return (
     <div className="space-y-6">
       {embedded ? null : (
@@ -245,43 +186,30 @@ export function HRModule({ embedded = false }: { embedded?: boolean }) {
         </p>
       ) : null}
 
+      {credentials ? (
+        <SectionCard title="Employee login details">
+          <p className="mb-3 text-sm text-muted">Save these details and share them with the employee. The temporary password is shown only here and must be changed after sign-in.</p>
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <div><dt className="text-sm font-bold">Username</dt><dd className="mt-1 break-all font-mono select-all">{credentials.username}</dd></div>
+            <div><dt className="text-sm font-bold">Temporary password</dt><dd className="mt-1 break-all font-mono select-all">{credentials.temporaryPassword}</dd></div>
+          </dl>
+          <button type="button" onClick={() => setCredentials(null)} className="mt-4 min-h-11 rounded-md border border-border px-4 text-sm font-bold">I have saved the login details</button>
+        </SectionCard>
+      ) : null}
+
       <SectionCard title="Add employee">
-        <form onSubmit={createEmployee} className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_220px_auto]">
+        <form onSubmit={createEmployee} className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
           <label>
             <span className="text-xs font-bold uppercase tracking-wide text-muted">
               Employee name
             </span>
             <input
+              required
               value={fullName}
               disabled={Boolean(setupWarning)}
               onChange={(event) => setFullName(event.target.value)}
               className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
               placeholder="Employee name"
-            />
-          </label>
-          <label>
-            <span className="text-xs font-bold uppercase tracking-wide text-muted">
-              {t("settings.loginUsername")}
-            </span>
-            <input
-              value={username}
-              disabled={Boolean(setupWarning)}
-              onChange={(event) => setUsername(event.target.value)}
-              className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
-              placeholder={t("auth.usernamePlaceholder")}
-            />
-          </label>
-          <label>
-            <span className="text-xs font-bold uppercase tracking-wide text-muted">
-              {t("settings.temporaryPassword")}
-            </span>
-            <input
-              type="password"
-              value={password}
-              disabled={Boolean(setupWarning)}
-              onChange={(event) => setPassword(event.target.value)}
-              className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
-              placeholder={t("settings.temporaryPassword")}
             />
           </label>
           <label>
@@ -294,7 +222,7 @@ export function HRModule({ embedded = false }: { embedded?: boolean }) {
               onChange={(event) => setRole(event.target.value as AppRole)}
               className="mt-2 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
             >
-              {appRoles.map((roleOption) => (
+              {appRoles.filter(roleOption => isAdmin || roleOption !== "Admin").map((roleOption) => (
                 <option key={roleOption} value={roleOption}>
                   {term(roleOption)}
                 </option>
@@ -303,7 +231,7 @@ export function HRModule({ embedded = false }: { embedded?: boolean }) {
           </label>
           <button
             type="submit"
-            disabled={isCreating || Boolean(setupWarning)}
+            disabled={isCreating || Boolean(setupWarning) || Boolean(credentials)}
             className="h-11 self-end rounded-md bg-primary px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isCreating ? t("common.loading") : "Add Employee"}
@@ -322,20 +250,13 @@ export function HRModule({ embedded = false }: { embedded?: boolean }) {
           <div className="grid gap-4">
             {employees.map((employee) => (
               <EmployeeAccessCard
-                key={`${employee.id}-${employee.full_name ?? ""}-${employee.role}-${pageAccessRows
-                  .filter((access) => access.user_id === employee.id)
-                  .map((access) => `${access.route_path}:${access.can_access}`)
-                  .join("|")}`}
+                key={`${employee.id}-${employee.full_name}-${employee.role}`}
                 employee={employee}
                 isAdminUser={isAdmin}
-                pageAccessRows={pageAccessRows.filter(
-                  (access) => access.user_id === employee.id,
-                )}
                 formatDate={formatDate}
                 term={term}
                 t={t}
                 onUpdate={updateEmployee}
-                onUpdatePageAccess={updateEmployeePageAccess}
               />
             ))}
           </div>
@@ -348,16 +269,13 @@ export function HRModule({ embedded = false }: { embedded?: boolean }) {
 function EmployeeAccessCard({
   employee,
   isAdminUser,
-  pageAccessRows,
   formatDate,
   term,
   t,
   onUpdate,
-  onUpdatePageAccess,
 }: {
   employee: Employee;
   isAdminUser: boolean;
-  pageAccessRows: PageAccessRow[];
   formatDate: (value: Date | string | number) => string;
   term: (value: string | null | undefined) => string;
   t: (key: string, replacements?: Record<string, string | number>) => string;
@@ -365,27 +283,12 @@ function EmployeeAccessCard({
     employeeId: string,
     payload: { role?: AppRole; isActive?: boolean; fullName?: string },
   ) => Promise<void>;
-  onUpdatePageAccess: (
-    employeeId: string,
-    access: Array<{ route_path: string; can_access: boolean }>,
-  ) => Promise<void>;
 }) {
   const [selectedRole, setSelectedRole] = useState<AppRole>(
     normalizeAppRole(employee.role) ?? "Indoor Sales",
   );
   const [selectedName, setSelectedName] = useState(employee.full_name ?? "");
-  const [pageAccessModes, setPageAccessModes] = useState<
-    Record<string, PageAccessMode>
-  >(() =>
-    Object.fromEntries(
-      pageAccessRows.map((access) => [
-        access.route_path,
-        access.can_access ? "grant" : "deny",
-      ]),
-    ),
-  );
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isSavingAccess, setIsSavingAccess] = useState(false);
   const normalizedEmployeeRole = normalizeAppRole(employee.role);
   const isEmployeeAdmin = normalizedEmployeeRole === "Admin";
   const roleOptions = isAdminUser || isEmployeeAdmin
@@ -400,23 +303,6 @@ function EmployeeAccessCard({
     setIsUpdating(true);
     await onUpdate(employee.id, payload);
     setIsUpdating(false);
-  }
-
-  async function savePageAccess() {
-    setIsSavingAccess(true);
-
-    const access = pageAccessItems.flatMap((item) => {
-      const mode = pageAccessModes[item.routePath] ?? "role";
-
-      if (mode === "role") {
-        return [];
-      }
-
-      return [{ route_path: item.routePath, can_access: mode === "grant" }];
-    });
-
-    await onUpdatePageAccess(employee.id, access);
-    setIsSavingAccess(false);
   }
 
   return (
@@ -497,63 +383,7 @@ function EmployeeAccessCard({
         </button>
       </div>
 
-      <div className="mt-4 rounded-lg border border-border bg-surface p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-bold text-foreground">
-              Page permissions
-            </p>
-            <p className="mt-1 text-xs font-semibold text-muted">
-              Role default applies unless HR grants or denies a page here.
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={isSavingAccess || isEmployeeAdmin}
-            onClick={() => void savePageAccess()}
-            className="h-10 rounded-md bg-primary px-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
-          >
-            {isSavingAccess ? t("common.loading") : "Save page access"}
-          </button>
-        </div>
-
-        {isEmployeeAdmin ? (
-          <p className="mt-4 rounded-md border border-border bg-success-surface px-3 py-2 text-sm font-semibold text-success-text">
-            Admin users always have access to every page.
-          </p>
-        ) : (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {pageAccessItems.map((item) => {
-              const roleDefault = canAccessRoute(item.routePath, selectedRole);
-              const mode = pageAccessModes[item.routePath] ?? "role";
-
-              return (
-                <label key={item.routePath}>
-                  <span className="text-xs font-bold uppercase tracking-wide text-muted">
-                    {t(item.labelKey)}
-                  </span>
-                  <select
-                    value={mode}
-                    onChange={(event) =>
-                      setPageAccessModes((current) => ({
-                        ...current,
-                        [item.routePath]: event.target.value as PageAccessMode,
-                      }))
-                    }
-                    className="mt-2 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground"
-                  >
-                    <option value="role">
-                      Role default: {roleDefault ? "Allowed" : "Blocked"}
-                    </option>
-                    <option value="grant">Grant access</option>
-                    <option value="deny">Deny access</option>
-                  </select>
-                </label>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <p className="mt-4 text-sm text-muted">System access is assigned automatically from the employee’s role.</p>
 
     </article>
   );

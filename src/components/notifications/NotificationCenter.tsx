@@ -13,6 +13,7 @@ type NotificationItem = {
 };
 
 function titleForKey(key: string) {
+  if (key.endsWith("measurementAssigned")) return "Initial measurements assigned";
   if (key.endsWith("followUpAssigned")) return "Follow-up assigned";
   if (key.endsWith("followUpRescheduled")) return "Follow-up rescheduled";
   if (key.endsWith("followUpOverdue")) return "Follow-up overdue";
@@ -33,7 +34,11 @@ export function NotificationCenter({ compact = false }: { compact?: boolean }) {
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
+    const interval = window.setInterval(() => void load(), 30000);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(interval);
+    };
   }, [load]);
 
   const unread = items.filter((item) => !item.read_at);

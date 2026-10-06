@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { notifyMeasurementAssignment, validateOutdoorAssignee } from "@/lib/measurements/assignment";
 import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -300,6 +301,15 @@ export async function PATCH(
   const admin = createAdminClient();
   const assignedTo =
     typeof body?.assignedTo === "string" ? body.assignedTo.trim() : "";
+  if (action === "assign") {
+    if (!["Admin", "Indoor Sales", "Sales Manager"].includes(auth.role)) {
+      return NextResponse.json({ error: "Indoor Sales permission is required to assign measurements." }, { status: 403 });
+    }
+    const assigneeError = await validateOutdoorAssignee(admin, assignedTo);
+    if (assigneeError) {
+      return NextResponse.json({ error: assigneeError }, { status: 400 });
+    }
+  }
   const preferredAt =
     typeof body?.preferredAt === "string" && body.preferredAt
       ? new Date(body.preferredAt).toISOString()
@@ -344,5 +354,8 @@ export async function PATCH(
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  return NextResponse.json({ request: data });
+  const warning = action === "assign" && data && "project_id" in data
+    ? await notifyMeasurementAssignment(data)
+    : undefined;
+  return NextResponse.json({ request: data, warning });
 }

@@ -1,3 +1,5 @@
+import { headers } from "next/headers";
+import { requiresMobileWorkspace } from "@/lib/auth/mobileAccess";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/lib/auth/permissions";
@@ -80,6 +82,10 @@ export async function requireRole(
       status: 403,
       error: "You do not have permission to complete this action.",
     };
+  }
+
+  if (role === "Outdoor Sales" && requiresMobileWorkspace(role, await headers())) {
+    return { ok: false, status: 403, error: "Outdoor Sales must access the system from a mobile phone." };
   }
 
   return { ok: true, user, role, profile: profileData };

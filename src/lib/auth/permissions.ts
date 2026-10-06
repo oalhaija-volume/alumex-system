@@ -1,6 +1,5 @@
 import type { AppRole } from "@/lib/auth/roles";
 import {
-  routePathMatches,
   type EmployeePageAccess,
 } from "@/lib/auth/pageAccess";
 import { isActiveSystemRoute } from "@/lib/systemScope";
@@ -39,14 +38,9 @@ const routePermissions: Array<{
   { prefix: "/hr", roles: ["Admin", "HR"] },
   {
     prefix: "/intake",
-    roles: [
-      "Admin",
-      "Sales Manager",
-      "Indoor Sales",
-      "Outdoor Sales",
-      "Sales Rep",
-    ],
+    roles: ["Admin", "Indoor Sales", "Outdoor Sales"],
   },
+  { prefix: "/measurements", roles: ["Admin", "Indoor Sales", "Sales Manager", "Outdoor Sales", "Project Engineer", "Site Engineer"] },
   {
     prefix: "/crm",
     roles: ["Admin", "Sales Manager", "Indoor Sales", "Branch Manager"],
@@ -83,8 +77,14 @@ export function defaultRouteForRole(role: AppRole | null) {
     case "Indoor Sales":
     case "Outdoor Sales":
     case "Sales Rep":
-    case "Branch Manager":
       return "/dashboard";
+    case "Branch Manager":
+      return "/projects";
+    case "HR":
+      return "/hr";
+    case "Project Engineer":
+    case "Site Engineer":
+      return "/measurements";
     case "Finance / Accountant":
       return "/contracts";
     case "Operations Manager":
@@ -92,8 +92,6 @@ export function defaultRouteForRole(role: AppRole | null) {
     case "Procurement Engineer":
       return "/costing";
     case "Project Manager":
-    case "Project Engineer":
-    case "Site Engineer":
     case "Delivery Head":
     case "Delivery Team":
     case "Installation Head":
@@ -101,7 +99,6 @@ export function defaultRouteForRole(role: AppRole | null) {
     case "Quality Control":
     case "Factory":
     case "Glass Department":
-    case "HR":
     case "Auditor":
     case "Audit Team":
       return "/unauthorized";
@@ -131,21 +128,7 @@ export function canAccessRouteWithOverrides(
   role: AppRole | null,
   accessRows: Array<Pick<EmployeePageAccess, "route_path" | "can_access">>,
 ) {
-  if (role === "Admin") {
-    return true;
-  }
-
-  if (!isActiveSystemRoute(pathname)) {
-    return false;
-  }
-
-  const override = accessRows
-    .filter((access) => routePathMatches(pathname, access.route_path))
-    .sort((left, right) => right.route_path.length - left.route_path.length)[0];
-
-  if (override) {
-    return override.can_access;
-  }
-
+  // Employee access always follows the current role; legacy overrides are ignored.
+  void accessRows;
   return canAccessRoute(pathname, role);
 }

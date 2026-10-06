@@ -4,17 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useI18n } from "@/components/i18n/I18nProvider";
-import {
-  defaultOpeningDropdownOptions,
-  loadOpeningDropdownOptions,
-  optionsForCategory,
-  type OpeningDropdownOption,
-} from "@/lib/openings/dropdownOptions";
+import { isInitialOpeningValid } from "@/lib/measurements/initialOpening";
 import { centimetersToSquareMeters } from "@/lib/measurements/area";
 import {
   isStructuralOpeningType,
   nextStructuralOpeningCode,
-  structuralOpeningTypes,
 } from "@/lib/measurements/structuralOpenings";
 
 type MeasurementProject = {
@@ -72,9 +66,9 @@ const emptyOpening: OpeningDraft = {
   room: "",
   openingCode: "",
   siteReadiness: "ready",
-  width: 100,
-  height: 100,
-  length: 100,
+  width: 0,
+  height: 0,
+  length: 0,
   shape: "",
   type: "",
   openingType: "",
@@ -90,24 +84,11 @@ const emptyOpening: OpeningDraft = {
   notes: "",
 };
 
-const textFields: Array<{
-  key: keyof OpeningDraft;
-  label: string;
-  placeholder: string;
-  required?: boolean;
-}> = [
-  { key: "floor", label: "Floor", placeholder: "Ground floor", required: true },
-];
-
-const numberFields: Array<{
-  key: "width" | "height";
-  label: string;
-  suffix: string;
-  step: string;
-}> = [
+const numberFields = [
   { key: "width", label: "Width", suffix: "cm", step: "0.01" },
   { key: "height", label: "Height", suffix: "cm", step: "0.01" },
-];
+  { key: "quantity", label: "Quantity", suffix: "", step: "1" },
+] as const;
 
 function openingToDraft(opening: MeasurementOpening): OpeningDraft {
   return {
@@ -136,60 +117,25 @@ function openingToDraft(opening: MeasurementOpening): OpeningDraft {
 
 function normalizeDraft(opening: OpeningDraft): OpeningDraft {
   return {
+    ...opening,
     floor: opening.floor.trim(),
     room: opening.room.trim(),
     openingCode: opening.openingCode.trim(),
-    siteReadiness: opening.siteReadiness,
-    width: opening.siteReadiness === "not_ready" ? 0 : Number(opening.width) || 0,
-    height: opening.siteReadiness === "not_ready" ? 0 : Number(opening.height) || 0,
-    length: opening.siteReadiness === "not_ready" ? 0 : Number(opening.height) || 0,
-    shape: "",
-    type: (opening.openingType || opening.type).trim(),
-    openingType: (opening.openingType || opening.type).trim(),
-    bottomFrame: "",
-    openingDirection: "",
-    glassColor: "",
-    solidPanelHeight: 0,
-    fixedHeight: 0,
-    quantity: 1,
-    productSystem: "",
-    glassType: "",
-    aluminumColor: "",
-    notes: "",
+    width: opening.siteReadiness === "not_ready" ? 0 : Number(opening.width),
+    height: opening.siteReadiness === "not_ready" ? 0 : Number(opening.height),
+    length: opening.siteReadiness === "not_ready" ? 0 : Number(opening.height),
+    quantity: Number(opening.quantity),
   };
 }
 
 function hasOpeningContent(opening: OpeningDraft) {
-  return Boolean(
-      opening.floor.trim() ||
-      opening.room.trim() ||
-      opening.openingCode.trim() ||
-      opening.openingType.trim() ||
-      opening.type.trim(),
-  );
+  return Boolean(opening.width || opening.height || opening.openingCode || opening.siteReadiness === "not_ready" || opening.quantity !== 1);
 }
 
-function isOpeningValid(opening: OpeningDraft) {
-  return Boolean(
-    opening.floor &&
-      opening.room &&
-      opening.openingCode &&
-      (opening.siteReadiness === "not_ready" ||
-        (opening.width > 0 && opening.height > 0)) &&
-      (opening.openingType || opening.type),
-  );
-}
+const isOpeningValid = isInitialOpeningValid;
 
 function openingRows(count: number) {
   return Array.from({ length: count }, () => ({ ...emptyOpening }));
-}
-
-function optionLabels(options: OpeningDropdownOption[], currentValue: string) {
-  const labels = options.map((option) => option.label);
-
-  return currentValue && !labels.includes(currentValue)
-    ? [currentValue, ...labels]
-    : labels;
 }
 
 export function SiteMeasurementModule() {
@@ -209,10 +155,6 @@ export function SiteMeasurementModule() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
-  const [openingOptions, setOpeningOptions] = useState<OpeningDropdownOption[]>(
-    defaultOpeningDropdownOptions,
-  );
-
   const totalArea = useMemo(
     () =>
       openings.reduce(
@@ -255,10 +197,6 @@ export function SiteMeasurementModule() {
   const canComplete = Boolean(
     isEditable &&
       (openings.length > 0 || newOpenings.some(hasOpeningContent)),
-  );
-  const roomOptions = useMemo(
-    () => optionsForCategory(openingOptions, "room"),
-    [openingOptions],
   );
   const loadMeasurements = useCallback(async () => {
     setIsLoading(true);
@@ -320,16 +258,6 @@ export function SiteMeasurementModule() {
 
     return () => window.clearTimeout(timer);
   }, [loadMeasurements, t]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadOpeningDropdownOptions()
-        .then(setOpeningOptions)
-        .catch(() => setOpeningOptions(defaultOpeningDropdownOptions));
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     if (!isEditable || !projectId) return;
@@ -516,39 +444,6 @@ export function SiteMeasurementModule() {
       );
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : t("measurements.saveOpeningError"));
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function saveCurrentOpeningAndContinue() {
-    const currentOpening = newOpenings[0];
-    if (!currentOpening) return;
-
-    setError("");
-    setMessage("");
-
-    const normalized = normalizeDraft(currentOpening);
-    if (!isOpeningValid(normalized)) {
-      setError(t("measurements.completeRequiredDetails"));
-      return;
-    }
-
-    setIsSaving(true);
-
-    try {
-      const savedOpening = await saveOpeningPayload(normalized);
-      setOpenings((current) => [...current, savedOpening]);
-      setNewOpenings(openingRows(1));
-      window.localStorage.removeItem(`alumex:measurement-draft:${projectId}`);
-      await runMeasurementAction("save_draft", { quiet: true });
-      setMessage(t("measurements.openingSavedContinue"));
-    } catch (saveError) {
-      setError(
-        saveError instanceof Error
-          ? saveError.message
-          : t("measurements.saveOpeningError"),
-      );
     } finally {
       setIsSaving(false);
     }
@@ -868,483 +763,43 @@ export function SiteMeasurementModule() {
           </div>
         ) : null}
 
-        {editingId ? (
-          <>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              {textFields.map((field) => (
-                <label key={field.key} className="block">
-                  <span className="material-label">
-                    {term(field.label)}
-                    {field.required ? " *" : ""}
-                  </span>
-                  <input
-                    value={String(draft[field.key])}
-                    onChange={(event) => updateDraft(field.key, event.target.value)}
-                    placeholder={term(field.placeholder)}
-                    disabled={!isEditable}
-                    className="material-field mt-2 min-h-12"
-                  />
-                </label>
-              ))}
-
-              <label className="block">
-                <span className="material-label">{term("Room")}</span>
-                <select
-                  value={draft.room}
-                  onChange={(event) => updateDraft("room", event.target.value)}
-                  disabled={!isEditable}
-                  className="material-field mt-2 min-h-12"
-                >
-                  <option value="">{t("measurements.selectRoom")}</option>
-                  {optionLabels(roomOptions, draft.room).map((option) => (
-                    <option key={option} value={option}>
-                      {term(option)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {isPartialProject ? (
-                <label className="block">
-                  <span className="material-label">
-                    {t("measurements.openingReadiness")}
-                  </span>
-                  <select
-                    value={draft.siteReadiness}
-                    onChange={(event) =>
-                      updateDraft("siteReadiness", event.target.value)
-                    }
-                    disabled={!isEditable}
-                    className="material-field mt-2 min-h-12"
-                  >
-                    <option value="ready">{t("intake.readiness.ready")}</option>
-                    <option value="not_ready">
-                      {t("intake.readiness.not_ready")}
-                    </option>
-                  </select>
-                </label>
-              ) : null}
-
-              {numberFields.map((field) => (
-                <label key={field.key} className="block">
-                  <span className="material-label">{term(field.label)}</span>
-                  <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container">
-                    <input
-                      type="number"
-                      min="0"
-                      inputMode="decimal"
-                      step={field.step}
-                      value={draft[field.key] || ""}
-                      onChange={(event) => updateDraft(field.key, event.target.value)}
-                      disabled={!isEditable || draft.siteReadiness === "not_ready"}
-                      className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
-                    />
-                    <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
-                      {term(field.suffix)}
-                    </span>
-                  </div>
-                </label>
-              ))}
-
-              <label className="block">
-                <span className="material-label">{term("Type")} *</span>
-                <select
-                  value={draft.openingType || draft.type}
-                  onChange={(event) => updateDraft("openingType", event.target.value)}
-                  disabled={!isEditable}
-                  className="material-field mt-2 min-h-12"
-                >
-                  <option value="">{t("measurements.selectType")}</option>
-                  {optionLabels(
-                    structuralOpeningTypes.map((label, index) => ({
-                      category: "room" as const,
-                      label,
-                      sort_order: index + 1,
-                      is_active: true,
-                    })),
-                    draft.openingType || draft.type,
-                  ).map((option) => (
-                    <option key={option} value={option}>
-                      {term(option)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
-              <div className="material-card-muted p-3">
-                <p className="text-xs font-bold uppercase text-muted">{t("measurements.areaEstimate")}</p>
-                <p className="mt-1 text-2xl font-bold text-foreground">
-                  {draft.siteReadiness === "not_ready"
-                    ? t("intake.readiness.not_ready")
-                    : t("common.areaValue", {
-                        value: centimetersToSquareMeters(draft).toFixed(2),
-                      })}
-                </p>
+        <div className="mt-4 space-y-4">
+          <p className="text-sm text-muted">{t("measurements.dimensionsOnly")}</p>
+          {(editingId ? [draft] : newOpenings).map((opening, index) => (
+            <div key={editingId || index} className="material-card-muted p-4">
+              <p className="mb-3 text-sm font-bold">{opening.openingCode || `${term("Opening")} ${index + 1}`}</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {numberFields.map(field => (
+                  <label key={field.key} className="block">
+                    <span className="material-label">{term(field.label)} {field.suffix} *</span>
+                    <input type="number" min={field.key === "quantity" ? "1" : "0.01"} step={field.step}
+                      inputMode={field.key === "quantity" ? "numeric" : "decimal"}
+                      value={opening[field.key] || ""}
+                      onChange={event => editingId ? updateDraft(field.key, event.target.value) : updateNewOpening(index, field.key, event.target.value)}
+                      disabled={!isEditable || isSaving || (field.key !== "quantity" && opening.siteReadiness === "not_ready")}
+                      className="material-field mt-2 min-h-12 w-full" />
+                  </label>
+                ))}
+                {isPartialProject ? (
+                  <label className="block">
+                    <span className="material-label">{t("measurements.openingReadiness")}</span>
+                    <select value={opening.siteReadiness} disabled={!isEditable || isSaving}
+                      onChange={event => editingId ? updateDraft("siteReadiness", event.target.value) : updateNewOpening(index, "siteReadiness", event.target.value)} className="material-field mt-2 min-h-12">
+                      <option value="ready">{t("intake.readiness.ready")}</option>
+                      <option value="not_ready">{t("intake.readiness.not_ready")}</option>
+                    </select>
+                  </label>
+                ) : null}
               </div>
-              <button
-                type="button"
-                onClick={() => void saveEditedOpening()}
-                disabled={!isEditable || isSaving}
-                className="material-button-filled min-h-12 w-full sm:w-auto"
-              >
-                {isSaving ? t("measurements.saving") : t("measurements.saveOpening")}
-              </button>
+              <p className="mt-3 text-sm font-semibold">{t("measurements.areaEstimate")}: {centimetersToSquareMeters(opening).toFixed(2)} m²</p>
             </div>
-          </>
-        ) : (
-          <>
-            <div className="mt-4 hidden justify-end gap-2 xl:flex">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setNewOpenings((currentOpenings) => [
-                      ...currentOpenings,
-                      ...openingRows(3),
-                    ])
-                  }
-                  disabled={!isEditable || isSaving}
-                  className="material-button-tonal min-h-11 px-3"
-                >
-                  {t("measurements.addRows")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewOpenings(openingRows(1));
-                  }}
-                  disabled={!isEditable || isSaving}
-                  className="material-button-outlined min-h-11 px-3"
-                >
-                  {t("measurements.clear")}
-                </button>
-            </div>
-
-            <div
-              data-testid="desktop-opening-capture"
-              className="mt-4 hidden overflow-hidden rounded-lg border border-material-outline-variant xl:block"
-            >
-              <div className="overflow-x-auto">
-                <table className="min-w-[920px] table-fixed divide-y divide-material-outline-variant text-left text-sm">
-                  <thead className="bg-material-surface-container-lowest text-xs font-bold uppercase text-muted">
-                    <tr>
-                      {[
-                        "Floor",
-                        "Room",
-                        ...(isPartialProject ? ["Readiness"] : []),
-                        "Width",
-                        "Height",
-                        "Type",
-                        "Area",
-                        "Actions",
-                      ].map((heading) => (
-                        <th key={heading} className="px-2 py-3">
-                          {term(heading)}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-material-outline-variant">
-                    {newOpenings.map((opening, index) => (
-                      <tr key={`desktop-opening-${index}`}>
-                        <td className="w-32 px-2 py-2">
-                          <input
-                            value={opening.floor}
-                            onChange={(event) =>
-                              updateNewOpening(index, "floor", event.target.value)
-                            }
-                            disabled={!isEditable}
-                            className="material-field h-10 px-2"
-                          />
-                        </td>
-                        <td className="w-40 px-2 py-2">
-                          <select
-                            value={opening.room}
-                            onChange={(event) =>
-                              updateNewOpening(index, "room", event.target.value)
-                            }
-                            disabled={!isEditable}
-                            className="material-field h-10 px-2"
-                          >
-                            <option value="">{t("measurements.selectRoom")}</option>
-                            {optionLabels(roomOptions, opening.room).map((option) => (
-                              <option key={option} value={option}>
-                                {term(option)}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        {isPartialProject ? (
-                          <td className="w-36 px-2 py-2">
-                            <select
-                              value={opening.siteReadiness}
-                              onChange={(event) =>
-                                updateNewOpening(
-                                  index,
-                                  "siteReadiness",
-                                  event.target.value,
-                                )
-                              }
-                              disabled={!isEditable}
-                              className="material-field h-10 px-2"
-                            >
-                              <option value="ready">
-                                {t("intake.readiness.ready")}
-                              </option>
-                              <option value="not_ready">
-                                {t("intake.readiness.not_ready")}
-                              </option>
-                            </select>
-                          </td>
-                        ) : null}
-                        {numberFields.map((field) => (
-                          <td key={field.key} className="w-28 px-2 py-2">
-                            <input
-                              type="number"
-                              min="0"
-                              step={field.step}
-                              value={opening[field.key] || ""}
-                              onChange={(event) =>
-                                updateNewOpening(index, field.key, event.target.value)
-                              }
-                              disabled={
-                                !isEditable ||
-                                opening.siteReadiness === "not_ready"
-                              }
-                              className="material-field h-10 px-2"
-                            />
-                          </td>
-                        ))}
-                        <td className="w-40 px-2 py-2">
-                          <select
-                            value={opening.openingType || opening.type}
-                            onChange={(event) =>
-                              updateNewOpening(index, "openingType", event.target.value)
-                            }
-                            disabled={!isEditable}
-                            className="material-field h-10 px-2"
-                          >
-                            <option value="">{t("measurements.selectType")}</option>
-                            {structuralOpeningTypes.map((option) => (
-                              <option key={option} value={option}>
-                                {term(option)}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="w-28 bg-material-primary-container px-2 py-2 text-sm font-bold text-material-on-primary-container">
-                          {opening.siteReadiness === "not_ready"
-                            ? t("intake.readiness.not_ready")
-                            : t("common.areaValue", {
-                                value: centimetersToSquareMeters(opening).toFixed(2),
-                              })}
-                        </td>
-                        <td className="w-28 px-2 py-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setNewOpenings((currentOpenings) =>
-                                currentOpenings.filter((_, rowIndex) => rowIndex !== index),
-                              )
-                            }
-                            disabled={!isEditable || isSaving || newOpenings.length === 1}
-                            className="material-button-outlined h-10 px-3"
-                          >
-                            {t("common.delete")}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div data-testid="guided-opening-capture" className="mt-4 xl:hidden">
-              {newOpenings.slice(0, 1).map((opening) => (
-                <div key="guided-opening" className="material-card-muted p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-bold uppercase text-muted">
-                        {t("measurements.openingNumber", {
-                          index: openings.length + 1,
-                        })}
-                      </p>
-                      <p className="mt-1 text-sm font-bold text-foreground">
-                        {opening.openingCode || t("measurements.newStructuralOpening")}
-                      </p>
-                    </div>
-                    <span className="material-status">
-                      {opening.siteReadiness === "not_ready"
-                        ? t("intake.readiness.not_ready")
-                        : t("common.areaValue", {
-                            value: centimetersToSquareMeters(opening).toFixed(2),
-                          })}
-                    </span>
-                  </div>
-
-                  <p className="mt-2 text-sm text-muted">
-                    {t("measurements.oneOpeningAtATimeHelp")}
-                  </p>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    {textFields.map((field) => (
-                      <label key={field.key} className="block">
-                        <span className="material-label">
-                          {term(field.label)}
-                          {field.required ? " *" : ""}
-                        </span>
-                        <input
-                          value={String(opening[field.key])}
-                          onChange={(event) =>
-                            updateNewOpening(0, field.key, event.target.value)
-                          }
-                          placeholder={term(field.placeholder)}
-                          disabled={!isEditable}
-                          className="material-field mt-2 min-h-12"
-                        />
-                      </label>
-                    ))}
-
-                    <label className="block">
-                      <span className="material-label">{term("Room")} *</span>
-                      <select
-                        value={opening.room}
-                        onChange={(event) =>
-                          updateNewOpening(0, "room", event.target.value)
-                        }
-                        disabled={!isEditable}
-                        className="material-field mt-2 min-h-12"
-                      >
-                        <option value="">{t("measurements.selectRoom")}</option>
-                        {optionLabels(roomOptions, opening.room).map((option) => (
-                          <option key={option} value={option}>
-                            {term(option)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    {isPartialProject ? (
-                      <label className="block">
-                        <span className="material-label">
-                          {t("measurements.openingReadiness")}
-                        </span>
-                        <select
-                          value={opening.siteReadiness}
-                          onChange={(event) =>
-                            updateNewOpening(
-                              0,
-                              "siteReadiness",
-                              event.target.value,
-                            )
-                          }
-                          disabled={!isEditable}
-                          className="material-field mt-2 min-h-12"
-                        >
-                          <option value="ready">
-                            {t("intake.readiness.ready")}
-                          </option>
-                          <option value="not_ready">
-                            {t("intake.readiness.not_ready")}
-                          </option>
-                        </select>
-                      </label>
-                    ) : null}
-
-                    {numberFields.map((field) => (
-                      <label key={field.key} className="block">
-                        <span className="material-label">
-                          {term(field.label)}
-                          {opening.siteReadiness === "ready" ? " *" : ""}
-                        </span>
-                        <div className="mt-2 flex min-h-12 overflow-hidden rounded-md border border-material-outline-variant bg-material-surface-container-low">
-                          <input
-                            type="number"
-                            min="0"
-                            inputMode="decimal"
-                            step={field.step}
-                            value={opening[field.key] || ""}
-                            onChange={(event) =>
-                              updateNewOpening(0, field.key, event.target.value)
-                            }
-                            disabled={
-                              !isEditable ||
-                              opening.siteReadiness === "not_ready"
-                            }
-                            className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base font-semibold text-foreground outline-none disabled:text-muted"
-                          />
-                          <span className="flex w-14 items-center justify-center border-l border-material-outline-variant text-xs font-bold text-muted">
-                            {term(field.suffix)}
-                          </span>
-                        </div>
-                      </label>
-                    ))}
-
-                    <label className="block">
-                      <span className="material-label">{term("Type")} *</span>
-                      <select
-                        value={opening.openingType || opening.type}
-                        onChange={(event) =>
-                          updateNewOpening(0, "openingType", event.target.value)
-                        }
-                        disabled={!isEditable}
-                        className="material-field mt-2 min-h-12"
-                      >
-                        <option value="">{t("measurements.selectType")}</option>
-                        {structuralOpeningTypes.map((option) => (
-                          <option key={option} value={option}>
-                            {term(option)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="mt-4 grid gap-2 md:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={() => void saveCurrentOpeningAndContinue()}
-                      disabled={!isEditable || isSaving}
-                      className="material-button-tonal min-h-12"
-                    >
-                      {isSaving
-                        ? t("measurements.saving")
-                        : t("measurements.saveAndNext")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void completeMeasurements()}
-                      disabled={
-                        !isEditable ||
-                        !canComplete ||
-                        isSaving ||
-                        Boolean(workflowSaving)
-                      }
-                      className="material-button-filled min-h-12"
-                    >
-                      {workflowSaving === "complete"
-                        ? t("measurements.savingAndCompleting")
-                        : hasNotReadyOpenings
-                          ? t("measurements.savePartialVisit")
-                          : t("measurements.doneSendToIndoor")}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void saveNewOpenings()}
-              disabled={!isEditable || isSaving}
-              className="material-button-filled mt-4 hidden min-h-12 w-full xl:block"
-            >
-              {isSaving ? t("measurements.saving") : t("measurements.saveStructuralOpenings")}
-            </button>
-          </>
-        )}
+          ))}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {!editingId ? <button type="button" onClick={() => setNewOpenings(current => [...current, ...openingRows(1)])} disabled={!isEditable || isSaving} className="material-button-outlined min-h-12">{t("measurements.addRows")}</button> : null}
+            <button type="button" onClick={() => void (editingId ? saveEditedOpening() : saveNewOpenings())} disabled={!isEditable || isSaving} className="material-button-tonal min-h-12">{isSaving ? t("measurements.saving") : t("measurements.saveStructuralOpenings")}</button>
+            {!editingId ? <button type="button" onClick={() => void completeMeasurements()} disabled={!canComplete || isSaving || Boolean(workflowSaving)} className="material-button-filled min-h-12 sm:col-span-2">{workflowSaving === "complete" ? t("measurements.savingAndCompleting") : hasNotReadyOpenings ? t("measurements.savePartialVisit") : t("measurements.doneSendToIndoor")}</button> : null}
+          </div>
+        </div>
 
         {!isEditable ? (
           <p className="mt-3 text-sm font-semibold text-muted">

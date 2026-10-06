@@ -553,3 +553,16 @@ test("missing Supabase RPC functions are recognized as unapplied migrations", ()
     true,
   );
 });
+
+
+test("client registration supports Indoor and Outdoor Sales with an Admin override", () => {
+  for (const role of ["Sales Manager", "Sales Rep", "Branch Manager", null]) {
+    assert.equal(roleHasCapability(role, "clients:create"), false, String(role));
+  }
+  assert.equal(roleHasCapability("Outdoor Sales", "clients:create"), true);
+  assert.equal(roleHasCapability("Indoor Sales", "clients:create"), true);
+  assert.equal(roleHasCapability("Admin", "clients:create"), true);
+  assert.equal(roleHasCapability("Outdoor Sales", "clients:update"), true);
+  assert.equal(roleHasCapability("Indoor Sales", "measurements:request"), true);
+  assert.equal(roleHasCapability("Outdoor Sales", "measurements:request"), false);
+});

@@ -219,7 +219,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const authCheck = await requireRole(clientWriteRoles);
+  const authCheck = await requireRole(["Admin", "Indoor Sales", "Outdoor Sales"]);
 
   if (!authCheck.ok) {
     return NextResponse.json(

@@ -1,3 +1,4 @@
+import { isInitialOpeningValid } from "@/lib/measurements/initialOpening";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/adminServer";
 import type { AppRole } from "@/lib/auth/roles";
@@ -164,28 +165,25 @@ function normalizeOpeningPayload(
   const opening = {
     floor: textValue(body.floor),
     room: textValue(body.room),
-    opening_code: textValue(body.openingCode),
+    opening_code: textValue(body.openingCode) || `OP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
     site_readiness: siteReadiness,
     width: siteReadiness === "not_ready" ? 0 : numberValue(body.width),
     height: siteReadiness === "not_ready" ? 0 : length,
-    quantity: 1,
+    quantity: numberValue(body.quantity ?? 1),
     opening_type: openingType,
   };
 
   if (
-    !opening.floor ||
-    !opening.room ||
     !opening.opening_code ||
-    (siteReadiness === "ready" &&
-      (opening.width <= 0 || opening.height <= 0)) ||
-    !isStructuralOpeningType(opening.opening_type)
+    !isInitialOpeningValid({ ...opening, siteReadiness }) ||
+    (opening.opening_type !== "" && !isStructuralOpeningType(opening.opening_type))
   ) {
     return {
       ok: false as const,
       error:
         siteReadiness === "ready"
-          ? "Floor, room, width, height, and opening type are required."
-          : "Floor, room, and opening type are required.",
+          ? "Positive width, height, and a whole-number quantity are required."
+          : "A positive whole-number quantity is required.",
     };
   }
 

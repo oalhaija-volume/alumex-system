@@ -1,6 +1,7 @@
 export const activeNavigationHrefs = [
   "/dashboard",
   "/intake",
+  "/measurements",
   "/clients",
   "/projects",
   "/crm",

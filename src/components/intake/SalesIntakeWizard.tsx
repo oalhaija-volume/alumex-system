@@ -8,7 +8,6 @@ import { useI18n } from "@/components/i18n/I18nProvider";
 import { ProjectLocationPicker } from "@/components/projects/ProjectLocationPicker";
 import { useProjects } from "@/components/projects/ProjectsProvider";
 import {
-  intakeMovesDirectlyToMeasurements,
   readinessNeedsFollowUp,
   type StructureReadiness,
 } from "@/lib/intake/nextStage";
@@ -30,6 +29,7 @@ type IntakeDraft = {
   companyLatitude: number | null;
   companyLongitude: number | null;
   projectName: string;
+  outdoorSalesId: string;
   branch: "" | "Rasafa" | "Karkh";
   projectType: string;
   projectAddress: string;
@@ -48,7 +48,7 @@ type IntakeDraft = {
 };
 
 const initialDraft: IntakeDraft = {
-  mode: "existing",
+  mode: "new",
   existingClientId: "",
   clientType: "individual",
   clientName: "",
@@ -63,6 +63,7 @@ const initialDraft: IntakeDraft = {
   companyLatitude: null,
   companyLongitude: null,
   projectName: "",
+  outdoorSalesId: "",
   branch: "",
   projectType: "",
   projectAddress: "",
@@ -146,17 +147,29 @@ export function SalesIntakeWizard() {
   const [clientSearch, setClientSearch] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [assignees, setAssignees] = useState<Array<{ id: string; name: string }>>([]);
+  const [assigneesLoading, setAssigneesLoading] = useState(true);
+  const [assigneesError, setAssigneesError] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/sales-intake", { signal: controller.signal, cache: "no-store" })
+      .then(async response => {
+        if (!response.ok) throw new Error("Unable to load assignees");
+        const result = await response.json() as { assignees: Array<{ id: string; name: string }> };
+        setAssignees(result.assignees);
+      })
+      .catch(() => { if (!controller.signal.aborted) setAssigneesError(true); })
+      .finally(() => { if (!controller.signal.aborted) setAssigneesLoading(false); });
+    return () => controller.abort();
+  }, []);
   const selectedClient = clients.find(
     (client) => client.id === draft.existingClientId,
   );
   const sourceDefault =
     role === "Outdoor Sales" ? "outdoor_sales" : "showroom_walk_in";
   const isOutdoorSales = role === "Outdoor Sales";
-  const isDirectMeasurement = intakeMovesDirectlyToMeasurements({
-    role,
-    source: draft.source || sourceDefault,
-    readiness: draft.readiness,
-  });
+  const isDirectMeasurement = false;
   const displayedSteps = isDirectMeasurement ? measurementSteps : steps;
   const hasProjectPin =
     typeof draft.projectLatitude === "number" &&
@@ -221,6 +234,9 @@ export function SalesIntakeWizard() {
     ) {
       return t("intake.errors.project");
     }
+    if (step === 1 && !assignees.some(person => person.id === draft.outdoorSalesId)) {
+      return t("intake.errors.outdoorSales");
+    }
     if (step === 1 && isOutdoorSales && !hasProjectPin) {
       return t("intake.errors.location");
     }
@@ -252,6 +268,10 @@ export function SalesIntakeWizard() {
 
   async function submit() {
     if (isSubmitting) return;
+    if (!assignees.some(person => person.id === draft.outdoorSalesId)) {
+      setError(t("intake.errors.outdoorSales"));
+      return;
+    }
     setIsSubmitting(true);
     setError("");
     try {
@@ -280,6 +300,7 @@ export function SalesIntakeWizard() {
               : null,
           project: {
             projectName: draft.projectName,
+            outdoorSalesId: draft.outdoorSalesId,
             branch: draft.branch,
             projectType: draft.projectType,
             address: draft.projectAddress,
@@ -305,6 +326,7 @@ export function SalesIntakeWizard() {
         projectId?: string;
         nextPath?: string;
         error?: string;
+        warning?: string;
       } | null;
       if (!response.ok || !result?.projectId) {
         throw new Error(result?.error ?? t("intake.errors.save"));
@@ -312,6 +334,7 @@ export function SalesIntakeWizard() {
 
       window.localStorage.removeItem(draftKey);
       await Promise.all([refreshClients(), refreshProjects()]);
+      if (result.warning) window.alert(result.warning);
       router.push(result.nextPath ?? `/projects/${result.projectId}`);
     } catch (submitError) {
       setError(
@@ -574,6 +597,17 @@ export function SalesIntakeWizard() {
               <div className="grid gap-4 md:grid-cols-2">
                 <Field required label={t("intake.fields.projectName")} value={draft.projectName} onChange={(value) => update("projectName", value)} />
                 <label className={labelClass}>{t("intake.fields.branch")} *<select value={draft.branch} onChange={(event) => update("branch", event.target.value as IntakeDraft["branch"])} className={inputClass}><option value="">{t("intake.select")}</option><option value="Rasafa">{term("Rasafa")}</option><option value="Karkh">{term("Karkh")}</option></select></label>
+                <label className={labelClass}>
+                  {t("intake.fields.outdoorSales")} <span className="text-red-600">*</span>
+                  <select required value={draft.outdoorSalesId}
+                    disabled={assigneesLoading || assigneesError || assignees.length === 0}
+                    onChange={event => update("outdoorSalesId", event.target.value)} className={inputClass}>
+                    <option value="">{assigneesLoading ? t("common.loading") : t("intake.select")}</option>
+                    {assignees.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
+                  </select>
+                  {assigneesError ? <span role="alert" className="mt-2 block text-sm text-red-700">{t("intake.errors.assigneesLoad")}</span>
+                    : !assigneesLoading && assignees.length === 0 ? <span role="alert" className="mt-2 block text-sm text-red-700">{t("intake.errors.noOutdoorSales")}</span> : null}
+                </label>
                 <Field required label={t("intake.fields.projectType")} value={draft.projectType} onChange={(value) => update("projectType", value)} />
                 <label className={labelClass}>{t("intake.fields.source")} *<select value={draft.source || sourceDefault} onChange={(event) => update("source", event.target.value)} className={inputClass}>{["outdoor_sales","showroom_walk_in","existing_client","referral","phone_inquiry","website","social_media","management_referral","other"].map((source) => <option key={source} value={source}>{t(`intake.sources.${source}`)}</option>)}</select></label>
                 <div className="md:col-span-2"><Field required label={t("intake.fields.projectAddress")} value={draft.projectAddress} onChange={(value) => update("projectAddress", value)} /></div>
@@ -637,6 +671,7 @@ export function SalesIntakeWizard() {
                   [t("intake.steps.client"), selectedClient?.clientName || draft.companyName || draft.clientName],
                   [t("intake.fields.mobile"), selectedClient?.mobile || draft.mobile],
                   [t("intake.fields.projectName"), draft.projectName],
+                  [t("intake.fields.outdoorSales"), assignees.find(person => person.id === draft.outdoorSalesId)?.name || ""],
                   [t("intake.fields.branch"), draft.branch],
                   [t("intake.fields.source"), sourceLabel],
                   ...(draft.mode === "new" &&

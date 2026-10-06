@@ -64,6 +64,8 @@ function metersPerPixel(latitude: number, zoom: number) {
 }
 
 export function ProjectLocationPicker({
+  compact = false,
+  pinPrompt = "Click to add pin",
   latitude,
   longitude,
   geofenceRadiusMeters,
@@ -90,6 +92,8 @@ export function ProjectLocationPicker({
   onSearchSelect,
   onCurrentLocationSelect,
 }: {
+  compact?: boolean;
+  pinPrompt?: string;
   latitude?: number | null;
   longitude?: number | null;
   geofenceRadiusMeters?: number | null;
@@ -327,7 +331,7 @@ export function ProjectLocationPicker({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-surface-muted p-3">
+    <div className={compact ? "text-slate-800" : "rounded-lg border border-border bg-surface-muted p-3"}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-bold text-foreground">{title}</p>
@@ -436,7 +440,7 @@ export function ProjectLocationPicker({
       <button
         type="button"
         onClick={handleMapClick}
-        className="relative mt-3 h-64 w-full overflow-hidden rounded-md border border-border bg-surface text-left sm:h-80"
+        className={`relative mt-3 w-full overflow-hidden rounded-md border border-border bg-surface text-left ${compact ? "h-40 sm:h-44" : "h-64 sm:h-80"}`}
         aria-label={mapAriaLabel}
       >
         {tiles.map((tile) => (
@@ -465,13 +469,13 @@ export function ProjectLocationPicker({
                 }}
               />
             ) : null}
-            <span className="absolute left-1/2 top-1/2 z-20 h-8 w-8 -translate-x-1/2 -translate-y-full rounded-full border-4 border-white bg-danger-text shadow-lg">
-              <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-danger-text" />
+            <span className="absolute left-1/2 top-1/2 z-20 h-8 w-8 -translate-x-1/2 -translate-y-full rounded-full border-4 border-white bg-blue-600 shadow-lg">
+              <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-blue-600" />
             </span>
           </>
         ) : (
-          <span className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-md bg-surface/95 px-3 py-2 text-sm font-bold text-muted-strong shadow">
-            {readOnly ? "No pin added" : "Click to add pin"}
+          <span className="absolute left-1/2 top-1/2 z-10 w-max max-w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-surface/95 px-3 py-2 text-sm font-bold text-muted-strong shadow">
+            {readOnly ? "No pin added" : pinPrompt}
           </span>
         )}
         <span className="absolute bottom-2 right-2 rounded bg-surface/90 px-2 py-1 text-[10px] font-semibold text-muted">
@@ -479,7 +483,7 @@ export function ProjectLocationPicker({
         </span>
       </button>
 
-      <div className="mt-3 grid gap-2 text-xs font-semibold text-muted-strong sm:grid-cols-[1fr_1fr_auto]">
+      <div className={`${compact ? "hidden" : "mt-3 grid gap-2 text-xs font-semibold text-muted-strong sm:grid-cols-[1fr_1fr_auto]"}`}>
         <p className="rounded-md border border-border bg-surface px-3 py-2">
           Latitude: {formatCoordinate(latitude)}
         </p>

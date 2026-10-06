@@ -75,10 +75,10 @@ function personName(person: Person | null) {
   return person?.full_name?.trim() || person?.email || "Unassigned";
 }
 
-export function MeasurementWorkspace() {
+export function MeasurementWorkspace({ initialProjectId = "" }: { initialProjectId?: string }) {
   const [payload, setPayload] = useState<WorkspacePayload | null>(null);
   const [selectedId, setSelectedId] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(initialProjectId);
   const [assignedTo, setAssignedTo] = useState("");
   const [preferredAt, setPreferredAt] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -139,8 +139,8 @@ export function MeasurementWorkspace() {
   );
 
   async function createRequest() {
-    if (!projectId) {
-      setError("Select a project.");
+    if (!projectId || !assignedTo) {
+      setError("Select a project and an Outdoor Sales employee.");
       return;
     }
     setIsSaving(true);
@@ -158,7 +158,7 @@ export function MeasurementWorkspace() {
         }),
       });
       const body = (await response.json().catch(() => null)) as
-        | { error?: string }
+        | { error?: string; warning?: string }
         | null;
       if (!response.ok) {
         throw new Error(body?.error ?? "Unable to create the request.");
@@ -168,7 +168,8 @@ export function MeasurementWorkspace() {
       setPreferredAt("");
       setInstructions("");
       await loadWorkspace();
-      setMessage("Measurement request created.");
+      setMessage("Measurement request created and assigned.");
+      if (body?.warning) setError(body.warning);
     } catch (saveError) {
       setError(
         saveError instanceof Error
@@ -194,7 +195,7 @@ export function MeasurementWorkspace() {
         body: JSON.stringify({ action, note: reviewNote }),
       });
       const body = (await response.json().catch(() => null)) as
-        | { error?: string }
+        | { error?: string; warning?: string }
         | null;
       if (!response.ok) {
         throw new Error(body?.error ?? "Unable to update this submission.");
@@ -239,7 +240,7 @@ export function MeasurementWorkspace() {
         }),
       });
       const body = (await response.json().catch(() => null)) as
-        | { error?: string }
+        | { error?: string; warning?: string }
         | null;
       if (!response.ok) {
         throw new Error(body?.error ?? "Unable to assign this request.");
@@ -249,6 +250,7 @@ export function MeasurementWorkspace() {
       setReviewNote("");
       await loadWorkspace();
       setMessage("Measurement request assigned.");
+      if (body?.warning) setError(body.warning);
     } catch (saveError) {
       setError(
         saveError instanceof Error
@@ -304,7 +306,7 @@ export function MeasurementWorkspace() {
                 New measurement request
               </h2>
               <p className="text-sm text-muted">
-                Assign now, or leave unassigned for the sales manager.
+                Assign Outdoor Sales to collect initial measurements. They will receive a notification.
               </p>
             </div>
           </div>
@@ -325,13 +327,13 @@ export function MeasurementWorkspace() {
               </select>
             </label>
             <label className="block">
-              <span className="material-label">Field assignee</span>
+              <span className="material-label">Outdoor Sales employee *</span>
               <select
                 value={assignedTo}
                 onChange={(event) => setAssignedTo(event.target.value)}
                 className="material-field mt-2 min-h-12"
               >
-                <option value="">Leave unassigned</option>
+                <option value="">Select Outdoor Sales</option>
                 {payload.assignees.map((person) => (
                   <option key={person.id} value={person.id}>
                     {personName(person)} · {person.role}

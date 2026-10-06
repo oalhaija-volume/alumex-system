@@ -1,4 +1,23 @@
 {
+  "mobileAccess": {
+    "title": "Use your mobile phone",
+    "description": "Outdoor Sales accounts can access the system only from a mobile phone. Open this website on your phone and sign in with your employee login details.",
+    "retry": "Try again",
+    "signOut": "Sign out"
+  },
+  "mobileIntake": {
+    "title": "New client project",
+    "description": "Register the site, then record openings or send it for follow-up.",
+    "name": "Client name",
+    "phone": "Phone number",
+    "readiness": "Is the site ready for measurements?",
+    "required": "Enter the client name, phone number, location pin, and site readiness.",
+    "followUp": "This project will go to the mini CRM for Indoor Sales follow-up tomorrow.",
+    "sendCrm": "Save and send to mini CRM",
+    "openings": "Save and enter openings",
+    "saved": "Sent to mini CRM",
+    "savedHelp": "The client and project are saved. Indoor Sales can follow up on site readiness tomorrow."
+  },
   "app": {
     "name": "Alumex",
     "subtitle": "Quotation System",
@@ -6,6 +25,7 @@
     "description": "UI for Alumex quotations, projects, clients, and contracts."
   },
   "nav": {
+    "measurements": "Initial Measurements",
     "dashboard": "Dashboard",
     "intake": "Sales Intake",
     "clients": "Clients",
@@ -258,6 +278,9 @@
       "selectTask": "Select a task to view its activity history."
     },
     "errors": {
+      "outdoorSales": "Select an active Outdoor Sales employee.",
+      "assigneesLoad": "Unable to load Outdoor Sales employees. Refresh and try again.",
+      "noOutdoorSales": "No active Outdoor Sales employees are available. Ask an administrator to add one.",
       "load": "Unable to load sales follow-ups.",
       "projectAndDueRequired": "Select a project and due date.",
       "activityRequired": "Add a response, outcome, or internal note.",
@@ -485,6 +508,7 @@
       "company": "Company"
     },
     "fields": {
+      "outdoorSales": "Assigned Outdoor Sales",
       "searchClient": "Search existing clients",
       "clientName": "Client name",
       "companyName": "Company name",
@@ -773,6 +797,9 @@
     }
   },
   "quotations": {
+    "projectSystem": "Project system and rate",
+    "projectSystemHelp": "Choose once. This system and its rate apply to every measured opening.",
+    "projectSystemSelect": "Select one system for the project",
     "eyebrow": "Pricing",
     "title": "Quotations",
     "workspaceTabs": "Quotation and contract workspace",
@@ -812,7 +839,7 @@
     "noReadyProjectsPrerequisite": "Complete the initial measurement in full before Indoor Sales creates the quotation.",
     "indoorSalesOnly": "Quotation creation is assigned to Indoor Sales.",
     "selectOpeningSystem": "Select aluminum system",
-    "openingSystemRequired": "Select a priced aluminum system for every opening before saving the quotation.",
+    "openingSystemRequired": "Choose a priced system for the project.",
     "savedQuotation": "Saved quotation locally.",
     "validationRequired": "Select a project with at least one opening before generating a quotation.",
     "quotationPreview": "Quotation Preview",
@@ -1076,6 +1103,7 @@
     "emailRequired": "Username and temporary password are required."
   },
   "measurements": {
+    "dimensionsOnly": "Enter width, height, and quantity only. Opening details can be added later.",
     "loading": "Loading measurements...",
     "loadError": "Unable to load measurements.",
     "projectNotFound": "Measurement project was not found.",
@@ -1085,7 +1113,7 @@
     "saveOpeningError": "Unable to save opening.",
     "deleteOpeningError": "Unable to delete opening.",
     "addOpeningBeforeSaving": "Add at least one structural opening before saving.",
-    "completeRequiredDetails": "Add the floor, room, width, height, and opening type before saving.",
+    "completeRequiredDetails": "Enter positive width and height, and a whole-number quantity.",
     "completeStep": "Complete this step before continuing.",
     "openingUpdated": "Opening updated.",
     "openingSaved": "Opening saved.",
@@ -1295,11 +1323,8 @@
     "Projects": "Projects",
     "Workflow queue": "Workflow queue",
     "Track projects from sales handoff through delivery and installation.": "Track projects from sales handoff through delivery and installation.",
-    "Operations Manager": "Operations Manager",
     "Assign project managers and monitor projects after finance handoff through delivery and installation.": "Assign project managers and monitor projects after finance handoff through delivery and installation.",
-    "Project Manager": "Project Manager",
     "Assign project engineers, follow assigned projects, and manage delivery-to-installation progress.": "Assign project engineers, follow assigned projects, and manage delivery-to-installation progress.",
-    "Project Engineer": "Project Engineer",
     "Assign site engineers, complete measurements, prepare project descriptions, and track factory progress.": "Assign site engineers, complete measurements, prepare project descriptions, and track factory progress.",
     "Site Engineer Measurements": "Site Engineer Measurements",
     "Select an assigned project and enter detailed opening measurements.": "Select an assigned project and enter detailed opening measurements.",
@@ -1501,19 +1526,8 @@
     "Width": "Width",
     "Length": "Length",
     "Quantity": "Quantity",
-    "Shape": "Shape",
-    "Type": "Type",
-    "Bottom frame": "Bottom frame",
-    "Opening direction": "Opening direction",
-    "Glass color": "Glass color",
-    "Solid panel height": "Solid panel height",
-    "Fixed height": "Fixed height",
     "Qty": "Qty",
     "Actions": "Actions",
-    "Area": "Area",
-    "Notes": "Notes",
-    "Location": "Location",
-    "Dimensions": "Dimensions",
     "Details": "Details",
     "cm": "cm",
     "m2": "m2",
@@ -1551,5 +1565,24 @@
     "Erbil": "Erbil",
     "Nineveh": "Nineveh",
     "Mosul": "Mosul"
+  },
+  "registration": {
+    "title": "New client & project",
+    "description": "Start with the client and the project location.",
+    "namePlaceholder": "Enter full name",
+    "location": "Project location",
+    "useLocation": "Use my location",
+    "searchPlaceholder": "Search address or place",
+    "search": "Search",
+    "map": "Project location map",
+    "pinPrompt": "Tap the map to choose the project location",
+    "readiness": "Is the site ready?",
+    "ready": "Ready for measurements",
+    "readyHelp": "Enter initial measurements next.",
+    "not_ready": "Not ready yet",
+    "not_readyHelp": "Send to mini CRM for follow-up.",
+    "audit": "Your name and registration time are saved automatically.",
+    "close": "Close registration",
+    "continue": "Continue to measurements"
   }
 }

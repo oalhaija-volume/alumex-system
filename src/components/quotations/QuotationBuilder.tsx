@@ -1,5 +1,6 @@
 "use client";
 
+import { applyProjectSystem } from "@/lib/quotations/projectSystem";
 import Link from "next/link";
 import {
   Fragment,
@@ -484,22 +485,12 @@ export function QuotationBuilder() {
     );
   }
 
-  function updateOpeningSystem(lineId: string, systemName: string) {
+  function updateProjectSystem(systemName: string) {
     const system = openingSystemPrices.find(
       (item) => item.product_name === systemName,
     );
 
-    setLines((currentLines) =>
-      currentLines.map((line) =>
-        line.id === lineId
-          ? {
-              ...line,
-              productSystem: system?.product_name ?? "",
-              unitPrice: system?.unit_price ?? 0,
-            }
-          : line,
-      ),
-    );
+    setLines(currentLines => applyProjectSystem(currentLines, system));
     setError("");
   }
 
@@ -1396,6 +1387,21 @@ export function QuotationBuilder() {
       ) : null}
 
       <SectionCard title={t("quotations.openingsAndPricing")}>
+        <label className="mb-5 block rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <span className="text-sm font-bold text-slate-900">{t("quotations.projectSystem")} *</span>
+          <p className="mt-1 text-sm text-slate-600">{t("quotations.projectSystemHelp")}</p>
+          <select className="mt-3 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold"
+            value={(() => {
+              const base = lines.filter(line => (line.lineType ?? "base") === "base");
+              return base.length && base.every(line => line.productSystem === base[0].productSystem) ? base[0].productSystem : "";
+            })()}
+            onChange={event => updateProjectSystem(event.target.value)} disabled={!selectedProject}>
+            <option value="">{t("quotations.projectSystemSelect")}</option>
+            {openingSystemPrices.map(system => <option key={system.id ?? system.product_name} value={system.product_name} disabled={system.unit_price <= 0}>
+              {system.product_name} — {formatCurrency(system.unit_price)} / {system.unit}
+            </option>)}
+          </select>
+        </label>
         <div className="mb-4 space-y-4 rounded-lg border border-blue-100 bg-blue-50 p-4">
           <div>
             <p className="text-sm font-bold text-[var(--alumex-blue)]">
@@ -1610,39 +1616,7 @@ export function QuotationBuilder() {
                         {term(line.floor)} - {term(line.room)}
                       </td>
                       <td className="px-3 py-4 text-slate-700">
-                        {isBaseLine ? (
-                          <select
-                            value={line.productSystem}
-                            onChange={(event) =>
-                              updateOpeningSystem(line.id, event.target.value)
-                            }
-                            aria-label={`${t("quotations.selectOpeningSystem")} ${line.openingCode}`}
-                            className="h-9 w-52 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-700"
-                          >
-                            <option value="">
-                              {t("quotations.selectOpeningSystem")}
-                            </option>
-                            {line.productSystem &&
-                            !openingSystemPrices.some(
-                              (system) => system.product_name === line.productSystem,
-                            ) ? (
-                              <option value={line.productSystem} disabled>
-                                {line.productSystem}
-                              </option>
-                            ) : null}
-                            {openingSystemPrices.map((system) => (
-                              <option
-                                key={system.id ?? system.product_name}
-                                value={system.product_name}
-                                disabled={system.unit_price <= 0}
-                              >
-                                {system.unit_price > 0
-                                  ? `${system.product_name} — ${formatCurrency(system.unit_price)} / ${system.unit}`
-                                  : `${system.product_name} — ${t("quotations.priceNotConfigured")}`}
-                              </option>
-                            ))}
-                          </select>
-                        ) : line.productSystem}
+                        {line.productSystem || "—"}
                       </td>
                       <td className="px-3 py-4 text-slate-700">
                         {term(line.glassType)}
@@ -1795,41 +1769,7 @@ export function QuotationBuilder() {
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   {isBaseLine ? (
-                    <label className="sm:col-span-2">
-                      <span className="text-xs font-bold uppercase text-slate-500">
-                        {t("quotations.selectOpeningSystem")}
-                      </span>
-                      <select
-                        value={line.productSystem}
-                        onChange={(event) =>
-                          updateOpeningSystem(line.id, event.target.value)
-                        }
-                        className="mt-2 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"
-                      >
-                        <option value="">
-                          {t("quotations.selectOpeningSystem")}
-                        </option>
-                        {line.productSystem &&
-                        !openingSystemPrices.some(
-                          (system) => system.product_name === line.productSystem,
-                        ) ? (
-                          <option value={line.productSystem} disabled>
-                            {line.productSystem}
-                          </option>
-                        ) : null}
-                        {openingSystemPrices.map((system) => (
-                          <option
-                            key={system.id ?? system.product_name}
-                            value={system.product_name}
-                            disabled={system.unit_price <= 0}
-                          >
-                            {system.unit_price > 0
-                              ? `${system.product_name} — ${formatCurrency(system.unit_price)} / ${system.unit}`
-                              : `${system.product_name} — ${t("quotations.priceNotConfigured")}`}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <p className="text-sm font-semibold text-slate-700 sm:col-span-2">{line.productSystem || "—"}</p>
                   ) : isProductLine ? (
                     <>
                       <p className="text-sm font-semibold text-slate-700 sm:col-span-2">

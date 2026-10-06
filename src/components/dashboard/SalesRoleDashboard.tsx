@@ -749,6 +749,9 @@ export function SalesRoleDashboard({
 
     return (
       <div className="swift-role-dashboard space-y-5">
+        <Link href="/intake" className="flex min-h-12 items-center justify-center rounded-md bg-[var(--alumex-blue)] px-4 py-3 font-bold text-white">
+          {t("mobileIntake.title")}
+        </Link>
         {error ? <div className="material-alert-error">{error}</div> : null}
         <section className="swift-search-panel material-card p-4 sm:p-5">
           <label className="block">

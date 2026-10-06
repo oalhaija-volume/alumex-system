@@ -107,7 +107,7 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const canLoadClients = roleHasCapability(role, "clients:create");
+  const canLoadClients = roleHasCapability(role, "clients:update");
 
   const loadClients = useCallback(async (force = false) => {
     if (!isRoleLoaded) {

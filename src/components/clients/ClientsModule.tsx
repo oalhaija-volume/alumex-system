@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { roleHasCapability } from "@/lib/auth/capabilities";
 import { useMemo, useState } from "react";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
 import { ClientForm, type ClientFormValues } from "@/components/clients/ClientForm";
@@ -123,7 +124,8 @@ function ClientCard({
 
 export function ClientsModule() {
   const { clients, createClient, updateClient, deleteClient } = useClients();
-  const { isAdmin } = useCurrentRole();
+  const { isAdmin, role } = useCurrentRole();
+  const canCreate = roleHasCapability(role, "clients:create");
   const { t, term } = useI18n();
   const [search, setSearch] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -140,6 +142,7 @@ export function ClientsModule() {
   );
 
   function openCreateForm() {
+    if (!canCreate) return;
     setEditingClient(undefined);
     setIsFormOpen(true);
   }
@@ -230,6 +233,7 @@ export function ClientsModule() {
             className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-[var(--alumex-blue)] focus:ring-4 focus:ring-blue-100"
           />
         </label>
+        {canCreate ? (
         <button
           type="button"
           onClick={openCreateForm}
@@ -237,6 +241,7 @@ export function ClientsModule() {
         >
           {t("clients.newClient")}
         </button>
+        ) : null}
       </div>
 
       {error ? (

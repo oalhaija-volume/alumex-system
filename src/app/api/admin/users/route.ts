@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { generateEmployeeCredentials } from "@/lib/auth/employeeCredentials";
 import { requireRole } from "@/lib/auth/adminServer";
 import { isAppRole } from "@/lib/auth/roles";
 import {
@@ -98,17 +99,21 @@ export async function POST(request: Request) {
     role?: unknown;
     fullName?: unknown;
   } | null;
+  const fullName = typeof body?.fullName === "string" ? body.fullName.trim() : "";
+  const generated = !body?.username && !body?.email && !body?.password
+    ? generateEmployeeCredentials(fullName) : null;
+  if (generated && !fullName) {
+    return NextResponse.json({ error: "Employee name and role are required." }, { status: 400 });
+  }
   const providedEmail = typeof body?.email === "string" ? body.email.trim() : "";
   const username =
     typeof body?.username === "string"
       ? normalizeUsername(body.username)
-      : usernameFromEmail(providedEmail);
+      : generated?.username ?? usernameFromEmail(providedEmail);
   const email = providedEmail || authEmailForUsername(username);
   const password =
-    typeof body?.password === "string" ? body.password.trim() : "";
+    typeof body?.password === "string" ? body.password.trim() : generated?.password ?? "";
   const role = isAppRole(body?.role) ? body.role : null;
-  const fullName =
-    typeof body?.fullName === "string" ? body.fullName.trim() : "";
 
   if (!username || !password || !role) {
     return NextResponse.json(
@@ -193,6 +198,7 @@ export async function POST(request: Request) {
   );
 
   if (profileError) {
+    await admin.auth.admin.deleteUser(created.user.id);
     if (isMissingUsernameColumn(profileError)) {
       return NextResponse.json(
         { error: usernameColumnMissingError },
@@ -206,5 +212,8 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ user: created.user }, { status: 201 });
+  return NextResponse.json(
+    { user: created.user, credentials: generated ? { username, temporaryPassword: password } : undefined },
+    { status: 201, headers: { "Cache-Control": "no-store" } },
+  );
 }

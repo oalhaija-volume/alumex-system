@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { notifyMeasurementAssignment, validateOutdoorAssignee } from "@/lib/measurements/assignment";
 import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -234,12 +235,7 @@ export async function GET() {
         .select("id, full_name, email, role")
         .eq("is_active", true)
         .neq("status", "Inactive")
-        .in("role", [
-          "Admin",
-          "Outdoor Sales",
-          "Project Engineer",
-          "Site Engineer",
-        ])
+        .eq("role", "Outdoor Sales")
         .order("full_name"),
     ]);
 
@@ -318,6 +314,10 @@ export async function POST(request: Request) {
     typeof body?.assignedTo === "string" && body.assignedTo
       ? body.assignedTo
       : null;
+  const assigneeError = await validateOutdoorAssignee(context.admin, assignedTo);
+  if (assigneeError) {
+    return NextResponse.json({ error: assigneeError }, { status: 400 });
+  }
   const preferredAt =
     typeof body?.preferredAt === "string" && body.preferredAt
       ? new Date(body.preferredAt).toISOString()
@@ -340,5 +340,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  return NextResponse.json({ request: data }, { status: 201 });
+  const warning = data ? await notifyMeasurementAssignment(data) : undefined;
+  return NextResponse.json({ request: data, warning }, { status: 201 });
 }

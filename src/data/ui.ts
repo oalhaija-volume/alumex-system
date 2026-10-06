@@ -68,6 +68,7 @@ export type StructuralOpening = {
 };
 
 export const navItems: NavItem[] = [
+  { labelKey: "nav.measurements", href: "/measurements", icon: "M" },
   { labelKey: "nav.dashboard", href: "/dashboard", icon: "D" },
   { labelKey: "nav.intake", href: "/intake", icon: "N" },
   { labelKey: "nav.clients", href: "/clients", icon: "C" },

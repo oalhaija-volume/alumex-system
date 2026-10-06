@@ -5,14 +5,14 @@ const registrationRoles: readonly AppRole[] = ["Admin", "Indoor Sales", "Outdoor
 export function defaultRouteForRole(role: AppRole | null) {
  if(role === "HR")return "/hr";
  if(role === "Operations Manager" || role === "Project Manager")return "/operations";
- return role && registrationRoles.includes(role) ? "/intake" : "/unauthorized";
+ return role && registrationRoles.includes(role) ? "/dashboard" : "/unauthorized";
 }
 export function canAccessRoute(pathname: string, role: AppRole | null) {
  if(!role)return false;
  if(pathname === "/hr")return role === "Admin" || role === "HR";
  if(pathname === "/catalog")return role === "Admin";
  if(pathname === "/operations")return ["Admin","Operations Manager","Project Manager"].includes(role);
- return registrationRoles.includes(role) && (/^\/projects\/[0-9a-f-]{36}\/follow-ups$/i.test(pathname) || ["/", "/intake", "/projects", "/mini-crm"].includes(pathname) || /^\/(initial-measurements|quotation|contract)\/[0-9a-f-]{36}$/i.test(pathname));
+ return registrationRoles.includes(role) && (/^\/projects\/[0-9a-f-]{36}\/follow-ups$/i.test(pathname) || ["/", "/dashboard", "/intake", "/projects", "/mini-crm"].includes(pathname) || /^\/(initial-measurements|quotation|contract)\/[0-9a-f-]{36}$/i.test(pathname));
 }
 export function canAccessRouteWithOverrides(pathname: string, role: AppRole | null, accessRows: Array<Pick<EmployeePageAccess, "route_path" | "can_access">>) {
   void accessRows;

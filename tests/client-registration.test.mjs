@@ -43,11 +43,11 @@ test('protected API authorization blocks Outdoor Sales on desktop and allows pho
 });
 
 for (const role of ['Admin', 'Indoor Sales', 'Outdoor Sales']) {
-  test(`${role} starts at the redesigned registration screen`, () => {
+  test(`${role} starts at the main dashboard`, () => {
     const permissions = loadModule('../src/lib/auth/permissions.ts', {
       '@/lib/systemScope': {isActiveSystemRoute: () => true},
     });
-    assert.equal(permissions.defaultRouteForRole(role), '/intake');
+    assert.equal(permissions.defaultRouteForRole(role), '/dashboard');
     assert.equal(permissions.canAccessRoute('/intake', role), true);
   });
 }

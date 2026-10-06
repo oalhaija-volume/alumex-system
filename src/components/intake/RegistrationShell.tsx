@@ -12,6 +12,7 @@ import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/I18nProvider";
 
 const links = [
+  ["/dashboard", "Dashboard", "لوحة المتابعة"],
   ["/intake", "New project", "مشروع جديد"],
   ["/projects", "Projects", "المشاريع"],
   ["/mini-crm", "Follow-ups", "المتابعات"],

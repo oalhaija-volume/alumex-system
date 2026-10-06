@@ -1,3 +1,3 @@
 import { redirect } from "next/navigation";
 
-export default function Home() { redirect("/intake"); }
+export default function Home() { redirect("/dashboard"); }

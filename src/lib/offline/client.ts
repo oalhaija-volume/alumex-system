@@ -1,3 +1,4 @@
+import { needsSalesFollowUp } from '@/lib/workflow/stages';
 import { normalizeRegistrationOpening } from '@/lib/measurements/registrationOpening';
 import { activeFieldUser,readFieldState,setFieldUser,updateFieldState } from './store';
 import type { FieldChange,FieldProject,FieldState } from './types';
@@ -79,6 +80,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if(action==='finish'){if(!openings.some(o=>o.projectId===projectId))throw new Error('Save at least one opening first.');p={...p,sales_status:'ready_for_quotation'};}
    if(action==='reopen')p={...p,sales_status:'new_lead'};
    if(action==='ready')p={...p,structure_readiness:'ready',sales_status:'new_lead',next_follow_up_at:null};
+   if(action==='follow-up'&&!needsSalesFollowUp(p))throw new Error('Sales follow-up is complete for this project.');
    if(action==='follow-up')p={...p,next_follow_up_at:String(payload.nextFollowUp),project_notes:String(payload.note??'')};
    projects=projects.map(row=>row.id===projectId?{...p!,pending:true}:row);
   }

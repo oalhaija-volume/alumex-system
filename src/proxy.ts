@@ -149,7 +149,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/mobile-required", request.url));
   }
 
-  if (pathname === "/" || (pathname === "/dashboard" && defaultRouteForRole(role) === "/intake")) {
+  if (pathname === "/") {
     return NextResponse.redirect(new URL(defaultRouteForRole(role), request.url));
   }
 

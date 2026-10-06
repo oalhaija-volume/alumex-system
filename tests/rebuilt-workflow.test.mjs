@@ -41,7 +41,7 @@ for(const role of ['Operations Manager','Project Manager'])test(`${role} cannot 
 });
 test('HR has employee workspace only and legacy routes remain inaccessible',()=>{
  assert.equal(permissions.defaultRouteForRole('HR'),'/hr');assert.equal(permissions.canAccessRoute('/hr','HR'),true);
- for(const path of ['/finance','/factory','/dashboard','/contracts','/quotations'])assert.equal(permissions.canAccessRoute(path,'Admin'),false);
+ for(const path of ['/finance','/factory','/contracts','/quotations'])assert.equal(permissions.canAccessRoute(path,'Admin'),false);
 });
 const json={NextResponse:{json:(body,options)=>({body,status:options?.status??200})}};
 for(const role of ['Operations Manager','Project Manager'])test(`${role} is rejected by commercial API before database access`,async()=>{
@@ -128,4 +128,11 @@ for(const [role,id,allowed] of [['Outdoor Sales','assigned',true],['Outdoor Sale
  const project={id:'project',created_by:'creator',assigned_outdoor_sales_id:'assigned'};
  const access=load('../src/lib/workflow/access.ts',{'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,user:{id}})},'@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},'@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:project,error:null})})})}});
  const result=await access.salesProject('project');assert.equal(!result.response,allowed);
+});
+const stages=load('../src/lib/workflow/stages.ts');
+for(const [sales_status,stage,open]of [['new_lead','measurements',true],['ready_for_quotation','quotation-preparation',true],['quotation_in_progress','quotation-response',true],['quotation_approved','contract-preparation',true],['contract_generated','contract-signature',true],['transferred_to_operations','handoff',false]])test(`${sales_status} appears in the correct dashboard stage and CRM queue`,()=>{
+ const project={id:'project',structure_readiness:'ready',sales_status,status:'Draft'};assert.equal(stages.projectStage(project),stage);assert.equal(stages.needsSalesFollowUp(project),open);
+});
+test('Operations acceptance and site readiness remain separate dashboard stages',()=>{
+ assert.equal(stages.projectStage({structure_readiness:'not_ready',sales_status:'new_lead'}),'site');assert.equal(stages.projectStage({structure_readiness:'ready',sales_status:'transferred_to_operations',status:'Production'}),'operations');
 });

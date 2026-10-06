@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { salesProject,salesRoles } from '@/lib/workflow/access';
 export async function GET(){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
- const admin=createAdminClient();let query=admin.from('projects').select('id,project_name,project_number,address,client_id,structure_readiness,sales_status,next_follow_up_at,created_by,created_at,project_notes,assigned_outdoor_sales_id,original_creator_role').order('created_at',{ascending:false});
+ const admin=createAdminClient();let query=admin.from('projects').select('id,project_name,project_number,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,created_by,created_at,project_notes,assigned_outdoor_sales_id,original_creator_role').order('created_at',{ascending:false});
  if(auth.role==='Outdoor Sales')query=query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);else if(auth.role!=='Admin')query=query.eq('created_by',auth.user.id);
  const result=await query;
  if(result.error)return NextResponse.json({error:'Unable to load projects.'},{status:500});
@@ -19,15 +19,14 @@ export async function GET(){
 export async function PATCH(request:Request){
  const body=await request.json().catch(()=>null);if(typeof body?.projectId!=='string')return NextResponse.json({error:'Project is required.'},{status:400});
  const access=await salesProject(body.projectId);if(access.response)return access.response;
- if(access.project.structure_readiness==='ready')return NextResponse.json({error:'This project has already moved to measurements.'},{status:409});
  const ready=body.action==='ready';
  if(!ready && body.action!=='follow-up')return NextResponse.json({error:'Invalid action.'},{status:400});
  const next=typeof body.nextFollowUp==='string'&&body.nextFollowUp?new Date(body.nextFollowUp):null;
  if(!ready && (!next||!Number.isFinite(next.getTime())))return NextResponse.json({error:'Choose the next follow-up date.'},{status:400});
  const note=typeof body.note==='string'?body.note.trim():'';
  if(note.length>2000)return NextResponse.json({error:'Keep the follow-up note under 2,000 characters.'},{status:400});
- const {error}=await access.admin.from('projects').update(ready?{structure_readiness:'ready',sales_status:'new_lead',next_follow_up_at:null}:{next_follow_up_at:next!.toISOString(),project_notes:note}).eq('id',body.projectId).eq('structure_readiness','not_ready');
- return error?NextResponse.json({error:'Unable to update follow-up.'},{status:500}):NextResponse.json({ok:true});
+ const result=await access.admin.rpc('sync_field_change',{p_operation:crypto.randomUUID(),p_actor:access.auth.user.id,p_project:body.projectId,p_action:ready?'ready':'follow-up',p_payload:ready?{}:{nextFollowUp:next!.toISOString(),note},p_recorded_at:new Date().toISOString(),p_expected_updated_at:access.project.updated_at});
+ return result.error?NextResponse.json({error:result.error.message},{status:409}):NextResponse.json({ok:true});
 }
 
 export async function DELETE(request:Request){

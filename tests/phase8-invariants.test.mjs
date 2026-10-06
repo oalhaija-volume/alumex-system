@@ -9,7 +9,7 @@ function files(dir, prefix='') {
 }
 test('only approved rebuilt workflow pages exist', () => {
  assert.deepEqual(files(root).filter(p=>p.endsWith('/page.tsx') || p==='page.tsx').sort(),
-  ['catalog/page.tsx','contract/[projectId]/page.tsx','hr/page.tsx','initial-measurements/[projectId]/page.tsx','intake/page.tsx','login/page.tsx','mini-crm/page.tsx','mobile-required/page.tsx','offline/page.tsx','operations/page.tsx','page.tsx','projects/[projectId]/follow-ups/page.tsx','projects/page.tsx','quotation/[projectId]/page.tsx','unauthorized/page.tsx']);
+  ['catalog/page.tsx','contract/[projectId]/page.tsx','dashboard/page.tsx','hr/page.tsx','initial-measurements/[projectId]/page.tsx','intake/page.tsx','login/page.tsx','mini-crm/page.tsx','mobile-required/page.tsx','offline/page.tsx','operations/page.tsx','page.tsx','projects/[projectId]/follow-ups/page.tsx','projects/page.tsx','quotation/[projectId]/page.tsx','unauthorized/page.tsx']);
 });
 test('only the approved rebuilt APIs exist; legacy workflow endpoints stay absent', () => {
  assert.deepEqual(files(new URL('api/',root)).filter(p=>p.endsWith('route.ts')).sort(),

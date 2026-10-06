@@ -73,9 +73,10 @@ const routePermissions: Array<{
 export function defaultRouteForRole(role: AppRole | null) {
   switch (role) {
     case "Admin":
-    case "Sales Manager":
     case "Indoor Sales":
     case "Outdoor Sales":
+      return "/intake";
+    case "Sales Manager":
     case "Sales Rep":
       return "/dashboard";
     case "Branch Manager":

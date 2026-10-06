@@ -55,7 +55,7 @@ export function OutdoorIntake() {
     <section className="mx-auto max-w-xl space-y-4 rounded-lg border border-slate-200 bg-white p-5" role="status">
       <h1 className="text-xl font-bold text-slate-950">{t("mobileIntake.saved")}</h1>
       <p className="text-slate-600">{t("mobileIntake.savedHelp")}</p>
-      <Link href="/dashboard" className="flex min-h-12 items-center justify-center rounded-md bg-[var(--alumex-blue)] px-4 font-bold text-white">{t("nav.dashboard")}</Link>
+      <Link href="/projects" className="flex min-h-12 items-center justify-center rounded-md bg-[var(--alumex-blue)] px-4 font-bold text-white">{t("nav.projects")}</Link>
     </section>
   );
 

@@ -8,7 +8,6 @@ export const activeNavigationHrefs = [
   "/settings",
   "/hr",
   "/commercial",
-  "/finance",
   "/operations-manager",
   "/costing",
 ] as const;

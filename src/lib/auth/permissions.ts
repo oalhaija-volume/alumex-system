@@ -53,7 +53,6 @@ const routePermissions: Array<{
   },
   { prefix: "/commercial", roles: salesWorkspaceRoles },
   { prefix: "/contracts", roles: [...salesWorkspaceRoles, "Finance / Accountant"] },
-  { prefix: "/finance", roles: ["Admin", "Finance / Accountant"] },
   { prefix: "/costing", roles: ["Admin", "Procurement Engineer"] },
   { prefix: "/pricing", roles: ["Admin"] },
   { prefix: "/operation-manager", roles: ["Admin", "Operations Manager"] },
@@ -87,7 +86,7 @@ export function defaultRouteForRole(role: AppRole | null) {
     case "Branch Manager":
       return "/dashboard";
     case "Finance / Accountant":
-      return "/finance";
+      return "/contracts";
     case "Operations Manager":
       return "/dashboard";
     case "Procurement Engineer":

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { uploadedContractTerms } from '@/lib/contracts/uploadedTerms';
 import { salesProject } from '@/lib/workflow/access';
 import { priceQuotation, type CatalogItem, type OpeningChoice } from '@/lib/workflow/pricing';
 import type { Json } from '@/lib/supabase/database.types';
@@ -51,12 +52,12 @@ export async function POST(request:Request,context:Context){
   }
   if(action==='approve' && body.confirmed!==true)throw new Error('Confirm that the client approved this quotation.');
   if(action==='contract'){
-   const [terms,client]=await Promise.all([admin.from('contract_templates').select('*').eq('id','default').single(),admin.from('clients').select('name:client_name,mobile,client_type').eq('id',project.client_id).single()]);
-   if(terms.error||client.error)throw new Error('Unable to load contract terms and client information.');
-   const fields=['contract_terms','payment_terms','warranty_terms','execution_terms','first_party_obligations','second_party_obligations'] as const;
-   const sections=fields.map(key=>({title:key.replaceAll('_',' '),text:terms.data[key]??''}));
-   if(sections.some(t=>!t.text.trim()))throw new Error('Complete the stored contract terms before generating a contract.');
-   payload={number:`CT-${project.project_number}-${revision}`,createdAt:new Date().toISOString(),client:client.data,project:{name:project.project_name,number:project.project_number,address:project.address},terms:sections};
+   const kind=body.template;
+   if(kind!=='residential'&&kind!=='commercial')throw new Error('Choose the residential or commercial contract template.');
+   const client=await admin.from('clients').select('name:client_name,mobile,client_type').eq('id',project.client_id).single();
+   if(client.error)throw new Error('Unable to load client information.');
+   const sections=uploadedContractTerms(kind);
+   payload={number:`CT-${project.project_number}-${revision}`,createdAt:new Date().toISOString(),client:client.data,project:{name:project.project_name,number:project.project_number,address:project.address},terms:sections,template:kind};
   }
   if(action==='sign'){
    if(flow?.stage!=='contract')throw new Error('Only an unsigned generated contract can be signed.');

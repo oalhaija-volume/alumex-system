@@ -6,6 +6,8 @@ function load(path,dependencies={}){
  const source=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
  const exports={};new Function('require','exports',source)(name=>{if(!(name in dependencies))throw Error(name);return dependencies[name];},exports);return exports;
 }
+const termsData=JSON.parse(readFileSync(new URL('../src/lib/contracts/uploadedTerms.json',import.meta.url),'utf8'));
+const uploadedTerms=load('../src/lib/contracts/uploadedTerms.ts',{'./uploadedTerms.json':{default:termsData}});
 const pricing=load('../src/lib/workflow/pricing.ts');
 const opening={id:'opening',floor:'Ground',room:'Kitchen',width:120,height:150,opening_type:'Window',opening_direction:'Sliding'};
 const catalog=[{id:'alumex',name:'Alumex System',category:'aluminum_system',unit:'sqm',unit_price:270000,is_active:true},{id:'glass',name:'Low-E Glass',category:'addon',unit:'sqm',unit_price:25000,is_active:true},{id:'closer',name:'Closer',category:'addon',unit:'item',unit_price:10000,is_active:true},{id:'unpriced',name:'Other System',category:'aluminum_system',unit:'sqm',unit_price:0,is_active:true}];
@@ -43,7 +45,7 @@ test('HR has employee workspace only and legacy routes remain inaccessible',()=>
 });
 const json={NextResponse:{json:(body,options)=>({body,status:options?.status??200})}};
 for(const role of ['Operations Manager','Project Manager'])test(`${role} is rejected by commercial API before database access`,async()=>{
- const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({response:{status:403}})},'@/lib/workflow/pricing':pricing});
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({response:{status:403}})},'@/lib/workflow/pricing':pricing,'@/lib/contracts/uploadedTerms':uploadedTerms});
  const context={params:Promise.resolve({projectId:'project'})};assert.equal((await route.GET(new Request('https://example.test'),context)).status,403);assert.equal((await route.POST(new Request('https://example.test',{method:'POST'}),context)).status,403);
 });
 test('operations acceptance never returns the commercial RPC record',async()=>{
@@ -53,14 +55,14 @@ test('operations acceptance never returns the commercial RPC record',async()=>{
 test('stale quotation revision never reaches the transition RPC',async()=>{
  let calls=0;
  const admin={from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{revision:4,stage:'quotation'},error:null})};},rpc:()=>{calls++;}};
- const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project'}})},'@/lib/workflow/pricing':pricing});
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project'}})},'@/lib/workflow/pricing':pricing,'@/lib/contracts/uploadedTerms':uploadedTerms});
  const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'approve',revision:3,confirmed:true})}),{params:Promise.resolve({projectId:'project'})});
  assert.equal(result.status,409);assert.equal(calls,0);
 });
 for(const body of [{method:'digital',signature:''},{method:'upload'},{method:'digital',signature:'data:image/png;base64,forged'}])test(`unsigned/invalid ${body.method} evidence cannot trigger handoff`,async()=>{
  let calls=0;
  const admin={from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{revision:4,stage:'contract'},error:null})};},rpc:()=>{calls++;}};
- const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project'}})},'@/lib/workflow/pricing':pricing});
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project'}})},'@/lib/workflow/pricing':pricing,'@/lib/contracts/uploadedTerms':uploadedTerms});
  const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'sign',revision:4,signer:'Client',consent:true,...body})}),{params:Promise.resolve({projectId:'project'})});
  assert.equal(result.status,400);assert.equal(calls,0);
 });
@@ -91,4 +93,15 @@ test('operations specification projection excludes all monetary and contractual 
  const safe=operations.operationalSpecifications(quote);
  assert.deepEqual(safe,[{openingId:'opening',system:'Alumex System',glass:'Low-E Glass',extras:[{name:'Closer',quantity:2,unit:'item'}]}]);
  assert.equal(/rate|price|total|signature|contract/i.test(JSON.stringify(safe)),false);
+});
+
+for(const template of ['residential','commercial'])test(`${template} contract generation saves its uploaded terms and selected template`,async()=>{
+ let input;
+ const admin={from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{revision:2,stage:'approved'},error:null}),single:async()=>({data:{name:'Client',mobile:'07000',client_type:'individual'},error:null})};},rpc:async(name,args)=>{input=args;return {data:{},error:null};}};
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project',client_id:'client',project_name:'Site',project_number:'PRJ-1',address:'Baghdad'}})},'@/lib/workflow/pricing':pricing,'@/lib/contracts/uploadedTerms':uploadedTerms});
+ const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'contract',revision:2,template})}),{params:Promise.resolve({projectId:'project'})});
+ assert.equal(result.status,200);assert.equal(input.p_payload.template,template);assert.deepEqual(input.p_payload.terms,termsData[template]);
+ const payments=input.p_payload.terms.find(x=>x.title==='payment terms').text;
+ assert.match(payments,template==='commercial'?/25%/:/50/);
+ assert.ok(input.p_payload.terms.some(x=>x.text.includes('عشرة سنوات')));
 });

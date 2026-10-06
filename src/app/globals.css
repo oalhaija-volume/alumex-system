@@ -751,3 +751,89 @@ textarea {
   @page sales-document { size: A4; margin: 14mm; }
   .sales-document { page: sales-document; background: white; color: #0f172a; }
 }
+
+/* Shared client-facing quotation and contract stationery. */
+.commercial-document { background:#fff; color:#182e3b; border:1px solid #dbe3e8; border-radius:8px; padding:36px; box-shadow:0 4px 20px #16374b06; font-size:13px; line-height:1.6; }
+.document-header { border-bottom:3px solid #194b65; padding-bottom:26px; }
+.document-brand { display:flex; align-items:center; gap:22px; }
+.document-brand img { width:92px; height:110px; object-fit:contain; }
+.document-brand strong { font-size:19px; letter-spacing:.12em; color:#194b65; }
+.document-brand p { margin-top:4px; text-align:start; }
+.document-brand .document-address { color:#526574; font-size:12px; line-height:1.9; }
+.document-reference { display:flex; flex-wrap:wrap; align-items:end; justify-content:space-between; gap:8px 24px; margin-top:24px; }
+.document-eyebrow { width:100%; font-size:10px; letter-spacing:.16em; color:#5c7281; font-weight:600; }
+.document-reference h2 { font-size:30px; font-weight:650; line-height:1.25; }
+.document-reference h2 span { display:block; font-size:18px; margin-top:5px; color:#637786; font-weight:400; }
+.document-reference dl { min-width:220px; font-size:11px; }
+.document-reference dl div { display:flex; justify-content:space-between; gap:20px; }
+.document-reference dt { color:#657887; }
+.document-reference dd { font-weight:600; overflow-wrap:anywhere; }
+.document-parties { display:grid; grid-template-columns:1fr 1fr; gap:26px; padding:24px 0; border-bottom:1px solid #dae2e7; }
+.document-parties h3 { font-size:10px; letter-spacing:.08em; color:#5c7281; margin-bottom:8px; font-weight:600; }
+.document-client { font-size:16px; font-weight:600; }
+.document-parties p { overflow-wrap:anywhere; }
+.document-section-heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin:25px 0 14px; }
+.document-section-heading h3 { font-size:17px; font-weight:600; }
+.document-section-heading h3 span { display:inline-block; margin-inline-start:8px; font-size:13px; font-weight:400; color:#637786; }
+.document-section-heading p { font-size:11px; color:#637786; }
+.document-opening { margin-bottom:18px; border:1px solid #dbe3e8; border-radius:4px; overflow:hidden; }
+.document-opening-heading { display:flex; align-items:center; gap:12px; padding:13px; background:#f1f5f7; }
+.document-opening-number { color:#194b65; border-right:1px solid #c9d7df; padding-right:12px; font-weight:600; font-size:20px; }
+.document-opening-heading h4 { font-weight:650; font-size:13px; }
+.document-opening-heading p { font-size:11px; color:#637786; }
+.document-dimensions { margin-inline-start:auto; text-align:end; font-size:12px; }
+.document-opening table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:11px; }
+.document-opening th,.document-opening td { padding:10px 12px; text-align:end; vertical-align:top; overflow-wrap:anywhere; }
+.document-opening th:first-child,.document-opening td:first-child { text-align:start; width:44%; }
+.document-opening thead { color:#637786; font-size:10px; }
+.document-opening thead th { font-weight:500; border-bottom:1px solid #e4ebef; }
+.document-opening tbody tr+tr { border-top:1px solid #edf1f4; }
+.document-charge-kind { display:block; font-size:9px; color:#697d8a; }
+.document-opening tfoot { border-top:1px solid #dbe3e8; font-weight:600; }
+.document-total { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:20px; background:#194b65; color:white; border-radius:4px; }
+.document-total span { font-size:11px; letter-spacing:.08em; }
+.document-total p { font-size:10px; opacity:.8; }
+.document-total strong { font-size:24px; white-space:nowrap; }
+.document-note { margin:22px 0; font-size:11px; color:#637786; }
+.document-footer { margin-top:30px; padding-top:14px; border-top:1px solid #dbe3e8; display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; font-size:10px; color:#637786; }
+.document-footer strong { letter-spacing:.1em; color:#194b65; }
+.document-terms section { margin-top:22px; }
+.document-terms h4 { font-weight:650; padding-bottom:8px; border-bottom:1px solid #dbe3e8; margin-bottom:10px; }
+.document-terms h4 span { display:inline-block; color:#2b7094; margin-inline-end:12px; }
+.document-terms p { line-height:2; margin:8px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.document-company-signature { margin-bottom:28px; }
+.document-company-signature h3 { font-weight:600; }
+.document-company-signature p { color:#637786; font-size:11px; }
+.document-company-signature div { height:62px; border-bottom:1px solid #a6b7c2; width:48%; }
+@media(max-width:600px) {
+ .commercial-document { padding:16px; }
+ .document-brand { gap:12px; align-items:start; }
+ .document-brand img { width:64px; height:86px; }
+ .document-brand strong { font-size:14px; letter-spacing:.05em; }
+ .document-brand p { font-size:11px; }
+ .document-brand .document-address { font-size:10px; }
+ .document-reference dl { width:100%; }
+ .document-parties { grid-template-columns:1fr; gap:16px; }
+ .document-opening-heading { gap:8px; padding:10px; flex-wrap:wrap; }
+ .document-dimensions { font-size:10px; }
+ .document-opening th,.document-opening td { padding:8px 5px; font-size:10px; }
+ .document-total { padding:14px; flex-wrap:wrap; }
+ .document-total strong { font-size:21px; }
+}
+@media print {
+ .commercial-document { border:0; border-radius:0; box-shadow:none; padding:0; font-size:11px; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+ .document-header,.document-parties,.document-total,.document-footer,.document-company-signature { break-inside:avoid; }
+ .document-opening { overflow:visible; }
+ .document-opening-heading,.document-section-heading,.document-terms h4 { break-after:avoid; }
+ .document-opening tr,.document-terms p { break-inside:avoid; }
+ .document-opening thead { display:table-header-group; }
+ .document-opening tfoot { display:table-row-group; }
+ .document-terms p { orphans:3; widows:3; }
+ .document-reference h2 { font-size:25px; }
+ .document-brand img { height:90px; }
+}
+@media print {
+ html:has(.commercial-document), body:has(.commercial-document) { height:auto !important; min-height:0 !important; background:white !important; overflow:visible; }
+ body:has(.commercial-document), body:has(.commercial-document) > div { page:sales-document; }
+ body:has(.commercial-document) > div { min-height:0 !important; background:white !important; }
+}

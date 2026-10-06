@@ -6,7 +6,7 @@ import { setFieldUser } from "@/lib/offline/store";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCurrentRole } from "@/components/auth/useCurrentRole";
+import type { AppRole } from "@/lib/auth/permissions";
 import { canAccessRoute } from "@/lib/auth/permissions";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/I18nProvider";
@@ -26,9 +26,8 @@ function Brand({ small = false }: { small?: boolean }) {
   return <img src="/logos/AlumexLogo.svg" alt="Alumex" className={`${small ? "h-20" : "h-36"} w-auto object-contain`} />;
 }
 
-export function RegistrationShell({ children }: { children: React.ReactNode }) {
+export function RegistrationShell({ children, role }: { children: React.ReactNode; role: AppRole }) {
   const { t, locale } = useI18n();
-  const { role } = useCurrentRole();
   const pathname = usePathname();
   const drawer = useRef<HTMLDialogElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);

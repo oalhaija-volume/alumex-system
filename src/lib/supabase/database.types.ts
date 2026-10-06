@@ -1413,6 +1413,7 @@ export type Database = {
       };
     };
     Functions: {
+      sync_field_change: { Args: { p_operation: string; p_actor: string; p_project: string; p_action: string; p_payload: Json; p_recorded_at: string; p_expected_updated_at: string | null }; Returns: Json };
       commercial_privacy_ready: { Args: Record<string, never>; Returns: boolean };
       advance_sales_flow: { Args: { p_project: string; p_action: string; p_revision: number; p_payload: Json; p_actor: string }; Returns: Database["public"]["Tables"]["sales_workflows"]["Row"] };
       delete_projects_as_admin: {

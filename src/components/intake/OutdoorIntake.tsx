@@ -1,13 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { fieldFetch,isFieldOnline } from "@/lib/offline/client";
+import { useEffect, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { ProjectLocationPicker } from "@/components/projects/ProjectLocationPicker";
 
 export function OutdoorIntake() {
   const { t } = useI18n();
-  const router = useRouter();
+
   const [clientType, setClientType] = useState<"individual" | "company">("individual");
   const [companyLocation, setCompanyLocation] = useState<{latitude:number|null;longitude:number|null}>({latitude:null,longitude:null});
   const [name, setName] = useState("");
@@ -18,6 +18,8 @@ export function OutdoorIntake() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [offline,setOffline]=useState(false);
+  useEffect(()=>{const update=()=>setOffline(!isFieldOnline());const timer=setTimeout(update,0);window.addEventListener('field-connection',update);window.addEventListener('online',update);window.addEventListener('offline',update);return()=>{clearTimeout(timer);window.removeEventListener('field-connection',update);window.removeEventListener('online',update);window.removeEventListener('offline',update);};},[]);
 
   async function submit() {
     if (saving) return;
@@ -32,7 +34,7 @@ export function OutdoorIntake() {
     setSaving(true);
     setError("");
     try {
-      const response = await fetch("/api/sales-intake", {
+      const response = await fieldFetch("/api/sales-intake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -50,10 +52,10 @@ export function OutdoorIntake() {
           },
         }),
       });
-      const result = await response.json() as { error?: string; projectId?: string; nextPath?: string };
+      const result = await response.json() as { error?: string; projectId?: string; pending?: boolean; nextPath?: string };
       if (!response.ok || !result.projectId) throw new Error(result.error || t("intake.errors.save"));
-      if (readiness === "ready") router.push(`/initial-measurements/${result.projectId}`);
-      else router.push("/mini-crm");
+      if (!result.pending && isFieldOnline()) window.location.assign(readiness === "ready" ? `/initial-measurements/${result.projectId}` : "/mini-crm");
+      else window.location.assign(readiness === "ready" ? `/offline?project=${result.projectId}` : "/offline?path=/mini-crm");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("intake.errors.save"));
     } finally {
@@ -88,16 +90,16 @@ export function OutdoorIntake() {
         <div className="grid gap-5 sm:grid-cols-2">
           <label className="block text-sm font-medium text-slate-800">
             {clientType === "company" ? t("registration.companyName") : t("mobileIntake.name")}
-            <input required autoComplete={clientType === "company" ? "organization" : "name"} placeholder={clientType === "company" ? t("registration.companyNamePlaceholder") : t("registration.namePlaceholder")} value={name} onChange={event => setName(event.target.value)} className="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
+            <input required maxLength={150} autoComplete={clientType === "company" ? "organization" : "name"} placeholder={clientType === "company" ? t("registration.companyNamePlaceholder") : t("registration.namePlaceholder")} value={name} onChange={event => setName(event.target.value)} className="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
           </label>
           <label className="block text-sm font-medium text-slate-800">
             {t("mobileIntake.phone")}
-            <input required type="tel" autoComplete="tel" placeholder="07xx xxx xxxx" value={phone} onChange={event => setPhone(event.target.value)} className="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
+            <input required maxLength={80} type="tel" autoComplete="tel" placeholder="07xx xxx xxxx" value={phone} onChange={event => setPhone(event.target.value)} className="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
           </label>
         </div>
         {clientType === "company" ? <ProjectLocationPicker key="company-location"
           latitude={companyLocation.latitude} longitude={companyLocation.longitude} onChange={nextLocation => { setCompanyLocation(nextLocation); setError(""); }}
-          compact enableSearch allowRadiusChange={false} showGeofence={false}
+          compact enableSearch={!offline} allowRadiusChange={false} showGeofence={false}
           title={t("registration.companyLocation")} editableDescription={t("registration.companyLocationHelp")}
           currentLocationLabel={t("registration.useLocation")}
           searchLabel={t("registration.companyLocation")} searchPlaceholder={t("registration.searchPlaceholder")}
@@ -106,7 +108,7 @@ export function OutdoorIntake() {
           pinPrompt={t("registration.companyPinPrompt")}
         /> : null}
         <ProjectLocationPicker key="project-location" latitude={location.latitude} longitude={location.longitude} onChange={setLocation} onSearchSelect={setSiteAddress}
-          compact enableSearch allowRadiusChange={false} showGeofence={false}
+          compact enableSearch={!offline} allowRadiusChange={false} showGeofence={false}
           title={t("registration.location")} editableDescription=""
           currentLocationLabel={t("registration.useLocation")}
           searchLabel={t("registration.location")} searchPlaceholder={t("registration.searchPlaceholder")}
@@ -114,6 +116,11 @@ export function OutdoorIntake() {
           searchingLabel={t("common.loading")} locatingLabel={t("common.loading")}
           pinPrompt={t("registration.pinPrompt")}
         />
+        {offline && <div className="space-y-4 rounded-md border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm text-amber-900">Offline: map search needs internet. Use device location above, or enter coordinates below.</p>
+          {[{label:"Project site",value:location,set:setLocation},...(clientType === "company"?[{label:"Company",value:companyLocation,set:setCompanyLocation}]:[])].map(item=><fieldset key={item.label}><legend className="text-sm font-semibold">{item.label} coordinates</legend><div className="mt-2 grid grid-cols-2 gap-3">{(["latitude","longitude"] as const).map(axis=><label key={axis} className="text-xs capitalize">{axis}<input aria-label={`${item.label} ${axis}`} type="number" step="any" min={axis === "latitude"?-90:-180} max={axis === "latitude"?90:180} value={item.value[axis]??""} onChange={event=>item.set(current=>({...current,[axis]:event.target.value===""?null:Number(event.target.value)}))} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base"/></label>)}</div></fieldset>)}
+          <label className="block text-sm">Project site address<input value={siteAddress} onChange={event=>setSiteAddress(event.target.value)} className="mt-2 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3"/></label>
+        </div>}
         <fieldset>
           <legend className="mb-3 text-sm font-medium text-slate-800">{t("registration.readiness")}</legend>
           <div className="grid gap-3 sm:grid-cols-2">

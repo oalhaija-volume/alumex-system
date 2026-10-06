@@ -1,5 +1,8 @@
 "use client";
 
+import { OfflineStatus } from "@/components/offline/OfflineStatus";
+import { pendingFieldChanges,isFieldOnline } from "@/lib/offline/client";
+import { setFieldUser } from "@/lib/offline/store";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -40,7 +43,7 @@ export function RegistrationShell({ children }: { children: React.ReactNode }) {
     return <nav aria-label={menuLabel} className="space-y-1 px-4 py-5">
       {links.filter(([href]) => canAccessRoute(href, role)).map(([href, en, ar]) => {
         const active = pathname === href || (href === "/projects" && /^\/(initial-measurements|quotation|contract)\//.test(pathname));
-        return <Link key={href} href={href} onClick={closeMenu} aria-current={active ? "page" : undefined}
+        return <Link key={href} href={href} onClick={event=>{closeMenu();if(!isFieldOnline()){event.preventDefault();window.location.assign("/offline?path="+encodeURIComponent(href));}}} aria-current={active ? "page" : undefined}
           className={`flex min-h-12 items-center rounded-md border-s-4 px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${active ? "border-blue-600 bg-blue-50 text-blue-700" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
           {locale === "ar" ? ar : en}
         </Link>;
@@ -51,7 +54,12 @@ export function RegistrationShell({ children }: { children: React.ReactNode }) {
   function accountControls() {
     return <div className="mt-auto space-y-4 border-t border-slate-200 p-5">
       <LanguageSwitcher />
-      <form action="/auth/logout" method="post">
+      <form action="/auth/logout" method="post" onSubmit={async event=>{
+        event.preventDefault();const form=event.currentTarget;
+        if(!isFieldOnline()){alert("Connect to the internet before signing out.");return;}
+        if(await pendingFieldChanges()){alert(locale === "ar" ? "يرجى مزامنة التغييرات المحفوظة قبل تسجيل الخروج." : "Sync the changes saved on this device before signing out.");return;}
+        setFieldUser(null);form.submit();
+      }}>
         <button type="submit" className="min-h-11 w-full rounded-md px-3 text-start text-sm text-slate-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600">{t("mobileAccess.signOut")}</button>
       </form>
     </div>;
@@ -86,7 +94,7 @@ export function RegistrationShell({ children }: { children: React.ReactNode }) {
         </div>
       </dialog>
 
-      <main className="min-w-0 lg:ps-64 print:ps-0">{children}</main>
+      <main className="min-w-0 lg:ps-64 print:ps-0" onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a[href]');const href=link?.getAttribute('href');if(!isFieldOnline()&&href?.startsWith('/')&&href!=='/offline'){event.preventDefault();event.stopPropagation();window.location.assign('/offline?path='+encodeURIComponent(href));}}}>{role && ["Admin","Indoor Sales","Outdoor Sales"].includes(role) && <OfflineStatus/>}{children}</main>
     </div>
   );
 }

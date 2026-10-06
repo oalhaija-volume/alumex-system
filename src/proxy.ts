@@ -44,6 +44,7 @@ function measurementProjectIdFromPath(pathname: string) {
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  if (pathname === "/offline" || pathname === "/sw.js") return NextResponse.next();
   // Retired pages cannot expose the old UI, even through saved URLs.
   if (!isActiveSystemRoute(pathname) && !["/login", "/auth/callback", "/auth/logout", "/mobile-required"].includes(pathname)) {
     return NextResponse.redirect(new URL("/intake", request.url));

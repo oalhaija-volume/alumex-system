@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import { readFieldState } from "@/lib/offline/store";
+import { fieldFetch } from "@/lib/offline/client";
 import { useEffect, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { normalizeRegistrationOpening, registrationRoomTypes, registrationStructureTypes, type RegistrationOpening, type RegistrationStructure } from "@/lib/measurements/registrationOpening";
@@ -25,7 +27,7 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
   const endpoint = `/api/initial-measurements/${projectId}`;
   useEffect(()=>{
     const controller = new AbortController();
-    fetch(endpoint,{signal:controller.signal}).then(async response=>{
+    fieldFetch(endpoint,{signal:controller.signal}).then(async response=>{
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       setProject(data.project);setOpenings(data.openings);setFinished(data.project.sales_status !== "new_lead");setDraftId(crypto.randomUUID());
@@ -40,7 +42,7 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
     if (!opening) {setError(t("initialStep.invalid"));return;}
     setSaving(true);setError("");setNotice("");
     try {
-      const response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(opening)});
+      const response=await fieldFetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(opening)});
       const data=await response.json();if(!response.ok) throw new Error(data.error);
       setOpenings(current=>current.some(row=>row.id===opening.id)?current:[...current,opening]);
       setFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setDraftId(crypto.randomUUID());
@@ -52,7 +54,7 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
     if (saving) return;
     setSaving(true);setError("");
     try {
-      const response = await fetch(endpoint,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({action})});
+      const response = await fieldFetch(endpoint,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({action})});
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       setFinished(data.salesStatus === "ready_for_quotation");setNotice("");
@@ -113,6 +115,6 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
       </li>)}</ol>
       {!finished ? <><button type="button" disabled={saving || dirty} onClick={()=>void updateMeasurementStatus("finish")} className="mt-5 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50">{saving ? t("common.loading") : t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
     </div>:null}
-    {finished ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{t("initialStep.done")}</p><button disabled={saving} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button><Link href={`/quotation/${projectId}`} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">Continue to quotation</Link><Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
+    {finished ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{t("initialStep.done")}</p><button disabled={saving} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button><Link href={`/quotation/${projectId}`} onClick={async event=>{event.preventDefault();const state=await readFieldState();if(!navigator.onLine || state?.queue.some(c=>c.projectId===projectId)){setError("Your measurements are saved on this device. Wait for synchronization before preparing a quotation.");return;}window.location.assign(`/quotation/${projectId}`);}} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">Continue to quotation</Link><Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
   </section>;
 }

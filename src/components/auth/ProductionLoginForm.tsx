@@ -1,4 +1,5 @@
 "use client";
+import { setFieldUser } from "@/lib/offline/store";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import type { FormEvent } from "react";
@@ -72,6 +73,7 @@ export function ProductionLoginForm() {
         return;
       }
 
+      setFieldUser(null);
       const profileResponse = await fetch("/api/auth/bootstrap-profile", {
         method: "POST",
       });

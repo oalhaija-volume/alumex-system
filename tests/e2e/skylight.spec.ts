@@ -88,8 +88,27 @@ test("standalone skylight calculator creates a branded PDF without opening syste
   expect(errors).toEqual([]);
 
   const protectedPage = await context.newPage();
-  await protectedPage.goto("/dashboard");
-  await expect(protectedPage).toHaveURL(/\/login\?/);
+  for (const path of ["/dashboard", "/projects", "/catalog", "/hr"]) {
+    await protectedPage.goto(path);
+    await expect(protectedPage).toHaveURL(/\/login\?/);
+  }
+  const privateData = await context.request.get("/api/workspace");
+  expect(privateData.status()).toBe(401);
+});
+
+test("public calculator access is limited to its exact route", async ({ request }) => {
+  const response = await request.get("/skylight?source=shared", {
+    maxRedirects: 0,
+    headers: { cookie: "sb-test-auth-token=invalid-session" },
+  });
+  expect(response.status()).toBe(200);
+  expect(await response.text()).toContain("Skylight cost calculator");
+  expect(response.headers()["x-robots-tag"]).toContain("noindex");
+  for (const path of ["/skylight/private", "/skylight-admin"]) {
+    const protectedResponse = await request.get(path, { maxRedirects: 0 });
+    expect(protectedResponse.status()).toBe(307);
+    expect(new URL(protectedResponse.headers().location, protectedResponse.url()).pathname).toBe("/intake");
+  }
 });
 
 test("all materials and manual amounts fit one A4 quotation", async ({ page }) => {

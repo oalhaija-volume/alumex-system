@@ -44,6 +44,13 @@ function measurementProjectIdFromPath(pathname: string) {
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  // The standalone calculator uses local inputs only and does not need a session.
+  // Keep this exact exception ahead of both retired-page and authentication checks.
+  if (pathname === "/skylight") {
+    const response = NextResponse.next();
+    response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+    return response;
+  }
   if (pathname === "/offline" || pathname === "/sw.js") return NextResponse.next();
   // Retired pages cannot expose the old UI, even through saved URLs.
   if (!isActiveSystemRoute(pathname) && !["/login", "/auth/callback", "/auth/logout", "/mobile-required"].includes(pathname)) {

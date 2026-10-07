@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 import { useEffect, useRef, useState } from "react";
 
@@ -39,6 +40,7 @@ export function SignaturePad({
   ariaLabel = "لوحة التوقيع الرقمي",
   emptyMessage = "اطلب من الموقع التوقيع داخل المربع.",
 }: SignaturePadProps) {
+  const {term}=useI18n();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastPointRef = useRef<Point | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -180,14 +182,14 @@ export function SignaturePad({
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-semibold text-muted">
-            {value ? "تم أخذ التوقيع" : emptyMessage}
+            {value ? term("Signature captured") : emptyMessage}
           </p>
           <button
             type="button"
             onClick={clearSignature}
             className="h-10 rounded-md border border-border bg-surface px-4 text-sm font-bold text-muted-strong"
           >
-            مسح التوقيع
+            {term("Clear signature")}
           </button>
         </div>
       </div>

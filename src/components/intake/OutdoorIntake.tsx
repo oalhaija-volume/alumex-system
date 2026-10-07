@@ -8,7 +8,7 @@ import { useI18n } from "@/components/i18n/I18nProvider";
 import { ProjectLocationPicker } from "@/components/projects/ProjectLocationPicker";
 
 export function OutdoorIntake() {
-  const { t } = useI18n();
+  const { t, term,errorMessage } = useI18n();
 
   const [clientType, setClientType] = useState<"individual" | "company">("individual");
   const [companyLocation, setCompanyLocation] = useState<{latitude:number|null;longitude:number|null}>({latitude:null,longitude:null});
@@ -102,7 +102,7 @@ export function OutdoorIntake() {
           </label>
           <label className="block text-sm font-medium text-slate-800">
             {t("mobileIntake.phone")}
-            <input required maxLength={80} type="tel" autoComplete="tel" placeholder="07xx xxx xxxx" value={phone} onChange={event => setPhone(event.target.value)} className="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
+            <input required maxLength={80} type="tel" dir="ltr" autoComplete="tel" placeholder="07xx xxx xxxx" value={phone} onChange={event => setPhone(event.target.value)} className="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
           </label>
         </div>
         {clientType === "company" ? <ProjectLocationPicker key="company-location"
@@ -125,9 +125,9 @@ export function OutdoorIntake() {
           pinPrompt={t("registration.pinPrompt")}
         />
         {offline && <div className="space-y-4 rounded-md border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm text-amber-900">Offline: map search needs internet. Use device location above, or enter coordinates below.</p>
-          {[{label:"Project site",value:location,set:setLocation},...(clientType === "company"?[{label:"Company",value:companyLocation,set:setCompanyLocation}]:[])].map(item=><fieldset key={item.label}><legend className="text-sm font-semibold">{item.label} coordinates</legend><div className="mt-2 grid grid-cols-2 gap-3">{(["latitude","longitude"] as const).map(axis=><label key={axis} className="text-xs capitalize">{axis}<input aria-label={`${item.label} ${axis}`} type="number" step="any" min={axis === "latitude"?-90:-180} max={axis === "latitude"?90:180} value={item.value[axis]??""} onChange={event=>item.set(current=>({...current,[axis]:event.target.value===""?null:Number(event.target.value)}))} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base"/></label>)}</div></fieldset>)}
-          <label className="block text-sm">Project site address<input value={siteAddress} onChange={event=>setSiteAddress(event.target.value)} className="mt-2 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3"/></label>
+          <p className="text-sm text-amber-900">{term("Offline: map search needs internet. Use device location above, or enter coordinates below.")}</p>
+          {[{label:"Project site",value:location,set:setLocation},...(clientType === "company"?[{label:"Company",value:companyLocation,set:setCompanyLocation}]:[])].map(item=><fieldset key={item.label}><legend className="text-sm font-semibold">{term('{site} coordinates',{site:term(item.label)})}</legend><div className="mt-2 grid grid-cols-2 gap-3">{(["latitude","longitude"] as const).map(axis=><label key={axis} className="text-xs capitalize">{term(axis)}<input aria-label={term('{site} {axis}',{site:term(item.label),axis:term(axis)})} type="number" step="any" min={axis === "latitude"?-90:-180} max={axis === "latitude"?90:180} value={item.value[axis]??""} onChange={event=>item.set(current=>({...current,[axis]:event.target.value===""?null:Number(event.target.value)}))} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base"/></label>)}</div></fieldset>)}
+          <label className="block text-sm">{term("Project site address")}<input value={siteAddress} onChange={event=>setSiteAddress(event.target.value)} className="mt-2 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3"/></label>
         </div>}
         <fieldset>
           <legend className="mb-3 text-sm font-medium text-slate-800">{t("registration.readiness")}</legend>
@@ -140,13 +140,13 @@ export function OutdoorIntake() {
             ))}
           </div>
         </fieldset>
-        <div><label className="block text-sm font-medium text-slate-800" htmlFor="outdoor-assignee">Outdoor Sales for measurements {employeeState?.actor.role==='Indoor Sales'?'(required)':'(optional)'}</label>
-          <select id="outdoor-assignee" value={assignedOutdoorSalesId} onChange={event=>setAssignedOutdoorSalesId(event.target.value)} required={employeeState?.actor.role==='Indoor Sales'} className="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base"><option value="">{employeeState?.actor.role==='Indoor Sales'?'Choose Outdoor Sales employee':'Not assigned'}</option>{employeeState?.outdoorSales?.map(employee=><option key={employee.id} value={employee.id}>{employee.name}</option>)}</select>
-          <p className="mt-2 text-xs leading-5 text-slate-500">{employeeState?.actor.role==='Indoor Sales'?'The assigned employee will see the project in their mobile workspace to collect measurements.':'Choose an Outdoor Sales employee if someone else will collect the measurements.'}</p>
-          {employeeState&&!employeeState.outdoorSales?.length&&<p className="mt-2 text-xs text-amber-800">No active Outdoor Sales employees available. Add one in Employees and reconnect to refresh this list.</p>}
+        <div><label className="block text-sm font-medium text-slate-800" htmlFor="outdoor-assignee">{term("Outdoor Sales for measurements")} {employeeState?.actor.role==='Indoor Sales'?term("(required)"):term("(optional)")}</label>
+          <select id="outdoor-assignee" value={assignedOutdoorSalesId} onChange={event=>setAssignedOutdoorSalesId(event.target.value)} required={employeeState?.actor.role==='Indoor Sales'} className="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base"><option value="">{employeeState?.actor.role==='Indoor Sales'?term("Choose Outdoor Sales employee"):term("Not assigned")}</option>{employeeState?.outdoorSales?.map(employee=><option key={employee.id} value={employee.id}>{employee.name==='Employee'?term('Employee'):employee.name}</option>)}</select>
+          <p className="mt-2 text-xs leading-5 text-slate-500">{employeeState?.actor.role==='Indoor Sales'?term("The assigned employee will see the project in their mobile workspace to collect measurements."):term("Choose an Outdoor Sales employee if someone else will collect the measurements.")}</p>
+          {employeeState&&!employeeState.outdoorSales?.length&&<p className="mt-2 text-xs text-amber-800">{term("No active Outdoor Sales employees available. Add one in Employees and reconnect to refresh this list.")}</p>}
         </div>
         <p className="flex items-start gap-2 text-xs leading-5 text-slate-500"><span aria-hidden="true">ⓘ</span>{t("registration.audit")}</p>
-        {error ? <p role="alert" className="rounded-md bg-red-50 p-3 text-sm font-medium text-red-700">{error}</p> : null}
+        {error ? <p role="alert" className="rounded-md bg-red-50 p-3 text-sm font-medium text-red-700">{errorMessage(error)}</p> : null}
         <button type="button" onClick={() => void submit()} className="flex min-h-12 w-full items-center justify-center gap-3 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600 disabled:opacity-50">
           {saving ? t("common.loading") : readiness === "ready" ? t("registration.continue") : t("registration.save")}
           {!saving ? <span aria-hidden="true" className="rtl:rotate-180">→</span> : null}

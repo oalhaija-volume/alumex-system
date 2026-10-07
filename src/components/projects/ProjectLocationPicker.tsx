@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from '@/components/i18n/I18nProvider';
 
 import { useMemo, useRef, useState } from "react";
 import type { FormEvent, MouseEvent } from "react";
@@ -123,6 +124,7 @@ export function ProjectLocationPicker({
     longitude: number;
   }) => void;
 }) {
+ const { term,errorMessage } = useI18n();
   const hasPin =
     typeof latitude === "number" &&
     Number.isFinite(latitude) &&
@@ -340,9 +342,9 @@ export function ProjectLocationPicker({
     <div className={compact ? "text-slate-800" : "rounded-lg border border-border bg-surface-muted p-3"}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-foreground">{title}</p>
+          <p className="text-sm font-bold text-foreground">{term(title)}</p>
           <p className="mt-1 text-xs font-semibold text-muted">
-            {readOnly ? readOnlyDescription : editableDescription}
+            {term(readOnly ? readOnlyDescription : editableDescription)}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -353,14 +355,14 @@ export function ProjectLocationPicker({
               onClick={useCurrentLocation}
               className="h-11 rounded-md border border-border bg-surface px-3 text-xs font-bold text-muted-strong disabled:cursor-wait disabled:opacity-60"
             >
-              {isLocating ? locatingLabel : currentLocationLabel}
+              {term(isLocating ? locatingLabel : currentLocationLabel)}
             </button>
           ) : null}
           <button
             type="button"
             onClick={() => setZoom((currentZoom) => Math.max(currentZoom - 1, 3))}
             className="h-9 w-9 rounded-md border border-border bg-surface text-sm font-bold text-muted-strong"
-            aria-label="Zoom out"
+            aria-label={term("Zoom out")}
           >
             -
           </button>
@@ -368,7 +370,7 @@ export function ProjectLocationPicker({
             type="button"
             onClick={() => setZoom((currentZoom) => Math.min(currentZoom + 1, 18))}
             className="h-9 w-9 rounded-md border border-border bg-surface text-sm font-bold text-muted-strong"
-            aria-label="Zoom in"
+            aria-label={term("Zoom in")}
           >
             +
           </button>
@@ -376,7 +378,7 @@ export function ProjectLocationPicker({
       </div>
       {locationError ? (
         <p className="mt-2 text-xs font-semibold text-danger-text" role="alert">
-          {locationError}
+          {errorMessage(locationError)}
         </p>
       ) : null}
 
@@ -387,7 +389,7 @@ export function ProjectLocationPicker({
             className="flex flex-col gap-2 sm:flex-row"
           >
             <label className="min-w-0 flex-1">
-              <span className="sr-only">{searchLabel}</span>
+              <span className="sr-only">{term(searchLabel)}</span>
               <input
                 type="search"
                 value={searchQuery}
@@ -396,7 +398,7 @@ export function ProjectLocationPicker({
                   setSearchQuery(event.target.value);
                   setSearchError("");
                 }}
-                placeholder={searchPlaceholder}
+                placeholder={term(searchPlaceholder)}
                 minLength={3}
                 className="h-11 w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground outline-none transition placeholder:text-muted focus:border-primary focus:ring-4 focus:ring-info-surface"
               />
@@ -406,7 +408,7 @@ export function ProjectLocationPicker({
               disabled={isSearching || searchQuery.trim().length < 3}
               className="h-11 rounded-md bg-primary px-4 text-sm font-bold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
             >
-              {isSearching ? searchingLabel : searchButtonLabel}
+              {term(isSearching ? searchingLabel : searchButtonLabel)}
             </button>
           </form>
           {searchError ? (
@@ -414,12 +416,12 @@ export function ProjectLocationPicker({
               className="mt-2 text-xs font-semibold text-danger-text"
               role="status"
             >
-              {searchError}
+              {errorMessage(searchError)}
             </p>
           ) : null}
           {isResolvingAddress ? (
             <p className="mt-2 text-xs font-semibold text-muted" role="status">
-              {searchingLabel}
+              {term(searchingLabel)}
             </p>
           ) : null}
           {searchResults.length > 0 ? (
@@ -447,7 +449,7 @@ export function ProjectLocationPicker({
         type="button"
         onClick={handleMapClick}
         className={`relative mt-3 w-full overflow-hidden rounded-md border border-border bg-surface text-left ${compact ? "h-40 sm:h-44" : "h-64 sm:h-80"}`}
-        aria-label={mapAriaLabel}
+        aria-label={term(mapAriaLabel)}
       >
         {tiles.map((tile) => (
           // OpenStreetMap tiles are externally served map fragments; next/image optimization is not useful here.
@@ -481,7 +483,7 @@ export function ProjectLocationPicker({
           </>
         ) : (
           <span className="absolute left-1/2 top-1/2 z-10 w-max max-w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-surface/95 px-3 py-2 text-sm font-bold text-muted-strong shadow">
-            {readOnly ? "No pin added" : pinPrompt}
+            {readOnly ? term("No pin added") : term(pinPrompt)}
           </span>
         )}
         <span className="absolute bottom-2 right-2 rounded bg-surface/90 px-2 py-1 text-[10px] font-semibold text-muted">
@@ -490,11 +492,9 @@ export function ProjectLocationPicker({
       </button>
 
       <div className={`${compact ? "hidden" : "mt-3 grid gap-2 text-xs font-semibold text-muted-strong sm:grid-cols-[1fr_1fr_auto]"}`}>
-        <p className="rounded-md border border-border bg-surface px-3 py-2">
-          Latitude: {formatCoordinate(latitude)}
+        <p className="rounded-md border border-border bg-surface px-3 py-2"> {term("Latitude:")} {term(formatCoordinate(latitude))}
         </p>
-        <p className="rounded-md border border-border bg-surface px-3 py-2">
-          Longitude: {formatCoordinate(longitude)}
+        <p className="rounded-md border border-border bg-surface px-3 py-2"> {term("Longitude:")} {term(formatCoordinate(longitude))}
         </p>
         {!readOnly ? (
           <button
@@ -506,22 +506,17 @@ export function ProjectLocationPicker({
               onSearchSelect?.("");
             }}
             className="h-9 rounded-md border border-border bg-surface px-3 text-xs font-bold text-muted-strong"
-          >
-            Clear pin
-          </button>
+          > {term("Clear pin")} </button>
         ) : null}
       </div>
       {showGeofence ? (
         <div className="mt-3 rounded-md border border-border bg-surface px-3 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <label className="min-w-0 flex-1">
-              <span className="text-xs font-bold uppercase tracking-wide text-muted">
-                Geofence radius
-              </span>
+              <span className="text-xs font-bold uppercase tracking-wide text-muted"> {term("Geofence radius")} </span>
               {readOnly || !allowRadiusChange ? (
                 <p className="mt-1 text-sm font-bold text-foreground">
-                  {radiusMeters} meters
-                </p>
+                  {radiusMeters} {term("meters")} </p>
               ) : (
                 <input
                   type="range"
@@ -547,12 +542,12 @@ export function ProjectLocationPicker({
                   onRadiusChange?.(Number(event.target.value))
                 }
                 className="h-10 w-28 rounded-md border border-border bg-surface px-3 text-sm font-bold text-foreground"
-                aria-label="Geofence radius in meters"
+                aria-label={term("Geofence radius in meters")}
               />
             ) : null}
           </div>
           <p className="mt-2 text-xs font-semibold text-muted">
-            {radiusDescription}
+            {term(radiusDescription)}
           </p>
         </div>
       ) : null}

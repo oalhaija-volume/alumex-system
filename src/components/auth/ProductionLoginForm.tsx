@@ -23,7 +23,7 @@ function getLoginErrorMessage(error: unknown, failedToFetch: string, fallback: s
 export function ProductionLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useI18n();
+  const { t,errorMessage } = useI18n();
   const requestedRoute = searchParams.get("redirectTo");
   const redirectTo = requestedRoute?.startsWith("/") && !requestedRoute.startsWith("//") ? requestedRoute : "/";
   const hasMissingConfiguration =
@@ -113,6 +113,7 @@ export function ProductionLoginForm() {
             type="text"
             required
             autoComplete="username"
+            dir="ltr"
             value={username}
             onChange={(event) => setUsername(event.target.value)}
             placeholder={t("auth.usernamePlaceholder")}
@@ -135,7 +136,7 @@ export function ProductionLoginForm() {
         </label>
         {error ? (
           <p className="rounded-md border border-border bg-danger-surface px-3 py-2 text-sm font-semibold text-danger-text">
-            {error}
+            {errorMessage(error)}
           </p>
         ) : null}
         <button

@@ -9,7 +9,7 @@ import { normalizeRegistrationOpening, registrationRoomTypes, registrationStruct
 
 const field = "mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
 export function InitialMeasurements({projectId}:{projectId:string}) {
-  const {t} = useI18n();
+  const {t,term,errorMessage,formatNumber} = useI18n();
   const [project,setProject] = useState<{project_name:string;project_number:string}|null>(null);
   const [openings,setOpenings] = useState<RegistrationOpening[]>([]);
   const [floor,setFloor] = useState("");
@@ -65,13 +65,13 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
   const dirty = Boolean(width || height || structuralType || floor || room || otherRoom);
   return <section className="mx-auto w-full max-w-[760px] px-5 py-8 sm:px-8 sm:py-10">
     <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{t("initialStep.title")}</h1>
-    <p className="mt-2 text-sm leading-6 text-slate-500">{project ? `${project.project_name} · ${project.project_number}` : t("initialStep.description")}</p>
+    <p className="mt-2 text-sm leading-6 text-slate-500">{project ? `${project.project_name} · ${term(project.project_number)}` : t("initialStep.description")}</p>
     {loading ? <p className="mt-6" role="status">{t("common.loading")}</p> : null}
-    {error ? <p role="alert" className="mt-5 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+    {error ? <p role="alert" className="mt-5 rounded-md bg-red-50 p-3 text-sm text-red-700">{errorMessage(error)}</p> : null}
     <ProjectRecord projectId={projectId}/>{project && !finished ? <>
       <form onSubmit={save} className="mt-7 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
         <fieldset disabled={saving} className="min-w-0 space-y-5">
-          <legend className="mb-5 text-lg font-semibold text-slate-900">{t("initialStep.opening",{number:openings.length+1})}</legend>
+          <legend className="mb-5 text-lg font-semibold text-slate-900">{t("initialStep.opening",{number:formatNumber(openings.length+1)})}</legend>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm font-medium text-slate-800">{t("initialStep.floor")}
               <input required maxLength={100} value={floor} onChange={event=>setFloor(event.target.value)} placeholder={t("initialStep.floorPlaceholder")} className={field} />
@@ -105,17 +105,17 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
           <button type="submit" className="min-h-12 w-full rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{saving?t("common.loading"):t("initialStep.add")}</button>
         </fieldset>
       </form>
-      {notice ? <p role="status" className="mt-4 text-sm text-green-800">{notice}</p>:null}
+      {notice ? <p role="status" className="mt-4 text-sm text-green-800">{errorMessage(notice)}</p>:null}
     </> : null}
     {openings.length ? <div className="mt-7">
-      <h2 className="text-base font-semibold text-slate-900">{t("initialStep.list",{count:openings.length})}</h2>
+      <h2 className="text-base font-semibold text-slate-900">{t("initialStep.list",{count:formatNumber(openings.length)})}</h2>
       <ol className="mt-3 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white px-4">{openings.map((opening,index)=><li key={opening.id} className="flex flex-wrap items-center justify-between gap-2 py-4 text-sm">
-        <span className="font-medium text-slate-900">{index+1}. {t(`initialStep.types.${opening.structuralType}`)}{opening.openingType ? ` · ${t(`initialStep.${opening.openingType}`)}`:""}</span>
-        <span className="w-full text-slate-500">{opening.floor} · {opening.room === "Other" ? opening.otherRoom : t(`initialStep.rooms.${opening.room}`)}</span>
-        <span className="text-slate-600">{opening.width} × {opening.height} {t("initialStep.cm")}</span>
+        <span className="font-medium text-slate-900">{formatNumber(index+1)}. {t(`initialStep.types.${opening.structuralType}`)}{opening.openingType ? ` · ${t(`initialStep.${opening.openingType}`)}`:""}</span>
+        <span className="w-full text-slate-500">{term(opening.floor)} · {opening.room === "Other" ? opening.otherRoom : t(`initialStep.rooms.${opening.room}`)}</span>
+        <span className="text-slate-600">{formatNumber(opening.width)} × {formatNumber(opening.height)} {t("initialStep.cm")}</span>
       </li>)}</ol>
       {!finished ? <><button type="button" disabled={saving || dirty} onClick={()=>void updateMeasurementStatus("finish")} className="mt-5 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50">{saving ? t("common.loading") : t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
     </div>:null}
-    {finished ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{t("initialStep.done")}</p><button disabled={saving} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button><Link href={`/quotation/${projectId}`} onClick={async event=>{event.preventDefault();const state=await readFieldState();if(!navigator.onLine || state?.queue.some(c=>c.projectId===projectId)){setError("Your measurements are saved on this device. Wait for synchronization before preparing a quotation.");return;}window.location.assign(`/quotation/${projectId}`);}} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">Continue to quotation</Link><Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
+    {finished ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{t("initialStep.done")}</p><button disabled={saving} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button><Link href={`/quotation/${projectId}`} onClick={async event=>{event.preventDefault();const state=await readFieldState();if(!navigator.onLine || state?.queue.some(c=>c.projectId===projectId)){setError("Your measurements are saved on this device. Wait for synchronization before preparing a quotation.");return;}window.location.assign(`/quotation/${projectId}`);}} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Continue to quotation")}</Link><Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
   </section>;
 }

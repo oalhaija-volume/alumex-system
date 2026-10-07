@@ -1,8 +1,10 @@
 "use client";
+import { useI18n } from '@/components/i18n/I18nProvider';
 import { useEffect,useState } from 'react';
 import { prepareOffline,syncFieldChanges,isFieldOnline } from '@/lib/offline/client';
 import { activeFieldUser,readFieldState } from '@/lib/offline/store';
 export function OfflineStatus(){
+ const { term,errorMessage,formatNumber } = useI18n();
  const [online,setOnline]=useState(true);const [count,setCount]=useState(0);const [error,setError]=useState('');const [ready,setReady]=useState(false);
  useEffect(()=>{
   let mounted=true;
@@ -13,5 +15,5 @@ export function OfflineStatus(){
   const timer=window.setInterval(()=>void connect(),30000);
   return()=>{mounted=false;clearInterval(timer);window.removeEventListener('field-change',refresh);window.removeEventListener('field-connection',refresh);window.removeEventListener('online',connect);window.removeEventListener('offline',refresh);window.removeEventListener('focus',connect);};
  },[]);
- return <div className="border-b border-slate-200 bg-white px-5 py-3 text-sm print:hidden"><div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3"><p role="status" className={error?'text-red-700':!online||count?'text-amber-800':'text-slate-600'}>{!ready?'Preparing offline storage…':count?`${count} change${count===1?'':'s'} saved on this device · ${online?'Sync pending':'Offline'}`:online?'Synced · Offline saving ready':'Offline · Saved work is available on this device'}</p><a href="/offline" className="font-semibold text-blue-600">Device workspace</a></div>{error&&<p role="alert" className="mx-auto mt-2 max-w-5xl text-xs text-red-700">{error} <button onClick={()=>void syncFieldChanges()} className="underline">Retry sync</button></p>}</div>;
+ return <div className="border-b border-slate-200 bg-white px-5 py-3 text-sm print:hidden"><div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3"><p role="status" className={error?'text-red-700':!online||count?'text-amber-800':'text-slate-600'}>{!ready?term("Preparing offline storage…"):count?term(count===1?'{count} change saved on this device · {status}':'{count} changes saved on this device · {status}',{count:formatNumber(count),status:term(online?'Sync pending':'Offline')}):online?term("Synced · Offline saving ready"):term("Offline · Saved work is available on this device")}</p><a href="/offline" className="font-semibold text-blue-600">{term("Device workspace")}</a></div>{error&&<p role="alert" className="mx-auto mt-2 max-w-5xl text-xs text-red-700">{errorMessage(error)} <button onClick={()=>void syncFieldChanges()} className="underline">{term("Retry sync")}</button></p>}</div>;
 }

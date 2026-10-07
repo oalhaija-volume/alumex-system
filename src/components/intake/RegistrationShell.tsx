@@ -22,13 +22,14 @@ const links = [
 ];
 
 function Brand({ small = false }: { small?: boolean }) {
+ const { term } = useI18n();
   // The supplied brand asset is already an SVG.
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src="/logos/AlumexLogo.svg" alt="Alumex" className={`${small ? "h-20" : "h-36"} w-auto object-contain`} />;
+  return <img src="/logos/AlumexLogo.svg" alt={term("Alumex")} className={`${small ? "h-20" : "h-36"} w-auto object-contain`} />;
 }
 
 export function RegistrationShell({ children, role }: { children: React.ReactNode; role: AppRole }) {
-  const { t, locale } = useI18n();
+  const { t, locale, term } = useI18n();
   const pathname = usePathname();
   const drawer = useRef<HTMLDialogElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -56,7 +57,7 @@ export function RegistrationShell({ children, role }: { children: React.ReactNod
       <LanguageSwitcher />
       <form action="/auth/logout" method="post" onSubmit={async event=>{
         event.preventDefault();const form=event.currentTarget;
-        if(!isFieldOnline()){alert("Connect to the internet before signing out.");return;}
+        if(!isFieldOnline()){alert(term("Connect to the internet before signing out."));return;}
         if(await pendingFieldChanges()){alert(locale === "ar" ? "يرجى مزامنة التغييرات المحفوظة قبل تسجيل الخروج." : "Sync the changes saved on this device before signing out.");return;}
         setFieldUser(null);form.submit();
       }}>
@@ -79,7 +80,7 @@ export function RegistrationShell({ children, role }: { children: React.ReactNod
           onClick={() => { drawer.current?.showModal(); setMenuOpen(true); }}
           className="flex min-h-12 items-center gap-3 rounded-md border border-slate-200 px-4 text-sm font-semibold text-slate-700 focus-visible:outline-2 focus-visible:outline-blue-600">
           <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
-          {locale === "ar" ? "القائمة" : "Menu"}
+          {locale === "ar" ? "القائمة" : term("Menu")}
         </button>
       </header>
 

@@ -778,7 +778,7 @@ textarea {
 .document-section-heading p { font-size:11px; color:#637786; }
 .document-opening { margin-bottom:18px; border:1px solid #dbe3e8; border-radius:4px; overflow:hidden; }
 .document-opening-heading { display:flex; align-items:center; gap:12px; padding:13px; background:#f1f5f7; }
-.document-opening-number { color:#194b65; border-right:1px solid #c9d7df; padding-right:12px; font-weight:600; font-size:20px; }
+.document-opening-number { color:#194b65; border-inline-end:1px solid #c9d7df; padding-inline-end:12px; font-weight:600; font-size:20px; }
 .document-opening-heading h4 { font-weight:650; font-size:13px; }
 .document-opening-heading p { font-size:11px; color:#637786; }
 .document-dimensions { margin-inline-start:auto; text-align:end; font-size:12px; }
@@ -837,3 +837,9 @@ textarea {
  body:has(.commercial-document), body:has(.commercial-document) > div { page:sales-document; }
  body:has(.commercial-document) > div { min-height:0 !important; background:white !important; }
 }
+
+.commercial-document[dir="rtl"] .document-brand strong,
+.commercial-document[dir="rtl"] .document-eyebrow,
+.commercial-document[dir="rtl"] .document-parties h3,
+.commercial-document[dir="rtl"] .document-total span,
+.commercial-document[dir="rtl"] .document-footer strong { letter-spacing:0; }

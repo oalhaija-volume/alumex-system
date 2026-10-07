@@ -17,6 +17,7 @@ import {
   type Locale,
   type Messages,
 } from "@/lib/i18n";
+import { interpolateMessage,translateTerm,translateError,localizedDateTime,localizedNumber,localizedMoney } from '@/lib/i18nFormatting';
 
 type Replacements = Record<string, string | number>;
 
@@ -25,7 +26,11 @@ type I18nContextValue = {
   direction: "ltr" | "rtl";
   setLocale: (locale: Locale) => void;
   t: (key: string, replacements?: Replacements) => string;
-  term: (value: string | null | undefined) => string;
+  term: (value: string | null | undefined, replacements?: Replacements) => string;
+  errorMessage: (message: string) => string;
+  formatDateTime: (value:Date|string|number) => string;
+  formatNumber: (value:number,maximumFractionDigits?:number) => string;
+  formatMoney: (value:number) => string;
   formatDate: (value: Date | string | number) => string;
   formatCurrency: (value: number) => string;
   messages: Messages;
@@ -44,14 +49,7 @@ function readMessage(messages: Messages, key: string) {
 }
 
 function interpolate(message: string, replacements?: Replacements) {
-  if (!replacements) {
-    return message;
-  }
-
-  return Object.entries(replacements).reduce(
-    (text, [key, value]) => text.replaceAll(`{${key}}`, String(value)),
-    message,
-  );
+  return interpolateMessage(message,replacements);
 }
 
 function applyLocale(locale: Locale) {
@@ -101,12 +99,12 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         : key;
     }
 
-    function term(rawValue: string | null | undefined) {
+    function term(rawValue: string | null | undefined, replacements?: Replacements) {
       if (!rawValue) {
         return t("common.notAdded");
       }
 
-      return messages.terms[rawValue as keyof typeof messages.terms] ?? rawValue;
+      return translateTerm(locale,rawValue,replacements);
     }
 
     function formatDate(value: Date | string | number) {
@@ -116,6 +114,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         year: "numeric",
         month: "short",
         day: "numeric",
+        timeZone: "Asia/Baghdad",
       }).format(date);
     }
 
@@ -133,6 +132,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       setLocale,
       t,
       term,
+      errorMessage:(message:string)=>translateError(locale,message),
+      formatDateTime:(value:Date|string|number)=>localizedDateTime(locale,value),
+      formatNumber:(value:number,maximumFractionDigits?:number)=>localizedNumber(locale,value,maximumFractionDigits),
+      formatMoney:(value:number)=>localizedMoney(locale,value),
       formatDate,
       formatCurrency,
       messages,

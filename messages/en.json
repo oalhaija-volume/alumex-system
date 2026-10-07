@@ -94,6 +94,8 @@
     "passwordsDoNotMatch": "The new passwords do not match.",
     "passwordTooShort": "The new password must be at least 8 characters.",
     "loginButton": "Login",
+    "skylightCalculator": "Skylight calculator",
+    "publicCalculatorDescription": "Open the calculator without signing in.",
     "signingIn": "Signing in...",
     "logout": "Logout",
     "loggingOut": "Logging out...",

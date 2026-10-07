@@ -1,5 +1,6 @@
 "use client";
 import { Suspense } from "react";
+import Link from "next/link";
 import { ProductionLoginForm } from "@/components/auth/ProductionLoginForm";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/I18nProvider";
@@ -15,6 +16,12 @@ export default function LoginPage() {
       </div>
       <h1 className="mt-7 text-2xl font-semibold text-slate-900">{t("auth.login")}</h1>
       <Suspense fallback={<p>{t("common.loading")}</p>}><ProductionLoginForm /></Suspense>
+      <div className="mt-7 border-t border-slate-200 pt-6">
+        <Link href="/skylight" className="flex min-h-12 w-full items-center justify-center rounded-md border border-blue-600 bg-blue-50 px-4 py-3 text-center text-sm font-semibold text-blue-700 hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+          {t("auth.skylightCalculator")}
+        </Link>
+        <p className="mt-3 text-center text-sm text-slate-500">{t("auth.publicCalculatorDescription")}</p>
+      </div>
     </section>
   </main>;
 }

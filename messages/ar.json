@@ -93,6 +93,8 @@
     "passwordsDoNotMatch": "كلمتا المرور الجديدتان غير متطابقتين.",
     "passwordTooShort": "يجب أن تكون كلمة المرور الجديدة 8 أحرف على الأقل.",
     "loginButton": "تسجيل الدخول",
+    "skylightCalculator": "حاسبة السكاي لايت",
+    "publicCalculatorDescription": "افتح الحاسبة دون تسجيل الدخول.",
     "signingIn": "جاري تسجيل الدخول...",
     "logout": "تسجيل الخروج",
     "loggingOut": "جاري تسجيل الخروج...",

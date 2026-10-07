@@ -11,7 +11,14 @@ export async function api<T>(url:string,init?:RequestInit):Promise<T>{
 }
 export function useResource<T>(url:string){
  const [data,setData]=useState<T|null>(null);const [error,setError]=useState('');const [loading,setLoading]=useState(true);
- useEffect(()=>{const controller=new AbortController();api<T>(url,{signal:controller.signal}).then(setData).catch(e=>{if(!controller.signal.aborted)setError(e.message);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});return()=>controller.abort();},[url]);
+ useEffect(()=>{
+  const controller=new AbortController();let version=0;let timer:ReturnType<typeof setTimeout>;
+  async function refresh(){const current=++version;try{const result=await api<T>(url,{signal:controller.signal});if(!controller.signal.aborted&&current===version){setData(result);setError('');}}catch(e){if(!controller.signal.aborted&&current===version)setError((e as Error).message);}finally{if(!controller.signal.aborted)setLoading(false);}}
+  function changed(){clearTimeout(timer);timer=setTimeout(()=>void refresh(),150);}
+  void refresh();
+  if(url==='/api/workspace'){window.addEventListener('field-change',changed);window.addEventListener('focus',changed);}
+  return()=>{controller.abort();clearTimeout(timer);window.removeEventListener('field-change',changed);window.removeEventListener('focus',changed);};
+ },[url]);
  async function reload(){setData(await api<T>(url));}
  return {data,setData,error,setError,loading,reload};
 }
@@ -19,6 +26,6 @@ export function Workspace({title,description,children}:{title:string;description
 export function Notice({error}:{error:string}){const {errorMessage}=useI18n();return error?<div role="alert" className="mb-5 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{errorMessage(error)}</div>:null;}
 export function useNow(){
  const [now,setNow]=useState(0);
- useEffect(()=>{const refresh=()=>setNow(Date.now());const first=setTimeout(refresh,0);const timer=setInterval(refresh,60000);return()=>{clearTimeout(first);clearInterval(timer);};},[]);
+ useEffect(()=>{const refresh=()=>setNow(Date.now());const first=setTimeout(refresh,0);const timer=setInterval(refresh,60000);window.addEventListener('focus',refresh);return()=>{clearTimeout(first);clearInterval(timer);window.removeEventListener('focus',refresh);};},[]);
  return now;
 }

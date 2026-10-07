@@ -16,7 +16,7 @@ export async function GET(_request:Request,{params}:{params:Promise<{projectId:s
  if(people.error)return NextResponse.json({error:'Unable to load follow-up authors.'},{status:500});
  const entries:FollowUpEntry[]=rows.map(row=>{
   const data=row.result as Record<string,Json>;const actor=people.data?.find(p=>p.id===row.actor_id);
-  return {id:row.operation_id,action:row.action==='ready'?'ready':'follow-up',note:row.action==='follow-up'&&typeof data.project_notes==='string'?data.project_notes:'',nextFollowUp:row.action==='follow-up'&&typeof data.next_follow_up_at==='string'?data.next_follow_up_at:null,recordedAt:row.recorded_at,recordedBy:actor?.full_name??actor?.username??'Employee'};
+  return {followUpType:typeof data.follow_up_type==='string'?data.follow_up_type:null,followUpDetail:typeof data.follow_up_detail==='string'?data.follow_up_detail:null,followUpOwner:typeof data.follow_up_owner_name==='string'?data.follow_up_owner_name:null,id:row.operation_id,action:row.action==='ready'?'ready':'follow-up',note:row.action==='follow-up'&&typeof data.project_notes==='string'?data.project_notes:'',nextFollowUp:row.action==='follow-up'&&typeof data.next_follow_up_at==='string'?data.next_follow_up_at:null,recordedAt:row.recorded_at,recordedBy:actor?.full_name??actor?.username??'Employee'};
  });
  // Older workflows only retained the latest note. Do not invent an author or
  // date for that note, or pretend that overwritten notes can be recovered.

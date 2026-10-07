@@ -1,3 +1,4 @@
+import { normalizeFollowUp,type FollowUpInput } from '@/lib/workflow/followUps';
 import { needsSalesFollowUp } from '@/lib/workflow/stages';
 import { normalizeRegistrationOpening } from '@/lib/measurements/registrationOpening';
 import { activeFieldUser,readFieldState,setFieldUser,updateFieldState } from './store';
@@ -58,7 +59,7 @@ export async function syncFieldChanges(){
  syncing=Promise.resolve('locks' in navigator?navigator.locks.request('alumex-field-sync',run):run()).then(()=>undefined).finally(()=>{syncing=null;});return syncing;
 }
 export async function saveFieldChange(action:FieldChange['action'],projectId:string,payload:Record<string,unknown>){
- const state=await stateForWrite();const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
+ const state=await stateForWrite();if(action==='follow-up')payload=normalizeFollowUp(payload);const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
  await updateFieldState(state.actor.id,s=>{
   if(!s)throw new Error('Offline account unavailable.');
   let projects=[...s.projects];const openings=[...s.openings];let p=projects.find(p=>p.id===projectId);
@@ -67,7 +68,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    const assigned=typeof project.assignedOutdoorSalesId==='string'?project.assignedOutdoorSalesId:'';
    if(s.actor.role==='Indoor Sales'&&!assigned)throw new Error('Assign an Outdoor Sales employee to collect measurements.');
    if(assigned&&!s.outdoorSales?.some(e=>e.id===assigned))throw new Error('Choose an Outdoor Sales employee from the list. Connect online to refresh employees.');
-   p={assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,project_notes:null,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
+   p={assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:s.actor.role==='Indoor Sales'?s.actor.id:null,followUpOwner:s.actor.role==='Indoor Sales'?s.actor.name:null,project_notes:null,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
   }else{
    if(!p)throw new Error('Open this project online once before working on it offline.');
    if(['opening','finish','reopen'].includes(action)&&!['new_lead','ready_for_quotation'].includes(p.sales_status))throw new Error('Measurements are locked after quotation creation.');
@@ -81,7 +82,11 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if(action==='reopen')p={...p,sales_status:'new_lead'};
    if(action==='ready')p={...p,structure_readiness:'ready',sales_status:'new_lead',next_follow_up_at:null};
    if(action==='follow-up'&&!needsSalesFollowUp(p))throw new Error('Sales follow-up is complete for this project.');
-   if(action==='follow-up')p={...p,next_follow_up_at:String(payload.nextFollowUp),project_notes:String(payload.note??'')};
+   if(action==='follow-up'){
+    const owner=s.indoorSales?.find(e=>e.id===payload.followUpOwnerId);
+    if(!owner)throw new Error('Choose an Indoor Sales employee from the list. Connect online to refresh employees.');
+    p={...p,next_follow_up_at:String(payload.nextFollowUp),project_notes:String(payload.note??''),follow_up_type:String(payload.followUpType),follow_up_detail:String(payload.followUpDetail),follow_up_owner_id:owner.id,followUpOwner:owner.name};
+   }
    projects=projects.map(row=>row.id===projectId?{...p!,pending:true}:row);
   }
   return {...s,projects,openings,queue:[...s.queue,change]};
@@ -105,7 +110,7 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
    if(response.status<500)return response;
   }catch{connection(false);/* Read the last saved local copy below. */}}
   if(!s)return Response.json({error:'Open this workspace online once before working offline.'},{status:503});
-  if(url==='/api/workspace')return Response.json({projects:s.projects});
+  if(url==='/api/workspace')return Response.json({actor:s.actor,indoorSales:s.indoorSales??[],projects:s.projects});
   const p=s.projects.find(p=>p.id===id);
   return p?Response.json({project:p,openings:s.openings.filter(o=>o.projectId===id)}):Response.json({error:'This project is not downloaded on this device.'},{status:404});
  }
@@ -127,9 +132,17 @@ export async function reviewServerProject(projectId:string){
  const project=data.projects.find(p=>p.id===projectId);if(!project)throw new Error('Project no longer available. Your saved work remains on this device.');
  return {project,openings:data.openings.filter(o=>o.projectId===projectId)};
 }
-export async function retryReviewedProject(projectId:string,updatedAt:string){
+export async function retryReviewedProject(projectId:string,updatedAt:string,correction?:{changeId:string;values:FollowUpInput}){
  const id=activeFieldUser();if(!id)return;
- await updateFieldState(id,s=>({...s!,projects:s!.projects.map(p=>p.id===projectId?{...p,serverUpdatedAt:updatedAt}:p),queue:s!.queue.map(c=>c.projectId===projectId?{...c,error:undefined}:c)}));await syncFieldChanges();
+ const corrected=correction?normalizeFollowUp(correction.values):null;
+ await updateFieldState(id,s=>{
+  if(!s)throw new Error('Offline account unavailable.');
+  if(corrected&&!s.indoorSales?.some(e=>e.id===corrected.followUpOwnerId))throw new Error('Choose an Indoor Sales employee from the list. Connect online to refresh employees.');
+  const queue=s.queue.map(c=>c.projectId===projectId?{...c,error:undefined,...(corrected&&c.id===correction?.changeId&&c.action==='follow-up'?{id:crypto.randomUUID(),payload:corrected}:{})}:c);
+  const latest=queue.filter(c=>c.projectId===projectId&&c.action==='follow-up').at(-1)?.payload;
+  return {...s,queue,projects:s.projects.map(p=>p.id===projectId?{...p,serverUpdatedAt:updatedAt,...(corrected&&latest?{next_follow_up_at:String(latest.nextFollowUp),project_notes:String(latest.note??''),follow_up_type:String(latest.followUpType??''),follow_up_detail:String(latest.followUpDetail??''),follow_up_owner_id:String(latest.followUpOwnerId??''),followUpOwner:s.indoorSales?.find(e=>e.id===latest.followUpOwnerId)?.name??null}:{})}:p)};
+ });
+ await syncFieldChanges();
 }
 
 export async function keepReviewedServerVersion(review:Awaited<ReturnType<typeof reviewServerProject>>){

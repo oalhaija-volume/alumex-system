@@ -108,7 +108,7 @@ for(const template of ['residential','commercial'])test(`${template} contract ge
  assert.ok(input.p_payload.terms.some(x=>x.text.includes('عشرة سنوات')));
 });
 test('project deletion rejects unauthorized roles and missing confirmation before mutation',async()=>{
- const access={'@/lib/workflow/access':{salesRoles:['Admin','Indoor Sales','Outdoor Sales']}};
+ const access={'@/lib/workflow/followUps':load('../src/lib/workflow/followUps.ts'),'@/lib/workflow/access':{salesRoles:['Admin','Indoor Sales','Outdoor Sales']}};
  let calls=0;const admin={rpc:()=>{calls++;}};
  function route(ok){return load('../src/app/api/workspace/route.ts',{'next/server':json,...access,'@/lib/auth/adminServer':{requireRole:async roles=>{assert.deepEqual(roles,['Admin']);return ok?{ok:true,user:{id:'actor'}}:{ok:false,status:403,error:'Denied'};}},'@/lib/supabase/admin':{createAdminClient:()=>admin}});}
  assert.equal((await route(false).DELETE({json:async()=>({})})).status,403);
@@ -121,13 +121,13 @@ test('follow-up history checks project access before reading receipts',async()=>
 });
 test('follow-up history uses each saved note rather than the current overwritten project note',async()=>{
  const project={id:'project',project_name:'Client',project_number:'PRJ-1',structure_readiness:'not_ready',project_notes:'Latest note',next_follow_up_at:null};
- const rows=[{operation_id:'new',actor_id:'actor',action:'follow-up',recorded_at:'2026-10-07T10:00:00Z',result:{project_notes:'Latest note',next_follow_up_at:'2026-10-10T10:00:00Z'}},{operation_id:'old',actor_id:'actor',action:'follow-up',recorded_at:'2026-10-06T10:00:00Z',result:{project_notes:'First call',next_follow_up_at:'2026-10-07T10:00:00Z'}}];
+ const rows=[{operation_id:'new',actor_id:'actor',action:'follow-up',recorded_at:'2026-10-07T10:00:00Z',result:{project_notes:'Latest note',next_follow_up_at:'2026-10-10T10:00:00Z',follow_up_type:'other',follow_up_detail:'Video call',follow_up_owner_name:'Indoor employee'}},{operation_id:'old',actor_id:'actor',action:'follow-up',recorded_at:'2026-10-06T10:00:00Z',result:{project_notes:'First call',next_follow_up_at:'2026-10-07T10:00:00Z'}}];
  const admin={from(table){return {select(){return this;},eq(column,id){assert.equal(id,'project');return this;},in(){return table==='profiles'?Promise.resolve({data:[{id:'actor',full_name:'Sales employee'}]}):this;},order(){return this;},range:async()=>({data:rows,error:null})};}};
  const route=load('../src/app/api/projects/[projectId]/follow-ups/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({project,admin})}});
- const result=await route.GET({}, {params:Promise.resolve({projectId:'project'})});assert.equal(result.status,200);assert.deepEqual(result.body.entries.map(e=>e.note),['Latest note','First call']);assert.equal(result.body.entries[1].recordedBy,'Sales employee');
+ const result=await route.GET({}, {params:Promise.resolve({projectId:'project'})});assert.equal(result.status,200);assert.deepEqual(result.body.entries.map(e=>e.note),['Latest note','First call']);assert.equal(result.body.entries[1].recordedBy,'Sales employee');assert.equal(result.body.entries[0].followUpType,'other');assert.equal(result.body.entries[0].followUpDetail,'Video call');assert.equal(result.body.entries[0].followUpOwner,'Indoor employee');assert.equal(result.body.entries[1].followUpType,null);
 });
-for(const [role,id,allowed] of [['Outdoor Sales','assigned',true],['Outdoor Sales','other',false],['Indoor Sales','assigned',false],['Indoor Sales','creator',true]])test(`${role} ${id} project assignment access`,async()=>{
- const project={id:'project',created_by:'creator',assigned_outdoor_sales_id:'assigned'};
+for(const [role,id,allowed] of [['Outdoor Sales','assigned',true],['Outdoor Sales','other',false],['Indoor Sales','assigned',false],['Indoor Sales','creator',true],['Indoor Sales','followup-owner',true],['Indoor Sales','stranger',false],['Outdoor Sales','followup-owner',false]])test(`${role} ${id} project assignment access`,async()=>{
+ const project={id:'project',created_by:'creator',assigned_outdoor_sales_id:'assigned',follow_up_owner_id:'followup-owner'};
  const access=load('../src/lib/workflow/access.ts',{'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,user:{id}})},'@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},'@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:project,error:null})})})}});
  const result=await access.salesProject('project');assert.equal(!result.response,allowed);
 });

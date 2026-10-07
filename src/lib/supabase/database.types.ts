@@ -278,6 +278,9 @@ export type Database = {
             | "not_ready";
           expected_structure_ready_date: string | null;
           next_follow_up_at: string | null;
+          follow_up_type: string | null;
+          follow_up_detail: string | null;
+          follow_up_owner_id: string | null;
           priority: "low" | "normal" | "high" | "urgent";
           estimated_value: number | null;
           project_notes: string | null;
@@ -325,6 +328,9 @@ export type Database = {
             | "not_ready";
           expected_structure_ready_date?: string | null;
           next_follow_up_at?: string | null;
+          follow_up_type?: string | null;
+          follow_up_detail?: string | null;
+          follow_up_owner_id?: string | null;
           priority?: "low" | "normal" | "high" | "urgent";
           estimated_value?: number | null;
           project_notes?: string | null;

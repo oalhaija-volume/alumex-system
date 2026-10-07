@@ -12,9 +12,9 @@ async function access(context: Context) {
   const {projectId} = await context.params;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) return {response:NextResponse.json({error:"Project not found."},{status:404})};
   const admin = createAdminClient();
-  const {data:project,error} = await admin.from("projects").select("id, project_name, project_number, created_by, assigned_outdoor_sales_id, structure_readiness, sales_status").eq("id",projectId).maybeSingle();
+  const {data:project,error} = await admin.from("projects").select("id, project_name, project_number, created_by, assigned_outdoor_sales_id, follow_up_owner_id, structure_readiness, sales_status").eq("id",projectId).maybeSingle();
   if (error) return {response:NextResponse.json({error:"Unable to load project."},{status:500})};
-  if (!project || (auth.role !== "Admin" && project.created_by !== auth.user.id && !(auth.role === "Outdoor Sales" && project.assigned_outdoor_sales_id === auth.user.id))) return {response:NextResponse.json({error:"Project not found."},{status:404})};
+  if (!project || (auth.role !== "Admin" && project.created_by !== auth.user.id && !(auth.role === "Outdoor Sales" && project.assigned_outdoor_sales_id === auth.user.id) && !(auth.role === "Indoor Sales" && project.follow_up_owner_id === auth.user.id))) return {response:NextResponse.json({error:"Project not found."},{status:404})};
   if (project.structure_readiness !== "ready") return {response:NextResponse.json({error:"The site must be ready before measurements can be recorded."},{status:409})};
   return {admin,project,auth};
 }

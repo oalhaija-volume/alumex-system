@@ -215,3 +215,63 @@ export async function POST(request: Request) {
     { status: 201, headers: { "Cache-Control": "no-store" } },
   );
 }
+
+export async function PATCH(request: Request) {
+  const actor = await requireRole(["Admin", "HR"]);
+  if (!actor.ok) return NextResponse.json({ error: actor.error }, { status: actor.status });
+  if (!hasSupabaseServiceRoleKey()) {
+    return NextResponse.json({ error: supabaseServiceRoleError }, { status: 503 });
+  }
+  const body = (await request.json().catch(() => null)) as {
+    id?: unknown; action?: unknown; password?: unknown; fullName?: unknown;
+    username?: unknown; role?: unknown; isActive?: unknown; updatedAt?: unknown;
+  } | null;
+  if (!body || typeof body.id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.id)) {
+    return NextResponse.json({ error: "Employee is required." }, { status: 400 });
+  }
+  const admin = createAdminClient();
+
+  // Password resets are a separate action: a profile save never changes Auth
+  // credentials, and a failed reset never silently saves part of a profile edit.
+  if (body.action === "reset-password") {
+    if (actor.role !== "Admin") {
+      return NextResponse.json({ error: "Only Admin can reset employee passwords." }, { status: 403 });
+    }
+    if (typeof body.password !== "string" || body.password.length < 8 || body.password.length > 128) {
+      return NextResponse.json({ error: "Enter a new password of 8–128 characters." }, { status: 400 });
+    }
+    const { data: employee, error: lookupError } = await admin.from("profiles")
+      .select("id").eq("id", body.id).maybeSingle();
+    if (lookupError) return NextResponse.json({ error: "Unable to load employee." }, { status: 500 });
+    if (!employee) return NextResponse.json({ error: "Employee not found." }, { status: 404 });
+    const { error } = await admin.auth.admin.updateUserById(employee.id, { password: body.password });
+    if (error) {
+      return NextResponse.json({ error: "Unable to reset password. Use a different password and try again." }, { status: 400 });
+    }
+    return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
+  }
+  if (body.action !== "update-profile") {
+    return NextResponse.json({ error: "Invalid employee action." }, { status: 400 });
+  }
+  const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+  const username = typeof body.username === "string" ? normalizeUsername(body.username) : "";
+  if (!fullName || fullName.length > 150 || !isValidUsername(username) ||
+      (!isAppRole(body.role) && body.role !== "Sales User") || typeof body.isActive !== "boolean" ||
+      typeof body.updatedAt !== "string" || !Number.isFinite(Date.parse(body.updatedAt))) {
+    return NextResponse.json({ error: "Enter a valid employee name, username, role and status." }, { status: 400 });
+  }
+  const { data, error } = await admin.rpc("update_employee_profile", {
+    p_actor: actor.user.id, p_employee: body.id, p_expected_updated_at: body.updatedAt,
+    p_full_name: fullName, p_username: username, p_role: body.role, p_is_active: body.isActive,
+  });
+  if (error) {
+    if (error.code === "23505") return NextResponse.json({ error: "Username already exists." }, { status: 409 });
+    if (error.code === "PGRST202" || error.code === "42883") {
+      return NextResponse.json({ error: "Apply the employee editing database migration before saving changes." }, { status: 503 });
+    }
+    const status = error.code === "42501" ? 403 : error.code === "P0002" ? 404 : error.code === "40001" ? 409 : error.code === "22023" ? 400 : 500;
+    return NextResponse.json({ error: status === 500 ? "Unable to update employee. Please try again." : error.message }, { status });
+  }
+  return NextResponse.json({ user: data }, { headers: { "Cache-Control": "no-store" } });
+}

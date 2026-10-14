@@ -1443,6 +1443,10 @@ export type Database = {
       };
     };
     Functions: {
+      update_employee_profile: {
+        Args: { p_actor: string; p_employee: string; p_expected_updated_at: string; p_full_name: string; p_username: string; p_role: string; p_is_active: boolean };
+        Returns: Json;
+      };
       sales_leadership_ready: { Args: Record<PropertyKey, never>; Returns: boolean };
       sync_field_change: { Args: { p_operation: string; p_actor: string; p_project: string; p_action: string; p_payload: Json; p_recorded_at: string; p_expected_updated_at: string | null }; Returns: Json };
       commercial_privacy_ready: { Args: Record<string, never>; Returns: boolean };

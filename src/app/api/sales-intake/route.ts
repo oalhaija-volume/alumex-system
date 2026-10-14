@@ -7,7 +7,7 @@ import { generateNextProjectNumber } from "@/lib/projects/numbering";
 
 // Registration retains the creator and validates measurement assignment.
 export async function POST(request: Request) {
-  const auth = await requireRole(["Admin", "Indoor Sales", "Outdoor Sales"]);
+  const auth = await requireRole(["Admin", "Sales Director", "CEO", "Indoor Sales", "Outdoor Sales"]);
   if (!auth.ok) return NextResponse.json({error: auth.error}, {status: auth.status});
   if (!hasSupabaseServiceRoleKey()) return NextResponse.json({error:supabaseServiceRoleError}, {status:500});
   const body = await request.json().catch(() => null);

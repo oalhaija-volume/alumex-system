@@ -103,7 +103,7 @@ export async function POST(request: Request) {
   const password = typeof body?.password === "string" ? body.password : "";
   const role = isAppRole(body?.role) ? body.role : null;
 
-  if (!fullName || fullName.length > 150 || !username || password.length < 8 || !role || !["Admin","HR","Indoor Sales","Outdoor Sales","Operations Manager","Project Manager"].includes(role)) {
+  if (!fullName || fullName.length > 150 || !username || password.length < 8 || !role || !["Admin","HR","Sales Director","CEO","Indoor Sales","Outdoor Sales","Operations Manager","Project Manager"].includes(role)) {
     return NextResponse.json(
       { error: "Enter employee name, username, role, and a password of at least 8 characters." },
       { status: 400 },
@@ -128,6 +128,12 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
+  if (role === "Sales Director" || role === "CEO") {
+    const readiness = await admin.rpc("sales_leadership_ready", {});
+    if (readiness.error || readiness.data !== true) {
+      return NextResponse.json({error:"Apply the sales leadership database migrations before adding Sales Director or CEO accounts."}, {status:503});
+    }
+  }
   if (role === "Operations Manager" || role === "Project Manager") {
     const privacy = await admin.rpc("commercial_privacy_ready", {});
     if (privacy.error || privacy.data !== true) return NextResponse.json({error:"Apply the commercial privacy database migration before adding manager accounts."}, {status:503});

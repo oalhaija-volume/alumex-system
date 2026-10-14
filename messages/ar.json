@@ -1269,6 +1269,8 @@
   "terms": {
     "Admin": "مسؤول",
     "Sales Manager": "مدير المبيعات",
+    "Sales Director": "مدير المبيعات",
+    "CEO": "الرئيس التنفيذي",
     "Indoor Sales": "المبيعات الداخلية",
     "Outdoor Sales": "المبيعات الخارجية",
     "Sales User": "مندوب مبيعات",

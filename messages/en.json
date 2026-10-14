@@ -1276,6 +1276,8 @@
     "Commercial": "Commercial",
     "Admin": "Admin",
     "Sales Manager": "Sales Manager",
+    "Sales Director": "Sales Director",
+    "CEO": "CEO",
     "Indoor Sales": "Indoor Sales",
     "Outdoor Sales": "Outdoor Sales",
     "Sales User": "Sales Rep",

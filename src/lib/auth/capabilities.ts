@@ -16,9 +16,11 @@ export type AppCapability =
   | "workflow:configure";
 
 const capabilityRoles: Record<AppCapability, readonly AppRole[]> = {
-  "clients:create": ["Admin", "Indoor Sales", "Outdoor Sales"],
+  "clients:create": ["Admin", "Sales Director", "CEO", "Indoor Sales", "Outdoor Sales"],
   "clients:update": [
     "Admin",
+    "Sales Director",
+    "CEO",
     "Sales Manager",
     "Indoor Sales",
     "Outdoor Sales",
@@ -27,6 +29,8 @@ const capabilityRoles: Record<AppCapability, readonly AppRole[]> = {
   ],
   "projects:create": [
     "Admin",
+    "Sales Director",
+    "CEO",
     "Sales Manager",
     "Indoor Sales",
     "Outdoor Sales",
@@ -35,21 +39,27 @@ const capabilityRoles: Record<AppCapability, readonly AppRole[]> = {
   ],
   "projects:view-team": [
     "Admin",
+    "Sales Director",
+    "CEO",
     "Sales Manager",
     "Indoor Sales",
     "Branch Manager",
   ],
-  "projects:reassign": ["Admin", "Sales Manager"],
-  "measurements:request": ["Admin", "Sales Manager", "Indoor Sales"],
+  "projects:reassign": ["Admin", "Sales Director", "CEO", "Sales Manager"],
+  "measurements:request": ["Admin", "Sales Director", "CEO", "Sales Manager", "Indoor Sales"],
   "measurements:record": [
     "Admin",
+    "Sales Director",
+    "CEO",
     "Outdoor Sales",
     "Project Engineer",
     "Site Engineer",
   ],
-  "measurements:review": ["Admin", "Sales Manager", "Indoor Sales"],
+  "measurements:review": ["Admin", "Sales Director", "CEO", "Sales Manager", "Indoor Sales"],
   "quotations:manage": [
     "Admin",
+    "Sales Director",
+    "CEO",
     "Sales Manager",
     "Indoor Sales",
     "Sales Rep",
@@ -57,6 +67,8 @@ const capabilityRoles: Record<AppCapability, readonly AppRole[]> = {
   ],
   "contracts:manage": [
     "Admin",
+    "Sales Director",
+    "CEO",
     "Sales Manager",
     "Indoor Sales",
     "Sales Rep",
@@ -64,11 +76,13 @@ const capabilityRoles: Record<AppCapability, readonly AppRole[]> = {
   ],
   "follow-ups:perform": [
     "Admin",
+    "Sales Director",
+    "CEO",
     "Sales Manager",
     "Indoor Sales",
     "Branch Manager",
   ],
-  "audit:view": ["Admin", "Sales Manager"],
+  "audit:view": ["Admin", "Sales Director", "CEO", "Sales Manager"],
   "workflow:configure": ["Admin"],
 };
 

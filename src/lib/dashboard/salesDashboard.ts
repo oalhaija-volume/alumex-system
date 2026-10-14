@@ -22,6 +22,8 @@ export function normalizeDashboardPreviewRole(
 
 const salesDashboardRoles = new Set<AppRole>([
   "Admin",
+  "Sales Director",
+  "CEO",
   "Sales Manager",
   "Indoor Sales",
   "Outdoor Sales",
@@ -34,6 +36,6 @@ export function salesDashboardKind(
 ): SalesDashboardKind | null {
   if (!role || !salesDashboardRoles.has(role)) return null;
   if (role === "Outdoor Sales") return "outdoor";
-  if (role === "Admin" || role === "Sales Manager") return "manager";
+  if (["Admin", "Sales Director", "CEO", "Sales Manager"].includes(role)) return "manager";
   return "indoor";
 }

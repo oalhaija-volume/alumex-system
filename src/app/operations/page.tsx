@@ -3,6 +3,6 @@ import { requireRole } from '@/lib/auth/adminServer';
 import { RegistrationShell } from '@/components/intake/RegistrationShell';
 import { OperationsWorkspace } from '@/components/workflow/OperationsWorkspace';
 export default async function Page(){
- const auth=await requireRole(["Admin", "Operations Manager", "Project Manager"]);if(!auth.ok)redirect('/unauthorized');
+ const auth=await requireRole(["Admin", "CEO", "Operations Manager", "Project Manager"]);if(!auth.ok)redirect('/unauthorized');
  return <RegistrationShell role={auth.role}><OperationsWorkspace/></RegistrationShell>;
 }

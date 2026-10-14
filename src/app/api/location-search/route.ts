@@ -3,6 +3,8 @@ import { requireRole } from "@/lib/auth/adminServer";
 
 const locationSearchRoles = [
   "Admin",
+  "Sales Director",
+  "CEO",
   "Sales Manager",
   "Indoor Sales",
   "Outdoor Sales",

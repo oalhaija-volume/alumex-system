@@ -5,7 +5,7 @@ import { requireRole } from '@/lib/auth/adminServer';
 import { createAdminClient } from '@/lib/supabase/admin';
 // Select only operational fields. Never send contract snapshots, evidence, catalog or totals.
 export async function GET(){
- const auth=await requireRole(['Admin','Operations Manager','Project Manager']);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
+ const auth=await requireRole(['Admin','CEO','Operations Manager','Project Manager']);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const admin=createAdminClient();
  const flows=await admin.from('sales_workflows').select('project_id,stage,revision,signed_at,accepted_at,quotation').in('stage',['signed','operations']).not('signed_at','is',null).order('signed_at',{ascending:false});
  if(flows.error)return NextResponse.json({error:'The operations database update is required.'},{status:503});
@@ -22,7 +22,7 @@ export async function GET(){
  return NextResponse.json({canAccept:auth.role!=='Project Manager',projects:projects.data.map(p=>({...p,client:clients.data.find(c=>c.id===p.client_id),handoff:safeFlows.find(f=>f.project_id===p.id),openings:openings.data.filter(o=>o.project_id===p.id)}))},{headers:{'Cache-Control':'private, no-store'}});
 }
 export async function POST(request:Request){
- const auth=await requireRole(['Admin','Operations Manager']);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
+ const auth=await requireRole(['Admin','CEO','Operations Manager']);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const body=await request.json().catch(()=>null);if(typeof body?.projectId!=='string'||!Number.isInteger(body.revision))return NextResponse.json({error:'Invalid project.'},{status:400});
  const result=await createAdminClient().rpc('advance_sales_flow',{p_project:body.projectId,p_action:'accept',p_revision:body.revision,p_payload:{},p_actor:auth.user.id});
  // The RPC returns commercial data internally; the response deliberately does not.

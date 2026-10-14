@@ -1,6 +1,6 @@
 import type { AppRole } from "@/lib/auth/roles";
 
-export const quotationCreatorRoles = ["Admin", "Indoor Sales"] as const;
+export const quotationCreatorRoles = ["Admin", "Sales Director", "CEO", "Indoor Sales"] as const;
 
 export function canCreateQuotationForRole(role: AppRole | null) {
   return role !== null && quotationCreatorRoles.some((item) => item === role);

@@ -43,6 +43,7 @@ for (const actor of [fatma, ehab]) {
           await expect(page.locator('#outdoor-assignee')).toHaveValue(ehab.id);
           await expect(page.getByRole('button', { name: 'Continue to measurements', exact: false })).toHaveCount(0);
         }
+        if (actor.role === 'Outdoor Sales') await expect(page.locator('#outdoor-assignee')).toHaveCount(0);
         if (!online) {
           await page.evaluate(() => {
             Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
@@ -272,6 +273,7 @@ test.describe('Outdoor Sales phone workspace', () => {
       await expect(page.getByText('Created by', { exact: true })).toHaveCount(0);
       await page.getByRole('button', { name: 'New project', exact: true }).click();
       await expect(page.getByPlaceholder('Enter full name')).toBeVisible();
+      await expect(page.locator('#outdoor-assignee')).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.goto('/offline?path=/initial-measurements/' + projects[1].id);
       await expect(page.getByText('Measurements submitted', { exact: true })).toBeVisible();

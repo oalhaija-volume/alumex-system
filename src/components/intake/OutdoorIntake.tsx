@@ -27,9 +27,10 @@ export function OutdoorIntake() {
   const [offline,setOffline]=useState(false);
   const [employeeState,setEmployeeState]=useState<FieldState|null>(null);
   const [assignedOutdoorSalesId,setAssignedOutdoorSalesId]=useState('');
-  const outdoorAssignee = assignedOutdoorSalesId || (employeeState?.actor.role === 'Indoor Sales' && employeeState.outdoorSales?.length === 1 ? employeeState.outdoorSales[0].id : '');
+  const canAssignMeasurements = canAccessCRM(employeeState?.actor.role);
+  const outdoorAssignee = canAssignMeasurements ? assignedOutdoorSalesId || (employeeState?.actor.role === 'Indoor Sales' && employeeState.outdoorSales?.length === 1 ? employeeState.outdoorSales[0].id : '') : '';
   const assignedEmployee = employeeState?.outdoorSales?.find(employee => employee.id === outdoorAssignee);
-  const collectsMeasurements = employeeState?.actor.role === 'Outdoor Sales' && (!outdoorAssignee || outdoorAssignee === employeeState.actor.id);
+  const collectsMeasurements = employeeState?.actor.role === 'Outdoor Sales';
   useEffect(()=>{let live=true;const refresh=async()=>{const state=await readFieldState().catch(()=>null);if(live)setEmployeeState(state);};void prepareOffline().then(refresh).catch(()=>{void refresh();});window.addEventListener('field-change',refresh);return()=>{live=false;window.removeEventListener('field-change',refresh);};},[]);
 
   useEffect(()=>{const update=()=>setOffline(!isFieldOnline());const timer=setTimeout(update,0);window.addEventListener('field-connection',update);window.addEventListener('online',update);window.addEventListener('offline',update);return()=>{clearTimeout(timer);window.removeEventListener('field-connection',update);window.removeEventListener('online',update);window.removeEventListener('offline',update);};},[]);
@@ -157,11 +158,11 @@ export function OutdoorIntake() {
             ))}
           </div>
         </fieldset>
-        <div><label className="block text-sm font-medium text-slate-800" htmlFor="outdoor-assignee">{term("Outdoor Sales for measurements")} {employeeState?.actor.role==='Indoor Sales'?term("(required)"):term("(optional)")}</label>
+        {canAssignMeasurements && <div><label className="block text-sm font-medium text-slate-800" htmlFor="outdoor-assignee">{term("Outdoor Sales for measurements")} {employeeState?.actor.role==='Indoor Sales'?term("(required)"):term("(optional)")}</label>
           <select id="outdoor-assignee" value={outdoorAssignee} onChange={event=>setAssignedOutdoorSalesId(event.target.value)} required={employeeState?.actor.role==='Indoor Sales'} className="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base"><option value="">{employeeState?.actor.role==='Indoor Sales'?term("Choose Outdoor Sales employee"):term("Not assigned")}</option>{employeeState?.outdoorSales?.map(employee=><option key={employee.id} value={employee.id}>{employee.name==='Employee'?term('Employee'):employee.name}</option>)}</select>
           <p className="mt-2 text-xs leading-5 text-slate-500">{employeeState?.actor.role==='Indoor Sales'?term("The assigned employee will see the project in their mobile workspace to collect measurements."):term("Choose an Outdoor Sales employee if someone else will collect the measurements.")}</p>
           {employeeState&&!employeeState.outdoorSales?.length&&<p className="mt-2 text-xs text-amber-800">{term("No active Outdoor Sales employees available. Add one in Employees and reconnect to refresh this list.")}</p>}
-        </div>
+        </div>}
         <p className="flex items-start gap-2 text-xs leading-5 text-slate-500"><span aria-hidden="true">ⓘ</span>{t("registration.audit")}</p>
         {error ? <p role="alert" className="rounded-md bg-red-50 p-3 text-sm font-medium text-red-700">{errorMessage(error)}</p> : null}
         <button type="button" disabled={saving || !employeeState} onClick={() => void submit()} className="flex min-h-12 w-full items-center justify-center gap-3 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600 disabled:opacity-50">

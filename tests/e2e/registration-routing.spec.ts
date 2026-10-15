@@ -228,3 +228,56 @@ for(const ready of [false,true])for(const online of [false,true])test(`CRM ${rea
  for(const width of [320,390,1440]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
  if(online&&ready)await page.screenshot({path:'artifacts/mini-crm-review-20261015/crm-assign-measurements.png',fullPage:true});
 });
+
+test.describe('Outdoor Sales phone workspace', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1', isMobile: true });
+  for (const requestedPath of ['/dashboard', '/projects', '/quotation/11111111-1111-4111-8111-111111111110']) {
+    test(`phone shows only assignments when opening ${requestedPath}`, async ({ page }) => {
+      const projects = ['new_lead', 'ready_for_quotation', 'new_lead', 'new_lead'].map((sales_status, index) => ({
+        id: `11111111-1111-4111-8111-11111111111${index}`, project_name: `Phone sample ${index}`, project_number: `PRJ-PHONE-${index}`,
+        sales_status, structure_readiness: index === 2 ? 'not_ready' : 'ready', address: 'Baghdad', phone: '07700000000',
+        created_by: fatma.id, assigned_outdoor_sales_id: index === 3 ? fatma.id : ehab.id,
+        registeredBy: fatma.name, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        next_follow_up_at: null, project_notes: null,
+      }));
+      const state = { actor: ehab, projects, outdoorSales: [ehab], indoorSales: [fatma], openings: [], queue: [], syncedAt: null };
+      await page.route('**/api/offline*', route => route.fulfill({ json: state }));
+      await page.route('**/api/workspace', route => route.fulfill({ json: state }));
+      await page.goto('/offline?path=' + encodeURIComponent(requestedPath));
+      await page.evaluate(async state => {
+        localStorage.setItem('alumex_locale', 'en');
+        localStorage.setItem('alumex-field-active', state.actor.id);
+        await new Promise<void>((resolve, reject) => {
+          const request = indexedDB.open('alumex-field-v1', 1);
+          request.onupgradeneeded = () => request.result.createObjectStore('accounts');
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const db = request.result;
+            const tx = db.transaction('accounts', 'readwrite');
+            tx.objectStore('accounts').put(state, state.actor.id);
+            tx.oncomplete = () => { db.close(); resolve(); };
+            tx.onerror = () => reject(tx.error);
+          };
+        });
+        window.dispatchEvent(new Event('field-change'));
+      }, state);
+      await expect(page.getByRole('heading', { name: 'Measurement assignments', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Phone sample 0', exact: true })).toBeVisible();
+      for (const name of ['Phone sample 1', 'Phone sample 2', 'Phone sample 3', 'Project stages', 'All projects']) {
+        await expect(page.getByRole('heading', { name, exact: true })).toHaveCount(0);
+      }
+      await expect(page.locator('nav button')).toHaveText(['Measurement assignments', 'New project']);
+      await page.getByRole('link', { name: 'Record measurements', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Initial measurements', exact: true })).toBeVisible();
+      await expect(page.getByText('Created by', { exact: true })).toHaveCount(0);
+      await page.getByRole('button', { name: 'New project', exact: true }).click();
+      await expect(page.getByPlaceholder('Enter full name')).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.goto('/offline?path=/initial-measurements/' + projects[1].id);
+      await expect(page.getByText('Measurements submitted', { exact: true })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Continue to quotation', exact: true })).toHaveCount(0);
+      await page.getByRole('link', { name: 'Back to assignments', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Measurement assignments', exact: true })).toBeVisible();
+    });
+  }
+});

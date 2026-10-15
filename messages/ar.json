@@ -2266,7 +2266,11 @@
     "Measurement assignment saved on this device. The employee will be notified after sync.": "تم حفظ تكليف القياسات على هذا الجهاز. سيتلقى الموظف إشعاراً بعد المزامنة.",
     "Measurements assigned. The employee will see the task in their mobile workspace.": "تم تكليف الموظف بالقياسات. ستظهر المهمة في مساحة عمله على الهاتف.",
     "Measurements assigned": "تم تكليف الموظف بالقياسات",
-    "assign-measurements": "تكليف القياسات"
+    "assign-measurements": "تكليف القياسات",
+    "Measurement assignments": "مهام القياسات",
+    "Open an assigned site to record measurements, or register a new project.": "افتح موقعاً مكلّفاً به لتسجيل القياسات، أو سجّل مشروعاً جديداً.",
+    "Measurements submitted": "تم إرسال القياسات",
+    "Back to assignments": "العودة إلى المهام"
   },
   "registration": {
     "title": "عميل ومشروع جديد",

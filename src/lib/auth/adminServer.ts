@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { requiresMobileWorkspace } from "@/lib/auth/mobileAccess";
+import { usesMobileWorkspace } from "@/lib/auth/mobileAccess";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/lib/auth/permissions";
@@ -18,6 +18,7 @@ export type RoleCheck =
       ok: true;
       user: User;
       role: AppRole;
+      mobileOutdoor: boolean;
       profile: {
         role: AppRole | "Sales User" | null;
         is_active: boolean | null;
@@ -84,11 +85,8 @@ export async function requireRole(
     };
   }
 
-  if (role === "Outdoor Sales" && requiresMobileWorkspace(role, await headers())) {
-    return { ok: false, status: 403, error: "Outdoor Sales must access the system from a mobile phone." };
-  }
-
-  return { ok: true, user, role, profile: profileData };
+  const mobileOutdoor = role === "Outdoor Sales" && usesMobileWorkspace(role, await headers());
+  return { ok: true, user, role, mobileOutdoor, profile: profileData };
 }
 
 export async function requireAdminUser(): Promise<AdminCheck> {

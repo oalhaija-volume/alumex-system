@@ -1,4 +1,5 @@
 "use client";
+import { useMobileOutdoor } from "@/components/workflow/MobileOutdoorContext";
 import { ProjectRecord } from '@/components/workflow/ProjectRecord';
 import Link from "next/link";
 import { readFieldState } from "@/lib/offline/store";
@@ -9,6 +10,7 @@ import { normalizeRegistrationOpening, registrationRoomTypes, registrationStruct
 
 const field = "mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
 export function InitialMeasurements({projectId}:{projectId:string}) {
+  const mobileOutdoor = useMobileOutdoor();
   const {t,term,errorMessage,formatNumber} = useI18n();
   const [project,setProject] = useState<{project_name:string;project_number:string}|null>(null);
   const [openings,setOpenings] = useState<RegistrationOpening[]>([]);
@@ -68,7 +70,7 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
     <p className="mt-2 text-sm leading-6 text-slate-500">{project ? `${project.project_name} · ${term(project.project_number)}` : t("initialStep.description")}</p>
     {loading ? <p className="mt-6" role="status">{t("common.loading")}</p> : null}
     {error ? <p role="alert" className="mt-5 rounded-md bg-red-50 p-3 text-sm text-red-700">{errorMessage(error)}</p> : null}
-    <ProjectRecord projectId={projectId}/>{project && !finished ? <>
+    {!mobileOutdoor && <ProjectRecord projectId={projectId}/>}{project && !finished ? <>
       <form onSubmit={save} className="mt-7 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
         <fieldset disabled={saving} className="min-w-0 space-y-5">
           <legend className="mb-5 text-lg font-semibold text-slate-900">{t("initialStep.opening",{number:formatNumber(openings.length+1)})}</legend>
@@ -116,6 +118,6 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
       </li>)}</ol>
       {!finished ? <><button type="button" disabled={saving || dirty} onClick={()=>void updateMeasurementStatus("finish")} className="mt-5 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50">{saving ? t("common.loading") : t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
     </div>:null}
-    {finished ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{t("initialStep.done")}</p><button disabled={saving} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button><Link href={`/quotation/${projectId}`} onClick={async event=>{event.preventDefault();const state=await readFieldState();if(!navigator.onLine || state?.queue.some(c=>c.projectId===projectId)){setError("Your measurements are saved on this device. Wait for synchronization before preparing a quotation.");return;}window.location.assign(`/quotation/${projectId}`);}} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Continue to quotation")}</Link><Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
+    {finished ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{mobileOutdoor ? term("Measurements submitted") : t("initialStep.done")}</p><button disabled={saving} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button>{mobileOutdoor ? <Link href="/dashboard" className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Back to assignments")}</Link> : <Link href={`/quotation/${projectId}`} onClick={async event=>{event.preventDefault();const state=await readFieldState();if(!navigator.onLine || state?.queue.some(c=>c.projectId===projectId)){setError("Your measurements are saved on this device. Wait for synchronization before preparing a quotation.");return;}window.location.assign(`/quotation/${projectId}`);}} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Continue to quotation")}</Link>}<Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
   </section>;
 }

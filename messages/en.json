@@ -2266,7 +2266,11 @@
     "Measurement assignment saved on this device. The employee will be notified after sync.": "Measurement assignment saved on this device. The employee will be notified after sync.",
     "Measurements assigned. The employee will see the task in their mobile workspace.": "Measurements assigned. The employee will see the task in their mobile workspace.",
     "Measurements assigned": "Measurements assigned",
-    "assign-measurements": "assign-measurements"
+    "assign-measurements": "assign-measurements",
+    "Measurement assignments": "Measurement assignments",
+    "Open an assigned site to record measurements, or register a new project.": "Open an assigned site to record measurements, or register a new project.",
+    "Measurements submitted": "Measurements submitted",
+    "Back to assignments": "Back to assignments"
   },
   "registration": {
     "title": "New client & project",

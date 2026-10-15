@@ -1,5 +1,6 @@
 "use client";
 
+import { MobileOutdoorProvider } from "@/components/workflow/MobileOutdoorContext";
 import { SalesReminders } from "@/components/workflow/SalesReminders";
 import { OfflineStatus } from "@/components/offline/OfflineStatus";
 import { pendingFieldChanges,isFieldOnline } from "@/lib/offline/client";
@@ -29,7 +30,7 @@ function Brand({ small = false }: { small?: boolean }) {
   return <img src="/logos/AlumexLogo.svg" alt={term("Alumex")} className={`${small ? "h-20" : "h-36"} w-auto object-contain`} />;
 }
 
-export function RegistrationShell({ children, role }: { children: React.ReactNode; role: AppRole }) {
+export function RegistrationShell({ children, role, mobileOutdoor = false }: { children: React.ReactNode; role: AppRole; mobileOutdoor?: boolean }) {
   const { t, locale, term } = useI18n();
   const pathname = usePathname();
   const drawer = useRef<HTMLDialogElement>(null);
@@ -43,7 +44,7 @@ export function RegistrationShell({ children, role }: { children: React.ReactNod
 
   function navigation() {
     return <nav aria-label={menuLabel} className="space-y-1 px-4 py-5">
-      {links.filter(([href]) => canAccessRoute(href, role)).map(([href, en, ar]) => {
+      {(mobileOutdoor ? [["/dashboard", "Measurement assignments", "مهام القياسات"], ["/intake", "New project", "مشروع جديد"]] : links).filter(([href]) => canAccessRoute(href, role)).map(([href, en, ar]) => {
         const active = pathname === href || (href === "/mini-crm" && /^\/projects\/[^/]+\/follow-ups$/.test(pathname)) || (href === "/projects" && /^\/(initial-measurements|quotation|contract)\//.test(pathname));
         return <Link key={href} href={href} onClick={event=>{closeMenu();if(!isFieldOnline()){event.preventDefault();window.location.assign("/offline?path="+encodeURIComponent(href));}}} aria-current={active ? "page" : undefined}
           className={`flex min-h-12 items-center rounded-md border-s-4 px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${active ? "border-blue-600 bg-blue-50 text-blue-700" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
@@ -68,7 +69,7 @@ export function RegistrationShell({ children, role }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-dvh bg-white text-slate-900 sm:bg-slate-50">
+    <MobileOutdoorProvider value={mobileOutdoor}><div className="min-h-dvh bg-white text-slate-900 sm:bg-slate-50">
       <aside aria-label={menuLabel} className="fixed inset-y-0 start-0 z-30 hidden w-64 flex-col overflow-y-auto border-e border-slate-200 bg-white lg:flex print:hidden">
         <div className="flex justify-center border-b border-slate-100 px-6 py-8"><Brand /></div>
         {navigation()}
@@ -97,6 +98,6 @@ export function RegistrationShell({ children, role }: { children: React.ReactNod
       </dialog>
 
       <main className="min-w-0 lg:ps-64 print:ps-0" onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a[href]');const href=link?.getAttribute('href');if(!isFieldOnline()&&href?.startsWith('/')&&href!=='/offline'){event.preventDefault();event.stopPropagation();window.location.assign('/offline?path='+encodeURIComponent(href));}}}>{role && ["Admin","Sales Director","CEO", "Company Owner","Indoor Sales","Outdoor Sales"].includes(role) && <><OfflineStatus/><SalesReminders/></>}{children}</main>
-    </div>
+    </div></MobileOutdoorProvider>
   );
 }

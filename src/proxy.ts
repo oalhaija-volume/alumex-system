@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isActiveSystemRoute } from "@/lib/systemScope";
-import { requiresMobileWorkspace } from "@/lib/auth/mobileAccess";
+import { usesMobileWorkspace, isMobileWorkspaceRoute } from "@/lib/auth/mobileAccess";
 import {
   canAccessRouteWithOverrides,
   defaultRouteForRole,
@@ -44,6 +44,7 @@ function measurementProjectIdFromPath(pathname: string) {
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  if (pathname === "/mobile-required") return NextResponse.redirect(new URL("/dashboard", request.url));
   // The standalone calculator uses local inputs only and does not need a session.
   // Keep this exact exception ahead of both retired-page and authentication checks.
   if (pathname === "/skylight") {
@@ -110,9 +111,6 @@ export async function proxy(request: NextRequest) {
           ? "Admin"
           : normalizeAppRole(profileData?.role);
 
-    if (requiresMobileWorkspace(role, request.headers)) {
-      return NextResponse.redirect(new URL("/mobile-required", request.url));
-    }
     return NextResponse.redirect(new URL(defaultRouteForRole(role), request.url));
   }
 
@@ -152,8 +150,8 @@ export async function proxy(request: NextRequest) {
       : normalizeAppRole(profileData?.role);
 
   if (pathname === "/auth/logout") return response;
-  if (requiresMobileWorkspace(role, request.headers)) {
-    return NextResponse.redirect(new URL("/mobile-required", request.url));
+  if (usesMobileWorkspace(role, request.headers) && !isMobileWorkspaceRoute(pathname)) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   if (pathname === "/") {

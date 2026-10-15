@@ -1,5 +1,6 @@
 "use client";
 
+import { useMobileOutdoor } from "@/components/workflow/MobileOutdoorContext";
 import { fieldFetch,isFieldOnline,prepareOffline } from "@/lib/offline/client";
 import { readFieldState } from "@/lib/offline/store";
 import type { FieldState } from "@/lib/offline/types";
@@ -10,6 +11,7 @@ import { canAccessCRM } from '@/lib/auth/permissions';
 import Link from "next/link";
 
 export function OutdoorIntake() {
+  const mobileOutdoor = useMobileOutdoor();
   const { t, term,errorMessage } = useI18n();
 
   const [clientType, setClientType] = useState<"individual" | "company">("individual");
@@ -89,7 +91,7 @@ export function OutdoorIntake() {
       <h1 className="text-xl font-bold text-slate-950">{t("registration.saved")}</h1>
       <p className="text-slate-600">{readiness === 'not_ready' ? term('The project is in the CRM queue. Indoor Sales will follow up until the site is ready for measurements.') : assignedEmployee ? term('The project is assigned to {name} for initial measurements.',{name:assignedEmployee.name}) : term('The project is ready. Outdoor Sales will collect the initial measurements.')}</p>
       {saved.pending && <p className="text-sm text-amber-800">{term('Saved on device · Pending sync')}</p>}
-      <Link href={!canAccessCRM(employeeState?.actor.role) ? (saved.pending || offline ? "/offline?path=/dashboard" : "/dashboard") : saved.pending || offline ? '/offline?path=/mini-crm' : `/mini-crm#project-${saved.projectId}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700">{term(canAccessCRM(employeeState?.actor.role)?'Open follow-ups':'Dashboard')}</Link>
+      <Link href={!canAccessCRM(employeeState?.actor.role) ? (saved.pending || offline ? "/offline?path=/dashboard" : "/dashboard") : saved.pending || offline ? '/offline?path=/mini-crm' : `/mini-crm#project-${saved.projectId}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700">{term(canAccessCRM(employeeState?.actor.role)?'Open follow-ups':mobileOutdoor?'Measurement assignments':'Dashboard')}</Link>
       <button type="button" onClick={() => { setClientType("individual"); setCompanyLocation({latitude:null,longitude:null}); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setReadiness("ready"); setAssignedOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
     </section>
   );

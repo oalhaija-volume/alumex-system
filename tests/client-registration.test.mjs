@@ -15,7 +15,7 @@ function loadModule(path, dependencies) {
   return exports;
 }
 
-test('protected API authorization blocks Outdoor Sales on desktop and allows phones', async () => {
+test('protected API authorization allows Outdoor Sales on desktop and phones, selecting the focused phone layout', async () => {
   const mobile = loadModule('../src/lib/auth/mobileAccess.ts', {});
   for (const [role, agent, expected] of [
     ['Outdoor Sales','Mozilla/5.0 (Windows NT 10.0; Win64; x64)',false],
@@ -34,11 +34,8 @@ test('protected API authorization blocks Outdoor Sales on desktop and allows pho
       })},
     });
     const result = await server.requireRole(['Outdoor Sales','Indoor Sales']);
-    assert.equal(result.ok,expected);
-    if (!expected) {
-      assert.equal(result.status,403);
-      assert.match(result.error,/mobile phone/);
-    }
+    assert.equal(result.ok,true);
+    assert.equal(result.mobileOutdoor, role === "Outdoor Sales" && expected);
   }
 });
 

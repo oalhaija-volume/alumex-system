@@ -110,12 +110,30 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
       {notice ? <p role="status" className="mt-4 text-sm text-green-800">{errorMessage(notice)}</p>:null}
     </> : null}
     {openings.length ? <div className="mt-7">
-      <h2 className="text-base font-semibold text-slate-900">{t("initialStep.list",{count:formatNumber(openings.length)})}</h2>
-      <ol className="mt-3 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white px-4">{openings.map((opening,index)=><li key={opening.id} className="flex flex-wrap items-center justify-between gap-2 py-4 text-sm">
-        <span className="font-medium text-slate-900">{formatNumber(index+1)}. {t(`initialStep.types.${opening.structuralType}`)}{opening.openingType ? ` · ${t(`initialStep.${opening.openingType}`)}`:""}</span>
-        <span className="w-full text-slate-500">{term(opening.floor)} · {opening.room === "Other" ? opening.otherRoom : t(`initialStep.rooms.${opening.room}`)}</span>
-        <span className="text-slate-600">{formatNumber(opening.width)} × {formatNumber(opening.height)} {t("initialStep.cm")}</span>
-      </li>)}</ol>
+      <h2 id="saved-openings-heading" className="text-base font-semibold text-slate-900">{t("initialStep.list",{count:formatNumber(openings.length)})}</h2>
+      <p id="saved-openings-scroll-hint" className="mt-2 text-xs text-slate-500 sm:hidden">{t("initialStep.tableScrollHint")}</p>
+      <div role="region" aria-labelledby="saved-openings-heading" tabIndex={0} className="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+        <table className="w-full min-w-[640px] border-collapse text-start text-sm">
+          <caption className="sr-only">{t("initialStep.list",{count:formatNumber(openings.length)})}</caption>
+          <thead className="bg-slate-100 text-xs font-semibold text-slate-700">
+            <tr>
+              <th scope="col" className="sticky start-0 z-10 border-e border-slate-200 bg-slate-100 px-3 py-3 text-start">{t("initialStep.number")}</th>
+              {["floor","room","structure","movement","width","height"].map(column=><th key={column} scope="col" className="whitespace-nowrap px-3 py-3 text-start">{t(`initialStep.${column}`)}</th>)}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {openings.map((opening,index)=><tr key={opening.id} className="odd:bg-white even:bg-slate-50">
+              <th scope="row" className={`sticky start-0 border-e border-slate-200 px-3 py-3 text-start font-semibold tabular-nums text-slate-700 ${index%2===0?"bg-white":"bg-slate-50"}`}>{formatNumber(index+1)}</th>
+              <td className="max-w-40 break-words px-3 py-3 text-slate-700">{term(opening.floor)}</td>
+              <td className="max-w-48 break-words px-3 py-3 text-slate-700">{opening.room === "Other" ? opening.otherRoom : t(`initialStep.rooms.${opening.room}`)}</td>
+              <td className="px-3 py-3 text-slate-900">{t(`initialStep.types.${opening.structuralType}`)}</td>
+              <td className="px-3 py-3 text-slate-700">{opening.openingType ? t(`initialStep.${opening.openingType}`) : "—"}</td>
+              <td className="whitespace-nowrap px-3 py-3 font-medium tabular-nums text-slate-900"><bdi>{formatNumber(opening.width)}</bdi></td>
+              <td className="whitespace-nowrap px-3 py-3 font-medium tabular-nums text-slate-900"><bdi>{formatNumber(opening.height)}</bdi></td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
       {!finished ? <><button type="button" disabled={saving || dirty} onClick={()=>void updateMeasurementStatus("finish")} className="mt-5 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50">{saving ? t("common.loading") : t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
     </div>:null}
     {finished ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{mobileOutdoor ? term("Measurements submitted") : t("initialStep.done")}</p><button disabled={saving} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button>{mobileOutdoor ? <Link href="/dashboard" className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Back to assignments")}</Link> : <Link href={`/quotation/${projectId}`} onClick={async event=>{event.preventDefault();const state=await readFieldState();if(!navigator.onLine || state?.queue.some(c=>c.projectId===projectId)){setError("Your measurements are saved on this device. Wait for synchronization before preparing a quotation.");return;}window.location.assign(`/quotation/${projectId}`);}} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Continue to quotation")}</Link>}<Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}

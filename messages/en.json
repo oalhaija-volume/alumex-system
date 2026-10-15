@@ -2353,6 +2353,8 @@
       "Storage room": "Storage room",
       "Other": "Other"
     },
-    "reopen": "Reopen measurements"
+    "reopen": "Reopen measurements",
+    "number": "No.",
+    "tableScrollHint": "Swipe horizontally to view all measurement columns."
   }
 }

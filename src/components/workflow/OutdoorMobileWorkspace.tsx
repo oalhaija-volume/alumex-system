@@ -9,9 +9,8 @@ export function OutdoorMobileWorkspace() {
   const { term, formatNumber } = useI18n();
   const { data, error, loading } = useResource<SalesWorkspaceData>('/api/workspace');
   const tasks = data ? measurementTasks(data.projects, data.actor) : [];
-  return <Workspace title={term('Measurement assignments')} description={term('Open an assigned site to record measurements, or register a new project.')}>
+  return <Workspace title={term('Measurement assignments')} description={term('Open an assigned site to record measurements, or register a new project.')} action={<Link href="/intake" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border border-blue-600 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">{term('New project')}</Link>}>
     <Notice error={error}/>
-    <Link href="/intake" className={`${button} mb-7 block text-center`}>{term('New project')}</Link>
     <section id="measurement-tasks" aria-label={term('Measurement tasks')}>
       {loading ? <p>{term('Loading saved workspace…')}</p> : <>
         <h2 className="mb-4 text-lg font-semibold">{term('Measurement tasks')} <span className="text-slate-500">· {formatNumber(tasks.length)}</span></h2>

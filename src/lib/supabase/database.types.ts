@@ -244,6 +244,7 @@ export type Database = {
           project_type: string | null;
           branch: "Rasafa" | "Karkh" | null;
           sales_engineer_id: string | null;
+          measurement_assignment_id: string | null;
           assigned_outdoor_sales_id: string | null;
           status: Database["public"]["Enums"]["project_status"];
           workflow_status: Database["public"]["Enums"]["project_workflow_status"];
@@ -310,6 +311,7 @@ export type Database = {
           project_type?: string | null;
           branch?: "Rasafa" | "Karkh" | null;
           sales_engineer_id?: string | null;
+          measurement_assignment_id?: string | null;
           assigned_outdoor_sales_id?: string | null;
           status?: Database["public"]["Enums"]["project_status"];
           workflow_status?: Database["public"]["Enums"]["project_workflow_status"];

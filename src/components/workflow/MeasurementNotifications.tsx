@@ -25,10 +25,10 @@ export function MeasurementNotifications({ state }: { state: FieldState }) {
   let read: string[] = [];
   try { const parsed: unknown = JSON.parse(saved); if (Array.isArray(parsed)) read = parsed.filter((id): id is string => typeof id === 'string'); } catch { /* Ignore damaged local preferences. */ }
   const tasks = measurementTasks(state.projects, state.actor);
-  const unread = tasks.filter(project => !read.includes(project.id));
+  const unread = tasks.filter(project => !read.includes(project.measurement_assignment_id??project.id));
   function markRead() {
     try {
-      localStorage.setItem(key, JSON.stringify([...new Set([...read, ...tasks.map(project => project.id)])]));
+      localStorage.setItem(key, JSON.stringify([...new Set([...read, ...tasks.map(project => project.measurement_assignment_id??project.id)])]));
       window.dispatchEvent(new Event('measurement-alerts-read'));
     } catch { /* Tasks remain visible if storage is unavailable. */ }
   }

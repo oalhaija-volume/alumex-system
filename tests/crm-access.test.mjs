@@ -53,7 +53,7 @@ test('Indoor Sales can open and follow up projects across the company', async ()
  assert.equal((await access.salesProject(id, true)).response, undefined);
 });
 
-for (const action of ['follow-up', 'ready']) test(`Outdoor Sales cannot submit ${action} through offline sync`, async () => {
+for (const action of ['follow-up', 'ready', 'assign-measurements']) test(`Outdoor Sales cannot submit ${action} through offline sync`, async () => {
  const route = load('../src/app/api/offline/route.ts', {
   'next/server': json,
   '@/lib/auth/adminServer': { requireRole: async () => ({ ok: true, role: 'Outdoor Sales', user: { id } }) },
@@ -81,4 +81,14 @@ test('not-ready links avoid CRM for restricted employees; unsigned quotations an
  assert.equal(stages.projectLink(project, true), `/mini-crm#project-${id}`);
  for (const sales_status of ['new_lead', 'quotation_in_progress', 'quotation_approved', 'contract_generated']) assert.equal(stages.needsSalesFollowUp({ ...project, sales_status }), true);
  for (const sales_status of ['contract_signed', 'transferred_to_operations', 'closed', 'cancelled', 'lost']) assert.equal(stages.needsSalesFollowUp({ ...project, sales_status }), false);
+});
+
+for(const action of ['ready','assign-measurements'])test(`online CRM ${action} passes the chosen employee through the versioned RPC`,async()=>{
+ const selected='22222222-2222-4222-8222-222222222222';let called=false;
+ const route=load('../src/app/api/workspace/route.ts',{
+  'next/server':json,'@/lib/auth/adminServer':{},'@/lib/supabase/admin':{},'@/lib/workflow/followUps':load('../src/lib/workflow/followUps.ts'),
+  '@/lib/workflow/access':{salesProject:async(_,crmOnly)=>{assert.equal(crmOnly,true);return {auth:{user:{id:'indoor'}},project:{updated_at:'version'},admin:{rpc:async(name,args)=>{called=true;assert.equal(name,'sync_field_change');assert.equal(args.p_action,action);assert.equal(args.p_expected_updated_at,'version');assert.equal(args.p_payload.assignedOutdoorSalesId,selected);return {data:{}};}}};}},
+ });
+ assert.equal((await route.PATCH({json:async()=>({projectId:id,action,assignedOutdoorSalesId:selected})})).status,200);assert.equal(called,true);
+ called=false;assert.equal((await route.PATCH({json:async()=>({projectId:id,action,assignedOutdoorSalesId:'invalid'})})).status,400);assert.equal(called,false);
 });

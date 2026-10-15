@@ -2255,7 +2255,18 @@
     "Your assigned sites and initial measurement tasks.": "Your assigned sites and initial measurement tasks.",
     "{count} new measurement assignment": "{count} new measurement assignment",
     "Latest follow-up note": "Latest follow-up note",
-    "Phone": "Phone"
+    "Phone": "Phone",
+    "Assign measurements": "Assign measurements",
+    "Assign & mark site ready": "Assign & mark site ready",
+    "Save measurement assignment": "Save measurement assignment",
+    "When the site is ready, choose who will collect the initial measurements.": "When the site is ready, choose who will collect the initial measurements.",
+    "Choose the Outdoor Sales employee responsible for initial measurements.": "Choose the Outdoor Sales employee responsible for initial measurements.",
+    "Choose an active Outdoor Sales employee for measurements.": "Choose an active Outdoor Sales employee for measurements.",
+    "Measurement assignment is only available before measurements are completed.": "Measurement assignment is only available before measurements are completed.",
+    "Measurement assignment saved on this device. The employee will be notified after sync.": "Measurement assignment saved on this device. The employee will be notified after sync.",
+    "Measurements assigned. The employee will see the task in their mobile workspace.": "Measurements assigned. The employee will see the task in their mobile workspace.",
+    "Measurements assigned": "Measurements assigned",
+    "assign-measurements": "assign-measurements"
   },
   "registration": {
     "title": "New client & project",

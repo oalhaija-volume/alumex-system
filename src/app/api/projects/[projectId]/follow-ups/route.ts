@@ -7,7 +7,7 @@ export async function GET(_request:Request,{params}:{params:Promise<{projectId:s
  const {admin,project}=access;
  const rows:{operation_id:string;actor_id:string;action:string;recorded_at:string;result:Json}[]=[];
  for(let offset=0;;offset+=1000){
-  const result=await admin.from('field_sync_receipts').select('operation_id,actor_id,action,recorded_at,result').eq('project_id',projectId).in('action',['follow-up','ready']).order('recorded_at',{ascending:false}).order('operation_id').range(offset,offset+999);
+  const result=await admin.from('field_sync_receipts').select('operation_id,actor_id,action,recorded_at,result').eq('project_id',projectId).in('action',['follow-up','ready','assign-measurements']).order('recorded_at',{ascending:false}).order('operation_id').range(offset,offset+999);
   if(result.error)return NextResponse.json({error:'Unable to load follow-up history.'},{status:500});
   rows.push(...result.data);if(result.data.length<1000)break;
  }
@@ -16,7 +16,7 @@ export async function GET(_request:Request,{params}:{params:Promise<{projectId:s
  if(people.error)return NextResponse.json({error:'Unable to load follow-up authors.'},{status:500});
  const entries:FollowUpEntry[]=rows.map(row=>{
   const data=row.result as Record<string,Json>;const actor=people.data?.find(p=>p.id===row.actor_id);
-  return {followUpType:typeof data.follow_up_type==='string'?data.follow_up_type:null,followUpDetail:typeof data.follow_up_detail==='string'?data.follow_up_detail:null,followUpOwner:typeof data.follow_up_owner_name==='string'?data.follow_up_owner_name:null,id:row.operation_id,action:row.action==='ready'?'ready':'follow-up',note:row.action==='follow-up'&&typeof data.project_notes==='string'?data.project_notes:'',nextFollowUp:row.action==='follow-up'&&typeof data.next_follow_up_at==='string'?data.next_follow_up_at:null,recordedAt:row.recorded_at,recordedBy:actor?.full_name??actor?.username??'Employee'};
+  return {assignedOutdoorSales:typeof data.assignedOutdoorSales==='string'?data.assignedOutdoorSales:null,followUpType:typeof data.follow_up_type==='string'?data.follow_up_type:null,followUpDetail:typeof data.follow_up_detail==='string'?data.follow_up_detail:null,followUpOwner:typeof data.follow_up_owner_name==='string'?data.follow_up_owner_name:null,id:row.operation_id,action:row.action==='ready'?'ready':row.action==='assign-measurements'?'assign-measurements':'follow-up',note:row.action==='follow-up'&&typeof data.project_notes==='string'?data.project_notes:'',nextFollowUp:row.action==='follow-up'&&typeof data.next_follow_up_at==='string'?data.next_follow_up_at:null,recordedAt:row.recorded_at,recordedBy:actor?.full_name??actor?.username??'Employee'};
  });
  // Older workflows only retained the latest note. Do not invent an author or
  // date for that note, or pretend that overwritten notes can be recovered.

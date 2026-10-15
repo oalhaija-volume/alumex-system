@@ -42,7 +42,7 @@ export async function syncFieldChanges(){
   for(const change of (await readFieldState(id))?.queue??[]){
    if(activeFieldUser()!==id)return;
    if(failed.has(change.projectId))continue;
-   if(['follow-up','ready'].includes(change.action)&&!canAccessCRM(identity.actor.role)){await updateFieldState(id,s=>({...s!,queue:s!.queue.map(c=>c.id===change.id?{...c,error:'CRM access is limited to Indoor Sales and company leadership.'}:c)}));failed.add(change.projectId);continue;}
+   if(['follow-up','ready','assign-measurements'].includes(change.action)&&!canAccessCRM(identity.actor.role)){await updateFieldState(id,s=>({...s!,queue:s!.queue.map(c=>c.id===change.id?{...c,error:'CRM access is limited to Indoor Sales and company leadership.'}:c)}));failed.add(change.projectId);continue;}
    const current=await readFieldState(id);const project=current?.projects.find(p=>p.id===change.projectId);
    let response:Response;
    try{response=await fetch('/api/offline',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(20000),body:JSON.stringify({...change,expectedUpdatedAt:project?.serverUpdatedAt??project?.updated_at})});}catch{connection(false);return;}
@@ -61,7 +61,7 @@ export async function syncFieldChanges(){
  syncing=Promise.resolve('locks' in navigator?navigator.locks.request('alumex-field-sync',run):run()).then(()=>undefined).finally(()=>{syncing=null;});return syncing;
 }
 export async function saveFieldChange(action:FieldChange['action'],projectId:string,payload:Record<string,unknown>){
- const state=await stateForWrite();if(['follow-up','ready'].includes(action)&&!canAccessCRM(state.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');if(action==='follow-up')payload=normalizeFollowUp(payload);const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
+ const state=await stateForWrite();if(['follow-up','ready','assign-measurements'].includes(action)&&!canAccessCRM(state.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');if(action==='follow-up')payload=normalizeFollowUp(payload);const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
  await updateFieldState(state.actor.id,s=>{
   if(!s)throw new Error('Offline account unavailable.');
   let projects=[...s.projects];const openings=[...s.openings];let p=projects.find(p=>p.id===projectId);
@@ -82,6 +82,13 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    }
    if(action==='finish'){if(!openings.some(o=>o.projectId===projectId))throw new Error('Save at least one opening first.');p={...p,sales_status:'ready_for_quotation'};}
    if(action==='reopen')p={...p,sales_status:'new_lead'};
+   if(action==='ready'||action==='assign-measurements'){
+    if(p.sales_status!=='new_lead'||(action==='assign-measurements'&&p.structure_readiness!=='ready'))throw new Error('Measurement assignment is only available before measurements are completed.');
+    const id=payload.assignedOutdoorSalesId??p.assigned_outdoor_sales_id;const employee=s.outdoorSales?.find(e=>e.id===id);
+    if(!employee)throw new Error('Choose an active Outdoor Sales employee for measurements.');
+    change.payload={...payload,assignedOutdoorSalesId:employee.id};
+    p={...p,assigned_outdoor_sales_id:employee.id,assignedOutdoorSales:employee.name,assignedToYou:employee.id===s.actor.id,measurement_assignment_id:change.id};
+   }
    if(action==='ready'){if(p.structure_readiness!=='not_ready'||p.sales_status!=='new_lead')throw new Error('This project has already moved beyond site readiness.');p={...p,structure_readiness:'ready',sales_status:'new_lead',next_follow_up_at:null,follow_up_owner_id:p.follow_up_owner_id??(s.actor.role==='Indoor Sales'?s.actor.id:null),followUpOwner:p.followUpOwner??(s.actor.role==='Indoor Sales'?s.actor.name:null)};}
    if(action==='follow-up'&&!needsSalesFollowUp(p))throw new Error('Sales follow-up is complete for this project.');
    if(action==='follow-up'){
@@ -112,7 +119,7 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
    if(response.status<500)return response;
   }catch{connection(false);/* Read the last saved local copy below. */}}
   if(!s)return Response.json({error:'Open this workspace online once before working offline.'},{status:503});
-  if(url==='/api/workspace')return Response.json({actor:s.actor,indoorSales:s.indoorSales??[],projects:s.projects});
+  if(url==='/api/workspace')return Response.json({actor:s.actor,outdoorSales:s.outdoorSales??[],indoorSales:s.indoorSales??[],projects:s.projects});
   const p=s.projects.find(p=>p.id===id);
   return p?Response.json({project:p,openings:s.openings.filter(o=>o.projectId===id)}):Response.json({error:'This project is not downloaded on this device.'},{status:404});
  }

@@ -7,7 +7,7 @@ import type { FieldProject, SalesWorkspaceData } from '@/lib/offline/types';
 import { followUpTypeLabel } from '@/lib/workflow/followUps';
 import { needsSalesFollowUp, projectLink, projectStage, projectStages, stageDetails } from '@/lib/workflow/stages';
 import { FollowUpFields } from './FollowUpFields';
-import { button, Notice, secondary } from './ui';
+import { button, Notice } from './ui';
 
 type QueueFilter = 'all' | 'overdue' | 'today' | 'unscheduled';
 type Props = {
@@ -122,6 +122,7 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
   const overdue = due !== null && now > due;
   const today = due !== null && now > 0 && baghdadDay.format(due) === baghdadDay.format(now);
   const stage = stageDetails(project);
+  const canAssign = project.sales_status === 'new_lead' && ['site', 'measurements'].includes(stage.id);
   const stageTone = ['contract-signature', 'contract-preparation'].includes(stage.id) ? 'bg-indigo-50 text-indigo-800' : stage.id === 'site' ? 'bg-slate-100 text-slate-700' : 'bg-blue-50 text-blue-800';
   return <article id={`project-${project.id}`} className="scroll-mt-5 target:bg-blue-50/50">
     <div className="grid items-center gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto] xl:gap-5">
@@ -131,17 +132,37 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
         {project.address && <p dir="auto" className="mt-1 break-words text-xs leading-5 text-slate-500">{project.address}</p>}
         {project.phone && <a dir="ltr" href={`tel:${project.phone}`} className={`${focus} mt-1 inline-flex min-h-8 items-center text-xs font-medium text-blue-700 hover:underline`}>{project.phone}</a>}
       </div>
-      <div className="min-w-0"><span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium leading-5 ${stageTone}`}>{term(stage.label)}</span><p className="mt-2 text-xs leading-5 text-slate-500">{term(stage.action)}</p></div>
+      <div className="min-w-0"><span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium leading-5 ${stageTone}`}>{term(stage.label)}</span><p className="mt-2 text-xs leading-5 text-slate-500">{term(stage.action)}</p>{canAssign&&<p className="mt-2 text-xs font-medium text-slate-700">{term('Outdoor Sales')}: {project.assignedOutdoorSales??term('Not assigned')}</p>}</div>
       <div className="min-w-0 border-t border-slate-100 pt-3 xl:border-0 xl:pt-0">
         <p className={`flex items-center gap-1.5 text-xs font-semibold ${overdue ? 'text-amber-800' : today ? 'text-blue-700' : 'text-slate-500'}`}><Icon kind="clock" className="h-3.5 w-3.5" />{term(overdue ? 'Overdue' : today ? 'Due today' : due === null ? 'Unscheduled' : 'Upcoming')}</p>
         {due !== null && <time dateTime={project.next_follow_up_at!} className="mt-1.5 block text-sm font-medium leading-5 text-slate-800">{formatDateTime(due)}</time>}
         <p className="mt-1.5 break-words text-xs leading-5 text-slate-500">{due !== null && <>{term(followUpTypeLabel(project.follow_up_type))} · </>}{project.followUpOwner ?? term('Not assigned')}</p>
       </div>
-      <button type="button" aria-expanded={expanded} aria-controls={`follow-up-editor-${project.id}`} onClick={() => { setExpanded(!expanded); setHasOpened(true); }} className={`${focus} flex min-h-11 items-center justify-center gap-1 rounded-lg border px-3 text-sm font-semibold whitespace-nowrap xl:w-32 ${expanded ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:text-blue-700'}`}><span>{term(expanded ? 'Close' : 'Follow up')}</span><Icon kind="chevron" className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} /></button>
+      <div className="flex flex-wrap gap-2 xl:w-40 xl:flex-col">
+        {canAssign&&<button type="button" aria-expanded={expanded} aria-controls={`follow-up-editor-${project.id}`} onClick={()=>{setExpanded(true);setHasOpened(true);}} className={`${focus} min-h-11 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white`}>{term('Assign measurements')}</button>}
+        <button type="button" aria-expanded={expanded} aria-controls={`follow-up-editor-${project.id}`} onClick={() => { setExpanded(!expanded); setHasOpened(true); }} className={`${focus} flex min-h-11 items-center justify-center gap-1 rounded-lg border px-3 text-sm font-semibold whitespace-nowrap ${expanded ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:text-blue-700'}`}><span>{term(expanded ? 'Close' : 'Follow up')}</span><Icon kind="chevron" className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} /></button>
+      </div>
     </div>
 
     <div id={`follow-up-editor-${project.id}`} hidden={!expanded} className="border-t border-slate-200 bg-slate-50 p-4 sm:p-6">
       {hasOpened && <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_15rem]">
+        {canAssign&&<form aria-label={term('Assign measurements')} className="rounded-lg border border-blue-200 bg-white p-4 xl:col-span-2" onSubmit={event=>{event.preventDefault();void onUpdate(project,stage.id==='site'?'ready':'assign-measurements',event.currentTarget);}}>
+          <fieldset disabled={!!busy} className="min-w-0">
+            <legend className="font-semibold text-slate-900">{term('Assign measurements')}</legend>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{term(stage.id==='site'?'When the site is ready, choose who will collect the initial measurements.':'Choose the Outdoor Sales employee responsible for initial measurements.')}</p>
+            <div className="mt-3 flex flex-col items-start gap-3 sm:flex-row sm:items-end">
+              <label className="w-full text-sm sm:max-w-sm">{term('Outdoor Sales for measurements')}
+                <select key={project.assigned_outdoor_sales_id??'unassigned'} name="assignedOutdoorSalesId" required defaultValue={data?.outdoorSales?.some(employee=>employee.id===project.assigned_outdoor_sales_id)?project.assigned_outdoor_sales_id!:data?.outdoorSales?.length===1?data.outdoorSales[0].id:''} className={`${control} mt-2`}>
+                  <option value="">{term('Choose Outdoor Sales employee')}</option>
+                  {(data?.outdoorSales??[]).map(employee=><option key={employee.id} value={employee.id}>{employee.name}</option>)}
+                </select>
+              </label>
+              <button type="submit" disabled={!data?.outdoorSales?.length} className={`${button} ${focus}`}>{term(busy===project.id?'Please wait…':stage.id==='site'?'Assign & mark site ready':'Save measurement assignment')}</button>
+            </div>
+            {!data?.outdoorSales?.length&&<p className="mt-3 text-sm text-amber-800">{term('No active Outdoor Sales employees available. Add one in Employees and reconnect to refresh this list.')}</p>}
+            <p className="mt-3 text-xs leading-5 text-slate-500">{term('The assigned employee will see the project in their mobile workspace to collect measurements.')}</p>
+          </fieldset>
+        </form>}
         <form onSubmit={event => { event.preventDefault(); void onUpdate(project, 'follow-up', event.currentTarget); }}>
           <h4 className="mb-4 text-sm font-semibold text-slate-900">{term('Record the outcome & next step')}</h4>
           <fieldset disabled={!!busy} className="min-w-0"><legend className="sr-only">{term('Record follow-up')}</legend><FollowUpFields project={project} actor={data?.actor} indoorSales={data?.indoorSales ?? []} />
@@ -153,7 +174,7 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
           <dl className="mt-4 grid gap-4 text-xs sm:grid-cols-2 xl:grid-cols-1"><div><dt className="text-slate-500">{term('Outdoor Sales')}</dt><dd className="mt-1 font-medium text-slate-800">{project.assignedOutdoorSales ?? term('Not assigned')}</dd></div><div><dt className="text-slate-500">{term('Created by')}</dt><dd className="mt-1 font-medium text-slate-800">{project.registeredBy === 'Employee' ? term('Employee') : project.registeredBy}{project.original_creator_role && <> · {term(project.original_creator_role)}</>}<span className="mt-1 block font-normal text-slate-500">{formatDateTime(project.created_at)}</span></dd></div></dl>
           {project.follow_up_type === 'other' && project.follow_up_detail && <p className="mt-4 break-words text-xs text-slate-600">{project.follow_up_detail}</p>}
           <div className="mt-4 flex flex-col items-start gap-2">
-            {project.structure_readiness !== 'ready' ? <button type="button" disabled={!!busy} onClick={() => void onUpdate(project, 'ready')} className={`${secondary} ${focus} text-start`}>{term('Mark site ready')}</button> : stage.id==='measurements' ? <p className="text-sm leading-6 text-slate-600">{term('Outdoor Sales will collect the initial measurements.')}</p> : <Link href={projectLink(project)} className={`${focus} inline-flex min-h-11 items-center text-sm font-semibold text-blue-700`}>{term('Open project →')}</Link>}
+            {canAssign ? <p className="text-sm leading-6 text-slate-600">{term('Outdoor Sales will collect the initial measurements.')}</p> : <Link href={projectLink(project)} className={`${focus} inline-flex min-h-11 items-center text-sm font-semibold text-blue-700`}>{term('Open project →')}</Link>}
             <Link href={`/projects/${project.id}/follow-ups`} className={`${focus} inline-flex min-h-11 items-center text-sm font-medium text-blue-700`}>{term('View follow-up history →')}</Link>
           </div>
           {canDelete && <div className="mt-4 border-t border-slate-200 pt-2"><button type="button" disabled={!!busy || project.pending} onClick={() => void onDelete(project)} className={`${focus} min-h-11 text-xs font-medium text-red-700 hover:underline disabled:opacity-50`}>{term('Delete project')}</button>{project.pending && <p className="text-xs leading-5 text-slate-500">{term('Sync saved changes before deleting.')}</p>}</div>}

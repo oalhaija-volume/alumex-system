@@ -183,5 +183,48 @@ test('Outdoor Sales receives new assignment alerts; read alerts stay dismissed a
   await expect(alerts).toHaveCount(0);
   await expect(tasks.getByText('New office assignment', { exact: true })).toHaveCount(0);
   await expect(tasks.getByText('Assigned residence', { exact: true })).toBeVisible();
+  Object.assign(state.projects[0], {measurement_assignment_id:'new-assignment-cycle'});
+  await updateDevice();
+  await expect(alerts.getByText('Assigned residence', { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+for(const ready of [false,true])for(const online of [false,true])test(`CRM ${ready?'ready':'waiting'} site assigns measurements to a selected employee ${online?'online':'offline'}`,async({page})=>{
+ const second={id:'33333333-3333-4333-8333-333333333333',name:'Second outdoor employee'};
+ const project={id:'11111111-1111-4111-8111-111111111111',project_name:'CRM assignment sample',project_number:'PRJ-ASSIGN',structure_readiness:ready?'ready':'not_ready',sales_status:'new_lead',status:'Draft',address:'Baghdad',phone:null,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),created_by:fatma.id,registeredBy:'Fatma',assigned_outdoor_sales_id:ehab.id,assignedOutdoorSales:'Ehab',next_follow_up_at:null,project_notes:null};
+ const state={actor:fatma,indoorSales:[fatma],outdoorSales:[ehab,second],projects:[project],openings:[],queue:[],syncedAt:null};
+ const writes: Record<string,unknown>[]=[];
+ await page.route('**/api/workspace',route=>route.fulfill({json:state}));
+ await page.route('**/api/offline*',async route=>{
+  if(route.request().method()==='POST'){
+   const body=route.request().postDataJSON();writes.push(body);
+   expect(body.payload.assignedOutdoorSalesId).toBe(second.id);
+   Object.assign(project,{assigned_outdoor_sales_id:second.id,assignedOutdoorSales:second.name,measurement_assignment_id:body.id,structure_readiness:'ready',updated_at:new Date().toISOString()});
+   return route.fulfill({json:{project}});
+  }
+  return route.fulfill({json:state});
+ });
+ await page.goto('/offline?path=/mini-crm');
+ await page.evaluate(async state=>{
+  localStorage.setItem('alumex-field-active',state.actor.id);
+  await new Promise<void>((resolve,reject)=>{const request=indexedDB.open('alumex-field-v1',1);request.onupgradeneeded=()=>request.result.createObjectStore('accounts');request.onerror=()=>reject(request.error);request.onsuccess=()=>{const db=request.result;const tx=db.transaction('accounts','readwrite');tx.objectStore('accounts').put(state,state.actor.id);tx.oncomplete=()=>{db.close();resolve();};};});
+  window.dispatchEvent(new Event('field-change'));
+ },state);
+ const row=page.locator('article').filter({hasText:'CRM assignment sample'});
+ await row.getByRole('button',{name:'Assign measurements',exact:true}).click();
+ const form=row.getByRole('form',{name:'Assign measurements',exact:true});
+ await form.getByRole('combobox',{name:'Outdoor Sales for measurements',exact:true}).selectOption(second.id);
+ if(!online)await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});window.dispatchEvent(new Event('offline'));});
+ await form.getByRole('button',{name:ready?'Save measurement assignment':'Assign & mark site ready',exact:true}).click();
+ await expect(row.getByText('Outdoor Sales: Second outdoor employee',{exact:true})).toBeVisible();
+ await expect(row.getByText('Initial measurements',{exact:true})).toBeVisible();
+ await expect(page).toHaveURL(/\/offline\?path=\/mini-crm$/);
+ if(online){await expect.poll(()=>writes.length).toBe(1);expect(writes[0].action).toBe(ready?'assign-measurements':'ready');}
+ else{
+  expect(writes).toHaveLength(0);
+  const saved=await page.evaluate(async()=>new Promise<{queue:{action:string;payload:{assignedOutdoorSalesId:string}}[]}>(resolve=>{const request=indexedDB.open('alumex-field-v1',1);request.onsuccess=()=>{const db=request.result;const get=db.transaction('accounts').objectStore('accounts').get(localStorage.getItem('alumex-field-active')!);get.onsuccess=()=>{resolve(get.result);db.close();};};}));
+  expect(saved.queue.at(-1)?.payload.assignedOutdoorSalesId).toBe(second.id);
+ }
+ for(const width of [320,390,1440]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
+ if(online&&ready)await page.screenshot({path:'artifacts/mini-crm-review-20261015/crm-assign-measurements.png',fullPage:true});
 });

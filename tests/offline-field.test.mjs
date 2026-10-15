@@ -68,8 +68,25 @@ test('restricted employees cannot queue CRM updates or readiness changes on a ca
    const x=setup();
    await x.client.saveFieldChange('register',projectId,payload);
    const before=x.state.queue.length;
-   for(const action of ['follow-up','ready'])await assert.rejects(x.client.saveFieldChange(action,projectId,{}),/CRM access is limited/);
+   for(const action of ['follow-up','ready','assign-measurements'])await assert.rejects(x.client.saveFieldChange(action,projectId,{}),/CRM access is limited/);
    assert.equal(x.state.queue.length,before);
   }
  }finally{actor.role=originalRole;}
+});
+
+test('CRM assignment preserves creator and saved measurements, and hands a ready site to the selected employee',async()=>{
+ const x=setup();await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,structureReadiness:'not_ready'}});
+ x.state.outdoorSales.push({id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',name:'Second outdoor employee'});
+ await x.client.saveFieldChange('ready',projectId,{assignedOutdoorSalesId:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'});
+ const p=x.state.projects[0];assert.equal(p.structure_readiness,'ready');assert.equal(p.assignedOutdoorSales,'Second outdoor employee');assert.equal(p.created_by,actor.id);assert.equal(p.measurement_assignment_id,x.state.queue.at(-1).id);
+ await x.client.saveFieldChange('opening',projectId,{id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'});
+ await x.client.saveFieldChange('assign-measurements',projectId,{assignedOutdoorSalesId:payload.project.assignedOutdoorSalesId});
+ assert.equal(x.state.projects[0].assignedOutdoorSales,'Outdoor employee');assert.equal(x.state.openings.length,1);assert.equal(x.state.queue.at(-1).payload.assignedOutdoorSalesId,payload.project.assignedOutdoorSalesId);
+ await x.client.saveFieldChange('finish',projectId,{});
+ await assert.rejects(x.client.saveFieldChange('assign-measurements',projectId,{assignedOutdoorSalesId:payload.project.assignedOutdoorSalesId}),/before measurements are completed/);
+});
+test('CRM assignment rejects missing employees without changing local project or queue',async()=>{
+ const x=setup();await x.client.saveFieldChange('register',projectId,payload);const before=structuredClone(x.state);
+ await assert.rejects(x.client.saveFieldChange('assign-measurements',projectId,{assignedOutdoorSalesId:actor.id}),/active Outdoor Sales/);
+ assert.deepEqual(x.state,before);
 });

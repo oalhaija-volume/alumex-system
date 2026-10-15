@@ -2255,7 +2255,18 @@
     "Your assigned sites and initial measurement tasks.": "المواقع المكلّف بها ومهام القياسات الأولية.",
     "{count} new measurement assignment": "{count} تكليف قياس جديد",
     "Latest follow-up note": "آخر ملاحظة متابعة",
-    "Phone": "الهاتف"
+    "Phone": "الهاتف",
+    "Assign measurements": "تعيين موظف للقياسات",
+    "Assign & mark site ready": "تعيين الموظف وتأكيد جاهزية الموقع",
+    "Save measurement assignment": "حفظ تكليف القياسات",
+    "When the site is ready, choose who will collect the initial measurements.": "عندما يصبح الموقع جاهزاً، اختر الموظف الذي سيأخذ القياسات الأولية.",
+    "Choose the Outdoor Sales employee responsible for initial measurements.": "اختر موظف المبيعات الخارجية المسؤول عن القياسات الأولية.",
+    "Choose an active Outdoor Sales employee for measurements.": "اختر موظف مبيعات خارجية نشطاً للقياسات.",
+    "Measurement assignment is only available before measurements are completed.": "يمكن تعيين موظف للقياسات قبل اكتمال القياسات فقط.",
+    "Measurement assignment saved on this device. The employee will be notified after sync.": "تم حفظ تكليف القياسات على هذا الجهاز. سيتلقى الموظف إشعاراً بعد المزامنة.",
+    "Measurements assigned. The employee will see the task in their mobile workspace.": "تم تكليف الموظف بالقياسات. ستظهر المهمة في مساحة عمله على الهاتف.",
+    "Measurements assigned": "تم تكليف الموظف بالقياسات",
+    "assign-measurements": "تكليف القياسات"
   },
   "registration": {
     "title": "عميل ومشروع جديد",

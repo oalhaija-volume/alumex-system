@@ -1,6 +1,7 @@
 "use client";
 import { useI18n } from '@/components/i18n/I18nProvider';
 import { ProjectRecord } from './ProjectRecord';
+import { canAccessCRM } from '@/lib/auth/permissions';
 import Link from 'next/link';
 import { useEffect,useState } from 'react';
 import { activeFieldUser,readFieldState,updateFieldState } from '@/lib/offline/store';
@@ -13,7 +14,7 @@ export function FollowUpWorkspace({projectId}:{projectId:string}){
  useEffect(()=>{let active=true;const controller=new AbortController();
   async function load(){
    try{
-    let saved=await readFieldState();if(!saved&&isFieldOnline())saved=await prepareOffline().catch(()=>null);const account=activeFieldUser();let history=saved?.followUpHistories?.[projectId];let fromCache=true;
+    let saved=await readFieldState();if(!saved&&isFieldOnline())saved=await prepareOffline().catch(()=>null);if(saved&&!canAccessCRM(saved.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');const account=activeFieldUser();let history=saved?.followUpHistories?.[projectId];let fromCache=true;
     if(isFieldOnline()){
      let response:Response|null=null;try{response=await fetch(`/api/projects/${projectId}/follow-ups`,{cache:'no-store',signal:controller.signal});}catch{ /* Use downloaded history when unreachable. */ }
      if(response){

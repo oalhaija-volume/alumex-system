@@ -4,7 +4,7 @@ import test from 'node:test';
 import ts from 'typescript';
 function load(path,dependencies={}){
  const source=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
- const exports={};new Function('require','exports',source)(name=>{if(!(name in dependencies))throw Error(name);return dependencies[name];},exports);return exports;
+ const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(name in dependencies))throw Error(name);return dependencies[name];},exports);return exports;
 }
 const termsData=JSON.parse(readFileSync(new URL('../src/lib/contracts/uploadedTerms.json',import.meta.url),'utf8'));
 const uploadedTerms=load('../src/lib/contracts/uploadedTerms.ts',{'./uploadedTerms.json':{default:termsData}});
@@ -37,12 +37,12 @@ test('default matches movement-specific Alumex when configured; structural produ
 });
 const permissions=load('../src/lib/auth/permissions.ts');
 for(const role of ['Operations Manager','Project Manager'])test(`${role} cannot access HR, quotations, contracts or catalog`,()=>{
- assert.equal(permissions.defaultRouteForRole(role),'/operations');
+ assert.equal(permissions.defaultRouteForRole(role),'/dashboard');
  for(const path of ['/hr','/catalog','/projects','/quotation/11111111-1111-4111-8111-111111111111','/contract/11111111-1111-4111-8111-111111111111'])assert.equal(permissions.canAccessRoute(path,role),false);
  assert.equal(permissions.canAccessRoute('/operations',role),true);
 });
 test('HR has employee workspace only and legacy routes remain inaccessible',()=>{
- assert.equal(permissions.defaultRouteForRole('HR'),'/hr');assert.equal(permissions.canAccessRoute('/hr','HR'),true);
+ assert.equal(permissions.defaultRouteForRole('HR'),'/dashboard');assert.equal(permissions.canAccessRoute('/hr','HR'),true);
  for(const path of ['/finance','/factory','/contracts','/quotations'])assert.equal(permissions.canAccessRoute(path,'Admin'),false);
 });
 const json={NextResponse:{json:(body,options)=>({body,status:options?.status??200})}};
@@ -126,7 +126,7 @@ test('follow-up history uses each saved note rather than the current overwritten
  const route=load('../src/app/api/projects/[projectId]/follow-ups/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({project,admin})}});
  const result=await route.GET({}, {params:Promise.resolve({projectId:'project'})});assert.equal(result.status,200);assert.deepEqual(result.body.entries.map(e=>e.note),['Latest note','First call']);assert.equal(result.body.entries[1].recordedBy,'Sales employee');assert.equal(result.body.entries[0].followUpType,'other');assert.equal(result.body.entries[0].followUpDetail,'Video call');assert.equal(result.body.entries[0].followUpOwner,'Indoor employee');assert.equal(result.body.entries[1].followUpType,null);
 });
-for(const [role,id,allowed] of [['Outdoor Sales','assigned',true],['Outdoor Sales','other',false],['Indoor Sales','assigned',false],['Indoor Sales','creator',true],['Indoor Sales','followup-owner',true],['Indoor Sales','stranger',false],['Outdoor Sales','followup-owner',false]])test(`${role} ${id} project assignment access`,async()=>{
+for(const [role,id,allowed] of [['Outdoor Sales','assigned',true],['Outdoor Sales','other',false],['Indoor Sales','assigned',true],['Indoor Sales','creator',true],['Indoor Sales','followup-owner',true],['Indoor Sales','stranger',true],['Outdoor Sales','followup-owner',false]])test(`${role} ${id} project assignment access`,async()=>{
  const project={id:'project',created_by:'creator',assigned_outdoor_sales_id:'assigned',follow_up_owner_id:'followup-owner'};
  const access=load('../src/lib/workflow/access.ts',{'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,user:{id}})},'@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},'@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:project,error:null})})})}});
  const result=await access.salesProject('project');assert.equal(!result.response,allowed);

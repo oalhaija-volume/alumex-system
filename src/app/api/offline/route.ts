@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth/adminServer';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeFollowUp } from '@/lib/workflow/followUps';
+import { canAccessCRM } from '@/lib/auth/permissions';
 import { salesRoles } from '@/lib/workflow/access';
 import { normalizeRegistrationOpening,registrationRoomTypes } from '@/lib/measurements/registrationOpening';
 import { parseProjectLocation } from '@/lib/location/coordinates';
@@ -13,7 +14,7 @@ export async function GET(request:Request){
  const actor={id:auth.user.id,name:profile.data?.full_name??profile.data?.username??'Employee',role:auth.role};
  if(new URL(request.url).searchParams.has('session'))return NextResponse.json({actor},{headers:{'Cache-Control':'no-store'}});
  let query=admin.from('projects').select('id,project_number,project_name,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,project_notes,created_at,created_by,updated_at,assigned_outdoor_sales_id,original_creator_role').order('created_at',{ascending:false});
- if(auth.role==='Outdoor Sales')query=query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);else if(!['Admin','Sales Director','CEO'].includes(auth.role))query=query.or(`created_by.eq.${auth.user.id},follow_up_owner_id.eq.${auth.user.id}`);
+ if(auth.role==='Outdoor Sales')query=query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);
  const projects=await query;
  if(projects.error)return NextResponse.json({error:'Unable to download projects.'},{status:500});
  const ids=projects.data.map(p=>p.id);const clientIds=[...new Set(projects.data.map(p=>p.client_id))];
@@ -33,6 +34,7 @@ export async function POST(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const body=await request.json().catch(()=>null);
  if(!body||body.userId!==auth.user.id||!uuid.test(body.id)||!uuid.test(body.projectId)||!body.payload||!Number.isFinite(Date.parse(body.recordedAt)))return NextResponse.json({error:'Invalid saved change or account. Sign in with the employee who recorded this work.'},{status:400});
+ if(['follow-up','ready'].includes(body.action)&&!canAccessCRM(auth.role))return NextResponse.json({error:'CRM access is limited to Indoor Sales and company leadership.'},{status:403});
  let payload:Json={};
  if(body.action==='register'){
   const c=body.payload.client,p=body.payload.project;

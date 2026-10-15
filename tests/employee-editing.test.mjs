@@ -11,7 +11,7 @@ function load(path, dependencies = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', source)(name => { assert.ok(name in dependencies, name); return dependencies[name]; }, exports);
+  new Function('require', 'exports', source)(name => { if(name==='@/lib/auth/permissions') return load('../src/lib/auth/permissions.ts'); assert.ok(name in dependencies, name); return dependencies[name]; }, exports);
   return exports;
 }
 const roles = load('../src/lib/auth/roles.ts');

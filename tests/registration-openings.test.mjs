@@ -24,7 +24,7 @@ for(const scenario of ['other-owner','not-ready','valid','valid-other']) test(`m
  const writes=[];
  const route=load('../src/app/api/initial-measurements/[projectId]/route.ts',{
   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Indoor Sales',user:{id:'actor'}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',user:{id:'actor'}})},
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
   '@/lib/measurements/registrationOpening':rules,
   '@/lib/supabase/admin':{createAdminClient:()=>({from(table){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:base.id,created_by:scenario==='other-owner'?'other':'actor',structure_readiness:scenario==='not-ready'?'not_ready':'ready',sales_status:'new_lead'}}),insert:async(value)=>{writes.push({table,value});return {error:null};}};}})},
@@ -48,7 +48,7 @@ for(const scenario of ['complete','empty','incomplete','reopen','save-error']) t
  const updates=[];
  const route=load('../src/app/api/initial-measurements/[projectId]/route.ts',{
   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Indoor Sales',user:{id:'actor'}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',user:{id:'actor'}})},
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
   '@/lib/measurements/registrationOpening':rules,
   '@/lib/supabase/admin':{createAdminClient:()=>({from(table){return {

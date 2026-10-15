@@ -96,7 +96,7 @@ export function RegistrationShell({ children, role }: { children: React.ReactNod
         </div>
       </dialog>
 
-      <main className="min-w-0 lg:ps-64 print:ps-0" onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a[href]');const href=link?.getAttribute('href');if(!isFieldOnline()&&href?.startsWith('/')&&href!=='/offline'){event.preventDefault();event.stopPropagation();window.location.assign('/offline?path='+encodeURIComponent(href));}}}>{role && ["Admin","Sales Director","CEO","Indoor Sales","Outdoor Sales"].includes(role) && <><OfflineStatus/><SalesReminders/></>}{children}</main>
+      <main className="min-w-0 lg:ps-64 print:ps-0" onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a[href]');const href=link?.getAttribute('href');if(!isFieldOnline()&&href?.startsWith('/')&&href!=='/offline'){event.preventDefault();event.stopPropagation();window.location.assign('/offline?path='+encodeURIComponent(href));}}}>{role && ["Admin","Sales Director","CEO", "Company Owner","Indoor Sales","Outdoor Sales"].includes(role) && <><OfflineStatus/><SalesReminders/></>}{children}</main>
     </div>
   );
 }

@@ -12,6 +12,7 @@ function load(path, dependencies = {}) {
   }).outputText;
   const exports = {};
   new Function('require', 'exports', source)(name => {
+    if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');
     assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
     return dependencies[name];
   }, exports);
@@ -38,8 +39,8 @@ function authorization(role, active = true) {
   });
 }
 
-for (const role of ['Sales Director', 'CEO']) {
-  test(`${role} retains its identity and has full sales pages and capabilities`, () => {
+for (const role of ['Sales Director', 'CEO', 'Company Owner']) {
+  test(`${role} retains its identity and has role-appropriate sales pages and capabilities`, () => {
     assert.equal(roles.normalizeAppRole(role), role);
     assert.ok(roles.appRoles.includes(role));
     assert.equal(permissions.defaultRouteForRole(role), '/dashboard');
@@ -47,19 +48,19 @@ for (const role of ['Sales Director', 'CEO']) {
       assert.equal(permissions.canAccessRoute(path, role), true, path);
     }
     for (const capability of ['clients:create', 'clients:update', 'projects:create', 'projects:view-team', 'projects:reassign', 'measurements:request', 'measurements:record', 'measurements:review', 'quotations:manage', 'contracts:manage', 'follow-ups:perform']) {
-      assert.ok(capabilities.roleHasCapability(role, capability), capability);
-      assert.ok(capabilities.rolesForCapability(capability).includes(role), capability);
+      assert.equal(capabilities.roleHasCapability(role, capability), true, capability);
+      assert.equal(capabilities.rolesForCapability(capability).includes(role), true, capability);
     }
     assert.ok(roles.canViewSalesPrices(role));
     assert.ok(roles.canViewFinanceValues(role));
-    for (const path of ['/hr', '/catalog']) assert.equal(permissions.canAccessRoute(path, role), false);
-    assert.equal(permissions.canAccessRoute('/operations', role), role === 'CEO');
+    for (const path of ['/hr', '/catalog']) assert.equal(permissions.canAccessRoute(path, role), true);
+    assert.equal(permissions.canAccessRoute('/operations', role), true);
     assert.equal(capabilities.roleHasCapability(role, 'workflow:configure'), false);
   });
 
   test(`${role} passes real authorization without becoming Admin`, async () => {
     const auth = authorization(role);
-    const allowed = await auth.requireRole(['Admin', 'Sales Director', 'CEO', 'Indoor Sales', 'Outdoor Sales']);
+    const allowed = await auth.requireRole(['Admin', 'Sales Director', 'CEO', 'Company Owner', 'Indoor Sales', 'Outdoor Sales']);
     assert.equal(allowed.ok, true);
     assert.equal(allowed.role, role);
     assert.equal((await auth.requireAdminUser()).ok, false);
@@ -93,7 +94,7 @@ for (const role of ['Sales Director', 'CEO']) {
       const route = load(path, {
         'next/server':json, '@/lib/auth/adminServer':authorization(role),
         '@/lib/supabase/admin':{createAdminClient:()=>admin},
-        '@/lib/workflow/access':{salesRoles:['Admin','Sales Director','CEO','Indoor Sales','Outdoor Sales']},
+        '@/lib/workflow/access':{salesRoles:['Admin','Sales Director','CEO','Company Owner','Indoor Sales','Outdoor Sales']},
         '@/lib/workflow/followUps':{}, '@/lib/measurements/registrationOpening':{}, '@/lib/location/coordinates':{},
       });
       const result = await route.GET(new Request('http://localhost:3003/api/offline'));
@@ -144,8 +145,8 @@ for (const role of ['Sales Director', 'CEO']) {
       }})},
     });
     const result=await route.POST({json:async()=>({projectId,revision:1})});
-    assert.equal(result.status,role==='CEO'?200:403);
-    assert.equal(called,role==='CEO');
+    assert.equal(result.status,['CEO','Company Owner'].includes(role)?200:403);
+    assert.equal(called,['CEO','Company Owner'].includes(role));
     if(called)assert.deepEqual(result.body,{ok:true});
   });
 }

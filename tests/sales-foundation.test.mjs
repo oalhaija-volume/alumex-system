@@ -93,7 +93,7 @@ test("capabilities keep Outdoor Sales away from quotation and contract values", 
   assert.equal(roleHasCapability("Outdoor Sales", "contracts:manage"), false);
 });
 
-test("Admin is a superuser across every workflow capability", () => {
+test("Admin retains administrative and CRM capabilities", () => {
   for (const capability of [
     "clients:create",
     "clients:update",
@@ -345,12 +345,9 @@ test("completed field measurements can move directly to quotation", () => {
   );
 });
 
-test("mini CRM follow-ups stay with Indoor Sales and sales management", () => {
-  assert.equal(roleHasCapability("Admin", "follow-ups:perform"), true);
-  assert.equal(roleHasCapability("Sales Manager", "follow-ups:perform"), true);
-  assert.equal(roleHasCapability("Indoor Sales", "follow-ups:perform"), true);
-  assert.equal(roleHasCapability("Branch Manager", "follow-ups:perform"), true);
-  assert.equal(roleHasCapability("Outdoor Sales", "follow-ups:perform"), false);
+test("mini CRM follow-ups belong to Indoor Sales and company leadership", () => {
+  for (const role of ["Sales Manager", "Branch Manager", "Outdoor Sales"]) assert.equal(roleHasCapability(role, "follow-ups:perform"), false);
+  for (const role of ["Indoor Sales", "Sales Director", "CEO", "Company Owner", "Admin"]) assert.equal(roleHasCapability(role, "follow-ups:perform"), true);
 });
 
 test("quotation versions preserve approval as the contract boundary", () => {

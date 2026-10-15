@@ -3,7 +3,7 @@ import { salesProject } from '@/lib/workflow/access';
 import type { FollowUpEntry } from '@/lib/workflow/followUps';
 import type { Json } from '@/lib/supabase/database.types';
 export async function GET(_request:Request,{params}:{params:Promise<{projectId:string}>}){
- const {projectId}=await params;const access=await salesProject(projectId);if(access.response)return access.response;
+ const {projectId}=await params;const access=await salesProject(projectId,true);if(access.response)return access.response;
  const {admin,project}=access;
  const rows:{operation_id:string;actor_id:string;action:string;recorded_at:string;result:Json}[]=[];
  for(let offset=0;;offset+=1000){

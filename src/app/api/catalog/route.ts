@@ -1,8 +1,9 @@
+import { leadershipRoles } from '@/lib/auth/permissions';
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth/adminServer';
 import { createAdminClient } from '@/lib/supabase/admin';
 export async function GET(){
- const auth=await requireRole(['Admin']);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
+ const auth=await requireRole(leadershipRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const {data,error}=await createAdminClient().from('product_price_settings').select('id,name:product_name,category,unit,unit_price,is_active').order('product_name');
  return error?NextResponse.json({error:'Unable to load catalog.'},{status:500}):NextResponse.json({items:data},{headers:{'Cache-Control':'no-store'}});
 }

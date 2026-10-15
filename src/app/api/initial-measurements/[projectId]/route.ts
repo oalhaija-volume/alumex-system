@@ -6,7 +6,7 @@ import { normalizeRegistrationOpening, registrationRoomTypes } from "@/lib/measu
 
 type Context = { params: Promise<{projectId: string}> };
 async function access(context: Context) {
-  const auth = await requireRole(["Admin", "Sales Director", "CEO", "Indoor Sales", "Outdoor Sales"]);
+  const auth = await requireRole(["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Outdoor Sales"]);
   if (!auth.ok) return {response:NextResponse.json({error:auth.error},{status:auth.status})};
   if (!hasSupabaseServiceRoleKey()) return {response:NextResponse.json({error:"Measurements are unavailable."},{status:503})};
   const {projectId} = await context.params;
@@ -14,7 +14,7 @@ async function access(context: Context) {
   const admin = createAdminClient();
   const {data:project,error} = await admin.from("projects").select("id, project_name, project_number, created_by, assigned_outdoor_sales_id, follow_up_owner_id, structure_readiness, sales_status").eq("id",projectId).maybeSingle();
   if (error) return {response:NextResponse.json({error:"Unable to load project."},{status:500})};
-  if (!project || (!["Admin", "Sales Director", "CEO"].includes(auth.role) && project.created_by !== auth.user.id && !(auth.role === "Outdoor Sales" && project.assigned_outdoor_sales_id === auth.user.id) && !(auth.role === "Indoor Sales" && project.follow_up_owner_id === auth.user.id))) return {response:NextResponse.json({error:"Project not found."},{status:404})};
+  if (!project || (!["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales"].includes(auth.role) && project.created_by !== auth.user.id && !(auth.role === "Outdoor Sales" && project.assigned_outdoor_sales_id === auth.user.id) && !(auth.role === "Indoor Sales" && project.follow_up_owner_id === auth.user.id))) return {response:NextResponse.json({error:"Project not found."},{status:404})};
   if (project.structure_readiness !== "ready") return {response:NextResponse.json({error:"The site must be ready before measurements can be recorded."},{status:409})};
   return {admin,project,auth};
 }

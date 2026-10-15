@@ -16,8 +16,10 @@ export function useResource<T>(url:string){
   async function refresh(){const current=++version;try{const result=await api<T>(url,{signal:controller.signal});if(!controller.signal.aborted&&current===version){setData(result);setError('');}}catch(e){if(!controller.signal.aborted&&current===version)setError((e as Error).message);}finally{if(!controller.signal.aborted)setLoading(false);}}
   function changed(){clearTimeout(timer);timer=setTimeout(()=>void refresh(),150);}
   void refresh();
-  if(url==='/api/workspace'){window.addEventListener('field-change',changed);window.addEventListener('focus',changed);}
-  return()=>{controller.abort();clearTimeout(timer);window.removeEventListener('field-change',changed);window.removeEventListener('focus',changed);};
+  const live=url==='/api/workspace'||url==='/api/dashboard';
+  const interval=live?setInterval(()=>{if(document.visibilityState==='visible')changed();},30000):undefined;
+  if(live){window.addEventListener('field-change',changed);window.addEventListener('focus',changed);}
+  return()=>{controller.abort();clearTimeout(timer);clearInterval(interval);window.removeEventListener('field-change',changed);window.removeEventListener('focus',changed);};
  },[url]);
  async function reload(){setData(await api<T>(url));}
  return {data,setData,error,setError,loading,reload};

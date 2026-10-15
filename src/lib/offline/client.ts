@@ -1,3 +1,4 @@
+import { canAccessCRM } from '@/lib/auth/permissions';
 import { normalizeFollowUp,type FollowUpInput } from '@/lib/workflow/followUps';
 import { needsSalesFollowUp } from '@/lib/workflow/stages';
 import { normalizeRegistrationOpening } from '@/lib/measurements/registrationOpening';
@@ -18,7 +19,7 @@ export async function prepareOffline():Promise<FieldState>{
   const remote=await response.json() as FieldState;
   const state=await updateFieldState(remote.actor.id,old=>{
    const pending=new Set(old?.queue.map(c=>c.projectId)??[]);
-   return {...remote,followUpHistories:Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remote.projects.some(p=>p.id===id)||pending.has(id))),queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id))??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
+   return {...remote,followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remote.projects.some(p=>p.id===id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id))??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
   });
   setFieldUser(remote.actor.id);return state;
  })();
@@ -41,6 +42,7 @@ export async function syncFieldChanges(){
   for(const change of (await readFieldState(id))?.queue??[]){
    if(activeFieldUser()!==id)return;
    if(failed.has(change.projectId))continue;
+   if(['follow-up','ready'].includes(change.action)&&!canAccessCRM(identity.actor.role)){await updateFieldState(id,s=>({...s!,queue:s!.queue.map(c=>c.id===change.id?{...c,error:'CRM access is limited to Indoor Sales and company leadership.'}:c)}));failed.add(change.projectId);continue;}
    const current=await readFieldState(id);const project=current?.projects.find(p=>p.id===change.projectId);
    let response:Response;
    try{response=await fetch('/api/offline',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(20000),body:JSON.stringify({...change,expectedUpdatedAt:project?.serverUpdatedAt??project?.updated_at})});}catch{connection(false);return;}
@@ -59,7 +61,7 @@ export async function syncFieldChanges(){
  syncing=Promise.resolve('locks' in navigator?navigator.locks.request('alumex-field-sync',run):run()).then(()=>undefined).finally(()=>{syncing=null;});return syncing;
 }
 export async function saveFieldChange(action:FieldChange['action'],projectId:string,payload:Record<string,unknown>){
- const state=await stateForWrite();if(action==='follow-up')payload=normalizeFollowUp(payload);const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
+ const state=await stateForWrite();if(['follow-up','ready'].includes(action)&&!canAccessCRM(state.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');if(action==='follow-up')payload=normalizeFollowUp(payload);const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
  await updateFieldState(state.actor.id,s=>{
   if(!s)throw new Error('Offline account unavailable.');
   let projects=[...s.projects];const openings=[...s.openings];let p=projects.find(p=>p.id===projectId);
@@ -80,7 +82,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    }
    if(action==='finish'){if(!openings.some(o=>o.projectId===projectId))throw new Error('Save at least one opening first.');p={...p,sales_status:'ready_for_quotation'};}
    if(action==='reopen')p={...p,sales_status:'new_lead'};
-   if(action==='ready')p={...p,structure_readiness:'ready',sales_status:'new_lead',next_follow_up_at:null};
+   if(action==='ready'){if(p.structure_readiness!=='not_ready'||p.sales_status!=='new_lead')throw new Error('This project has already moved beyond site readiness.');p={...p,structure_readiness:'ready',sales_status:'new_lead',next_follow_up_at:null,follow_up_owner_id:p.follow_up_owner_id??(s.actor.role==='Indoor Sales'?s.actor.id:null),followUpOwner:p.followUpOwner??(s.actor.role==='Indoor Sales'?s.actor.name:null)};}
    if(action==='follow-up'&&!needsSalesFollowUp(p))throw new Error('Sales follow-up is complete for this project.');
    if(action==='follow-up'){
     const owner=s.indoorSales?.find(e=>e.id===payload.followUpOwnerId);
@@ -137,6 +139,7 @@ export async function retryReviewedProject(projectId:string,updatedAt:string,cor
  const corrected=correction?normalizeFollowUp(correction.values):null;
  await updateFieldState(id,s=>{
   if(!s)throw new Error('Offline account unavailable.');
+  if(corrected&&!canAccessCRM(s.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');
   if(corrected&&!s.indoorSales?.some(e=>e.id===corrected.followUpOwnerId))throw new Error('Choose an Indoor Sales employee from the list. Connect online to refresh employees.');
   const queue=s.queue.map(c=>c.projectId===projectId?{...c,error:undefined,...(corrected&&c.id===correction?.changeId&&c.action==='follow-up'?{id:crypto.randomUUID(),payload:corrected}:{})}:c);
   const latest=queue.filter(c=>c.projectId===projectId&&c.action==='follow-up').at(-1)?.payload;

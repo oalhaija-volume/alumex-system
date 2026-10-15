@@ -13,6 +13,7 @@ export type Database = {
         | "Admin"
         | "Sales Director"
         | "CEO"
+        | "Company Owner"
         | "Sales Manager"
         | "Indoor Sales"
         | "Outdoor Sales"
@@ -1447,6 +1448,7 @@ export type Database = {
         Args: { p_actor: string; p_employee: string; p_expected_updated_at: string; p_full_name: string; p_username: string; p_role: string; p_is_active: boolean };
         Returns: Json;
       };
+      company_owner_ready: { Args: Record<PropertyKey, never>; Returns: boolean };
       sales_leadership_ready: { Args: Record<PropertyKey, never>; Returns: boolean };
       sync_field_change: { Args: { p_operation: string; p_actor: string; p_project: string; p_action: string; p_payload: Json; p_recorded_at: string; p_expected_updated_at: string | null }; Returns: Json };
       commercial_privacy_ready: { Args: Record<string, never>; Returns: boolean };

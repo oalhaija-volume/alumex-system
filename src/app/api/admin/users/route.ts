@@ -1,3 +1,4 @@
+import { leadershipRoles } from '@/lib/auth/permissions';
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/adminServer";
 import { isAppRole } from "@/lib/auth/roles";
@@ -25,7 +26,7 @@ function isMissingUsernameColumn(error: { message?: string; code?: string }) {
 }
 
 export async function GET() {
-  const roleCheck = await requireRole(["Admin", "HR"]);
+  const roleCheck = await requireRole([...leadershipRoles, "HR"]);
 
   if (!roleCheck.ok) {
     return NextResponse.json(
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
   const password = typeof body?.password === "string" ? body.password : "";
   const role = isAppRole(body?.role) ? body.role : null;
 
-  if (!fullName || fullName.length > 150 || !username || password.length < 8 || !role || !["Admin","HR","Sales Director","CEO","Indoor Sales","Outdoor Sales","Operations Manager","Project Manager"].includes(role)) {
+  if (!fullName || fullName.length > 150 || !username || password.length < 8 || !role || !["Admin","HR","Sales Director","CEO","Company Owner","Indoor Sales","Outdoor Sales","Operations Manager","Project Manager"].includes(role)) {
     return NextResponse.json(
       { error: "Enter employee name, username, role, and a password of at least 8 characters." },
       { status: 400 },
@@ -120,14 +121,18 @@ export async function POST(request: Request) {
     );
   }
 
-  if (roleCheck.role !== "Admin" && role === "Admin") {
+  if (roleCheck.role !== "Admin" && (role === "Admin" || role === "Company Owner")) {
     return NextResponse.json(
-      { error: "Only Admin can create Admin users." },
+      { error: "Only Admin can create Admin or Company Owner users." },
       { status: 403 },
     );
   }
 
   const admin = createAdminClient();
+  if (role === "Company Owner") {
+    const readiness = await admin.rpc("company_owner_ready", {});
+    if (readiness.error || readiness.data !== true) return NextResponse.json({error:"Apply the Company Owner database migrations before adding owner accounts."}, {status:503});
+  }
   if (role === "Sales Director" || role === "CEO") {
     const readiness = await admin.rpc("sales_leadership_ready", {});
     if (readiness.error || readiness.data !== true) {

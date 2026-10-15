@@ -2,6 +2,7 @@ export type AppRole =
   | "Admin"
   | "Sales Director"
   | "CEO"
+  | "Company Owner"
   | "Sales Manager"
   | "Indoor Sales"
   | "Outdoor Sales"
@@ -28,9 +29,11 @@ export const appRoles: AppRole[] = [
   "Admin",
   "Sales Director",
   "CEO",
+  "Company Owner",
   "Sales Manager",
   "Indoor Sales",
   "Outdoor Sales",
+  "Sales Rep",
   "Finance / Accountant",
   "Operations Manager",
   "Procurement Engineer",
@@ -56,6 +59,7 @@ export const salesPriceRoles: AppRole[] = [
   "Admin",
   "Sales Director",
   "CEO",
+  "Company Owner",
   "Sales Manager",
   "Indoor Sales",
   "Sales Rep",
@@ -66,6 +70,7 @@ export const financeValueRoles: AppRole[] = [
   "Admin",
   "Sales Director",
   "CEO",
+  "Company Owner",
   "Sales Manager",
   "Indoor Sales",
   "Sales Rep",

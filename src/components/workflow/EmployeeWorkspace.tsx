@@ -72,7 +72,7 @@ function EmployeeEditor({ employee, isAdmin, isSelf, onCancel, onSaved }: {
   const [error, setError] = useState('');
   const [resetting, setResetting] = useState(false);
   const accessLocked = isSelf || primaryAdmin(employee);
-  const options = [...employeeRoles, ...(isAdmin ? ['Admin'] : [])];
+  const options = [...employeeRoles, ...(isAdmin ? ['Admin', 'Company Owner'] : [])];
   if (!options.includes(employee.role)) options.push(employee.role);
   useEffect(() => { nameInput.current?.focus(); }, []);
 
@@ -132,6 +132,7 @@ export function EmployeeWorkspace() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const editButton = useRef<HTMLButtonElement | null>(null);
   const isAdmin = role === 'Admin';
+  const canEditEmployees = isAdmin || role === 'HR';
 
   useEffect(() => { if (editingId === null) editButton.current?.focus(); }, [editingId]);
   function closeEditor() { setEditingId(null); }
@@ -157,24 +158,24 @@ export function EmployeeWorkspace() {
   return <Workspace title={term('Employees')} description={term('Add employees, update their information, and manage system access.')}>
     <Notice error={error} />
     {notice && <p role="status" className="mb-5 rounded-md bg-green-50 p-4 text-sm text-green-800">{term(notice)}</p>}
-    <form onSubmit={submit} aria-label={term('Add employee')} className={card}>
+    {canEditEmployees&&<form onSubmit={submit} aria-label={term('Add employee')} className={card}>
       <fieldset disabled={saving}>
         <div className="grid gap-5 sm:grid-cols-2">
           <label>{term('Employee name')}<input required name="fullName" maxLength={150} autoComplete="off" className={field} /></label>
-          <label>{term('Role')}<select required name="role" aria-label={term('Role')} className={field}><option value="">{term('Choose role')}</option>{[...employeeRoles, ...(isAdmin ? ['Admin'] : [])].map(option => <option key={option} value={option}>{term(option)}</option>)}</select></label>
+          <label>{term('Role')}<select required name="role" aria-label={term('Role')} className={field}><option value="">{term('Choose role')}</option>{[...employeeRoles, ...(isAdmin ? ['Admin', 'Company Owner'] : [])].map(option => <option key={option} value={option}>{term(option)}</option>)}</select></label>
           <label>{term('Username')}<input required name="username" dir="ltr" autoComplete="off" pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]{1,62}[a-zA-Z0-9]" className={field} /></label>
           <label>{term('Password')}<input required name="password" aria-label={term('Password')} aria-describedby="password-help" type={show ? 'text' : 'password'} autoComplete="new-password" minLength={8} className={field} /><span id="password-help" className="mt-2 block text-xs text-slate-500">{term('At least 8 characters. Passwords are never shown in the employee list.')}</span></label>
         </div>
         <label className="my-5 flex items-center gap-2 text-sm"><input type="checkbox" checked={show} onChange={event => setShow(event.target.checked)} />{term('Show password while entering')}</label>
         <button className={button}>{saving ? term('Adding employee…') : term('Add employee')}</button>
       </fieldset>
-    </form>
+    </form>}
     <div className="mt-9 mb-4 flex flex-wrap items-center justify-between gap-3">
       <h2 className="text-lg font-semibold">{term('Team')}</h2>
       <button type="button" className={secondary} disabled={editingId !== null || loading} onClick={() => { setError(''); void reload().catch(cause => setError(cause instanceof Error ? cause.message : 'Unable to load employees.')); }}>{term('Refresh employees')}</button>
     </div>
     {loading ? <p>{term('Loading employees…')}</p> : !data?.users.length ? <p className={card}>{term('No employees to display.')}</p> : <div className="space-y-3">{data.users.map(employee => {
-      const editable = isAdmin || (role === 'HR' && employee.role !== 'Admin' && !primaryAdmin(employee));
+      const editable = isAdmin || (role === 'HR' && !['Admin','Company Owner'].includes(employee.role??'') && !primaryAdmin(employee));
       return <article key={employee.id} className={card}>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0"><h3 className="break-words font-semibold">{employee.full_name || employee.username}</h3><p dir="ltr" className="mt-1 break-all text-sm text-slate-500">{employee.username}</p><p className="mt-2 text-sm text-slate-600">{term(employee.role)} · {term(employee.status)}</p></div>

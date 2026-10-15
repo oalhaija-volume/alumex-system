@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
+function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
 const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Employee',role:'Indoor Sales'};
 const projectId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const payload={client:{clientType:'individual',clientName:'Client',mobile:'07000000000'},project:{assignedOutdoorSalesId:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',address:'Site',locationLatitude:33.3,locationLongitude:44.4,structureReadiness:'ready'}};
@@ -57,4 +57,19 @@ test('correcting a queued follow-up preserves other pending notes and uses a fre
  const first=x.state.queue[1],last=x.state.queue[2];
  await x.client.retryReviewedProject(projectId,'server-version',{changeId:first.id,values:{...values,followUpType:'whatsapp'}});
  assert.notEqual(x.state.queue[1].id,first.id);assert.equal(x.state.queue[1].payload.followUpType,'whatsapp');assert.deepEqual(x.state.queue[2].payload,last.payload);assert.equal(x.state.queue[2].id,last.id);assert.equal(x.state.projects[0].project_notes,'Second note');
+});
+
+
+test('restricted employees cannot queue CRM updates or readiness changes on a cached device',async()=>{
+ const originalRole=actor.role;
+ try {
+  for(const role of ['Outdoor Sales','HR']) {
+   actor.role=role;
+   const x=setup();
+   await x.client.saveFieldChange('register',projectId,payload);
+   const before=x.state.queue.length;
+   for(const action of ['follow-up','ready'])await assert.rejects(x.client.saveFieldChange(action,projectId,{}),/CRM access is limited/);
+   assert.equal(x.state.queue.length,before);
+  }
+ }finally{actor.role=originalRole;}
 });

@@ -108,7 +108,7 @@ export function MiniCRM({ data, loading, error, notice, busy, now, canDelete, on
 
       {loading ? <div role="status" className="space-y-5 p-6"><p className="text-sm text-slate-500">{term('Loading projects…')}</p>{[0, 1, 2].map(index => <div key={index} aria-hidden="true" className="h-20 rounded-lg bg-slate-100 motion-safe:animate-pulse" />)}</div> : error && !data ? <div className="px-6 py-10 text-sm text-slate-600">{term('Follow-ups could not be loaded. Refresh the page to try again.')}</div> : !projects.length ? <div className="flex flex-col items-center px-6 py-14 text-center"><span className="mb-4 rounded-xl bg-slate-100 p-3 text-slate-500"><Icon kind="queue" /></span><h3 className="font-semibold text-slate-900">{term(filtered ? 'No matching follow-ups' : 'No active follow-ups')}</h3><p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">{term(filtered ? 'Try another search or clear your filters to see all active projects.' : 'New projects appear here until the contract is signed.')}</p></div> : <>
         <div aria-hidden="true" className="hidden grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-5 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-500 xl:grid"><span>{term('Client / project')}</span><span>{term('Project stage')}</span><span>{term('Next follow-up')}</span><span className="w-32 text-end">{term('Action')}</span></div>
-        <div className="divide-y divide-slate-200">{projects.map(project => <CRMProject key={project.id} project={project} data={data} now={now} busy={busy} canDelete={canDelete} onUpdate={onUpdate} onDelete={onDelete} />)}</div>
+        <div className="flex flex-col gap-4 bg-slate-50">{projects.map(project => <CRMProject key={project.id} project={project} data={data} now={now} busy={busy} canDelete={canDelete} onUpdate={onUpdate} onDelete={onDelete} />)}</div>
       </>}
     </div>
     <p className="mt-4 text-xs leading-5 text-slate-500">{term('Signed projects move out of sales follow-up and into Operations.')}</p>
@@ -125,7 +125,7 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
   const stage = stageDetails(project);
   const canAssign = project.sales_status === 'new_lead' && ['site', 'measurements'].includes(stage.id);
   const stageTone = ['contract-signature', 'contract-preparation'].includes(stage.id) ? 'bg-indigo-50 text-indigo-800' : stage.id === 'site' ? 'bg-slate-100 text-slate-700' : 'bg-blue-50 text-blue-800';
-  return <article id={`project-${project.id}`} className="scroll-mt-5 target:bg-blue-50/50">
+  return <article id={`project-${project.id}`} className="scroll-mt-5 border-y border-slate-200 bg-white first:border-t-0 last:border-b-0 target:bg-blue-50/50">
     <div className="grid items-center gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto] xl:gap-5">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2 text-xs"><span className="font-medium text-slate-500">{term(project.project_number)}</span>{project.pending && <span className="rounded bg-amber-50 px-2 py-0.5 text-amber-800">{term('Saved on device')}</span>}{project.assignedToYou && <span className="font-medium text-blue-700">{term('Assigned to you')}</span>}</div>

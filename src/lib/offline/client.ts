@@ -119,16 +119,23 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
   // OfflineStatus refreshes it in the background; reads need no second API call.
   const savedProject=s?.projects.find(p=>p.id===id);
   const useSaved=isDeviceWorkspace()&&s&&(url==='/api/workspace'||savedProject);
-  if(!useSaved && !pending && navigator.onLine){try{
-   const timeout=AbortSignal.timeout(8000);
-   const response=await fetch(url,{...init,signal:init?.signal?AbortSignal.any([init.signal,timeout]):timeout});connection(true);
+  if(!useSaved && !pending && navigator.onLine){
+   const controller=new AbortController();
+   const abort=()=>controller.abort();
+   const timeout=setTimeout(abort,8000);
+   init?.signal?.addEventListener('abort',abort,{once:true});
+   if(init?.signal?.aborted)abort();
+   try{
+   const response=await fetch(url,{...init,signal:controller.signal});connection(true);
    if(response.ok){
     const data=await response.clone().json();
     if(s && url!=='/api/workspace' && data.project && data.openings)await updateFieldState(s.actor.id,old=>old?.queue.some(c=>c.projectId===id)?old:{...old!,projects:old!.projects.map(p=>p.id===id?{...p,...data.project}:p),openings:[...old!.openings.filter(o=>o.projectId!==id),...data.openings.map((o:Record<string,unknown>)=>({...o,projectId:id}))]});
     return response;
    }
    if(response.status<500)return response;
-  }catch{connection(false);/* Read the last saved local copy below. */}}
+   }catch{if(init?.signal?.aborted)throw new DOMException('Request cancelled','AbortError');connection(false);/* Read the last saved local copy below. */}
+   finally{clearTimeout(timeout);init?.signal?.removeEventListener('abort',abort);}
+  }
   if(!s)return Response.json({error:'Open this workspace online once before working offline.'},{status:503});
   if(url==='/api/workspace')return Response.json({actor:s.actor,outdoorSales:s.outdoorSales??[],indoorSales:s.indoorSales??[],projects:s.projects});
   const p=s.projects.find(p=>p.id===id);

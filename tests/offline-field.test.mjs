@@ -181,3 +181,11 @@ test('a device registration returns after durable save while synchronization is 
  assert.equal(response.status,201);assert.equal((await response.json()).pending,true);assert.equal(x.state.queue.length,1);
  release();await x.client.syncFieldChanges();assert.equal(x.state.queue.length,1);
 });
+
+test('cancelling an online read does not mark the device disconnected or return stale data',async()=>{
+ const x=setup();navigator.onLine=true;window.location={pathname:'/dashboard'};
+ const controller=new AbortController();controller.abort();
+ globalThis.fetch=async(url,init)=>{assert.equal(init.signal.aborted,true);throw new DOMException('Aborted','AbortError');};
+ await assert.rejects(x.client.fieldFetch('/api/workspace',{signal:controller.signal}),{name:'AbortError'});
+ assert.equal(x.client.isFieldOnline(),true);
+});

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMobileOutdoor } from "@/components/workflow/MobileOutdoorContext";
-import { fieldFetch,isFieldOnline,prepareOffline } from "@/lib/offline/client";
+import { fieldFetch,isFieldOnline,isDeviceWorkspace,prepareOffline } from "@/lib/offline/client";
 import { readFieldState } from "@/lib/offline/store";
 import type { FieldState } from "@/lib/offline/types";
 import { useEffect, useState } from "react";
@@ -35,7 +35,7 @@ export function OutdoorIntake() {
   const selfAssigned = employeeState?.actor.role === 'Indoor Sales' && outdoorAssignee === employeeState.actor.id;
   const assignedEmployee = selfAssigned ? employeeState.actor : employeeState?.outdoorSales?.find(employee => employee.id === outdoorAssignee);
   const collectsMeasurements = employeeState?.actor.role === 'Outdoor Sales' || selfAssigned;
-  useEffect(()=>{let live=true;const refresh=async()=>{const state=await readFieldState().catch(()=>null);if(live)setEmployeeState(state);};void prepareOffline().then(refresh).catch(()=>{void refresh();});window.addEventListener('field-change',refresh);return()=>{live=false;window.removeEventListener('field-change',refresh);};},[]);
+  useEffect(()=>{let live=true;const refresh=async()=>{const state=await readFieldState().catch(()=>null);if(live)setEmployeeState(state);};if(isDeviceWorkspace())void refresh();else void prepareOffline().then(refresh).catch(()=>{void refresh();});window.addEventListener('field-change',refresh);return()=>{live=false;window.removeEventListener('field-change',refresh);};},[]);
 
   useEffect(()=>{const update=()=>setOffline(!isFieldOnline());const timer=setTimeout(update,0);window.addEventListener('field-connection',update);window.addEventListener('online',update);window.addEventListener('offline',update);return()=>{clearTimeout(timer);window.removeEventListener('field-connection',update);window.removeEventListener('online',update);window.removeEventListener('offline',update);};},[]);
 
@@ -79,7 +79,7 @@ export function OutdoorIntake() {
         setSaved({projectId:result.projectId,pending:!!result.pending,registeredBy:registered?.registeredBy??employeeState.actor.name,createdAt:registered?.created_at});
         return;
       }
-      if (!result.pending && isFieldOnline()) window.location.assign(readiness === "ready" ? `/initial-measurements/${result.projectId}` : "/mini-crm");
+      if (!result.pending && isFieldOnline() && !isDeviceWorkspace()) window.location.assign(readiness === "ready" ? `/initial-measurements/${result.projectId}` : "/mini-crm");
       else window.location.assign(readiness === "ready" ? `/offline?project=${result.projectId}` : "/offline?path=/mini-crm");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("intake.errors.save"));

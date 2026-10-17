@@ -5,6 +5,7 @@ import { needsSalesFollowUp } from '@/lib/workflow/stages';
 import { normalizeRegistrationOpening } from '@/lib/measurements/registrationOpening';
 import { activeFieldUser,readFieldState,setFieldUser,updateFieldState } from './store';
 import type { FieldChange,FieldProject,FieldState } from './types';
+export function isDeviceWorkspace(){return typeof window!=='undefined'&&window.location?.pathname==='/offline';}
 let connectionAvailable=true;
 export function isFieldOnline(){return typeof navigator!=="undefined" && navigator.onLine && connectionAvailable;}
 function connection(available:boolean){if(connectionAvailable!==available){connectionAvailable=available;window.dispatchEvent(new Event('field-connection'));}}
@@ -16,7 +17,7 @@ export async function prepareOffline():Promise<FieldState>{
   if(!navigator.onLine){const state=await readFieldState();if(!state)throw new Error('Sign in online once to prepare this device for offline work.');return state;}
   let response:Response;
   try{response=await fetch('/api/offline',{cache:'no-store',signal:AbortSignal.timeout(8000)});connection(true);}catch{connection(false);const cached=await readFieldState();if(cached)return cached;throw new Error('Connect once to prepare this device for offline work.');}
-  if(!response.ok){if([401,403].includes(response.status))setFieldUser(null);throw new Error('Sign in with an active sales account to use offline work.');}
+  if(!response.ok){if([401,403].includes(response.status))setFieldUser(null);else if(response.status>=500){connection(false);const cached=await readFieldState();if(cached)return cached;}throw new Error('Sign in with an active sales account to use offline work.');}
   const remote=await response.json() as FieldState;
   const state=await updateFieldState(remote.actor.id,old=>{
    const pending=new Set(old?.queue.map(c=>c.projectId)??[]);
@@ -114,8 +115,13 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
  if(method==='GET'){
   const s=await readFieldState();const id=url.split('/').pop();
   const pending=s?.queue.some(c=>url==='/api/workspace'||c.projectId===id);
-  if(!pending && navigator.onLine){try{
-   const response=await fetch(url,init);connection(true);
+  // This explicit device workspace already owns an account-scoped snapshot.
+  // OfflineStatus refreshes it in the background; reads need no second API call.
+  const savedProject=s?.projects.find(p=>p.id===id);
+  const useSaved=isDeviceWorkspace()&&s&&(url==='/api/workspace'||savedProject);
+  if(!useSaved && !pending && navigator.onLine){try{
+   const timeout=AbortSignal.timeout(8000);
+   const response=await fetch(url,{...init,signal:init?.signal?AbortSignal.any([init.signal,timeout]):timeout});connection(true);
    if(response.ok){
     const data=await response.clone().json();
     if(s && url!=='/api/workspace' && data.project && data.openings)await updateFieldState(s.actor.id,old=>old?.queue.some(c=>c.projectId===id)?old:{...old!,projects:old!.projects.map(p=>p.id===id?{...p,...data.project}:p),openings:[...old!.openings.filter(o=>o.projectId!==id),...data.openings.map((o:Record<string,unknown>)=>({...o,projectId:id}))]});
@@ -130,7 +136,7 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
  }
  try{
   const body=JSON.parse(String(init?.body??'{}')) as Record<string,unknown>;
-  if(url==='/api/sales-intake'){const projectId=crypto.randomUUID();await saveFieldChange('register',projectId,body);if(isFieldOnline())await syncFieldChanges();const pending=(await readFieldState())?.queue.some(c=>c.projectId===projectId)??true;return Response.json({projectId,pending},{status:201});}
+  if(url==='/api/sales-intake'){const projectId=crypto.randomUUID();await saveFieldChange('register',projectId,body);if(isFieldOnline()&&!isDeviceWorkspace())await syncFieldChanges();const pending=(await readFieldState())?.queue.some(c=>c.projectId===projectId)??true;return Response.json({projectId,pending},{status:201});}
   const projectId=url==='/api/workspace'?String(body.projectId):url.split('/').pop()!;
   const action=method==='POST'?'opening':String(body.action) as FieldChange['action'];
   await saveFieldChange(action,projectId,body);

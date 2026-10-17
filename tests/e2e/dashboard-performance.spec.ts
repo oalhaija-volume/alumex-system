@@ -15,11 +15,13 @@ async function dashboard(page: Page) {
   let held: Promise<void> | null = null;
   // Exercise real IndexedDB preparation without waiting for a blocked service worker.
   await page.addInitScript(() => { Reflect.deleteProperty(Navigator.prototype, 'serviceWorker'); });
-  await page.route('**/api/offline*', route => {
+  await page.route('**/api/offline*', async route => {
     expect(route.request().method()).toBe('GET');
     if (new URL(route.request().url()).searchParams.has('session')) requests.session++;
     else requests.snapshot++;
-    return route.fulfill({ json: state });
+    const response=structuredClone(state);
+    if(held)await held;
+    return route.fulfill({ json: response });
   });
   await page.route('**/api/workspace', async route => {
     requests.workspace++;
@@ -35,26 +37,28 @@ async function dashboard(page: Page) {
 test('offline preparation and repeated focus events do not duplicate active dashboard requests', async ({ page }) => {
   const { requests, hold } = await dashboard(page);
   await page.waitForTimeout(400);
-  expect(requests).toEqual({ workspace: 1, snapshot: 1, session: 0 });
+  expect(requests).toEqual({ workspace: 0, snapshot: 1, session: 0 });
   const release = hold();
   try {
     for (let i = 0; i < 3; i++) {
       await page.evaluate(() => window.dispatchEvent(new Event('focus')));
       await page.waitForTimeout(250);
     }
-    expect(requests.workspace).toBe(2);
+    expect(requests.workspace).toBe(0);
+    expect(requests.snapshot).toBe(2);
     expect(requests.session).toBe(0);
   } finally { release(); }
   await expect(page.getByRole('heading', { name: 'Performance sample', exact: true })).toBeVisible();
   await page.waitForTimeout(400);
-  expect(requests.workspace).toBe(2);
+  expect(requests.workspace).toBe(0);
+    expect(requests.snapshot).toBe(2);
 });
 
 test('a local edit supersedes an older request and survives its late response', async ({ page }) => {
   const { state, requests, hold } = await dashboard(page);
   const release = hold();
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect.poll(() => requests.workspace).toBe(2);
+  await expect.poll(() => requests.snapshot).toBe(2);
   try {
     await page.evaluate(async state => {
       Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
@@ -80,5 +84,14 @@ test('a local edit supersedes an older request and survives its late response', 
   await page.waitForTimeout(400);
   await expect(page.getByRole('heading', { name: 'Saved locally', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Performance sample', exact: true })).toHaveCount(0);
-  expect(requests.workspace).toBe(2);
+  expect(requests.workspace).toBe(0);
+    expect(requests.snapshot).toBe(2);
+});
+
+test('a refreshed device snapshot updates visible projects without a workspace API request',async({page})=>{
+ const {state,requests}=await dashboard(page);
+ state.projects[0].project_name='Updated on the server';
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await expect(page.getByRole('heading',{name:'Updated on the server',exact:true})).toBeVisible();
+ expect(requests.workspace).toBe(0);
 });

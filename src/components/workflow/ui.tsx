@@ -1,6 +1,6 @@
 "use client";
 import { useI18n } from "@/components/i18n/I18nProvider";
-import { fieldFetch } from '@/lib/offline/client';
+import { fieldFetch,isDeviceWorkspace } from '@/lib/offline/client';
 import type { FieldChangeDetail } from '@/lib/offline/store';
 import { useEffect,useState } from 'react';
 export const field='mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100';
@@ -43,8 +43,8 @@ export function useResource<T>(url:string){
   }
   function changed(event?:Event){
    const detail=(event as CustomEvent<FieldChangeDetail>|undefined)?.detail;
-   // The dashboard polls independently. Saving its offline backup is not a mutation.
-   if(detail?.source==='snapshot')return;
+   // Online pages poll their API; the device workspace renders its refreshed snapshot.
+   if(detail?.source==='snapshot'&&!isDeviceWorkspace())return;
    if(detail?.source==='account'){
     if(detail.userId===actorId||(!actorId&&inFlight&&detail.userId))return;
     actorId=null;

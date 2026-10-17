@@ -1,3 +1,4 @@
+import { savedFieldState } from './helpers/fieldState';
 import { expect, test, type Page } from '@playwright/test';
 import type { FieldState } from '../../src/lib/offline/types';
 
@@ -47,12 +48,13 @@ test.describe('Indoor Sales self measurement', () => {
     await expect(page.getByRole('option', { name: 'Myself — Indoor employee', exact: true })).toHaveCount(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `artifacts/indoor-self-measurements/select-self-${testInfo.project.name}-${online}.png`, fullPage: true });
-    if (online) await page.route(url => /^\/initial-measurements\/[\da-f-]+$/.test(url.pathname), route => route.fulfill({ contentType: 'text/html', body: '<h1>Initial measurement destination</h1>' }));
+    if (online) await page.route(url => url.pathname==='/offline'&&url.searchParams.has('project'), route => route.fulfill({ contentType: 'text/html', body: '<h1>Initial measurement destination</h1>' }));
     await page.getByRole('button', { name: /Continue to measurements/ }).click();
     if (online) {
-      await expect(page).toHaveURL(/\/initial-measurements\/[\da-f-]+$/);
-      expect(check.registration()?.userId).toBe(actor.id);
-      expect(check.registration()?.payload.project.assignedOutdoorSalesId).toBe(actor.id);
+      await expect(page).toHaveURL(/\/offline\?project=[\da-f-]+$/);
+      const saved=check.registration()??(await savedFieldState(page)).queue.find(c=>c.action==='register');
+      expect(saved?.userId).toBe(actor.id);
+      expect((saved?.payload.project as {assignedOutdoorSalesId:string})?.assignedOutdoorSalesId).toBe(actor.id);
     } else {
       await expect(page).toHaveURL(/\/offline\?project=[\da-f-]+$/);
       await expect(page.getByRole('heading', { name: 'Initial measurements', exact: true })).toBeVisible();

@@ -1,3 +1,4 @@
+import { savedFieldState } from './helpers/fieldState';
 import { expect, test } from '@playwright/test';
 
 test.use({ serviceWorkers: 'block' }); // Route mocks must also intercept document navigation.
@@ -68,12 +69,14 @@ for (const actor of [fatma, ehab]) {
           await expect(page).toHaveURL(/\/offline\?path=\/intake$/);
           if (!online) await expect(page.getByText('Saved on device · Pending sync', { exact: true })).toBeVisible();
         } else {
-          await expect(page).toHaveURL(ready ? online ? /\/initial-measurements\/[\da-f-]+$/ : /\/offline\?project=[\da-f-]+$/ : online ? /\/mini-crm$/ : /\/offline\?path=\/mini-crm$/);
+          await expect(page).toHaveURL(ready ? /\/offline\?project=[\da-f-]+$/ : /\/offline\?path=\/mini-crm$/);
         }
         if (online) {
-          expect(registration?.userId).toBe(actor.id);
-          expect(registration?.payload.project.structureReadiness).toBe(ready ? 'ready' : 'not_ready');
-          expect(registration?.payload.project.assignedOutdoorSalesId).toBe(actor.role === 'Indoor Sales' ? ehab.id : null);
+          // The device flow may navigate before its background request finishes.
+          const saved=registration??(await savedFieldState(page)).queue.find(c=>c.action==='register');
+          expect(saved?.userId).toBe(actor.id);
+          expect((saved?.payload.project as {structureReadiness:string})?.structureReadiness).toBe(ready ? 'ready' : 'not_ready');
+          expect((saved?.payload.project as {assignedOutdoorSalesId:string|null})?.assignedOutdoorSalesId).toBe(actor.role === 'Indoor Sales' ? ehab.id : null);
         }
       });
     }

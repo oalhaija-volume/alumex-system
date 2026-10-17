@@ -149,3 +149,35 @@ test('Outdoor Sales cannot save a not-ready project locally without a note; the 
  assert.equal(x.state.projects[0].readiness_note,'Plastering unfinished');
  assert.equal(x.state.projects[0].project_notes,'Called client');
 });
+
+test('the device workspace reads its snapshot immediately without a second network request',async()=>{
+ const x=setup();await x.client.saveFieldChange('register',projectId,payload);
+ x.state.queue=[];navigator.onLine=true;window.location={pathname:'/offline'};
+ let calls=0;globalThis.fetch=async()=>{calls++;throw Error('Network must not block saved reads');};
+ const result=await (await x.client.fieldFetch('/api/workspace')).json();
+ assert.equal(result.projects[0].id,projectId);
+ const measurement=await (await x.client.fieldFetch('/api/initial-measurements/'+projectId)).json();
+ assert.equal(measurement.project.id,projectId);assert.equal(calls,0);
+});
+
+test('normal online pages still verify their data through the authenticated API',async()=>{
+ const x=setup();navigator.onLine=true;window.location={pathname:'/dashboard'};
+ let calls=0;globalThis.fetch=async()=>{calls++;return Response.json({error:'Sign in required'},{status:401});};
+ assert.equal((await x.client.fieldFetch('/api/workspace')).status,401);assert.equal(calls,1);
+});
+
+test('temporary server failures preserve the device workspace but revoked accounts stop access',async()=>{
+ const x=setup();await x.client.saveFieldChange('register',projectId,payload);navigator.onLine=true;
+ globalThis.fetch=async()=>new Response('Unavailable',{status:503});
+ assert.equal((await x.client.prepareOffline()).queue.length,1);assert.equal(x.active,actor.id);
+ globalThis.fetch=async()=>new Response('Unauthorized',{status:401});
+ await assert.rejects(x.client.prepareOffline(),/active sales account/);assert.equal(x.active,null);assert.equal(x.state.queue.length,1);
+});
+
+test('a device registration returns after durable save while synchronization is still waiting',async()=>{
+ const x=setup();navigator.onLine=true;window.location={pathname:'/offline'};
+ let release;globalThis.fetch=()=>new Promise(resolve=>{release=()=>resolve(Response.json({actor:{id:'other-account'}}));});
+ const response=await x.client.fieldFetch('/api/sales-intake',{method:'POST',body:JSON.stringify(payload)});
+ assert.equal(response.status,201);assert.equal((await response.json()).pending,true);assert.equal(x.state.queue.length,1);
+ release();await x.client.syncFieldChanges();assert.equal(x.state.queue.length,1);
+});

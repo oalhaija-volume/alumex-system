@@ -3,7 +3,7 @@ import { useMobileOutdoor } from "@/components/workflow/MobileOutdoorContext";
 import { ProjectRecord } from '@/components/workflow/ProjectRecord';
 import Link from "next/link";
 import { readFieldState } from "@/lib/offline/store";
-import { fieldFetch } from "@/lib/offline/client";
+import { fieldFetch,isDeviceWorkspace } from "@/lib/offline/client";
 import { useEffect, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { normalizeRegistrationOpening, registrationRoomTypes, registrationStructureTypes, type RegistrationOpening, type RegistrationStructure } from "@/lib/measurements/registrationOpening";
@@ -30,13 +30,23 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
   const endpoint = `/api/initial-measurements/${projectId}`;
   useEffect(()=>{
     const controller = new AbortController();
-    fieldFetch(endpoint,{signal:controller.signal}).then(async response=>{
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      setProject(data.project);setOpenings(data.openings);setFinished(data.project.sales_status !== "new_lead");setDraftId(crypto.randomUUID());
-    }).catch(cause=>{if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Unable to load measurements.");})
-      .finally(()=>{if (!controller.signal.aborted) setLoading(false);});
-    return ()=>controller.abort();
+    let version=0;
+    async function refresh(){
+      const current=++version;
+      try{
+        const response=await fieldFetch(endpoint,{signal:controller.signal});
+        const data=await response.json();
+        if(controller.signal.aborted||current!==version)return;
+        if(!response.ok)throw new Error(data.error);
+        setProject(data.project);setOpenings(data.openings);setFinished(data.project.sales_status!=="new_lead");
+        setDraftId(existing=>existing||crypto.randomUUID());setError("");
+      }catch(cause){if(!controller.signal.aborted&&current===version)setError(cause instanceof Error?cause.message:"Unable to load measurements.");}
+      finally{if(!controller.signal.aborted&&current===version)setLoading(false);}
+    }
+    void refresh();
+    // Saved records may refresh after the form opens. Keep unsaved form inputs intact.
+    if(isDeviceWorkspace())window.addEventListener('field-change',refresh);
+    return()=>{controller.abort();window.removeEventListener('field-change',refresh);};
   },[endpoint]);
   async function save(event:React.FormEvent) {
     event.preventDefault();

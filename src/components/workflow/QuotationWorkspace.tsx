@@ -2,7 +2,9 @@
 import { useI18n } from '@/components/i18n/I18nProvider';
 import Link from 'next/link';
 import { useState } from 'react';
-import { defaultSystem,systemOptions,additionalOptions,priceQuotation,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice } from '@/lib/workflow/pricing';
+import { defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice } from '@/lib/workflow/pricing';
+import { StandaloneItems } from './StandaloneItems';
+import { isShutterBox, isRollerShutter, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
 import type { RegistrationOpening } from '@/lib/measurements/registrationOpening';
 import type { QuotationRevision,SalesFlow } from '@/lib/workflow/types';
@@ -17,14 +19,15 @@ const quantityLabel=(unit?:string)=>unit==='sqm'?'Area (m²)':unit==='meter'?'Le
 function QuoteEditor({data,projectId,reload}:{data:QuoteData;projectId:string;reload:()=>Promise<void>}) {
  const { term,formatMoney,formatNumber,errorMessage } = useI18n();
  const rateLabel=(p:CatalogItem)=>p.unit_price>0?`${formatMoney(p.unit_price)} / ${term(p.unit)}`:term('Price required');
- const {catalog,flow}=data;
+ const {flow}=data;
+ const catalog=data.catalog.map(normalizeCatalogItem);
  const [newOpenings,setNewOpenings]=useState<RegistrationOpening[]>([]);
- const openings=quotationOpenings(data.openings,newOpenings);
- const [choices,setChoices]=useState<OpeningChoice[]>(()=>data.openings.map(o=>{
+ const openings=quotableOpenings(quotationOpenings(data.openings,newOpenings));
+ const [choices,setChoices]=useState<OpeningChoice[]>(()=>quotableOpenings(data.openings).map(o=>{
   const saved=flow?.quotation.lines.find(l=>l.opening.id===o.id);
   return {openingId:o.id,systemId:saved?.system.id??defaultSystem(o,catalog)?.id??'',glassId:saved?.glass?.id??'',extras:saved?.extras.map(e=>({id:e.id,quantity:e.quantity}))??[]};
  }));
- const [additionalItems,setAdditionalItems]=useState<AdditionalChoice[]>(()=>flow?.quotation.additionalItems?.map(item=>({id:item.id,quantity:item.quantity}))??[]);
+ const [additionalItems,setAdditionalItems]=useState<AdditionalChoice[]>(()=>flow?.quotation.additionalItems?.map(item=>({id:item.id,quantity:item.quantity,measurements:item.measurements,extras:item.extras?.map(e=>({id:e.id,quantity:e.quantity}))}))??[]);
  const [editing,setEditing]=useState(!flow);
  const [addingOpening,setAddingOpening]=useState(false);
  const [busy,setBusy]=useState(false);
@@ -70,24 +73,22 @@ function QuoteEditor({data,projectId,reload}:{data:QuoteData;projectId:string;re
      <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Opening {number}',{number:formatNumber(index+1)})} · {term(opening.opening_type)} {opening.opening_direction?term(opening.opening_direction):''}</h2>{isNew&&<button type="button" className="min-h-11 px-3 text-sm text-red-700" onClick={()=>{setNewOpenings(rows=>rows.filter(o=>o.id!==opening.id));setChoices(rows=>rows.filter(c=>c.openingId!==opening.id));}}>{term("Remove new opening")}</button>}</div>
      <p className="mt-2 text-sm text-slate-500">{term("Floor")} {term(opening.floor)} · {term(opening.room)} · {formatNumber(opening.width)} × {formatNumber(opening.height)} {term("cm")}{isNew?` · ${term('Not saved yet')}`:''}</p>
      <div className="mt-5 grid gap-4 sm:grid-cols-2">
-      <label className="text-sm">{term("System / product")}<select aria-label={term("System / product")} value={choice.systemId} onChange={e=>edit(index,{systemId:e.target.value})} className={field}><option value="">{term("Choose system")}</option>{systemOptions(opening,catalog).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
-      <label className="text-sm">{term("Glass")}<select aria-label={term("Glass")} value={choice.glassId} onChange={e=>edit(index,{glassId:e.target.value,extras:choice.extras.filter(x=>x.id!==e.target.value)})} className={field}><option value="">{term("Standard glass included")}</option>{catalog.filter(p=>/glass/i.test(p.name)).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
+      <label className="text-sm">{term("System / product")}<select aria-label={term("System / product")} value={choice.systemId} onChange={e=>edit(index,{systemId:e.target.value,glassId:'',extras:[]})} className={field}><option value="">{term("Choose system")}</option>{systemOptions(opening,catalog).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
+      <label className="text-sm">{term("Glass")}<select aria-label={term("Glass")} value={choice.glassId} onChange={e=>edit(index,{glassId:e.target.value,extras:choice.extras.filter(x=>x.id!==e.target.value)})} className={field}><option value="">{term("Standard glass included")}</option>{glassOptions(opening,catalog,choice.systemId).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
      </div>
-     <div className="mt-5"><label className="text-sm">{term("Add an extra")}<select aria-label={term("Add an extra")} value="" onChange={e=>{if(e.target.value)edit(index,{extras:[...choice.extras,{id:e.target.value,quantity:1}]});}} className={field}><option value="">{term("Choose add-on")}</option>{catalog.filter(p=>(p.category==='addon'||p.category==='service')&&p.id!==choice.systemId&&p.id!==choice.glassId&&!choice.extras.some(e=>e.id===p.id)).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
+     <div className="mt-5"><label className="text-sm">{term("Add an extra")}<select aria-label={term("Add an extra")} value="" onChange={e=>{if(e.target.value)edit(index,{extras:[...choice.extras,{id:e.target.value,quantity:1}]});}} className={field}><option value="">{term("Choose add-on")}</option>{addonOptions(opening,catalog,choice.systemId).filter(p=>p.id!==choice.systemId&&p.id!==choice.glassId&&!choice.extras.some(e=>e.id===p.id)&&(!isShutterBox(p)||choice.extras.some(e=>catalog.some(c=>c.id===e.id&&isRollerShutter(c))))&&(!isRollerShutter(p)||!choice.extras.some(e=>catalog.some(c=>c.id===e.id&&isRollerShutter(c))))).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
       {choice.extras.map(extra=>{const p=catalog.find(p=>p.id===extra.id);return <div key={extra.id} className="mt-3 flex flex-wrap items-center gap-3 rounded-md bg-slate-50 p-3">
        <span className="w-full min-w-0 text-sm sm:w-auto sm:flex-1">{term(p?.name??'Unavailable item')}{p?.unit==='sqm'&&<span className="block text-xs text-slate-500">{term("Uses this opening’s area")}</span>}</span>
-       {p?.unit!=='sqm'&&<label className="text-xs">{term(quantityLabel(p?.unit))}<input aria-label={term('{name} quantity',{name:term(p?.name)})} type="number" min="0.01" max="1000000" step="0.01" value={extra.quantity||''} className={`${field} max-w-28`} onChange={e=>edit(index,{extras:choice.extras.map(x=>x.id===extra.id?{...x,quantity:Number(e.target.value)}:x)})}/></label>}
-       <button type="button" className="min-h-11 px-3 text-sm text-red-700" onClick={()=>edit(index,{extras:choice.extras.filter(x=>x.id!==extra.id)})}>{term("Remove")}</button>
+       {p&&isShutterBox(p)&&<p className="w-full text-xs text-slate-500">{term('Optional with roller shutters when the structure has no concealed shutter recess.')}</p>}
+       {p?.unit!=='sqm'&&<label className="text-xs">{term(quantityLabel(p?.unit))}<input aria-label={term('{name} quantity',{name:term(p?.name)})} type="number" min={p?.unit==='item'?1:0.01} max="1000000" step={p?.unit==='item'?1:0.01} value={extra.quantity||''} className={`${field} max-w-28`} onChange={e=>edit(index,{extras:choice.extras.map(x=>x.id===extra.id?{...x,quantity:Number(e.target.value)}:x)})}/></label>}
+       <button type="button" className="min-h-11 px-3 text-sm text-red-700" onClick={()=>edit(index,{extras:choice.extras.filter(x=>x.id!==extra.id&&!(p&&isRollerShutter(p)&&catalog.some(c=>c.id===x.id&&isShutterBox(c))))})}>{term("Remove")}</button>
       </div>;})}
      </div>
     </section>;
    })}
+   {data.openings.some(o=>o.opening_type==='Skylight')&&<p className="rounded-lg bg-blue-50 p-4 text-sm">{term('Skylights are priced separately in the calculator and are not included in this quotation.')} <Link href="/skylight" className="font-semibold underline">{term('Open skylight calculator')}</Link></p>}
    {addingOpening?<QuotationOpeningForm onAdd={addOpening} onCancel={()=>setAddingOpening(false)}/>:<button type="button" disabled={newOpenings.length>=100} onClick={()=>setAddingOpening(true)} className={secondary}>{term("+ Add opening")}</button>}
-   <section className={card}>
-    <h2 className="font-semibold">{term("Additional products & services")}</h2><p className="mt-2 text-sm text-slate-500">{term("Items for the whole project. Enter the quantity, area or length for each item.")}</p>
-    <label className="mt-4 block text-sm">{term("Add product or service")}<select aria-label={term("Add product or service")} className={field} value="" onChange={e=>{if(e.target.value)setAdditionalItems(items=>[...items,{id:e.target.value,quantity:1}]);}}><option value="">{term("Choose from the price catalog")}</option>{additionalOptions(catalog).filter(p=>!additionalItems.some(item=>item.id===p.id)).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
-    {additionalItems.map(item=>{const p=catalog.find(p=>p.id===item.id);return <div key={item.id} className="mt-4 flex flex-wrap items-end gap-3 rounded-md bg-slate-50 p-3"><div className="w-full min-w-0 self-center sm:w-auto sm:flex-1"><p className="text-sm font-medium">{term(p?.name??'Unavailable item')}</p>{p&&<p className="mt-1 text-xs text-slate-500">{rateLabel(p)}</p>}</div><label className="text-xs">{term(quantityLabel(p?.unit))}<input aria-label={term('{name} project quantity',{name:term(p?.name)})} className={`${field} max-w-28`} type="number" min="0.01" max="1000000" step="0.01" value={item.quantity||''} onChange={e=>setAdditionalItems(items=>items.map(x=>x.id===item.id?{...x,quantity:Number(e.target.value)}:x))}/></label><button type="button" aria-label={term('Remove {name}',{name:term(p?.name)})} className="min-h-12 px-3 text-sm text-red-700" onClick={()=>setAdditionalItems(items=>items.filter(x=>x.id!==item.id))}>{term("Remove")}</button></div>;})}
-   </section>
+   <StandaloneItems items={additionalItems} catalog={catalog} onChange={setAdditionalItems}/>
    <div className={card}>
     <div className="flex flex-wrap justify-between gap-3"><div><p className="text-sm font-semibold">{flow?term("Revised total"):term("Quotation total")}</p>{flow&&<p className="mt-1 text-xs text-slate-500">{term("Currently saved:")} {formatMoney(flow.quotation.total)}</p>}</div><p className="text-xl font-semibold" aria-label={term("Draft total")}>{draftTotal===undefined?term("Complete selections"):formatMoney(draftTotal)}</p></div>
     {pricingError&&<p role="status" className="mt-3 text-sm text-amber-800">{errorMessage(pricingError)}</p>}

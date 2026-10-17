@@ -9,5 +9,5 @@ export function operationalSpecifications(quotation:QuoteSnapshot){
  }));
 }
 export function operationalAdditionalItems(quotation:QuoteSnapshot){
- return (quotation.additionalItems??[]).map(item=>({name:item.name,quantity:item.quantity,unit:item.unit}));
+ return (quotation.additionalItems??[]).map(item=>({name:item.name,quantity:item.quantity,unit:item.unit,...(item.measurements?{measurements:item.measurements.map(area=>({label:area.label,width:area.width,height:area.height,quantity:area.quantity}))}:{}),...(item.extras?.length?{extras:item.extras.map(extra=>({name:extra.name,quantity:extra.quantity,unit:extra.unit}))}:{})}));
 }

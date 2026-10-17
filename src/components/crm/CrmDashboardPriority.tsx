@@ -1,4 +1,5 @@
 "use client";
+import { formatBusinessDateTime } from "@/lib/dates";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -98,7 +99,7 @@ export function CrmDashboardPriority() {
                   }`}
                 >
                   {overdue ? "Overdue · " : ""}
-                  {new Date(task.due_at).toLocaleString()}
+                  {formatBusinessDateTime(task.due_at)}
                 </p>
                 <div className="min-w-0">
                   <p className="truncate font-bold text-foreground">

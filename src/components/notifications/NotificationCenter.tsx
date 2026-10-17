@@ -1,4 +1,5 @@
 "use client";
+import { formatBusinessDateTime } from "@/lib/dates";
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -123,7 +124,7 @@ export function NotificationCenter({ compact = false }: { compact?: boolean }) {
                     {titleForKey(item.title_key)}
                   </p>
                   <p className="mt-1 text-xs text-muted">
-                    {new Date(item.created_at).toLocaleString()}
+                    {formatBusinessDateTime(item.created_at)}
                   </p>
                 </Link>
               </div>

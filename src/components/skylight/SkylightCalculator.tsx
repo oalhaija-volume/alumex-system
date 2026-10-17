@@ -1,5 +1,6 @@
 "use client";
 
+import { formatBusinessDate } from "@/lib/dates";
 import { useState, useSyncExternalStore } from "react";
 import { SkylightPdfButton } from "@/components/skylight/SkylightPdfButton";
 import { SkylightAttachments } from "@/components/skylight/SkylightAttachments";
@@ -37,7 +38,7 @@ export function SkylightCalculator() {
     const now = new Date();
     setQuote({
       number: `SK-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getTime()).slice(-6)}`,
-      date: now.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+      date: formatBusinessDate(now),
       customer: customer.trim(), salesperson: salesperson.trim(), attachments, project: project.trim(), notes: notes.trim(), calculation, currency,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });

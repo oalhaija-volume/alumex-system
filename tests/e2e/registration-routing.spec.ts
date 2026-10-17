@@ -277,7 +277,8 @@ test.describe('Outdoor Sales phone workspace', () => {
       await expect(page.locator('nav button')).toHaveText(['Measurement assignments', 'New project']);
       await page.getByRole('link', { name: 'Record measurements', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Initial measurements', exact: true })).toBeVisible();
-      await expect(page.getByText('Created by', { exact: true })).toHaveCount(0);
+      await expect(page.getByRole('region', { name: 'Project record' })).toContainText('Created by');
+      await expect(page.getByRole('region', { name: 'Project record' }).locator('time')).toHaveText(/\d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}/);
       await page.getByRole('button', { name: 'New project', exact: true }).click();
       await expect(page.getByPlaceholder('Enter full name')).toBeVisible();
       await expect(page.locator('#outdoor-assignee')).toHaveCount(0);

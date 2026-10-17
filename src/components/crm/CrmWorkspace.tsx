@@ -169,7 +169,7 @@ export function CrmWorkspace({
   projectId?: string;
   embedded?: boolean;
 }) {
-  const { locale, t, term } = useI18n();
+  const { locale, t, term, formatDateTime } = useI18n();
   const [payload, setPayload] = useState<CrmPayload | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [filter, setFilter] = useState<TaskFilter>("today");
@@ -190,18 +190,6 @@ export function CrmWorkspace({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const dateTimeFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat(locale === "ar" ? "ar-IQ" : "en-US", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }),
-    [locale],
-  );
-  const formatDateTime = useCallback(
-    (value: Date | string) => dateTimeFormatter.format(new Date(value)),
-    [dateTimeFormatter],
-  );
   const displayLabel = useCallback(
     (value: string) => {
       const key = `crm.labels.${camelCaseLabel(value)}`;

@@ -68,6 +68,10 @@ for (const online of [true, false]) for (const locale of ['en', 'ar']) test(`${l
   await expect(page.getByRole('heading', { name: locale === 'en' ? 'Registration saved' : 'تم حفظ التسجيل', exact: true })).toBeVisible();
   const saved = await savedState(page);
   expect(saved.projects[0].readiness_note).toBe('الجدران غير مكتملة');
+  const confirmation=page.locator('section[role="status"]');
+  await expect(confirmation).toContainText(actor.name);
+  await expect(confirmation.locator('time')).toHaveAttribute('datetime',saved.projects[0].created_at);
+  await expect(confirmation.locator('time')).toHaveText(/\d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}/);
   if (online) { expect(posts).toHaveLength(1); expect(posts[0].payload.project.readinessNote.trim()).toBe('الجدران غير مكتملة'); }
   else { expect(saved.queue).toHaveLength(1); expect(saved.queue[0].payload.project).toMatchObject({ readinessNote: 'الجدران غير مكتملة' }); }
   await page.getByRole('button', { name: locale === 'en' ? 'Register another client' : 'تسجيل عميل آخر', exact: true }).click();

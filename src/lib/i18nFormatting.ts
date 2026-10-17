@@ -1,4 +1,5 @@
 import { messagesByLocale, type Locale } from './i18n';
+import { formatBusinessDateTime } from './dates';
 
 export type Replacements = Record<string,string|number>;
 export function interpolateMessage(message:string,replacements:Replacements={}) {
@@ -31,7 +32,8 @@ export function translateError(locale:Locale,message:string) {
  return translateTerm(locale,'Unable to complete this action. Please try again or contact the administrator.');
 }
 export function localizedDateTime(locale:Locale,value:Date|string|number) {
- return new Intl.DateTimeFormat(locale==='ar'?'ar-IQ':'en-GB',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Baghdad'}).format(new Date(value));
+ void locale;
+ return formatBusinessDateTime(value);
 }
 export function localizedNumber(locale:Locale,value:number,maximumFractionDigits=4) {
  return new Intl.NumberFormat(locale==='ar'?'ar-IQ':'en-GB',{maximumFractionDigits}).format(value);

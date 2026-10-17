@@ -1,4 +1,5 @@
 "use client";
+import { formatBusinessDateTime } from "@/lib/dates";
 
 import Link from "next/link";
 import {
@@ -409,7 +410,7 @@ function FollowUpList({ tasks }: { tasks: FollowUpSummary[] }) {
             </p>
           </div>
           <p className="text-sm font-semibold text-muted-strong">
-            {new Date(task.due_at).toLocaleString()}
+            {formatBusinessDateTime(task.due_at)}
           </p>
           <p className="text-xs font-bold text-material-primary">
             {personName(
@@ -453,7 +454,7 @@ function MeasurementList({
               </p>
               {measurement.preferred_at ? (
                 <p className="mt-1 text-xs font-semibold text-muted-strong">
-                  {new Date(measurement.preferred_at).toLocaleString()}
+                  {formatBusinessDateTime(measurement.preferred_at)}
                 </p>
               ) : null}
             </div>
@@ -514,7 +515,7 @@ function AppointmentList({
                 </p>
                 <p className="mt-1 text-sm text-muted">
                   {localizedStatus(t, appointment.appointment_type)} ·{" "}
-                  {new Date(appointment.starts_at).toLocaleString()}
+                  {formatBusinessDateTime(appointment.starts_at)}
                 </p>
                 <p className="mt-1 text-xs text-muted">
                   {appointment.location ||
@@ -1035,7 +1036,7 @@ export function SalesRoleDashboard({
                         t("dashboard.role.unassigned"),
                       )}{" "}
                       · {localizedStatus(t, event.entity_type)} ·{" "}
-                      {new Date(event.created_at).toLocaleString()}
+                      {formatBusinessDateTime(event.created_at)}
                     </p>
                   </div>
                 ))}

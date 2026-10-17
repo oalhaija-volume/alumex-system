@@ -8,7 +8,7 @@ export function DocumentHeader({kind,number,createdAt}:{kind:'Quotation'|'Contra
  const {term,locale,formatDate}=useI18n();
  return <header className="document-header">
   <div className="document-brand"><img src="/logos/AlumexLogo.svg" alt={term('Alumex Experts')}/><div><strong>{term('ALUMEX EXPERTS')}</strong><p lang="ar" dir="rtl">شركة خبراء الومكس لصناعة وتجارة الالمنيوم المحدودة</p><p className="document-address" lang="ar" dir="rtl">بغداد / فرع الرصافة / كرادة / شارع مجمع المشن<br/>بغداد / فرع الكرخ / القادسية / مجاور ساحة النسور</p></div></div>
-  <div className="document-reference"><p className="document-eyebrow">{term(kind==='Quotation'?'SALES QUOTATION':'SUPPLY & INSTALLATION')}</p><h2>{term(kind)}{locale==='en'&&<span lang="ar">{kind==='Quotation'?'عرض سعر':'عقد'}</span>}</h2><dl><div><dt>{term('Reference')}</dt><dd><bdi dir="ltr">{number}</bdi></dd></div><div><dt>{term('Issued')}</dt><dd>{formatDate(createdAt)}</dd></div><div><dt>{term('Currency')}</dt><dd>{term('Iraqi dinar · IQD')}</dd></div></dl></div>
+  <div className="document-reference"><p className="document-eyebrow">{term(kind==='Quotation'?'SALES QUOTATION':'SUPPLY & INSTALLATION')}</p><h2>{term(kind)}{locale==='en'&&<span lang="ar">{kind==='Quotation'?'عرض سعر':'عقد'}</span>}</h2><dl><div><dt>{term('Reference')}</dt><dd><bdi dir="ltr">{number}</bdi></dd></div><div><dt>{term('Issued')}</dt><dd><bdi dir="ltr">{formatDate(createdAt)}</bdi></dd></div><div><dt>{term('Currency')}</dt><dd>{term('Iraqi dinar · IQD')}</dd></div></dl></div>
  </header>;
 }
 export function DocumentParties({client,project}:{client:{name:string;mobile:string|null};project:{number:string;address:string|null;branch?:"Karkh"|"Rasafa"|null}}){

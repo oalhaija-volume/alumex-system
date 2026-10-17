@@ -14,7 +14,7 @@ import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
 
 export function OutdoorIntake() {
   const mobileOutdoor = useMobileOutdoor();
-  const { t, term,errorMessage } = useI18n();
+  const { t, term,errorMessage,formatDateTime } = useI18n();
 
   const [clientType, setClientType] = useState<"individual" | "company">("individual");
   const [name, setName] = useState("");
@@ -25,7 +25,7 @@ export function OutdoorIntake() {
   const [readinessNote, setReadinessNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [saved, setSaved] = useState<{projectId:string;pending:boolean}|null>(null);
+  const [saved, setSaved] = useState<{projectId:string;pending:boolean;registeredBy:string;createdAt?:string}|null>(null);
   const [offline,setOffline]=useState(false);
   const [employeeState,setEmployeeState]=useState<FieldState|null>(null);
   const [assignedOutdoorSalesId,setAssignedOutdoorSalesId]=useState('');
@@ -75,7 +75,8 @@ export function OutdoorIntake() {
       const result = await response.json() as { error?: string; projectId?: string; pending?: boolean };
       if (!response.ok || !result.projectId) throw new Error(result.error || t("intake.errors.save"));
       if ((readiness === 'ready' && !collectsMeasurements) || (readiness === 'not_ready' && !canAccessCRM(employeeState.actor.role))) {
-        setSaved({projectId:result.projectId,pending:!!result.pending});
+        const registered=(await readFieldState().catch(()=>null))?.projects.find(project=>project.id===result.projectId);
+        setSaved({projectId:result.projectId,pending:!!result.pending,registeredBy:registered?.registeredBy??employeeState.actor.name,createdAt:registered?.created_at});
         return;
       }
       if (!result.pending && isFieldOnline()) window.location.assign(readiness === "ready" ? `/initial-measurements/${result.projectId}` : "/mini-crm");
@@ -91,6 +92,7 @@ export function OutdoorIntake() {
     <section className="mx-auto my-8 max-w-xl space-y-4 rounded-lg border border-slate-200 bg-white p-5" role="status">
       <h1 className="text-xl font-bold text-slate-950">{t("registration.saved")}</h1>
       <p className="text-slate-600">{readiness === 'not_ready' ? term('The project is in the CRM queue. Indoor Sales will follow up until the site is ready for measurements.') : assignedEmployee ? term('The project is assigned to {name} for initial measurements.',{name:assignedEmployee.name}) : term('The project is ready. Outdoor Sales will collect the initial measurements.')}</p>
+      <p className="text-sm text-slate-600">{term('Created by')} <bdi>{saved.registeredBy==='Employee'?term('Employee'):saved.registeredBy}</bdi>{saved.createdAt&&<time dateTime={saved.createdAt} dir="ltr" className="mt-1 block w-fit max-w-full">{formatDateTime(saved.createdAt)}</time>}</p>
       {saved.pending && <p className="text-sm text-amber-800">{term('Saved on device · Pending sync')}</p>}
       <Link href={!canAccessCRM(employeeState?.actor.role) ? (saved.pending || offline ? "/offline?path=/dashboard" : "/dashboard") : saved.pending || offline ? '/offline?path=/mini-crm' : `/mini-crm#project-${saved.projectId}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700">{term(canAccessCRM(employeeState?.actor.role)?'Open follow-ups':mobileOutdoor?'Measurement assignments':'Dashboard')}</Link>
       <button type="button" onClick={() => { setClientType("individual"); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setReadiness("ready"); setReadinessNote(''); setAssignedOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>

@@ -18,6 +18,7 @@ import {
   type Messages,
 } from "@/lib/i18n";
 import { interpolateMessage,translateTerm,translateError,localizedDateTime,localizedNumber,localizedMoney } from '@/lib/i18nFormatting';
+import { formatBusinessDate } from '@/lib/dates';
 
 type Replacements = Record<string, string | number>;
 
@@ -107,17 +108,6 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       return translateTerm(locale,rawValue,replacements);
     }
 
-    function formatDate(value: Date | string | number) {
-      const date = value instanceof Date ? value : new Date(value);
-
-      return new Intl.DateTimeFormat(locale === "ar" ? "ar-IQ" : "en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        timeZone: "Asia/Baghdad",
-      }).format(date);
-    }
-
     function formatCurrency(value: number) {
       const formatted = new Intl.NumberFormat(locale === "ar" ? "ar-IQ" : "en-US", {
         maximumFractionDigits: 0,
@@ -136,7 +126,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       formatDateTime:(value:Date|string|number)=>localizedDateTime(locale,value),
       formatNumber:(value:number,maximumFractionDigits?:number)=>localizedNumber(locale,value,maximumFractionDigits),
       formatMoney:(value:number)=>localizedMoney(locale,value),
-      formatDate,
+      formatDate:formatBusinessDate,
       formatCurrency,
       messages,
     };

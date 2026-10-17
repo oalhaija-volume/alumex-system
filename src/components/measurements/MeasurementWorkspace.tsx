@@ -1,4 +1,5 @@
 "use client";
+import { formatBusinessDateTime } from "@/lib/dates";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -465,7 +466,7 @@ export function MeasurementWorkspace({ initialProjectId = "" }: { initialProject
                   [
                     "Visit",
                     selected.preferredAt
-                      ? new Date(selected.preferredAt).toLocaleString()
+                      ? formatBusinessDateTime(selected.preferredAt)
                       : "Not scheduled",
                   ],
                 ].map(([label, value]) => (
@@ -570,9 +571,7 @@ export function MeasurementWorkspace({ initialProjectId = "" }: { initialProject
                         Submitted
                       </p>
                       <p className="mt-1 font-bold">
-                        {new Date(
-                          selected.submission.submitted_at,
-                        ).toLocaleString()}
+                        {formatBusinessDateTime(selected.submission.submitted_at)}
                       </p>
                     </div>
                   </div>

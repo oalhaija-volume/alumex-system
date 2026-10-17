@@ -1,4 +1,5 @@
 "use client";
+import { formatBusinessDateTime } from "@/lib/dates";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
@@ -364,7 +365,7 @@ export function CostingModule() {
               </p>
               {selectedCosting?.sent_to_sales_at ? (
                 <p className="mt-1 text-xs font-semibold text-muted">
-                  {new Date(selectedCosting.sent_to_sales_at).toLocaleString()}
+                  {formatBusinessDateTime(selectedCosting.sent_to_sales_at)}
                 </p>
               ) : null}
             </div>

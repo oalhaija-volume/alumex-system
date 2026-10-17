@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useCurrentRole } from "@/components/auth/useCurrentRole";
+import { formatBusinessDate } from "@/lib/dates";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { PdfDownloadButton } from "@/components/pdf/PdfDownloadButton";
 import { SignaturePad } from "@/components/contracts/SignaturePad";
@@ -213,15 +214,7 @@ function useContractDocumentI18n(locale: Locale) {
     return messages.terms[rawValue as keyof typeof messages.terms] ?? rawValue;
   }
 
-  function formatDate(value: Date | string | number) {
-    const date = value instanceof Date ? value : new Date(value);
-
-    return new Intl.DateTimeFormat(locale === "ar" ? "ar-IQ" : "en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }).format(date);
-  }
+  const formatDate = formatBusinessDate;
 
   return { t, term, formatDate, locale };
 }

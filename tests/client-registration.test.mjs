@@ -118,3 +118,24 @@ for (const hasSite of [true,false]) test(`corporate offline sync requires only t
  assert.equal(payload.client.locationLatitude,null);assert.equal(payload.client.locationLongitude,null);
  assert.equal(payload.project.locationLatitude,33.9);assert.equal(payload.project.locationLongitude,44.9);
 });
+
+for(const target of ['self','outdoor','other-indoor','inactive','missing'])test(`registration measurement assignee: ${target}`,async()=>{
+ const actor='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';const other='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';const writes=[];
+ const route=loadModule('../src/app/api/sales-intake/route.ts',{
+  'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Indoor Sales',user:{id:actor}})},
+  '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
+  '@/lib/location/coordinates':{parseProjectLocation:()=>({isValid:true,latitude:33.3,longitude:44.4})},
+  '@/lib/projects/numbering':{generateNextProjectNumber:()=> 'PRJ-TEST'},
+  '@/lib/supabase/admin':{createAdminClient:()=>({from(table){return {
+   select(){return this;},eq(){return this;},like:async()=>({data:[]}),
+   maybeSingle:async()=>({data:target==='outdoor'?{id:other}:null}),
+   insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table,branch:'Karkh'}}),
+  };}})},
+ });
+ const assignee=target==='self'?actor:target==='missing'?null:other;
+ const result=await route.POST({json:async()=>({client:{clientType:'individual',clientName:'Client',mobile:'07700000000'},project:{structureReadiness:'ready',assignedOutdoorSalesId:assignee}})});
+ if(target==='self'||target==='outdoor'){
+  assert.equal(result.status,201);assert.equal(writes.find(w=>w.table==='projects').value.assigned_outdoor_sales_id,assignee);
+ }else{assert.equal(result.status,400);assert.equal(writes.length,0);}
+});

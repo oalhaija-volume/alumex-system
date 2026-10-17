@@ -1267,6 +1267,15 @@
     "generating": "جاري الإنشاء..."
   },
   "terms": {
+    "Measurements by": "المسؤول عن القياسات",
+    "Myself — {name}": "أنا — {name}",
+    "Choose who will record the initial measurements.": "اختر من سيسجل القياسات الأولية.",
+    "You will enter the initial measurements.": "ستقوم بإدخال القياسات الأولية بنفسك.",
+    "Choose yourself to enter measurements, or assign an Outdoor Sales employee.": "اختر نفسك لإدخال القياسات، أو عيّن موظف مبيعات خارجية.",
+    "No active Outdoor Sales employees available. You can enter the measurements yourself.": "لا يوجد موظفو مبيعات خارجية نشطون. يمكنك إدخال القياسات بنفسك.",
+    "The assigned employee will collect the initial measurements.": "سيقوم الموظف المعيّن بتسجيل القياسات الأولية.",
+    "Choose yourself or an Outdoor Sales employee to collect the initial measurements.": "اختر نفسك أو موظف مبيعات خارجية لتسجيل القياسات الأولية.",
+    "Choose an eligible employee for measurements.": "اختر موظفاً مؤهلاً لتسجيل القياسات.",
     "Branch": "الفرع",
     "Karkh": "الكرخ",
     "Rasafa": "الرصافة",

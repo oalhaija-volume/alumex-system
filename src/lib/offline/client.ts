@@ -69,9 +69,10 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    const client=payload.client as Record<string,unknown>,project=payload.project as Record<string,unknown>;
    const assigned=typeof project.assignedOutdoorSalesId==='string'?project.assignedOutdoorSalesId:'';
    if(s.actor.role==='Indoor Sales'&&!s.actor.branch)throw new Error('Ask Admin to assign your Karkh or Rasafa branch before creating a project.');
-   if(s.actor.role==='Indoor Sales'&&!assigned)throw new Error('Assign an Outdoor Sales employee to collect measurements.');
-   if(assigned&&!s.outdoorSales?.some(e=>e.id===assigned))throw new Error('Choose an Outdoor Sales employee from the list. Connect online to refresh employees.');
-   p={branch:s.actor.role==='Indoor Sales'?s.actor.branch:null,assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:s.actor.role==='Indoor Sales'?s.actor.id:null,followUpOwner:s.actor.role==='Indoor Sales'?s.actor.name:null,project_notes:null,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
+   const selfAssigned=s.actor.role==='Indoor Sales'&&assigned===s.actor.id;
+   if(s.actor.role==='Indoor Sales'&&!assigned)throw new Error('Choose yourself or an Outdoor Sales employee to collect the initial measurements.');
+   if(assigned&&!selfAssigned&&!s.outdoorSales?.some(e=>e.id===assigned))throw new Error('Choose an Outdoor Sales employee from the list. Connect online to refresh employees.');
+   p={branch:s.actor.role==='Indoor Sales'?s.actor.branch:null,assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:s.actor.role==='Indoor Sales'?s.actor.id:null,followUpOwner:s.actor.role==='Indoor Sales'?s.actor.name:null,project_notes:null,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
   }else{
    if(!p)throw new Error('Open this project online once before working on it offline.');
    if(['opening','finish','reopen'].includes(action)&&!['new_lead','ready_for_quotation'].includes(p.sales_status))throw new Error('Measurements are locked after quotation creation.');
@@ -85,8 +86,8 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if(action==='reopen')p={...p,sales_status:'new_lead'};
    if(action==='ready'||action==='assign-measurements'){
     if(p.sales_status!=='new_lead'||(action==='assign-measurements'&&p.structure_readiness!=='ready'))throw new Error('Measurement assignment is only available before measurements are completed.');
-    const id=payload.assignedOutdoorSalesId??p.assigned_outdoor_sales_id;const employee=s.outdoorSales?.find(e=>e.id===id);
-    if(!employee)throw new Error('Choose an active Outdoor Sales employee for measurements.');
+    const id=payload.assignedOutdoorSalesId??p.assigned_outdoor_sales_id;const employee=s.outdoorSales?.find(e=>e.id===id)??(p.original_creator_role==='Indoor Sales'&&id===p.created_by?s.indoorSales?.find(e=>e.id===id):undefined);
+    if(!employee)throw new Error('Choose an eligible employee for measurements.');
     change.payload={...payload,assignedOutdoorSalesId:employee.id};
     p={...p,assigned_outdoor_sales_id:employee.id,assignedOutdoorSales:employee.name,assignedToYou:employee.id===s.actor.id,measurement_assignment_id:change.id};
    }

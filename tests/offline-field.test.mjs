@@ -36,7 +36,7 @@ test('deletion requires online access and never discards unsynced project work',
 });
 
 test('Indoor Sales cannot queue registration without an assignment; creator remains the signed-in actor',async()=>{
- const x=setup();await assert.rejects(x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,assignedOutdoorSalesId:null}}),/Assign an Outdoor/);assert.equal(x.state.queue.length,0);
+ const x=setup();await assert.rejects(x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,assignedOutdoorSalesId:null}}),/Choose yourself or an Outdoor/);assert.equal(x.state.queue.length,0);
  await x.client.saveFieldChange('register',projectId,{...payload,created_by:'forged'});assert.equal(x.state.projects[0].created_by,actor.id);assert.equal(x.state.projects[0].assignedOutdoorSales,'Outdoor employee');
 });
 
@@ -87,7 +87,7 @@ test('CRM assignment preserves creator and saved measurements, and hands a ready
 });
 test('CRM assignment rejects missing employees without changing local project or queue',async()=>{
  const x=setup();await x.client.saveFieldChange('register',projectId,payload);const before=structuredClone(x.state);
- await assert.rejects(x.client.saveFieldChange('assign-measurements',projectId,{assignedOutdoorSalesId:actor.id}),/active Outdoor Sales/);
+ await assert.rejects(x.client.saveFieldChange('assign-measurements',projectId,{assignedOutdoorSalesId:'ffffffff-ffff-4fff-8fff-ffffffffffff'}),/eligible employee/);
  assert.deepEqual(x.state,before);
 });
 
@@ -97,4 +97,30 @@ test('offline registration retains the assigned branch and rejects an unassigned
  const unassigned=setup({actor:{...actor,branch:null}});
  await assert.rejects(unassigned.client.saveFieldChange('register',projectId,payload),/Ask Admin to assign/);
  assert.equal(unassigned.state.queue.length,0);
+});
+
+test('Indoor Sales can register for their own measurements and save openings offline',async()=>{
+ const x=setup({outdoorSales:[]});
+ await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,assignedOutdoorSalesId:actor.id}});
+ assert.equal(x.state.projects[0].assigned_outdoor_sales_id,actor.id);
+ assert.equal(x.state.projects[0].assignedOutdoorSales,actor.name);
+ assert.equal(x.state.projects[0].assignedToYou,true);
+ assert.equal(x.state.projects[0].branch,'Karkh');
+ await x.client.saveFieldChange('opening',projectId,{id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'});
+ await x.client.saveFieldChange('finish',projectId,{});
+ assert.deepEqual(x.state.queue.map(c=>c.action),['register','opening','finish']);
+ assert.equal(x.state.projects[0].sales_status,'ready_for_quotation');
+});
+test('not-ready self-assigned projects keep the Indoor Sales creator when marked ready',async()=>{
+ const x=setup({outdoorSales:[]});
+ await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,structureReadiness:'not_ready',assignedOutdoorSalesId:actor.id}});
+ await x.client.saveFieldChange('ready',projectId,{});
+ assert.equal(x.state.projects[0].structure_readiness,'ready');
+ assert.equal(x.state.projects[0].assigned_outdoor_sales_id,actor.id);
+});
+test('offline registration cannot assign another Indoor Sales employee',async()=>{
+ const other={id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',name:'Other indoor'};
+ const x=setup({indoorSales:[actor,other]});
+ await assert.rejects(x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,assignedOutdoorSalesId:other.id}}),/Outdoor Sales employee/);
+ assert.equal(x.state.queue.length,0);
 });

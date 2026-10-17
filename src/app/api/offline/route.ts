@@ -44,7 +44,7 @@ export async function POST(request:Request){
   if(!name||name.length>150||!phone||phone.length>80||!['individual','company'].includes(c?.clientType)||!['ready','not_ready'].includes(p?.structureReadiness)||!location.isValid)return NextResponse.json({error:'Complete the client, phone, locations and site readiness.'},{status:400});
   const assignee=p?.assignedOutdoorSalesId;
   if(assignee && (typeof assignee!=='string'||!uuid.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
-  if(auth.role==='Indoor Sales'&&!assignee)return NextResponse.json({error:'Indoor Sales must assign an Outdoor Sales employee for measurements.'},{status:400});
+  if(auth.role==='Indoor Sales'&&!assignee)return NextResponse.json({error:'Choose yourself or an Outdoor Sales employee to collect the initial measurements.'},{status:400});
   payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(assignee?{assignedOutdoorSalesId:assignee}:{}),address:typeof p.address==='string'?p.address.slice(0,2000):`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness}};
  }else if(body.action==='opening'){
   const opening=normalizeRegistrationOpening(body.payload);if(!opening)return NextResponse.json({error:'Complete the opening dimensions, floor, room and types.'},{status:400});payload=opening as unknown as Json;

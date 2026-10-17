@@ -125,6 +125,8 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
   const today = due !== null && now > 0 && baghdadDay.format(due) === baghdadDay.format(now);
   const stage = stageDetails(project);
   const canAssign = project.sales_status === 'new_lead' && ['site', 'measurements'].includes(stage.id);
+  const indoorCreator = project.original_creator_role === 'Indoor Sales' ? data?.indoorSales?.find(employee => employee.id === project.created_by) : undefined;
+  const measurementEmployees = [...(indoorCreator ? [indoorCreator] : []), ...(data?.outdoorSales ?? [])];
   const stageTone = ['contract-signature', 'contract-preparation'].includes(stage.id) ? 'bg-indigo-50 text-indigo-800' : stage.id === 'site' ? 'bg-slate-100 text-slate-700' : 'bg-blue-50 text-blue-800';
   return <article id={`project-${project.id}`} aria-labelledby={`project-name-${project.id}`} className="scroll-mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm target:ring-2 target:ring-blue-500">
     <div aria-hidden="true" className={`hidden ${projectColumns} border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-600 lg:grid`}>
@@ -138,7 +140,7 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
         {project.address && <p dir="auto" className="mt-1 break-words text-xs leading-5 text-slate-500">{project.address}</p>}
         {project.phone && <a dir="ltr" href={`tel:${project.phone}`} className={`${focus} mt-1 inline-flex min-h-8 items-center text-xs font-medium text-blue-700 hover:underline`}>{project.phone}</a>}
       </div>
-      <div className="min-w-0 border-t border-slate-100 pt-4 lg:border-0 lg:pt-0"><p className={mobileLabel}>{term('Project stage')}</p><span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium leading-5 ${stageTone}`}>{term(stage.label)}</span><p className="mt-2 text-xs leading-5 text-slate-500">{term(stage.action)}</p>{canAssign&&<p className="mt-2 text-xs font-medium text-slate-700">{term('Outdoor Sales')}: {project.assignedOutdoorSales??term('Not assigned')}</p>}</div>
+      <div className="min-w-0 border-t border-slate-100 pt-4 lg:border-0 lg:pt-0"><p className={mobileLabel}>{term('Project stage')}</p><span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium leading-5 ${stageTone}`}>{term(stage.label)}</span><p className="mt-2 text-xs leading-5 text-slate-500">{term(stage.action)}</p>{canAssign&&<p className="mt-2 text-xs font-medium text-slate-700">{term('Measurements by')}: {project.assignedOutdoorSales??term('Not assigned')}</p>}</div>
       <div className="min-w-0 border-t border-slate-100 pt-4 lg:border-0 lg:pt-0">
         <p className={mobileLabel}>{term('Next follow-up')}</p>
         <p className={`flex items-center gap-1.5 text-xs font-semibold ${overdue ? 'text-amber-800' : today ? 'text-blue-700' : 'text-slate-500'}`}><Icon kind="clock" className="h-3.5 w-3.5" />{term(overdue ? 'Overdue' : today ? 'Due today' : due === null ? 'Unscheduled' : 'Upcoming')}</p>
@@ -159,17 +161,17 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
         {canAssign&&<form aria-label={term('Assign measurements')} className="rounded-lg border border-blue-200 bg-white p-4 xl:col-span-2" onSubmit={event=>{event.preventDefault();void onUpdate(project,stage.id==='site'?'ready':'assign-measurements',event.currentTarget);}}>
           <fieldset disabled={!!busy} className="min-w-0">
             <legend className="font-semibold text-slate-900">{term('Assign measurements')}</legend>
-            <p className="mt-2 text-sm leading-6 text-slate-600">{term(stage.id==='site'?'When the site is ready, choose who will collect the initial measurements.':'Choose the Outdoor Sales employee responsible for initial measurements.')}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{term(stage.id==='site'?'When the site is ready, choose who will collect the initial measurements.':'Choose who will record the initial measurements.')}</p>
             <div className="mt-3 flex flex-col items-start gap-3 sm:flex-row sm:items-end">
-              <label className="w-full text-sm sm:max-w-sm">{term('Outdoor Sales for measurements')}
-                <select key={project.assigned_outdoor_sales_id??'unassigned'} name="assignedOutdoorSalesId" required defaultValue={data?.outdoorSales?.some(employee=>employee.id===project.assigned_outdoor_sales_id)?project.assigned_outdoor_sales_id!:data?.outdoorSales?.length===1?data.outdoorSales[0].id:''} className={`${control} mt-2`}>
-                  <option value="">{term('Choose Outdoor Sales employee')}</option>
-                  {(data?.outdoorSales??[]).map(employee=><option key={employee.id} value={employee.id}>{employee.name}</option>)}
+              <label className="w-full text-sm sm:max-w-sm">{term('Measurements by')}
+                <select key={project.assigned_outdoor_sales_id??'unassigned'} name="assignedOutdoorSalesId" required defaultValue={measurementEmployees.some(employee=>employee.id===project.assigned_outdoor_sales_id)?project.assigned_outdoor_sales_id!:data?.outdoorSales?.length===1?data.outdoorSales[0].id:''} className={`${control} mt-2`}>
+                  <option value="">{term('Choose who will record the initial measurements.')}</option>
+                  {measurementEmployees.map(employee=><option key={employee.id} value={employee.id}>{employee.name}</option>)}
                 </select>
               </label>
-              <button type="submit" disabled={!data?.outdoorSales?.length} className={`${button} ${focus}`}>{term(busy===project.id?'Please wait…':stage.id==='site'?'Assign & mark site ready':'Save measurement assignment')}</button>
+              <button type="submit" disabled={!measurementEmployees.length} className={`${button} ${focus}`}>{term(busy===project.id?'Please wait…':stage.id==='site'?'Assign & mark site ready':'Save measurement assignment')}</button>
             </div>
-            {!data?.outdoorSales?.length&&<p className="mt-3 text-sm text-amber-800">{term('No active Outdoor Sales employees available. Add one in Employees and reconnect to refresh this list.')}</p>}
+            {!measurementEmployees.length&&<p className="mt-3 text-sm text-amber-800">{term('No active Outdoor Sales employees available. Add one in Employees and reconnect to refresh this list.')}</p>}
             <p className="mt-3 text-xs leading-5 text-slate-500">{term('The assigned employee will see the project in their mobile workspace to collect measurements.')}</p>
           </fieldset>
         </form>}
@@ -181,10 +183,10 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
         </form>
         <aside aria-label={term('Project details')} className="border-t border-slate-200 pt-5 xl:border-s xl:border-t-0 xl:ps-6 xl:pt-0">
           <h4 className="text-sm font-semibold text-slate-900">{term('Project details')}</h4>
-          <dl className="mt-4 grid gap-4 text-xs sm:grid-cols-2 xl:grid-cols-1"><div><dt className="text-slate-500">{term('Outdoor Sales')}</dt><dd className="mt-1 font-medium text-slate-800">{project.assignedOutdoorSales ?? term('Not assigned')}</dd></div><div><dt className="text-slate-500">{term('Created by')}</dt><dd className="mt-1 font-medium text-slate-800">{project.registeredBy === 'Employee' ? term('Employee') : project.registeredBy}{project.original_creator_role && <> · {term(project.original_creator_role)}</>}<span className="mt-1 block font-normal text-slate-500">{formatDateTime(project.created_at)}</span></dd></div></dl>
+          <dl className="mt-4 grid gap-4 text-xs sm:grid-cols-2 xl:grid-cols-1"><div><dt className="text-slate-500">{term('Measurements by')}</dt><dd className="mt-1 font-medium text-slate-800">{project.assignedOutdoorSales ?? term('Not assigned')}</dd></div><div><dt className="text-slate-500">{term('Created by')}</dt><dd className="mt-1 font-medium text-slate-800">{project.registeredBy === 'Employee' ? term('Employee') : project.registeredBy}{project.original_creator_role && <> · {term(project.original_creator_role)}</>}<span className="mt-1 block font-normal text-slate-500">{formatDateTime(project.created_at)}</span></dd></div></dl>
           {project.follow_up_type === 'other' && project.follow_up_detail && <p className="mt-4 break-words text-xs text-slate-600">{project.follow_up_detail}</p>}
           <div className="mt-4 flex flex-col items-start gap-2">
-            {canAssign ? <p className="text-sm leading-6 text-slate-600">{term('Outdoor Sales will collect the initial measurements.')}</p> : <Link href={projectLink(project)} className={`${focus} inline-flex min-h-11 items-center text-sm font-semibold text-blue-700`}>{term('Open project →')}</Link>}
+            {canAssign ? <p className="text-sm leading-6 text-slate-600">{term('The assigned employee will collect the initial measurements.')}</p> : <Link href={projectLink(project)} className={`${focus} inline-flex min-h-11 items-center text-sm font-semibold text-blue-700`}>{term('Open project →')}</Link>}
             <Link href={`/projects/${project.id}/follow-ups`} className={`${focus} inline-flex min-h-11 items-center text-sm font-medium text-blue-700`}>{term('View follow-up history →')}</Link>
           </div>
           {canDelete && <div className="mt-4 border-t border-slate-200 pt-2"><button type="button" disabled={!!busy || project.pending} onClick={() => void onDelete(project)} className={`${focus} min-h-11 text-xs font-medium text-red-700 hover:underline disabled:opacity-50`}>{term('Delete project')}</button>{project.pending && <p className="text-xs leading-5 text-slate-500">{term('Sync saved changes before deleting.')}</p>}</div>}

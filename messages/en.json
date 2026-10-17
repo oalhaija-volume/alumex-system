@@ -1267,6 +1267,15 @@
     "generating": "Generating..."
   },
   "terms": {
+    "Measurements by": "Measurements by",
+    "Myself — {name}": "Myself — {name}",
+    "Choose who will record the initial measurements.": "Choose who will record the initial measurements.",
+    "You will enter the initial measurements.": "You will enter the initial measurements.",
+    "Choose yourself to enter measurements, or assign an Outdoor Sales employee.": "Choose yourself to enter measurements, or assign an Outdoor Sales employee.",
+    "No active Outdoor Sales employees available. You can enter the measurements yourself.": "No active Outdoor Sales employees available. You can enter the measurements yourself.",
+    "The assigned employee will collect the initial measurements.": "The assigned employee will collect the initial measurements.",
+    "Choose yourself or an Outdoor Sales employee to collect the initial measurements.": "Choose yourself or an Outdoor Sales employee to collect the initial measurements.",
+    "Choose an eligible employee for measurements.": "Choose an eligible employee for measurements.",
     "Branch": "Branch",
     "Karkh": "Karkh",
     "Rasafa": "Rasafa",

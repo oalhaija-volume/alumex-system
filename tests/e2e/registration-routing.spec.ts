@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 
-const fatma = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Fatma', role: 'Indoor Sales' };
+test.use({ serviceWorkers: 'block' }); // Route mocks must also intercept document navigation.
+
+const fatma = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Fatma', role: 'Indoor Sales', branch: 'Karkh' };
 const ehab = { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Ehab', role: 'Outdoor Sales' };
 
 for (const actor of [fatma, ehab]) {
@@ -52,7 +54,7 @@ for (const actor of [fatma, ehab]) {
         }
         // Observe destinations without loading protected routes or creating records.
         await page.route('**/initial-measurements/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Measurement destination</h1>' }));
-        await page.route('**/mini-crm', route => route.fulfill({ contentType: 'text/html', body: '<h1>Follow-up destination</h1>' }));
+        await page.route(url => url.pathname === '/mini-crm', route => route.fulfill({ contentType: 'text/html', body: '<h1>Follow-up destination</h1>' }));
         await page.route('**/offline?project=*', route => route.fulfill({ contentType: 'text/html', body: '<h1>Offline measurement destination</h1>' }));
         await page.route('**/offline?path=/mini-crm', route => route.fulfill({ contentType: 'text/html', body: '<h1>Offline follow-up destination</h1>' }));
         await page.getByRole('button', { name: actor.role === 'Outdoor Sales' && ready ? /Continue to measurements/ : /Save registration/ }).click();
@@ -214,10 +216,10 @@ for(const ready of [false,true])for(const online of [false,true])test(`CRM ${rea
  const row=page.locator('article').filter({hasText:'CRM assignment sample'});
  await row.getByRole('button',{name:'Assign measurements',exact:true}).click();
  const form=row.getByRole('form',{name:'Assign measurements',exact:true});
- await form.getByRole('combobox',{name:'Outdoor Sales for measurements',exact:true}).selectOption(second.id);
+ await form.getByRole('combobox',{name:'Measurements by',exact:true}).selectOption(second.id);
  if(!online)await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});window.dispatchEvent(new Event('offline'));});
  await form.getByRole('button',{name:ready?'Save measurement assignment':'Assign & mark site ready',exact:true}).click();
- await expect(row.getByText('Outdoor Sales: Second outdoor employee',{exact:true})).toBeVisible();
+ await expect(row.getByText('Measurements by: Second outdoor employee',{exact:true})).toBeVisible();
  await expect(row.getByText('Initial measurements',{exact:true})).toBeVisible();
  await expect(page).toHaveURL(/\/offline\?path=\/mini-crm$/);
  if(online){await expect.poll(()=>writes.length).toBe(1);expect(writes[0].action).toBe(ready?'assign-measurements':'ready');}

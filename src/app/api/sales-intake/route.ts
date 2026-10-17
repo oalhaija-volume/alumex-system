@@ -25,14 +25,14 @@ export async function POST(request: Request) {
   }
   const assignee=body?.project?.assignedOutdoorSalesId;
   if(assignee&&(typeof assignee!=='string'||!/^[0-9a-f-]{36}$/i.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
-  if(auth.role==='Indoor Sales'&&!assignee)return NextResponse.json({error:'Indoor Sales must assign an Outdoor Sales employee for measurements.'},{status:400});
+  if(auth.role==='Indoor Sales'&&!assignee)return NextResponse.json({error:'Choose yourself or an Outdoor Sales employee to collect the initial measurements.'},{status:400});
   const admin = createAdminClient();
   if (auth.role === 'Indoor Sales') {
     const profile = await admin.from('profiles').select('branch').eq('id', auth.user.id).single();
     if (profile.error) return NextResponse.json({error:'Unable to load your employee branch.'}, {status:503});
     if (!profile.data.branch) return NextResponse.json({error:'Ask Admin to assign your Karkh or Rasafa branch before creating a project.'}, {status:400});
   }
-  if(assignee){const employee=await admin.from('profiles').select('id').eq('id',assignee).eq('role','Outdoor Sales').eq('is_active',true).eq('status','Active').maybeSingle();if(employee.error||!employee.data)return NextResponse.json({error:'Choose an active Outdoor Sales employee.'},{status:400});}
+  if(assignee && !(auth.role==='Indoor Sales' && assignee===auth.user.id)){const employee=await admin.from('profiles').select('id').eq('id',assignee).eq('role','Outdoor Sales').eq('is_active',true).eq('status','Active').maybeSingle();if(employee.error||!employee.data)return NextResponse.json({error:'Choose an active Outdoor Sales employee.'},{status:400});}
 
   const date = new Date();
   const prefix = `PRJ-${date.getFullYear()}${String(date.getMonth()+1).padStart(2,"0")}-`;

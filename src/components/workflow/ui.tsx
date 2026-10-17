@@ -1,6 +1,7 @@
 "use client";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { fieldFetch } from '@/lib/offline/client';
+import type { FieldChangeDetail } from '@/lib/offline/store';
 import { useEffect,useState } from 'react';
 export const field='mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100';
 export const button='min-h-12 rounded-md bg-blue-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50 hover:bg-blue-700';
@@ -10,16 +11,60 @@ export async function api<T>(url:string,init?:RequestInit):Promise<T>{
  const response=await (url==='/api/workspace'?fieldFetch:fetch)(url,{cache:'no-store',...init});const data=await response.json();if(!response.ok)throw new Error(data.error??'Unable to complete request.');return data;
 }
 export function useResource<T>(url:string){
- const [data,setData]=useState<T|null>(null);const [error,setError]=useState('');const [loading,setLoading]=useState(true);
+ const [data,setData]=useState<T|null>(null);
+ const [error,setError]=useState('');
+ const [loading,setLoading]=useState(true);
  useEffect(()=>{
-  const controller=new AbortController();let version=0;let timer:ReturnType<typeof setTimeout>;
-  async function refresh(){const current=++version;try{const result=await api<T>(url,{signal:controller.signal});if(!controller.signal.aborted&&current===version){setData(result);setError('');}}catch(e){if(!controller.signal.aborted&&current===version)setError((e as Error).message);}finally{if(!controller.signal.aborted)setLoading(false);}}
-  function changed(){clearTimeout(timer);timer=setTimeout(()=>void refresh(),150);}
+  const controller=new AbortController();
+  let version=0;
+  let timer:ReturnType<typeof setTimeout>;
+  let inFlight=false;
+  let pendingForce=false;
+  let actorId:string|null=null;
+  async function refresh(force=false){
+   if(inFlight&&!force)return;
+   const current=++version;
+   inFlight=true;
+   try{
+    const result=await api<T>(url,{signal:controller.signal});
+    if(!controller.signal.aborted&&current===version){
+     setData(result);
+     setError('');
+     if(result&&typeof result==='object'&&'actor' in result){
+      const actor=result.actor;
+      if(actor&&typeof actor==='object'&&'id' in actor&&typeof actor.id==='string')actorId=actor.id;
+     }
+    }
+   }catch(e){
+    if(!controller.signal.aborted&&current===version)setError((e as Error).message);
+   }finally{
+    if(current===version){inFlight=false;if(!controller.signal.aborted)setLoading(false);}
+   }
+  }
+  function changed(event?:Event){
+   const detail=(event as CustomEvent<FieldChangeDetail>|undefined)?.detail;
+   // The dashboard polls independently. Saving its offline backup is not a mutation.
+   if(detail?.source==='snapshot')return;
+   if(detail?.source==='account'){
+    if(detail.userId===actorId||(!actorId&&inFlight&&detail.userId))return;
+    actorId=null;
+    version++;
+    inFlight=false;
+    setData(null);
+   }
+   // Real local edits must supersede a request that started before the edit.
+   pendingForce ||= event?.type==='field-change';
+   clearTimeout(timer);
+   timer=setTimeout(()=>{const force=pendingForce;pendingForce=false;void refresh(force);},150);
+  }
   void refresh();
   const live=url==='/api/workspace'||url==='/api/dashboard';
   const interval=live?setInterval(()=>{if(document.visibilityState==='visible')changed();},30000):undefined;
   if(live){window.addEventListener('field-change',changed);window.addEventListener('focus',changed);}
-  return()=>{controller.abort();clearTimeout(timer);clearInterval(interval);window.removeEventListener('field-change',changed);window.removeEventListener('focus',changed);};
+  return()=>{
+   controller.abort();clearTimeout(timer);clearInterval(interval);
+   window.removeEventListener('field-change',changed);window.removeEventListener('focus',changed);
+  };
  },[url]);
  async function reload(){setData(await api<T>(url));}
  return {data,setData,error,setError,loading,reload};

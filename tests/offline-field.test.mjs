@@ -124,3 +124,11 @@ test('offline registration cannot assign another Indoor Sales employee',async()=
  await assert.rejects(x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,assignedOutdoorSalesId:other.id}}),/Outdoor Sales employee/);
  assert.equal(x.state.queue.length,0);
 });
+
+
+test('an empty synchronization queue makes no session or write requests',async()=>{
+ const x=setup();navigator.onLine=true;
+ let calls=0;globalThis.fetch=async()=>{calls++;throw Error('Unexpected network request');};
+ await x.client.syncFieldChanges();
+ assert.equal(calls,0);assert.equal(x.active,actor.id);
+});

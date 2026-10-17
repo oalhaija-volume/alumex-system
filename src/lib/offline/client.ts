@@ -20,7 +20,7 @@ export async function prepareOffline():Promise<FieldState>{
   const state=await updateFieldState(remote.actor.id,old=>{
    const pending=new Set(old?.queue.map(c=>c.projectId)??[]);
    return {...remote,followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remote.projects.some(p=>p.id===id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id))??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
-  });
+  },'snapshot');
   setFieldUser(remote.actor.id);return state;
  })();
  try{return await initializing;}finally{initializing=null;}
@@ -32,6 +32,7 @@ export async function syncFieldChanges(){
  const run=async()=>{
   if(!navigator.onLine)return;
   const id=activeFieldUser();if(!id)return;
+  if(!(await readFieldState(id))?.queue.length)return;
   // Verify the currently signed-in account before sending any retained work.
   const session=await fetch('/api/offline?session=1',{cache:'no-store',signal:AbortSignal.timeout(8000)}).catch(()=>null);
   if(!session){connection(false);return;}

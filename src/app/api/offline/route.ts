@@ -10,26 +10,35 @@ import type { Json } from '@/lib/supabase/database.types';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export async function GET(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
- const admin=createAdminClient();const profile=await admin.from('profiles').select('full_name,username,branch').eq('id',auth.user.id).single();
- if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
- const actor={id:auth.user.id,name:profile.data?.full_name??profile.data?.username??'Employee',role:auth.role,branch:profile.data?.branch??null};
- if(new URL(request.url).searchParams.has('session'))return NextResponse.json({actor},{headers:{'Cache-Control':'no-store'}});
+ const admin=createAdminClient();
+ const profileQuery=admin.from('profiles').select('full_name,username,branch').eq('id',auth.user.id).single();
+ const actorFromProfile=(profile:{full_name:string|null;username:string|null;branch:string|null}|null)=>({id:auth.user.id,name:profile?.full_name??profile?.username??'Employee',role:auth.role,branch:profile?.branch??null});
+ if(new URL(request.url).searchParams.has('session')){
+  const profile=await profileQuery;
+  if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
+  return NextResponse.json({actor:actorFromProfile(profile.data)},{headers:{'Cache-Control':'no-store'}});
+ }
  let query=admin.from('projects').select('id,branch,project_number,project_name,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,project_notes,created_at,created_by,updated_at,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role').order('created_at',{ascending:false});
  if(auth.role==='Outdoor Sales')query=query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);
- const projects=await query;
+ const [profile,projects,directory]=await Promise.all([profileQuery,query,admin.from('profiles').select('id,full_name,username,role').in('role',['Indoor Sales','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name')]);
+ if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
+ const actor=actorFromProfile(profile.data);
  if(projects.error)return NextResponse.json({error:'Unable to download projects.'},{status:500});
  const ids=projects.data.map(p=>p.id);const clientIds=[...new Set(projects.data.map(p=>p.client_id))];
  const peopleIds=[...new Set(projects.data.flatMap(p=>[p.created_by,p.assigned_outdoor_sales_id,p.follow_up_owner_id]).filter((id):id is string=>!!id))];
- const [directory,people]=await Promise.all([admin.from('profiles').select('id,full_name,username,role').in('role',['Indoor Sales','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name'),peopleIds.length?admin.from('profiles').select('id,full_name,username').in('id',peopleIds):Promise.resolve({data:[],error:null})]);
+ const [people,openings,clients]=await Promise.all([
+  peopleIds.length?admin.from('profiles').select('id,full_name,username').in('id',peopleIds):{data:[],error:null},
+  ids.length?admin.from('openings').select('id,project_id,floor,room,width,height,opening_type,opening_direction').in('project_id',ids):{data:[],error:null},
+  clientIds.length?admin.from('clients').select('id,mobile').in('id',clientIds):{data:[],error:null}
+ ]);
  if(directory.error||people.error)return NextResponse.json({error:'Unable to load employee assignments.'},{status:500});
+ if(openings.error||clients.error)return NextResponse.json({error:'Unable to download measurements.'},{status:500});
  const indoorSales=directory.data.filter(p=>p.role==='Indoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'}));
  const outdoorSales=directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'}));
- const [openings,clients]=await Promise.all([
-  ids.length?admin.from('openings').select('id,project_id,floor,room,width,height,opening_type,opening_direction').in('project_id',ids):Promise.resolve({data:[],error:null}),
-  clientIds.length?admin.from('clients').select('id,mobile').in('id',clientIds):Promise.resolve({data:[],error:null})
- ]);
- if(openings.error||clients.error)return NextResponse.json({error:'Unable to download measurements.'},{status:500});
- return NextResponse.json({actor,outdoorSales,indoorSales,queue:[],syncedAt:null,projects:projects.data.map(p=>({...p,followUpOwner:people.data?.find(e=>e.id===p.follow_up_owner_id)?.full_name??people.data?.find(e=>e.id===p.follow_up_owner_id)?.username??null,phone:clients.data.find(c=>c.id===p.client_id)?.mobile??null,registeredBy:people.data?.find(e=>e.id===p.created_by)?.full_name??people.data?.find(e=>e.id===p.created_by)?.username??'Employee',assignedOutdoorSales:people.data?.find(e=>e.id===p.assigned_outdoor_sales_id)?.full_name??people.data?.find(e=>e.id===p.assigned_outdoor_sales_id)?.username??null,assignedToYou:p.assigned_outdoor_sales_id===actor.id,serverUpdatedAt:p.updated_at})),openings:openings.data.map(o=>({id:o.id,projectId:o.project_id,floor:o.floor??'',room:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?o.room:'Other',otherRoom:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?'':o.room??'',width:Number(o.width),height:Number(o.height),structuralType:o.opening_type,openingType:o.opening_direction}))},{headers:{'Cache-Control':'private, no-store'}});
+ const employees=new Map((people.data??[]).map(p=>[p.id,p]));
+ const contacts=new Map(clients.data.map(c=>[c.id,c.mobile]));
+ const name=(id:string|null)=>id?(employees.get(id)?.full_name??employees.get(id)?.username):null;
+ return NextResponse.json({actor,outdoorSales,indoorSales,queue:[],syncedAt:null,projects:projects.data.map(p=>({...p,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)??null,registeredBy:name(p.created_by)??'Employee',assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===actor.id,serverUpdatedAt:p.updated_at})),openings:openings.data.map(o=>({id:o.id,projectId:o.project_id,floor:o.floor??'',room:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?o.room:'Other',otherRoom:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?'':o.room??'',width:Number(o.width),height:Number(o.height),structuralType:o.opening_type,openingType:o.opening_direction}))},{headers:{'Cache-Control':'private, no-store'}});
 }
 export async function POST(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});

@@ -7,18 +7,22 @@ export async function GET(){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const admin=createAdminClient();let query=admin.from('projects').select('id,branch,project_name,project_number,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,created_by,created_at,updated_at,project_notes,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role').order('created_at',{ascending:false});
  if(auth.role==='Outdoor Sales')query=query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);
- const result=await query;
+ const [result,directory]=await Promise.all([query,admin.from('profiles').select('id,full_name,username,role').in('role',['Indoor Sales','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name')]);
  if(result.error)return NextResponse.json({error:'Unable to load projects.'},{status:500});
  const clientIds=[...new Set((result.data??[]).map(p=>p.client_id))];
- const clients=clientIds.length?await admin.from('clients').select('id,mobile').in('id',clientIds):{data:[],error:null};
- if(clients.error)return NextResponse.json({error:'Unable to load client contacts.'},{status:500});
  const ids=[...new Set([auth.user.id,...(result.data??[]).flatMap(p=>[p.created_by,p.assigned_outdoor_sales_id,p.follow_up_owner_id]).filter((id):id is string=>!!id)])];
- const profiles=ids.length?await admin.from('profiles').select('id,full_name,username').in('id',ids):{data:[],error:null};
+ const [clients,profiles]=await Promise.all([
+  clientIds.length?admin.from('clients').select('id,mobile').in('id',clientIds):{data:[],error:null},
+  admin.from('profiles').select('id,full_name,username').in('id',ids)
+ ]);
+ if(clients.error)return NextResponse.json({error:'Unable to load client contacts.'},{status:500});
  if(profiles.error)return NextResponse.json({error:'Unable to load employee names.'},{status:500});
- const directory=await admin.from('profiles').select('id,full_name,username,role').in('role',['Indoor Sales','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name');
  if(directory.error)return NextResponse.json({error:'Unable to load employee assignments.'},{status:500});
- const actorProfile=profiles.data?.find(p=>p.id===auth.user.id);
- return NextResponse.json({actor:{id:auth.user.id,role:auth.role,name:actorProfile?.full_name??actorProfile?.username??'Employee'},outdoorSales:directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'})),indoorSales:directory.data.filter(p=>p.role==='Indoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'})),projects:(result.data??[]).map(p=>({...p,followUpOwner:profiles.data?.find(e=>e.id===p.follow_up_owner_id)?.full_name??profiles.data?.find(e=>e.id===p.follow_up_owner_id)?.username??null,phone:clients.data?.find(c=>c.id===p.client_id)?.mobile??null,assignedOutdoorSales:profiles.data?.find(e=>e.id===p.assigned_outdoor_sales_id)?.full_name??profiles.data?.find(e=>e.id===p.assigned_outdoor_sales_id)?.username??null,assignedToYou:p.assigned_outdoor_sales_id===auth.user.id,registeredBy:profiles.data?.find(e=>e.id===p.created_by)?.full_name??profiles.data?.find(e=>e.id===p.created_by)?.username??'Employee'}))},{headers:{'Cache-Control':'no-store'}});
+ const people=new Map((profiles.data??[]).map(p=>[p.id,p]));
+ const contacts=new Map((clients.data??[]).map(c=>[c.id,c.mobile]));
+ const name=(id:string|null)=>id?(people.get(id)?.full_name??people.get(id)?.username):null;
+ const actorProfile=people.get(auth.user.id);
+ return NextResponse.json({actor:{id:auth.user.id,role:auth.role,name:actorProfile?.full_name??actorProfile?.username??'Employee'},outdoorSales:directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'})),indoorSales:directory.data.filter(p=>p.role==='Indoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'})),projects:(result.data??[]).map(p=>({...p,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)??null,assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===auth.user.id,registeredBy:name(p.created_by)??'Employee'}))},{headers:{'Cache-Control':'no-store'}});
 }
 export async function PATCH(request:Request){
  const body=await request.json().catch(()=>null);if(typeof body?.projectId!=='string')return NextResponse.json({error:'Project is required.'},{status:400});

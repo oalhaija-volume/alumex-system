@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isActiveSystemRoute } from "@/lib/systemScope";
 import { usesMobileWorkspace, isMobileWorkspaceRoute } from "@/lib/auth/mobileAccess";
 import {
-  canAccessRouteWithOverrides,
+  canAccessRoute,
   defaultRouteForRole,
   type AppRole,
 } from "@/lib/auth/permissions";
@@ -121,20 +121,11 @@ export async function proxy(request: NextRequest) {
   }
 
   const isAdminEmail = user.email?.toLowerCase() === "admin@alumex.com";
-  const [profileResult, pageAccessResult] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("role, is_active, status")
-      .eq("id", user.id)
-      .single(),
-    isAdminEmail
-      ? Promise.resolve({ data: [] })
-      : supabase
-          .from("employee_page_access")
-          .select("route_path, can_access")
-          .eq("user_id", user.id),
-  ]);
-  const { data: profile } = profileResult;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, is_active, status")
+    .eq("id", user.id)
+    .single();
   const profileData = profile as unknown as {
     role: AppRole | "Sales User" | null;
     is_active?: boolean | null;
@@ -158,7 +149,6 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL(defaultRouteForRole(role), request.url));
   }
 
-  const pageAccess = role && role !== "Admin" ? pageAccessResult.data : [];
   const measurementProjectId = measurementProjectIdFromPath(pathname);
 
   if (
@@ -185,7 +175,7 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  if (!canAccessRouteWithOverrides(pathname, role, pageAccess ?? [])) {
+  if (!canAccessRoute(pathname, role)) {
     return NextResponse.redirect(new URL("/unauthorized", request.url));
   }
 

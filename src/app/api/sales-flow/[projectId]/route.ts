@@ -58,10 +58,17 @@ export async function POST(request:Request,context:Context){
   if(action==='contract'){
    const kind=body.template;
    if(kind!=='residential'&&kind!=='commercial')throw new Error('Choose the residential or commercial contract template.');
+   let branch=project.branch;
+   if(auth.role==='Indoor Sales'){
+    const creator=await admin.from('profiles').select('branch').eq('id',auth.user.id).single();
+    if(creator.error)throw new Error('Unable to load your employee branch.');
+    if(creator.data.branch!=='Karkh'&&creator.data.branch!=='Rasafa')throw new Error('Ask Admin to assign your Karkh or Rasafa branch before generating a contract.');
+    branch=creator.data.branch;
+   }
    const client=await admin.from('clients').select('name:client_name,mobile,client_type').eq('id',project.client_id).single();
    if(client.error)throw new Error('Unable to load client information.');
    const sections=uploadedContractTerms(kind);
-   payload={number:`CT-${project.project_number}-${revision}`,createdAt:new Date().toISOString(),client:client.data,project:{branch:project.branch,name:project.project_name,number:project.project_number,address:project.address},terms:sections,template:kind};
+   payload={number:`CT-${project.project_number}-${revision}`,createdAt:new Date().toISOString(),createdBy:auth.user.id,branch,client:client.data,project:{branch:project.branch,name:project.project_name,number:project.project_number,address:project.address},terms:sections,template:kind};
   }
   if(action==='sign'){
    if(flow?.stage!=='contract')throw new Error('Only an unsigned generated contract can be signed.');

@@ -104,7 +104,7 @@ for(const template of ['residential','commercial'])test(`${template} contract ge
  const admin={from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{revision:2,stage:'approved'},error:null}),single:async()=>({data:{name:'Client',mobile:'07000',client_type:'individual'},error:null})};},rpc:async(name,args)=>{input=args;return {data:{},error:null};}};
  const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project',client_id:'client',project_name:'Site',project_number:'PRJ-1',address:'Baghdad',branch:'Rasafa'}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
  const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'contract',revision:2,template})}),{params:Promise.resolve({projectId:'project'})});
- assert.equal(result.status,200);assert.equal(input.p_payload.template,template);assert.equal(input.p_payload.project.branch,'Rasafa');assert.deepEqual(input.p_payload.terms,termsData[template]);
+ assert.equal(result.status,200);assert.equal(input.p_payload.template,template);assert.equal(input.p_payload.project.branch,'Rasafa');assert.equal(input.p_payload.branch,'Rasafa');assert.equal(input.p_payload.createdBy,'actor');assert.deepEqual(input.p_payload.terms,termsData[template]);
  const payments=input.p_payload.terms.find(x=>x.title==='payment terms').text;
  assert.match(payments,template==='commercial'?/25%/:/50/);
  assert.ok(input.p_payload.terms.some(x=>x.text.includes('عشرة سنوات')));
@@ -287,4 +287,20 @@ test('creating an Indoor Sales account requires a valid branch from Admin',async
   const result=await route.POST({json:async()=>({fullName:'Employee',role:'Indoor Sales',username:'employee',password:'secure-example',branch})});
   assert.equal(result.status,status);
  }
+});
+
+for(const branch of ['Karkh','Rasafa',null,'invalid','lookup-error'])test(`contract uses the authenticated Indoor Sales creator branch: ${branch}`,async()=>{
+ let input;const lookups=[];
+ const admin={from(table){return {select(){return this;},eq(key,value){if(table==='profiles')lookups.push([key,value]);return this;},
+  maybeSingle:async()=>({data:{revision:2,stage:'approved'},error:null}),
+  single:async()=>table==='profiles'?{data:{branch},error:branch==='lookup-error'?{message:'failed'}:null}:{data:{name:'Client',mobile:'07000',client_type:'individual'},error:null}
+ };},rpc:async(name,args)=>{input=structuredClone(args);return {data:{},error:null};}};
+ const projectBranch=branch==='Karkh'?'Rasafa':'Karkh';
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{role:'Indoor Sales',user:{id:'creator'}},project:{id:'project',client_id:'client',project_name:'Site',project_number:'PRJ-1',address:'Baghdad',branch:projectBranch}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
+ const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'contract',revision:2,template:'residential',branch:projectBranch,createdBy:'forged'})}),{params:Promise.resolve({projectId:'project'})});
+ assert.deepEqual(lookups,[['id','creator']]);
+ if(branch==='Karkh'||branch==='Rasafa'){
+  assert.equal(result.status,200);assert.equal(input.p_payload.branch,branch);assert.equal(input.p_payload.createdBy,'creator');
+  assert.equal(input.p_payload.project.branch,projectBranch);assert.equal(input.p_actor,'creator');
+ }else{assert.equal(result.status,400);assert.equal(input,undefined);assert.match(result.body.error,/branch/);}
 });

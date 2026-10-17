@@ -1267,6 +1267,7 @@
     "generating": "جاري الإنشاء..."
   },
   "terms": {
+    "Ask Admin to assign your Karkh or Rasafa branch before generating a contract.": "اطلب من المسؤول تحديد فرعك، الكرخ أو الرصافة، قبل إنشاء العقد.",
     "Measurements by": "المسؤول عن القياسات",
     "Myself — {name}": "أنا — {name}",
     "Choose who will record the initial measurements.": "اختر من سيسجل القياسات الأولية.",

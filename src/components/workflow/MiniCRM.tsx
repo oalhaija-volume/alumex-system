@@ -25,6 +25,8 @@ type Props = {
 
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600';
 const control = `min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 ${focus}`;
+const projectColumns = 'lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_12rem] lg:gap-6';
+const mobileLabel = 'mb-2 text-xs font-semibold text-slate-500 lg:hidden';
 const baghdadDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Baghdad', year: 'numeric', month: '2-digit', day: '2-digit' });
 
 function dueTime(project: FieldProject) {
@@ -93,8 +95,8 @@ export function MiniCRM({ data, loading, error, notice, busy, now, canDelete, on
       </button>)}
     </div>
 
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="border-b border-slate-200 p-4 sm:p-5">
+    <div className="space-y-5">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">{term('Follow-up queue')}<span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium tabular-nums text-slate-600">{loading ? '—' : formatNumber(projects.length)}</span></h2>
           <span className="text-xs text-slate-500">{term('Earliest follow-up first')}</span>
@@ -107,8 +109,7 @@ export function MiniCRM({ data, loading, error, notice, busy, now, canDelete, on
       </div>
 
       {loading ? <div role="status" className="space-y-5 p-6"><p className="text-sm text-slate-500">{term('Loading projects…')}</p>{[0, 1, 2].map(index => <div key={index} aria-hidden="true" className="h-20 rounded-lg bg-slate-100 motion-safe:animate-pulse" />)}</div> : error && !data ? <div className="px-6 py-10 text-sm text-slate-600">{term('Follow-ups could not be loaded. Refresh the page to try again.')}</div> : !projects.length ? <div className="flex flex-col items-center px-6 py-14 text-center"><span className="mb-4 rounded-xl bg-slate-100 p-3 text-slate-500"><Icon kind="queue" /></span><h3 className="font-semibold text-slate-900">{term(filtered ? 'No matching follow-ups' : 'No active follow-ups')}</h3><p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">{term(filtered ? 'Try another search or clear your filters to see all active projects.' : 'New projects appear here until the contract is signed.')}</p></div> : <>
-        <div aria-hidden="true" className="hidden grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-5 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-500 xl:grid"><span>{term('Client / project')}</span><span>{term('Project stage')}</span><span>{term('Next follow-up')}</span><span className="w-32 text-end">{term('Action')}</span></div>
-        <div className="flex flex-col gap-4 bg-slate-50">{projects.map(project => <CRMProject key={project.id} project={project} data={data} now={now} busy={busy} canDelete={canDelete} onUpdate={onUpdate} onDelete={onDelete} />)}</div>
+        <div className="flex flex-col gap-6">{projects.map(project => <CRMProject key={project.id} project={project} data={data} now={now} busy={busy} canDelete={canDelete} onUpdate={onUpdate} onDelete={onDelete} />)}</div>
       </>}
     </div>
     <p className="mt-4 text-xs leading-5 text-slate-500">{term('Signed projects move out of sales follow-up and into Operations.')}</p>
@@ -125,23 +126,31 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
   const stage = stageDetails(project);
   const canAssign = project.sales_status === 'new_lead' && ['site', 'measurements'].includes(stage.id);
   const stageTone = ['contract-signature', 'contract-preparation'].includes(stage.id) ? 'bg-indigo-50 text-indigo-800' : stage.id === 'site' ? 'bg-slate-100 text-slate-700' : 'bg-blue-50 text-blue-800';
-  return <article id={`project-${project.id}`} className="scroll-mt-5 border-y border-slate-200 bg-white first:border-t-0 last:border-b-0 target:bg-blue-50/50">
-    <div className="grid items-center gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto] xl:gap-5">
+  return <article id={`project-${project.id}`} aria-labelledby={`project-name-${project.id}`} className="scroll-mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm target:ring-2 target:ring-blue-500">
+    <div aria-hidden="true" className={`hidden ${projectColumns} border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-600 lg:grid`}>
+      <span>{term('Client / project')}</span><span>{term('Project stage')}</span><span>{term('Next follow-up')}</span><span>{term('Action')}</span>
+    </div>
+    <div className={`grid items-start gap-5 p-4 sm:p-5 ${projectColumns}`}>
       <div className="min-w-0">
+        <p className={mobileLabel}>{term('Client / project')}</p>
         <div className="flex flex-wrap items-center gap-2 text-xs"><span className="font-medium text-slate-500">{term(project.project_number)}</span>{project.pending && <span className="rounded bg-amber-50 px-2 py-0.5 text-amber-800">{term('Saved on device')}</span>}{project.assignedToYou && <span className="font-medium text-blue-700">{term('Assigned to you')}</span>}</div>
-        <h3 dir="auto" className="mt-1.5 break-words text-base font-semibold leading-6 text-slate-950">{project.project_name}</h3>
+        <h3 id={`project-name-${project.id}`} dir="auto" className="mt-1.5 break-words text-lg font-semibold leading-7 text-slate-950">{project.project_name}</h3>
         {project.address && <p dir="auto" className="mt-1 break-words text-xs leading-5 text-slate-500">{project.address}</p>}
         {project.phone && <a dir="ltr" href={`tel:${project.phone}`} className={`${focus} mt-1 inline-flex min-h-8 items-center text-xs font-medium text-blue-700 hover:underline`}>{project.phone}</a>}
       </div>
-      <div className="min-w-0"><span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium leading-5 ${stageTone}`}>{term(stage.label)}</span><p className="mt-2 text-xs leading-5 text-slate-500">{term(stage.action)}</p>{canAssign&&<p className="mt-2 text-xs font-medium text-slate-700">{term('Outdoor Sales')}: {project.assignedOutdoorSales??term('Not assigned')}</p>}</div>
-      <div className="min-w-0 border-t border-slate-100 pt-3 xl:border-0 xl:pt-0">
+      <div className="min-w-0 border-t border-slate-100 pt-4 lg:border-0 lg:pt-0"><p className={mobileLabel}>{term('Project stage')}</p><span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium leading-5 ${stageTone}`}>{term(stage.label)}</span><p className="mt-2 text-xs leading-5 text-slate-500">{term(stage.action)}</p>{canAssign&&<p className="mt-2 text-xs font-medium text-slate-700">{term('Outdoor Sales')}: {project.assignedOutdoorSales??term('Not assigned')}</p>}</div>
+      <div className="min-w-0 border-t border-slate-100 pt-4 lg:border-0 lg:pt-0">
+        <p className={mobileLabel}>{term('Next follow-up')}</p>
         <p className={`flex items-center gap-1.5 text-xs font-semibold ${overdue ? 'text-amber-800' : today ? 'text-blue-700' : 'text-slate-500'}`}><Icon kind="clock" className="h-3.5 w-3.5" />{term(overdue ? 'Overdue' : today ? 'Due today' : due === null ? 'Unscheduled' : 'Upcoming')}</p>
         {due !== null && <time dateTime={project.next_follow_up_at!} className="mt-1.5 block text-sm font-medium leading-5 text-slate-800">{formatDateTime(due)}</time>}
         <p className="mt-1.5 break-words text-xs leading-5 text-slate-500">{due !== null && <>{term(followUpTypeLabel(project.follow_up_type))} · </>}{project.followUpOwner ?? term('Not assigned')}</p>
       </div>
-      <div className="flex flex-wrap gap-2 xl:w-40 xl:flex-col">
-        {canAssign&&<button type="button" aria-expanded={expanded} aria-controls={`follow-up-editor-${project.id}`} onClick={()=>{setExpanded(true);setHasOpened(true);}} className={`${focus} min-h-11 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white`}>{term('Assign measurements')}</button>}
-        <button type="button" aria-expanded={expanded} aria-controls={`follow-up-editor-${project.id}`} onClick={() => { setExpanded(!expanded); setHasOpened(true); }} className={`${focus} flex min-h-11 items-center justify-center gap-1 rounded-lg border px-3 text-sm font-semibold whitespace-nowrap ${expanded ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:text-blue-700'}`}><span>{term(expanded ? 'Close' : 'Follow up')}</span><Icon kind="chevron" className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} /></button>
+      <div className="min-w-0">
+        <p className={mobileLabel}>{term('Action')}</p>
+        <div className="flex flex-col gap-2">
+          {canAssign&&<button type="button" aria-expanded={expanded} aria-controls={`follow-up-editor-${project.id}`} onClick={()=>{setExpanded(true);setHasOpened(true);}} className={`${focus} min-h-11 rounded-lg bg-blue-600 px-3 py-2 text-sm! font-semibold! text-white transition-colors hover:bg-blue-700`}>{term('Assign measurements')}</button>}
+          <button type="button" aria-expanded={expanded} aria-controls={`follow-up-editor-${project.id}`} onClick={() => { setExpanded(!expanded); setHasOpened(true); }} className={`${focus} flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm! font-semibold! whitespace-nowrap transition-colors ${expanded ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700'}`}><span>{term(expanded ? 'Close' : 'Follow up')}</span><Icon kind="chevron" className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} /></button>
+        </div>
       </div>
     </div>
 

@@ -2270,7 +2270,16 @@
     "Measurement assignments": "مهام القياسات",
     "Open an assigned site to record measurements, or register a new project.": "افتح موقعاً مكلّفاً به لتسجيل القياسات، أو سجّل مشروعاً جديداً.",
     "Measurements submitted": "تم إرسال القياسات",
-    "Back to assignments": "العودة إلى المهام"
+    "Back to assignments": "العودة إلى المهام",
+    "Every project, its current stage, and the next action for your team.": "كل مشروع ومرحلته الحالية والخطوة التالية لفريقك.",
+    "Select a stage to see its projects. Colors match the project cards below.": "اختر مرحلة لعرض مشاريعها. تتطابق الألوان مع بطاقات المشاريع أدناه.",
+    "Project priority": "أولوية المشاريع",
+    "Next step": "الخطوة التالية",
+    "Overdue follow-up": "متابعة متأخرة",
+    "Review measurements": "مراجعة القياسات",
+    "Open quotation": "فتح عرض السعر",
+    "Open contract": "فتح العقد",
+    "Measurement tasks and follow-up reminders": "مهام القياسات وتذكيرات المتابعة"
   },
   "registration": {
     "title": "عميل ومشروع جديد",

@@ -2270,7 +2270,16 @@
     "Measurement assignments": "Measurement assignments",
     "Open an assigned site to record measurements, or register a new project.": "Open an assigned site to record measurements, or register a new project.",
     "Measurements submitted": "Measurements submitted",
-    "Back to assignments": "Back to assignments"
+    "Back to assignments": "Back to assignments",
+    "Every project, its current stage, and the next action for your team.": "Every project, its current stage, and the next action for your team.",
+    "Select a stage to see its projects. Colors match the project cards below.": "Select a stage to see its projects. Colors match the project cards below.",
+    "Project priority": "Project priority",
+    "Next step": "Next step",
+    "Overdue follow-up": "Overdue follow-up",
+    "Review measurements": "Review measurements",
+    "Open quotation": "Open quotation",
+    "Open contract": "Open contract",
+    "Measurement tasks and follow-up reminders": "Measurement tasks and follow-up reminders"
   },
   "registration": {
     "title": "New client & project",

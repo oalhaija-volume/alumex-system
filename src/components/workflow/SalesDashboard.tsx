@@ -1,6 +1,7 @@
 "use client";
 import { useI18n } from '@/components/i18n/I18nProvider';
-import { canAccessCRM } from '@/lib/auth/permissions';
+import { LeadershipDashboard } from './LeadershipDashboard';
+import { canAccessCRM, isLeadershipRole } from '@/lib/auth/permissions';
 import Link from 'next/link';
 import { useState } from 'react';
 import type { SalesWorkspaceData } from '@/lib/offline/types';
@@ -14,6 +15,7 @@ export function SalesDashboard(){
  const waiting=projects.filter(needsSalesFollowUp);const overdue=waiting.filter(p=>p.next_follow_up_at&&Date.parse(p.next_follow_up_at)<now);
  const overview=outdoor?[['Total projects',projects.length],['Measurement tasks',projects.filter(p=>projectStage(p)==='measurements').length],['Awaiting site readiness',projects.filter(p=>projectStage(p)==='site').length],['Measurements completed',projects.filter(p=>!['site','measurements','closed'].includes(projectStage(p))).length]]:[['Total projects',projects.length],['Awaiting sales action',waiting.length],['Overdue follow-ups',overdue.length],['Signed / Operations',projects.filter(p=>['handoff','operations'].includes(projectStage(p))).length]];
  const selected=projects.filter(p=>(stage==='all'||projectStage(p)===stage)&&(`${p.project_name} ${term(p.project_number)} ${p.phone??''}`.toLowerCase().includes(search.toLowerCase()))&&(due==='all'||(needsSalesFollowUp(p)&&(due==='unscheduled'?!p.next_follow_up_at:!!p.next_follow_up_at&&Date.parse(p.next_follow_up_at)<now))));
+ if(data && isLeadershipRole(data.actor.role)) return <LeadershipDashboard data={data} error={error} now={now}/>;
  return <Workspace title={term(data?.actor?.role==='Outdoor Sales'?"My sales dashboard":"Dashboard")} description={term(outdoor?"Your assigned sites and initial measurement tasks.":"Your projects, measurement tasks and follow-up reminders.")}><Notice error={error}/><div className="mb-7 flex flex-wrap gap-3"><Link href="/intake" className={button}>{term("New client & project")}</Link>{canAccessCRM(data?.actor.role)&&<Link href="/mini-crm" className="min-h-12 rounded-md border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700">{term("Open CRM follow-ups")}</Link>}</div>{loading?<p>{term("Loading project stages…")}</p>:<>
  {data&&<SalesTaskPanel data={data} now={now}/>}
  <section aria-label={term("Project overview")} className="mb-7 grid grid-cols-2 gap-3 sm:grid-cols-4">{overview.map(([label,count])=><div key={label} className="rounded-lg border border-slate-200 bg-white p-4"><p className="text-xs font-medium text-slate-500">{term(String(label))}</p><p className={`mt-2 text-3xl font-semibold ${label==='Overdue follow-ups'&&Number(count)>0?'text-amber-700':'text-slate-900'}`}>{formatNumber(Number(count))}</p></div>)}</section>

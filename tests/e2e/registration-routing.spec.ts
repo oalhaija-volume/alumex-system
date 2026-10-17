@@ -283,3 +283,66 @@ test.describe('Outdoor Sales phone workspace', () => {
     });
   }
 });
+
+test.describe('Leadership dashboard clarity', () => {
+  for (const role of ['Admin', 'Company Owner', 'Sales Director', 'CEO']) for (const locale of ['en', 'ar']) {
+    test(`${role} ${locale}: stage colors, priorities and project actions`, async ({ page }) => {
+      await page.setViewportSize({ width: locale === 'ar' ? 390 : 1440, height: 1000 });
+      await page.addInitScript(locale => localStorage.setItem('alumex_locale', locale), locale);
+      const actor = { ...fatma, role };
+      const statuses = ['new_lead', 'new_lead', 'ready_for_quotation', 'quotation_in_progress', 'quotation_approved', 'contract_generated', 'contract_signed', 'transferred_to_operations', 'closed'];
+      const names = ['Mansour residence', 'Riverside villa', 'Karrada office', 'Al Noor showroom', 'University annex', 'Jadriya apartments', 'Tigris tower', 'Baghdad clinic', 'West gate'];
+      const projects = statuses.map((sales_status, index) => ({
+        id: `11111111-1111-4111-8111-11111111111${index}`, project_name: names[index], project_number: `PRJ-LEADERSHIP-${index}`,
+        structure_readiness: index ? 'ready' : 'not_ready', sales_status, status: index === 7 ? 'Production' : 'Draft',
+        address: 'Baghdad · Site address', phone: '07700000000', created_by: ehab.id, registeredBy: ehab.name,
+        assigned_outdoor_sales_id: ehab.id, assignedOutdoorSales: ehab.name, follow_up_owner_id: fatma.id, followUpOwner: fatma.name,
+        next_follow_up_at: index === 3 ? new Date(Date.now() - 3600000).toISOString() : null,
+        project_notes: 'Client requested a follow-up call.', created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }));
+      const state = { actor, projects, indoorSales: [fatma], outdoorSales: [ehab], queue: [], openings: [], syncedAt: null };
+      await page.route('**/api/offline*', route => route.fulfill({ json: state }));
+      await page.route('**/api/workspace', route => route.fulfill({ json: state }));
+      await page.goto('/offline?path=/dashboard');
+      await page.evaluate(async state => {
+        localStorage.setItem('alumex-field-active', state.actor.id);
+        await new Promise<void>((resolve, reject) => {
+          const request = indexedDB.open('alumex-field-v1', 1);
+          request.onupgradeneeded = () => request.result.createObjectStore('accounts');
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => { const db = request.result; const tx = db.transaction('accounts', 'readwrite'); tx.objectStore('accounts').put(state, state.actor.id); tx.oncomplete = () => { db.close(); resolve(); }; tx.onerror = () => reject(tx.error); };
+        });
+        window.dispatchEvent(new Event('field-change'));
+      }, state);
+      const cards = page.locator('article');
+      await expect(cards).toHaveCount(9);
+      const colors = await cards.evaluateAll(nodes => nodes.map(node => getComputedStyle(node).borderTopColor));
+      expect(new Set(colors).size).toBe(6);
+      expect(colors[2]).toBe(colors[3]);
+      expect(colors[4]).toBe(colors[5]);
+      const stageFilters = page.getByRole('region', { name: locale === 'en' ? 'Filter by project stage' : 'تصفية حسب مرحلة المشروع', exact: true });
+      const measurementFilter = stageFilters.getByRole('button', { name: locale === 'en' ? /Initial measurements/ : /القياسات الأولية/ });
+      await measurementFilter.click();
+      await expect(measurementFilter).toHaveAttribute('aria-pressed', 'true');
+      await expect(cards).toHaveCount(1);
+      await expect(cards.first()).toContainText('Riverside villa');
+      await expect(cards.first().getByRole('link', { name: locale === 'en' ? 'Review measurements' : 'مراجعة القياسات', exact: true })).toHaveAttribute('href', `/initial-measurements/${projects[1].id}`);
+      await expect(cards.first()).toContainText('Fatma');
+      await expect(cards.first()).toContainText('Ehab');
+      await page.getByRole('region', { name: locale === 'en' ? 'Project overview' : 'نظرة عامة على المشروع', exact: true }).getByRole('button', { name: locale === 'en' ? /Overdue follow-ups/ : /متابعات متأخرة/ }).click();
+      await expect(cards).toHaveCount(1);
+      await expect(cards.first()).toContainText('Al Noor showroom');
+      await page.getByRole('button', { name: locale === 'en' ? 'Clear filters' : 'مسح عوامل التصفية', exact: true }).click();
+      await expect(cards).toHaveCount(9);
+      await page.getByRole('searchbox').fill('no such project');
+      await expect(cards).toHaveCount(0);
+      await page.getByRole('searchbox').fill('Riverside');
+      await expect(cards).toHaveCount(1);
+      await cards.first().locator('summary').click();
+      await expect(cards.first().getByRole('link', { name: '07700000000', exact: true })).toHaveAttribute('href', 'tel:07700000000');
+      await page.getByRole('searchbox').fill('');
+      await expect(cards).toHaveCount(9);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    });
+  }
+});

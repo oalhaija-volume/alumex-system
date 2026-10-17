@@ -1267,6 +1267,8 @@
     "generating": "جاري الإنشاء..."
   },
   "terms": {
+    "Sales dashboard": "لوحة المبيعات",
+    "See what needs attention and take the next step.": "تابع ما يحتاج إلى اهتمامك وانتقل إلى الخطوة التالية.",
     "Ask Admin to assign your Karkh or Rasafa branch before generating a contract.": "اطلب من المسؤول تحديد فرعك، الكرخ أو الرصافة، قبل إنشاء العقد.",
     "Measurements by": "المسؤول عن القياسات",
     "Myself — {name}": "أنا — {name}",

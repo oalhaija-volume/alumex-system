@@ -287,7 +287,7 @@ test.describe('Outdoor Sales phone workspace', () => {
 });
 
 test.describe('Leadership dashboard clarity', () => {
-  for (const role of ['Admin', 'Company Owner', 'Sales Director', 'CEO']) for (const locale of ['en', 'ar']) {
+  for (const role of ['Admin', 'Company Owner', 'Sales Director', 'CEO', 'Indoor Sales']) for (const locale of ['en', 'ar']) {
     test(`${role} ${locale}: stage colors, priorities and project actions`, async ({ page }) => {
       await page.setViewportSize({ width: locale === 'ar' ? 390 : 1440, height: 1000 });
       await page.addInitScript(locale => localStorage.setItem('alumex_locale', locale), locale);
@@ -340,7 +340,7 @@ test.describe('Leadership dashboard clarity', () => {
       await expect(cards).toHaveCount(0);
       await page.getByRole('searchbox').fill('Riverside');
       await expect(cards).toHaveCount(1);
-      await cards.first().locator('summary').click();
+      await cards.first().locator('summary').filter({ hasText: locale === 'en' ? 'Project details' : 'تفاصيل المشروع' }).click();
       await expect(cards.first().getByRole('link', { name: '07700000000', exact: true })).toHaveAttribute('href', 'tel:07700000000');
       await page.getByRole('searchbox').fill('');
       await expect(cards).toHaveCount(9);

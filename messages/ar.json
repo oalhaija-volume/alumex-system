@@ -2339,7 +2339,14 @@
     "Dimensions (m)": "الأبعاد (م)",
     "Quote facade services or standalone products without window and door openings": "إعداد عرض سعر لخدمات واجهات أو منتجات مستقلة دون فتحات نوافذ وأبواب",
     "Swisspearl": "سويس بيرل",
-    "Uses the total measured facade area": "تُحسب حسب إجمالي مساحة الواجهة المقاسة"
+    "Uses the total measured facade area": "تُحسب حسب إجمالي مساحة الواجهة المقاسة",
+    "Save all changes": "حفظ جميع التغييرات",
+    "Changed prices: {count}": "الأسعار المعدّلة: {count}",
+    "No unsaved price changes": "لا توجد تغييرات أسعار غير محفوظة",
+    "All changed prices saved. Existing quotations and contracts retain their agreed prices.": "تم حفظ جميع الأسعار المعدّلة. تبقى أسعار عروض الأسعار والعقود الحالية كما اتُفق عليها.",
+    "Enter a positive price for every changed item.": "أدخل سعراً موجباً لكل عنصر تم تعديله.",
+    "One or more catalog items are unavailable. Reload the catalog and try again.": "عنصر أو أكثر غير متاح في دليل الأسعار. أعد تحميل الدليل وحاول مجدداً.",
+    "Unable to save catalog prices. Your changes have not been saved.": "تعذّر حفظ أسعار الدليل. لم تُحفظ تغييراتك."
   },
   "registration": {
     "title": "عميل ومشروع جديد",

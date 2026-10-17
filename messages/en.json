@@ -2339,7 +2339,14 @@
     "Dimensions (m)": "Dimensions (m)",
     "Quote facade services or standalone products without window and door openings": "Quote facade services or standalone products without window and door openings",
     "Swisspearl": "Swisspearl",
-    "Uses the total measured facade area": "Uses the total measured facade area"
+    "Uses the total measured facade area": "Uses the total measured facade area",
+    "Save all changes": "Save all changes",
+    "Changed prices: {count}": "Changed prices: {count}",
+    "No unsaved price changes": "No unsaved price changes",
+    "All changed prices saved. Existing quotations and contracts retain their agreed prices.": "All changed prices saved. Existing quotations and contracts retain their agreed prices.",
+    "Enter a positive price for every changed item.": "Enter a positive price for every changed item.",
+    "One or more catalog items are unavailable. Reload the catalog and try again.": "One or more catalog items are unavailable. Reload the catalog and try again.",
+    "Unable to save catalog prices. Your changes have not been saved.": "Unable to save catalog prices. Your changes have not been saved."
   },
   "registration": {
     "title": "New client & project",

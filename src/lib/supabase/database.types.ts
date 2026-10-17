@@ -1446,6 +1446,7 @@ export type Database = {
       };
     };
     Functions: {
+      save_catalog_prices: { Args: { p_changes: Json }; Returns: { id: string; price: number }[] };
       update_employee_profile: {
         Args: { p_actor: string; p_employee: string; p_expected_updated_at: string; p_full_name: string; p_username: string; p_role: string; p_is_active: boolean };
         Returns: Json;

@@ -1,39 +1,21 @@
 "use client";
+import Link from 'next/link';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import { ProjectRecord } from './ProjectRecord';
-import { canAccessCRM } from '@/lib/auth/permissions';
-import Link from 'next/link';
-import { useEffect,useState } from 'react';
-import { activeFieldUser,readFieldState,updateFieldState } from '@/lib/offline/store';
-import { isFieldOnline,prepareOffline } from '@/lib/offline/client';
-import { followUpTypeLabel,type FollowUpEntry,type FollowUpHistory } from '@/lib/workflow/followUps';
-import { card,Notice,Workspace } from './ui';
-export function FollowUpWorkspace({projectId}:{projectId:string}){
- const { term,formatDateTime:date } = useI18n();
- const [data,setData]=useState<FollowUpHistory|null>(null);const [error,setError]=useState('');const [loading,setLoading]=useState(true);const [cached,setCached]=useState(false);
- useEffect(()=>{let active=true;const controller=new AbortController();
-  async function load(){
-   try{
-    let saved=await readFieldState();if(!saved&&isFieldOnline())saved=await prepareOffline().catch(()=>null);if(saved&&!canAccessCRM(saved.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');const account=activeFieldUser();let history=saved?.followUpHistories?.[projectId];let fromCache=true;
-    if(isFieldOnline()){
-     let response:Response|null=null;try{response=await fetch(`/api/projects/${projectId}/follow-ups`,{cache:'no-store',signal:controller.signal});}catch{ /* Use downloaded history when unreachable. */ }
-     if(response){
-      if(!response.ok){const result=await response.json();throw new Error(result.error??'Unable to load follow-ups.');}
-      history=await response.json() as FollowUpHistory;fromCache=false;
-      if(saved&&account&&activeFieldUser()===account){const snapshot=history;await updateFieldState(account,state=>({...state!,followUpHistories:{...state?.followUpHistories,[projectId]:snapshot}}));}
-     }
-    }
-    saved=await readFieldState();if(account!==activeFieldUser())return;
-    const localProject=saved?.projects.find(p=>p.id===projectId);
-    const pending:FollowUpEntry[]=(saved?.queue??[]).filter(c=>c.projectId===projectId&&['follow-up','ready','assign-measurements'].includes(c.action)).map(c=>({assignedOutdoorSales:saved?.outdoorSales?.find(p=>p.id===c.payload.assignedOutdoorSalesId)?.name??null,followUpType:typeof c.payload.followUpType==='string'?c.payload.followUpType:null,followUpDetail:typeof c.payload.followUpDetail==='string'?c.payload.followUpDetail:null,followUpOwner:saved?.indoorSales?.find(p=>p.id===c.payload.followUpOwnerId)?.name??null,id:c.id,action:c.action==='ready'?'ready':c.action==='assign-measurements'?'assign-measurements':'follow-up',note:typeof c.payload.note==='string'?c.payload.note:'',nextFollowUp:typeof c.payload.nextFollowUp==='string'?c.payload.nextFollowUp:null,recordedAt:c.recordedAt,recordedBy:saved!.actor.name,pending:true}));
-    if(!history&&localProject)history={project:localProject,entries:[]};
-    if(!history)throw new Error('Connect to the internet to download this project’s follow-up history.');
-    const pendingIds=new Set(pending.map(e=>e.id));const entries=[...pending,...history.entries.filter(e=>!pendingIds.has(e.id))].sort((a,b)=>(b.recordedAt??'').localeCompare(a.recordedAt??''));
-    if(active){setData({...history,project:pending.length&&localProject?localProject:history.project,entries});setCached(fromCache);setError('');}
-   }catch(e){if(active)setError((e as Error).message);}finally{if(active)setLoading(false);}
-  }
-  void load();window.addEventListener('online',load);
-  return()=>{active=false;controller.abort();window.removeEventListener('online',load);};
- },[projectId]);
- return <Workspace title={term("Project follow-ups")} description={term("The history of follow-up notes and site readiness updates for this project.")}><div className="mb-6 flex flex-wrap gap-5 text-sm font-semibold text-blue-600"><Link href="/mini-crm">{term("← Follow-ups")}</Link><Link href="/projects">{term("All projects")}</Link></div><ProjectRecord projectId={projectId}/><Notice error={error}/>{loading?<p>{term("Loading follow-ups…")}</p>:data&&<><section className={`${card} mb-6`}><p className="text-xs font-semibold text-blue-600">{term(data.project.project_number)}</p><h2 className="mt-2 text-xl font-semibold">{data.project.project_name}</h2><p className="mt-3 text-sm text-slate-600">{data.project.next_follow_up_at?term('Next follow-up: {date}',{date:date(data.project.next_follow_up_at)}):term("No follow-up scheduled yet.")}</p></section>{cached&&<p role="status" className="mb-5 text-sm text-amber-800">{term("Showing history saved on this device and pending notes. Connect to see the latest updates.")}</p>}{!data.entries.length?<div className={card}>{term("No follow-ups recorded yet. Save a follow-up note in Mini CRM to start this history.")}</div>:<ol className="space-y-4">{data.entries.map(entry=><li key={entry.id} className={card}><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">{entry.action==='ready'?term("Site marked ready"):entry.action==='assign-measurements'?term('Measurements assigned'):entry.action==='snapshot'?term("Previously saved note"):term("Follow-up recorded")}</h3>{entry.pending&&<span className="rounded bg-amber-50 px-3 py-1 text-xs text-amber-800">{term("Saved on device · Pending sync")}</span>}</div><p className="mt-2 text-xs text-slate-500">{entry.recordedAt?date(entry.recordedAt):term("Original date not recorded")} · {['Employee','Not recorded'].includes(entry.recordedBy)?term(entry.recordedBy):entry.recordedBy}</p>{entry.action==='follow-up'&&<p className="mt-3 text-sm text-slate-600">{term('Follow-up type')}: {term(followUpTypeLabel(entry.followUpType))}{entry.followUpType==='other'&&entry.followUpDetail?` · ${entry.followUpDetail}`:''}{entry.followUpOwner?` · ${term('Responsible Indoor Sales')}: ${entry.followUpOwner}`:''}</p>}{entry.assignedOutdoorSales&&<p className="mt-3 text-sm text-slate-600">{term('Outdoor Sales')}: {entry.assignedOutdoorSales}</p>}{entry.note&&<p dir="auto" className="mt-4 whitespace-pre-wrap break-words text-sm leading-7 text-slate-800">{entry.note}</p>}{entry.nextFollowUp&&<p className="mt-4 border-t border-slate-100 pt-3 text-sm text-slate-600">{term('Scheduled follow-up: {date}',{date:date(entry.nextFollowUp)})}</p>}</li>)}</ol>}</>}</Workspace>;
+import { FollowUpHistoryTable } from './ProjectFollowUps';
+import { useFollowUpHistory } from './useFollowUpHistory';
+import { card, Notice, Workspace } from './ui';
+
+export function FollowUpWorkspace({ projectId }: { projectId: string }) {
+  const { term, formatDateTime } = useI18n();
+  const { data, error, loading, cached } = useFollowUpHistory(projectId);
+  return <Workspace title={term('Project follow-ups')} description={term('The history of follow-up notes and site readiness updates for this project.')}>
+    <div className="mb-6 flex flex-wrap gap-5 text-sm font-semibold text-blue-600"><Link href="/mini-crm">{term('← Follow-ups')}</Link><Link href="/projects">{term('All projects')}</Link></div>
+    <ProjectRecord projectId={projectId}/><Notice error={error}/>
+    {loading ? <p>{term('Loading follow-ups…')}</p> : data && <>
+      <section className={`${card} mb-6`}><p className="text-xs font-semibold text-blue-600">{term(data.project.project_number)}</p><h2 className="mt-2 text-xl font-semibold">{data.project.project_name}</h2><p className="mt-3 text-sm text-slate-600">{data.project.next_follow_up_at ? term('Next follow-up: {date}', { date: formatDateTime(data.project.next_follow_up_at) }) : term('No follow-up scheduled yet.')}</p></section>
+      {cached && <p role="status" className="mb-5 text-sm text-amber-800">{term('Showing history saved on this device and pending notes. Connect to see the latest updates.')}</p>}
+      <FollowUpHistoryTable entries={data.entries}/>
+    </>}
+  </Workspace>;
 }

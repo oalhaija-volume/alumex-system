@@ -2279,7 +2279,12 @@
     "Review measurements": "Review measurements",
     "Open quotation": "Open quotation",
     "Open contract": "Open contract",
-    "Measurement tasks and follow-up reminders": "Measurement tasks and follow-up reminders"
+    "Measurement tasks and follow-up reminders": "Measurement tasks and follow-up reminders",
+    "Newest follow-up first. Swipe horizontally to see all columns.": "Newest follow-up first. Swipe horizontally to see all columns.",
+    "Recorded at": "Recorded at",
+    "Activity": "Activity",
+    "Recorded by": "Recorded by",
+    "Responsible employee": "Responsible employee"
   },
   "registration": {
     "title": "New client & project",

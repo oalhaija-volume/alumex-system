@@ -2,6 +2,7 @@
 import { useI18n } from '@/components/i18n/I18nProvider';
 import type { FieldProject,SalesWorkspaceData } from '@/lib/offline/types';
 import { followUpFormValues } from './FollowUpFields';
+import { ProjectFollowUps } from './ProjectFollowUps';
 import { MiniCRM } from './MiniCRM';
 import { canAccessCRM } from '@/lib/auth/permissions';
 import Link from 'next/link';
@@ -35,6 +36,7 @@ export function ProjectWorkspace({followUps=false,canDelete=false}:{followUps?:b
    <Link href={projectLink(p,canAccessCRM(data?.actor.role))} className="mt-5 inline-block py-2 text-sm font-semibold text-blue-600">{term("Open project →")}</Link>
    <div className="mt-3 flex flex-wrap gap-5">{canAccessCRM(data?.actor.role)&&<Link href={`/projects/${p.id}/follow-ups`} className="inline-block min-h-11 py-2 text-sm font-semibold text-blue-600">{term("View follow-up history →")}</Link>}</div>
    {canDelete&&<div className="mt-4 border-t border-slate-100 pt-3"><button type="button" disabled={!!busy||p.pending} onClick={()=>void remove(p)} className="min-h-11 rounded-md px-3 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">{busy===p.id?term("Please wait…"):term("Delete project")}</button>{p.pending&&<span className="block text-xs text-slate-500">{term("Sync saved changes before deleting.")}</span>}</div>}
+   {canAccessCRM(data?.actor.role)&&<ProjectFollowUps projectId={p.id}/>}
   </article>)}</div>}
  </Workspace>;
 }

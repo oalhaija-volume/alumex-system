@@ -2279,7 +2279,12 @@
     "Review measurements": "مراجعة القياسات",
     "Open quotation": "فتح عرض السعر",
     "Open contract": "فتح العقد",
-    "Measurement tasks and follow-up reminders": "مهام القياسات وتذكيرات المتابعة"
+    "Measurement tasks and follow-up reminders": "مهام القياسات وتذكيرات المتابعة",
+    "Newest follow-up first. Swipe horizontally to see all columns.": "أحدث متابعة أولاً. اسحب أفقياً لعرض جميع الأعمدة.",
+    "Recorded at": "تاريخ التسجيل",
+    "Activity": "النشاط",
+    "Recorded by": "سجّله",
+    "Responsible employee": "الموظف المسؤول"
   },
   "registration": {
     "title": "عميل ومشروع جديد",

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import type { FieldProject, SalesWorkspaceData } from '@/lib/offline/types';
 import { needsSalesFollowUp, projectLink, projectStage, projectStages, stageDetails, type ProjectStage } from '@/lib/workflow/stages';
+import { ProjectFollowUps } from './ProjectFollowUps';
 import { SalesTaskPanel } from './SalesTaskPanel';
 import { button, field, Notice, secondary } from './ui';
 
@@ -108,6 +109,7 @@ export function LeadershipDashboard({ data, error, now }: { data: SalesWorkspace
               <details className="mt-3 border-t border-slate-100 pt-1"><summary className="min-h-11 cursor-pointer py-3 text-sm font-medium text-slate-600">{term('Project details')}</summary><dl className="grid gap-3 pb-3 text-sm sm:grid-cols-2"><div><dt className="text-xs text-slate-500">{term('Phone')}</dt><dd className="mt-1">{project.phone ? <a href={`tel:${project.phone}`} className="inline-flex min-h-11 items-center text-blue-700" dir="ltr">{project.phone}</a> : '—'}</dd></div><div><dt className="text-xs text-slate-500">{term('Created by')}</dt><dd className="mt-1">{project.registeredBy === 'Employee' ? term('Employee') : project.registeredBy}</dd></div><div className="sm:col-span-2"><dt className="text-xs text-slate-500">{term('Address')}</dt><dd className="mt-1 break-words">{project.address ?? '—'}</dd></div><div><dt className="text-xs text-slate-500">{term('Last updated')}</dt><dd className="mt-1">{formatDateTime(project.updated_at)}</dd></div>{project.project_notes && <div className="sm:col-span-2"><dt className="text-xs text-slate-500">{term('Latest follow-up note')}</dt><dd className="mt-1 whitespace-pre-wrap break-words">{project.project_notes}</dd></div>}</dl></details>
             </div>
             <footer className="flex flex-wrap items-center gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4"><Link href={action.href} className={`${button} inline-flex items-center justify-center`}>{term(action.label)}</Link>{currentStage !== 'site' && currentStage !== 'closed' && <Link href={needsSalesFollowUp(project) ? `/mini-crm#project-${project.id}` : `/projects/${project.id}/follow-ups`} className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700">{term(needsSalesFollowUp(project) ? 'Follow up' : 'Follow-up history')}</Link>}</footer>
+            <ProjectFollowUps projectId={project.id}/>
           </article>;
         })}
       </div>}

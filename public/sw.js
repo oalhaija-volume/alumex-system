@@ -1,5 +1,5 @@
 /* Cache only the public offline shell and static assets, never API responses or authenticated pages. */
-const CACHE = 'alumex-field-shell-v13';
+const CACHE = 'alumex-field-shell-v14';
 self.addEventListener('install', event => event.waitUntil((async () => {
  const cache = await caches.open(CACHE);
  const page = await fetch('/offline', {cache:'reload'});

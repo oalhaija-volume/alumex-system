@@ -6,6 +6,7 @@ import { useI18n } from '@/components/i18n/I18nProvider';
 import type { FieldProject, SalesWorkspaceData } from '@/lib/offline/types';
 import { followUpTypeLabel } from '@/lib/workflow/followUps';
 import { needsSalesFollowUp, projectLink, projectStage, projectStages, stageDetails } from '@/lib/workflow/stages';
+import { ProjectFollowUps } from './ProjectFollowUps';
 import { FollowUpFields } from './FollowUpFields';
 import { button, Notice } from './ui';
 
@@ -181,5 +182,6 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
         </aside>
       </div>}
     </div>
+    <ProjectFollowUps projectId={project.id}/>
   </article>;
 }

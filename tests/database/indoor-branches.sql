@@ -42,7 +42,7 @@ begin
     perform public.update_employee_profile_with_branch(admin_id, indoor_id, '2000-01-01',
       employee.full_name, employee.username, 'Indoor Sales', true, 'Rasafa');
     raise exception 'Stale profile update was accepted';
-  exception when sqlstate '40001' then null;
+  exception when sqlstate 'PT409' then null;
   end;
   select * into employee from public.profiles where id = indoor_id;
   begin

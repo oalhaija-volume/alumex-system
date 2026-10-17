@@ -299,7 +299,7 @@ export async function PATCH(request: Request) {
     if (error.code === "PGRST202" || error.code === "42883") {
       return NextResponse.json({ error: "Apply the employee editing database migration before saving changes." }, { status: 503 });
     }
-    const status = error.code === "42501" ? 403 : error.code === "P0002" ? 404 : error.code === "40001" ? 409 : error.code === "22023" ? 400 : 500;
+    const status = error.code === "42501" ? 403 : error.code === "P0002" ? 404 : (error.code === "40001" || error.code === "PT409") ? 409 : error.code === "22023" ? 400 : 500;
     return NextResponse.json({ error: status === 500 ? "Unable to update employee. Please try again." : error.message }, { status });
   }
   return NextResponse.json({ user: data }, { headers: { "Cache-Control": "no-store" } });

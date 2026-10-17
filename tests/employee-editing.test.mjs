@@ -49,7 +49,7 @@ test('unauthenticated employee editing is rejected', async()=>{
 for(const patch of [{id:'bad-id'},{fullName:' '},{username:'bad name'},{username:'.invalid'},{role:'Owner'},{isActive:'false'},{updatedAt:''},{action:'delete'},{updatedAt:undefined}])test(`invalid employee input is rejected: ${JSON.stringify(patch)}`,async()=>{
   const {api,calls}=route();assert.equal((await api.PATCH(request({...input,...patch}))).status,400);assert.equal(calls.length,0);
 });
-for (const [code,status] of [['23505',409],['40001',409],['42501',403],['P0002',404],['PGRST202',503],['42883',503],['22023',400],['unknown',500]]) test(`profile error ${code} produces actionable HTTP ${status}`,async()=>{
+for (const [code,status] of [['23505',409],['40001',409],['PT409',409],['42501',403],['P0002',404],['PGRST202',503],['42883',503],['22023',400],['unknown',500]]) test(`profile error ${code} produces actionable HTTP ${status}`,async()=>{
   const {api}=route({databaseError:{code,message:'Example database failure'}});
   const result=await api.PATCH(request(input));assert.equal(result.status,status);
   if(code==='23505')assert.equal(result.body.error,'Username already exists.');

@@ -1,17 +1,17 @@
 export type CatalogProduct = { name: string; category: string | null; unit: string; is_active: boolean };
 export type CatalogKind = 'facade' | 'standalone' | 'opening' | 'system' | 'glass' | 'addon' | 'calculator' | 'removed' | 'other';
 const key = (name: string) => name.trim().toLowerCase().replace(/[&-]/g, ' ').replace(/\s+/g, ' ');
-const facadeNames = new Set(['cladding', 'frontek', 'swisspearl', 'swiss pearl', 'spider system', 'curtain wall', 'natural stone', 'natural stones', 'fiber cement', 'fibre cement', 'porcelain']);
+const facadeNames = new Set(['cladding', 'frontek', 'swisspearl', 'swiss pearl', 'spider system', 'curtain wall', 'natural stone', 'natural stones', 'porcelain']);
 
 export function catalogKind(product: Pick<CatalogProduct, 'name' | 'category'>): CatalogKind {
   const name = key(product.name);
-  if (['windows doors', 'windows and doors', 'reynaers system', 'aluman system'].includes(name)) return 'removed';
+  if (['windows doors', 'windows and doors', 'reynaers system', 'aluman system', 'photocell doors', 'fiber cement', 'fibre cement'].includes(name)) return 'removed';
   if (name === 'skylight') return 'calculator';
   if (facadeNames.has(name)) return 'facade';
-  if (['photocell door', 'photocell doors', 'a swing door', 'swing door'].includes(name) || name.startsWith('photocell door ')) return 'standalone';
+  if (['photocell door', 'a swing door', 'swing door'].includes(name) || name.startsWith('photocell door ')) return 'standalone';
   if (['louver', 'louvres', 'louvers', 'lift slide', 'lift and slide'].includes(name)) return 'opening';
-  if (['sandblasted glass', 'low e glass'].includes(name)) return 'glass';
-  if (isRollerShutter(product) || isShutterBox(product) || isPushout(product) || ['tilt turn', 'tilt and turn', 'saint gobain glass', 'glass film shades', 'glass film shading', 'georgian bars', 'georgien bars'].includes(name) || name.startsWith('hydraulic door closer')) return 'addon';
+  if (['sandblasted glass', 'low e glass', 'saint gobain glass'].includes(name)) return 'glass';
+  if (isRollerShutter(product) || isShutterBox(product) || isPushout(product) || ['tilt turn', 'tilt and turn', 'glass film shades', 'glass film shading', 'georgian bars', 'georgien bars'].includes(name) || name.startsWith('hydraulic door closer')) return 'addon';
   const category = product.category?.toLowerCase();
   if (category === 'facade_service' || category === 'cladding_material') return 'facade';
   if (category === 'standalone_product' || category === 'service') return 'standalone';
@@ -49,8 +49,8 @@ export function catalogUsage(product: Pick<CatalogProduct,'name'|'category'>) {
   if(['tilt turn','tilt and turn'].includes(name)) return 'Window add-on only.';
   if(name.startsWith('hydraulic door closer')) return 'Door add-on only.';
   if(['georgian bars','georgien bars'].includes(name)) return 'Window and door add-on, priced by length.';
-  if(name==='sandblasted glass') return 'Priced glass option for windows and doors.';
-  if(name==='saint gobain glass'||name.startsWith('glass film')) return 'Glass add-on for glazed openings.';
+  if(['sandblasted glass','saint gobain glass'].includes(name)) return 'Priced glass option for windows and doors.';
+  if(name.startsWith('glass film')) return 'Glass add-on for glazed openings.';
   return catalogGroups.find(group=>group.kind===catalogKind(product))?.description ?? '';
 }
 export function compatibleAddon(product: CatalogProduct, structuralType: string | null, mainProduct?: CatalogProduct): boolean {
@@ -62,7 +62,7 @@ export function compatibleAddon(product: CatalogProduct, structuralType: string 
   const name=key(product.name);
   if(['tilt turn','tilt and turn'].includes(name)) return window;
   if(name.startsWith('hydraulic door closer')) return door;
-  if(name==='saint gobain glass'||name.startsWith('glass film')) return window||door||curtain;
+  if(name.startsWith('glass film')) return window||door||curtain;
   return window||door;
 }
 export function compatibleGlass(product: CatalogProduct, structuralType: string | null, mainProduct?: CatalogProduct) {

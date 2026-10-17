@@ -197,25 +197,25 @@ const correctedCatalog=[...catalog,
  product('roller','Roller Shutters','sqm'),product('foam','Roller Shutter - Foam','sqm','service_variant'),product('box','Roller Shutter Box'),
  product('sand','Sandblasted Glass','sqm'),product('saint','Saint-Gobain Glass','sqm'),product('film','Glass Film Shading','sqm'),
  product('georgian','Georgian Bars','meter'),product('lift','Lift & Slide'),product('louver','Louver','sqm'),
- product('photocell','Photocell Doors'),product('reynaers','Reynaers System','sqm','aluminum_system'),product('aluman','Aluman System','sqm','aluminum_system'),
+ product('photocell','Photocell Door - GEZE'),product('photocell-turkey','Photocell Door - Turkey'),product('photocell-generic','Photocell Doors'),product('fiber','Fiber Cement','sqm','facade_service'),product('reynaers','Reynaers System','sqm','aluminum_system'),product('aluman','Aluman System','sqm','aluminum_system'),
  product('windows','Windows & Doors','sqm','aluminum_section'),product('skylight','Skylight','sqm','service'),
 ];
 const plainChoice={openingId:opening.id,systemId:'alumex',extras:[]};
 const surface={label:'Front elevation',width:10,height:3,quantity:2};
 
 test('catalog classification overrides incorrect legacy categories and excludes retired or calculator products',()=>{
- for(const name of ['Cladding','Frontek','Swisspearl','Swiss Pearl','Spider System','Curtain Wall','Natural stones','Natural Stone','Fiber Cement','Porcelain']){
+ for(const name of ['Cladding','Frontek','Swisspearl','Swiss Pearl','Spider System','Curtain Wall','Natural stones','Natural Stone','Porcelain']){
   assert.equal(catalogRules.catalogKind(product(name,name)), 'facade');
   assert.equal(catalogRules.normalizeCatalogItem(product(name,name)).unit,'sqm');
  }
- for(const name of ['Photocell Doors','Photocell Door - GEZE','A Swing Door'])assert.equal(catalogRules.catalogKind(product(name,name)), 'standalone');
+ for(const name of ['Photocell Door','Photocell Door - GEZE','Photocell Door - Turkey','A Swing Door'])assert.equal(catalogRules.catalogKind(product(name,name)), 'standalone');
  for(const name of ['Louver','Lift & Slide'])assert.equal(catalogRules.catalogKind(product(name,name)), 'opening');
  const systems=pricing.systemOptions(opening,correctedCatalog).map(p=>p.id);
  assert.ok(systems.includes('lift')&&systems.includes('louver'));
  for(const id of ['reynaers','aluman','windows','skylight'])assert.ok(!systems.includes(id));
  const standalone=pricing.additionalOptions(correctedCatalog).map(p=>p.id);
- assert.deepEqual(standalone,['swing','cladding','curtain','photocell']);
- assert.deepEqual(pricing.glassOptions(opening,correctedCatalog).map(p=>p.id),['glass','sand']);
+ assert.deepEqual(standalone,['swing','cladding','curtain','photocell','photocell-turkey']);
+ assert.deepEqual(pricing.glassOptions(opening,correctedCatalog).map(p=>p.id),['glass','sand','saint']);
 });
 
 test('standalone facade pricing sums measured areas and snapshots measurements; client totals and quantities are ignored',()=>{
@@ -245,12 +245,16 @@ test('window and door accessories enforce compatibility and shutter-box dependen
  assert.ok(!pricing.addonOptions(door,correctedCatalog).some(p=>p.id==='tilt'));
  assert.ok(!pricing.addonOptions(opening,correctedCatalog).some(p=>p.id==='hydraulic'));
  assert.ok(pricing.addonOptions(door,correctedCatalog).some(p=>p.id==='hydraulic'));
- const valid=[{id:'roller',quantity:1},{id:'box',quantity:1},{id:'saint',quantity:1},{id:'georgian',quantity:2.5}];
+ const valid=[{id:'roller',quantity:1},{id:'box',quantity:1},{id:'film',quantity:1},{id:'georgian',quantity:2.5}];
  const quote=pricing.priceQuotation([opening],[{...plainChoice,glassId:'sand',extras:valid}],correctedCatalog,'actor');
  assert.deepEqual(quote.lines[0].extras.map(e=>e.total),[18000,10000,18000,25000]);
  for(const extras of [[{id:'box',quantity:1}],[{id:'cladding',quantity:1}],[{id:'swing',quantity:1}],[{id:'skylight',quantity:1}],[{id:'hydraulic',quantity:1}],[{id:'pushout',quantity:1}],[{id:'roller',quantity:1},{id:'foam',quantity:1}]])assert.throws(()=>pricing.priceQuotation([opening],[{...plainChoice,extras}],correctedCatalog,'actor'));
  assert.throws(()=>pricing.priceQuotation([door],[{...plainChoice,extras:[{id:'tilt',quantity:1}]}],correctedCatalog,'actor'));
- assert.throws(()=>pricing.priceQuotation([opening],[{...plainChoice,glassId:'saint'}],correctedCatalog,'actor'));
+ assert.throws(()=>pricing.priceQuotation([opening],[{...plainChoice,extras:[{id:'saint',quantity:1}]}],correctedCatalog,'actor'));
+ const glassQuote=pricing.priceQuotation([opening],[{...plainChoice,glassId:'saint'}],correctedCatalog,'actor');
+ assert.equal(glassQuote.lines[0].glass.name,'Saint-Gobain Glass');assert.equal(glassQuote.lines[0].glass.total,18000);
+ assert.ok(!pricing.addonOptions(opening,correctedCatalog).some(p=>p.id==='saint'));
+ assert.equal(catalogRules.normalizeCatalogItem(product('saint','Saint-Gobain Glass','sqm')).category,'glass_option');
  assert.throws(()=>pricing.priceQuotation([opening],[{...plainChoice,systemId:'louver',glassId:'sand'}],correctedCatalog,'actor'));
 });
 
@@ -258,7 +262,7 @@ test('standalone doors are independently priced and skylights are excluded from 
  const quote=pricing.priceQuotation([],[],correctedCatalog,'actor',[{id:'photocell',quantity:2},{id:'swing',quantity:1}]);assert.equal(quote.total,30000);
  const skylight={...opening,id:'sky',opening_type:'Skylight',opening_direction:null};
  const mixed=pricing.priceQuotation([opening,skylight],[plainChoice],correctedCatalog,'actor');assert.equal(mixed.lines.length,1);
- for(const id of ['skylight','reynaers','aluman','windows','tilt','sand'])assert.throws(()=>pricing.priceQuotation([],[],correctedCatalog,'actor',[{id,quantity:1}]));
+ for(const id of ['skylight','reynaers','aluman','windows','tilt','sand','photocell-generic','fiber'])assert.throws(()=>pricing.priceQuotation([],[],correctedCatalog,'actor',[{id,quantity:1}]));
 });
 
 test('Operations receives facade measurements and pushout counts without monetary fields',()=>{
@@ -266,4 +270,13 @@ test('Operations receives facade measurements and pushout counts without monetar
  const safe=load('../src/lib/workflow/operations.ts').operationalAdditionalItems(quote);
  assert.deepEqual(safe,[{name:'Curtain Wall',quantity:60,unit:'sqm',measurements:[surface],extras:[{name:'Curtain Wall Pushout',quantity:3,unit:'item'}]}]);
  assert.equal(/rate|price|total|signature|contract/.test(JSON.stringify(safe)),false);
+});
+
+test('removed generic photocell and fiber cement cannot be offered even with legacy active flags',()=>{
+ for(const name of ['Photocell Doors','Fiber Cement','Fibre Cement']){
+  const item=product(name,name,'sqm','facade_service');
+  assert.equal(catalogRules.catalogKind(item),'removed');
+  assert.equal(catalogRules.isAvailable(item),false);
+  assert.equal(catalogRules.normalizeCatalogItem(item).is_active,false);
+ }
 });

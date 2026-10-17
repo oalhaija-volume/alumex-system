@@ -10,10 +10,11 @@ import type { Json } from '@/lib/supabase/database.types';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export async function GET(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
- const admin=createAdminClient();const profile=await admin.from('profiles').select('full_name,username').eq('id',auth.user.id).single();
- const actor={id:auth.user.id,name:profile.data?.full_name??profile.data?.username??'Employee',role:auth.role};
+ const admin=createAdminClient();const profile=await admin.from('profiles').select('full_name,username,branch').eq('id',auth.user.id).single();
+ if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
+ const actor={id:auth.user.id,name:profile.data?.full_name??profile.data?.username??'Employee',role:auth.role,branch:profile.data?.branch??null};
  if(new URL(request.url).searchParams.has('session'))return NextResponse.json({actor},{headers:{'Cache-Control':'no-store'}});
- let query=admin.from('projects').select('id,project_number,project_name,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,project_notes,created_at,created_by,updated_at,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role').order('created_at',{ascending:false});
+ let query=admin.from('projects').select('id,branch,project_number,project_name,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,project_notes,created_at,created_by,updated_at,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role').order('created_at',{ascending:false});
  if(auth.role==='Outdoor Sales')query=query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);
  const projects=await query;
  if(projects.error)return NextResponse.json({error:'Unable to download projects.'},{status:500});

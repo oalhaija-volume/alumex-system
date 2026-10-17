@@ -122,6 +122,7 @@ export type Database = {
           email: string;
           username: string | null;
           full_name: string | null;
+          branch: "Karkh" | "Rasafa" | null;
           role: Database["public"]["Enums"]["app_role"];
           is_active: boolean;
           status: string;
@@ -133,6 +134,7 @@ export type Database = {
           email: string;
           username?: string | null;
           full_name?: string | null;
+          branch?: "Karkh" | "Rasafa" | null;
           role?: Database["public"]["Enums"]["app_role"];
           is_active?: boolean;
           status?: string;
@@ -1447,6 +1449,10 @@ export type Database = {
     };
     Functions: {
       save_catalog_prices: { Args: { p_changes: Json }; Returns: { id: string; price: number }[] };
+      update_employee_profile_with_branch: {
+        Args: { p_actor: string; p_employee: string; p_expected_updated_at: string; p_full_name: string; p_username: string; p_role: string; p_is_active: boolean; p_branch: string | null };
+        Returns: Json;
+      };
       update_employee_profile: {
         Args: { p_actor: string; p_employee: string; p_expected_updated_at: string; p_full_name: string; p_username: string; p_role: string; p_is_active: boolean };
         Returns: Json;

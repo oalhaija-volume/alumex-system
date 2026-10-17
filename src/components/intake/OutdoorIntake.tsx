@@ -44,6 +44,7 @@ export function OutdoorIntake() {
       setError(t("mobileIntake.required"));
       return;
     }
+    if(employeeState.actor.role==='Indoor Sales'&&!employeeState.actor.branch){setError('Ask Admin to assign your Karkh or Rasafa branch before creating a project.');return;}
     if(employeeState.actor.role==='Indoor Sales'&&!outdoorAssignee){setError('Assign an Outdoor Sales employee to collect the initial measurements.');return;}
     setSaving(true);
     setError("");

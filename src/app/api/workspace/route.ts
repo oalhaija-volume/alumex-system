@@ -5,7 +5,7 @@ import { normalizeFollowUp,normalizeMeasurementAssignment } from '@/lib/workflow
 import { salesProject,salesRoles } from '@/lib/workflow/access';
 export async function GET(){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
- const admin=createAdminClient();let query=admin.from('projects').select('id,project_name,project_number,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,created_by,created_at,updated_at,project_notes,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role').order('created_at',{ascending:false});
+ const admin=createAdminClient();let query=admin.from('projects').select('id,branch,project_name,project_number,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,created_by,created_at,updated_at,project_notes,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role').order('created_at',{ascending:false});
  if(auth.role==='Outdoor Sales')query=query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);
  const result=await query;
  if(result.error)return NextResponse.json({error:'Unable to load projects.'},{status:500});

@@ -45,14 +45,14 @@ export async function GET() {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("profiles")
-    .select("id, email, username, full_name, role, status, is_active, created_at, updated_at")
+    .select("id, email, username, full_name, role, branch, status, is_active, created_at, updated_at")
     .order("created_at", { ascending: false });
 
   if (error) {
     if (isMissingUsernameColumn(error)) {
       const { data: fallbackData, error: fallbackError } = await admin
         .from("profiles")
-        .select("id, email, full_name, role, status, is_active, created_at, updated_at")
+        .select("id, email, full_name, role, branch, status, is_active, created_at, updated_at")
         .order("created_at", { ascending: false });
 
       if (fallbackError) {
@@ -97,6 +97,7 @@ export async function POST(request: Request) {
     password?: unknown;
     role?: unknown;
     fullName?: unknown;
+    branch?: unknown;
   } | null;
   const fullName = typeof body?.fullName === "string" ? body.fullName.trim() : "";
   const username = typeof body?.username === "string" ? normalizeUsername(body.username) : "";
@@ -109,6 +110,17 @@ export async function POST(request: Request) {
       { error: "Enter employee name, username, role, and a password of at least 8 characters." },
       { status: 400 },
     );
+  }
+
+  const branch = body?.branch === "" || body?.branch == null ? null : body.branch;
+  if (branch !== null && branch !== "Karkh" && branch !== "Rasafa") {
+    return NextResponse.json({ error: "Choose Karkh or Rasafa." }, { status: 400 });
+  }
+  if (branch !== null && roleCheck.role !== "Admin") {
+    return NextResponse.json({ error: "Only Admin can assign employee branches." }, { status: 403 });
+  }
+  if (role === "Indoor Sales" && roleCheck.role === "Admin" && branch === null) {
+    return NextResponse.json({ error: "Choose a branch for the Indoor Sales employee." }, { status: 400 });
   }
 
   if (!isValidUsername(username)) {
@@ -193,6 +205,7 @@ export async function POST(request: Request) {
       email: email.toLowerCase(),
       username,
       full_name: fullName || null,
+      branch,
       role,
       status: "Active",
       is_active: true,
@@ -216,7 +229,7 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json(
-    { user: { id: created.user.id, username, full_name: fullName, role } },
+    { user: { id: created.user.id, username, full_name: fullName, role, branch } },
     { status: 201, headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -229,7 +242,7 @@ export async function PATCH(request: Request) {
   }
   const body = (await request.json().catch(() => null)) as {
     id?: unknown; action?: unknown; password?: unknown; fullName?: unknown;
-    username?: unknown; role?: unknown; isActive?: unknown; updatedAt?: unknown;
+    username?: unknown; role?: unknown; isActive?: unknown; updatedAt?: unknown; branch?: unknown;
   } | null;
   if (!body || typeof body.id !== "string" ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.id)) {
@@ -266,10 +279,21 @@ export async function PATCH(request: Request) {
       typeof body.updatedAt !== "string" || !Number.isFinite(Date.parse(body.updatedAt))) {
     return NextResponse.json({ error: "Enter a valid employee name, username, role and status." }, { status: 400 });
   }
-  const { data, error } = await admin.rpc("update_employee_profile", {
+  const hasBranch = Object.hasOwn(body, "branch");
+  const branch = body.branch === "" || body.branch == null ? null : body.branch;
+  if (hasBranch && branch !== null && branch !== "Karkh" && branch !== "Rasafa") {
+    return NextResponse.json({ error: "Choose Karkh or Rasafa." }, { status: 400 });
+  }
+  if (hasBranch && actor.role !== "Admin") {
+    return NextResponse.json({ error: "Only Admin can assign employee branches." }, { status: 403 });
+  }
+  const args = {
     p_actor: actor.user.id, p_employee: body.id, p_expected_updated_at: body.updatedAt,
     p_full_name: fullName, p_username: username, p_role: body.role, p_is_active: body.isActive,
-  });
+  };
+  const { data, error } = hasBranch
+    ? await admin.rpc("update_employee_profile_with_branch", { ...args, p_branch: branch })
+    : await admin.rpc("update_employee_profile", args);
   if (error) {
     if (error.code === "23505") return NextResponse.json({ error: "Username already exists." }, { status: 409 });
     if (error.code === "PGRST202" || error.code === "42883") {

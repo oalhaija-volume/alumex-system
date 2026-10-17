@@ -11,6 +11,7 @@ type Employee = {
   username: string | null;
   email: string;
   role: string;
+  branch: "Karkh" | "Rasafa" | null;
   status: string;
   is_active: boolean;
   updated_at: string;
@@ -71,6 +72,7 @@ function EmployeeEditor({ employee, isAdmin, isSelf, onCancel, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [resetting, setResetting] = useState(false);
+  const [selectedRole, setSelectedRole] = useState(employee.role);
   const accessLocked = isSelf || primaryAdmin(employee);
   const options = [...employeeRoles, ...(isAdmin ? ['Admin', 'Company Owner'] : [])];
   if (!options.includes(employee.role)) options.push(employee.role);
@@ -87,6 +89,7 @@ function EmployeeEditor({ employee, isAdmin, isSelf, onCancel, onSaved }: {
         body: JSON.stringify({ id: employee.id, action: 'update-profile', updatedAt: employee.updated_at,
           fullName: values.get('fullName'), username: values.get('username'),
           role: accessLocked ? employee.role : values.get('role'),
+          ...(isAdmin ? { branch: values.get('branch') } : {}),
           isActive: accessLocked ? employee.is_active : values.get('status') === 'Active' }),
       });
       onSaved(result.user);
@@ -103,9 +106,12 @@ function EmployeeEditor({ employee, isAdmin, isSelf, onCancel, onSaved }: {
         <div className="grid gap-5 sm:grid-cols-2">
           <label>{term('Employee name')}<input ref={nameInput} required name="fullName" defaultValue={employee.full_name ?? ''} maxLength={150} autoComplete="off" className={field} /></label>
           <label>{term('Username')}<input required name="username" defaultValue={employee.username ?? ''} dir="ltr" autoComplete="off" pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]{1,62}[a-zA-Z0-9]" className={field} /></label>
-          <label>{term('Role')}<select required name="role" defaultValue={employee.role} disabled={accessLocked} className={`${field} disabled:bg-slate-100`}>
+          <label>{term('Role')}<select required name="role" value={selectedRole} onChange={event => setSelectedRole(event.target.value)} disabled={accessLocked} className={`${field} disabled:bg-slate-100`}>
             {options.map(role => <option key={role} value={role}>{term(role)}</option>)}
           </select></label>
+          {isAdmin && <label>{term('Branch')}<select name="branch" defaultValue={employee.branch ?? ''} required={selectedRole === 'Indoor Sales'} className={field}>
+            <option value="">{term('Not assigned')}</option><option value="Karkh">{term('Karkh')}</option><option value="Rasafa">{term('Rasafa')}</option>
+          </select><span className="mt-2 block text-xs text-slate-500">{term('New projects use this branch. Existing projects keep their original branch.')}</span></label>}
           <label>{term('Account status')}<select name="status" defaultValue={employee.is_active ? 'Active' : 'Inactive'} disabled={accessLocked} className={`${field} disabled:bg-slate-100`}>
             <option value="Active">{term('Active')}</option><option value="Inactive">{term('Inactive')}</option>
           </select></label>
@@ -129,6 +135,7 @@ export function EmployeeWorkspace() {
   const [saving, setSaving] = useState(false);
   const [show, setShow] = useState(false);
   const [notice, setNotice] = useState('');
+  const [newRole, setNewRole] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const editButton = useRef<HTMLButtonElement | null>(null);
   const isAdmin = role === 'Admin';
@@ -148,7 +155,7 @@ export function EmployeeWorkspace() {
     setSaving(true); setError(''); setNotice('');
     try {
       await api('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(values)) });
-      form.reset(); setShow(false);
+      form.reset(); setShow(false); setNewRole('');
       setNotice('Employee added. They can sign in with the username and password you set.');
       await reload();
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to add employee.'); }
@@ -162,7 +169,10 @@ export function EmployeeWorkspace() {
       <fieldset disabled={saving}>
         <div className="grid gap-5 sm:grid-cols-2">
           <label>{term('Employee name')}<input required name="fullName" maxLength={150} autoComplete="off" className={field} /></label>
-          <label>{term('Role')}<select required name="role" aria-label={term('Role')} className={field}><option value="">{term('Choose role')}</option>{[...employeeRoles, ...(isAdmin ? ['Admin', 'Company Owner'] : [])].map(option => <option key={option} value={option}>{term(option)}</option>)}</select></label>
+          <label>{term('Role')}<select required name="role" aria-label={term('Role')} value={newRole} onChange={event => setNewRole(event.target.value)} className={field}><option value="">{term('Choose role')}</option>{[...employeeRoles, ...(isAdmin ? ['Admin', 'Company Owner'] : [])].map(option => <option key={option} value={option}>{term(option)}</option>)}</select></label>
+          {isAdmin && <label>{term('Branch')}<select name="branch" required={newRole === 'Indoor Sales'} className={field}>
+            <option value="">{term('Not assigned')}</option><option value="Karkh">{term('Karkh')}</option><option value="Rasafa">{term('Rasafa')}</option>
+          </select><span className="mt-2 block text-xs text-slate-500">{term('Required for Indoor Sales. New quotations and contracts show this branch.')}</span></label>}
           <label>{term('Username')}<input required name="username" dir="ltr" autoComplete="off" pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]{1,62}[a-zA-Z0-9]" className={field} /></label>
           <label>{term('Password')}<input required name="password" aria-label={term('Password')} aria-describedby="password-help" type={show ? 'text' : 'password'} autoComplete="new-password" minLength={8} className={field} /><span id="password-help" className="mt-2 block text-xs text-slate-500">{term('At least 8 characters. Passwords are never shown in the employee list.')}</span></label>
         </div>
@@ -178,7 +188,7 @@ export function EmployeeWorkspace() {
       const editable = isAdmin || (role === 'HR' && !['Admin','Company Owner'].includes(employee.role??'') && !primaryAdmin(employee));
       return <article key={employee.id} className={card}>
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0"><h3 className="break-words font-semibold">{employee.full_name || employee.username}</h3><p dir="ltr" className="mt-1 break-all text-sm text-slate-500">{employee.username}</p><p className="mt-2 text-sm text-slate-600">{term(employee.role)} · {term(employee.status)}</p></div>
+          <div className="min-w-0"><h3 className="break-words font-semibold">{employee.full_name || employee.username}</h3><p dir="ltr" className="mt-1 break-all text-sm text-slate-500">{employee.username}</p><p className="mt-2 text-sm text-slate-600">{term(employee.role)} · {term(employee.status)}</p>{(employee.role === 'Indoor Sales' || employee.branch) && <p className="mt-2 text-sm font-medium text-slate-700">{term('Branch')}: {term(employee.branch ?? 'Not assigned')}</p>}</div>
           {editable && <button type="button" className={secondary} aria-label={term('Edit {name}', { name: employee.full_name || employee.username || term('Employee') })} aria-expanded={editingId === employee.id} disabled={editingId !== null} onClick={event => { editButton.current = event.currentTarget; setEditingId(employee.id); setNotice(''); }}>{term('Edit')}</button>}
         </div>
         {editingId === employee.id && <EmployeeEditor employee={employee} isAdmin={isAdmin} isSelf={employee.id === userId} onCancel={closeEditor} onSaved={saved} />}

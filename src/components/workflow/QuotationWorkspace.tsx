@@ -13,7 +13,7 @@ import { QuotationOpeningForm } from './QuotationOpeningForm';
 import { DocumentHeader,DocumentParties,OpeningSchedule,DocumentFooter,DocumentPaper } from './CommercialDocument';
 import { api,button,card,field,Notice,secondary,useResource,Workspace } from './ui';
 
-type QuoteData={project:{project_name:string;project_number:string;address:string;sales_status:string};client:{name:string;mobile:string;client_type?:string};openings:MeasuredOpening[];catalog:CatalogItem[];flow:SalesFlow|null;history:QuotationRevision[]};
+type QuoteData={project:{branch?:"Karkh"|"Rasafa"|null;project_name:string;project_number:string;address:string;sales_status:string};client:{name:string;mobile:string;client_type?:string};openings:MeasuredOpening[];catalog:CatalogItem[];flow:SalesFlow|null;history:QuotationRevision[]};
 const quantityLabel=(unit?:string)=>unit==='sqm'?'Area (m²)':unit==='meter'?'Length (m)':'Quantity';
 
 function QuoteEditor({data,projectId,reload}:{data:QuoteData;projectId:string;reload:()=>Promise<void>}) {
@@ -106,7 +106,7 @@ function QuoteEditor({data,projectId,reload}:{data:QuoteData;projectId:string;re
    {shown&&<DocumentPaper>
     <DocumentHeader kind="Quotation" number={reference} createdAt={shown.createdAt}/>
     {archived&&<p className="my-5 border border-amber-400 bg-amber-50 p-3 font-semibold text-amber-900">{term("SUPERSEDED — For reference only. This quotation cannot be approved or signed.")}{archived.contract?' '+term('Contract {number} was also superseded.',{number:archived.contract.number}):''}</p>}
-    <DocumentParties client={data.client} project={{number:data.project.project_number,address:data.project.address}}/>
+    <DocumentParties client={data.client} project={{number:data.project.project_number,address:data.project.address,branch:shown.branch === undefined ? data.project.branch : shown.branch}}/>
     <OpeningSchedule quote={shown}/><p className="document-note">{term("Prepared from the recorded initial measurements and selected specifications. Contract terms are presented in the separate client contract.")}</p><DocumentFooter reference={reference}/>
    </DocumentPaper>}
    <div className="mt-6 flex flex-wrap gap-3 print:hidden">

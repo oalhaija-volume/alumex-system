@@ -87,8 +87,8 @@ test('manager provisioning fails closed when database privacy rules are absent',
 });
 test('employee creation passes password only to Auth, never profile or response',async()=>{
  let authInput,profileInput;const route=employeeRoute({from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null}),upsert:async(value)=>{profileInput=value;return {error:null};}};},auth:{admin:{createUser:async(value)=>{authInput=value;return {data:{user:{id:'new-user'}},error:null};}}}});
- const result=await route.POST({json:async()=>({fullName:'New Employee',role:'Indoor Sales',username:'New.User',password:' pass with spaces '})});
- assert.equal(result.status,201);assert.equal(authInput.password,' pass with spaces ');assert.equal(profileInput.username,'new.user');assert.equal(profileInput.full_name,'New Employee');assert.equal('password' in profileInput,false);assert.equal(JSON.stringify(result).includes('pass with spaces'),false);
+ const result=await route.POST({json:async()=>({fullName:'New Employee',role:'Indoor Sales',branch:'Karkh',username:'New.User',password:' pass with spaces '})});
+ assert.equal(result.status,201);assert.equal(authInput.password,' pass with spaces ');assert.equal(profileInput.username,'new.user');assert.equal(profileInput.full_name,'New Employee');assert.equal(profileInput.branch,'Karkh');assert.equal('password' in profileInput,false);assert.equal(JSON.stringify(result).includes('pass with spaces'),false);
 });
 
 test('operations specification projection excludes all monetary and contractual fields',()=>{
@@ -102,9 +102,9 @@ test('operations specification projection excludes all monetary and contractual 
 for(const template of ['residential','commercial'])test(`${template} contract generation saves its uploaded terms and selected template`,async()=>{
  let input;
  const admin={from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{revision:2,stage:'approved'},error:null}),single:async()=>({data:{name:'Client',mobile:'07000',client_type:'individual'},error:null})};},rpc:async(name,args)=>{input=args;return {data:{},error:null};}};
- const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project',client_id:'client',project_name:'Site',project_number:'PRJ-1',address:'Baghdad'}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project',client_id:'client',project_name:'Site',project_number:'PRJ-1',address:'Baghdad',branch:'Rasafa'}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
  const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'contract',revision:2,template})}),{params:Promise.resolve({projectId:'project'})});
- assert.equal(result.status,200);assert.equal(input.p_payload.template,template);assert.deepEqual(input.p_payload.terms,termsData[template]);
+ assert.equal(result.status,200);assert.equal(input.p_payload.template,template);assert.equal(input.p_payload.project.branch,'Rasafa');assert.deepEqual(input.p_payload.terms,termsData[template]);
  const payments=input.p_payload.terms.find(x=>x.title==='payment terms').text;
  assert.match(payments,template==='commercial'?/25%/:/50/);
  assert.ok(input.p_payload.terms.some(x=>x.text.includes('عشرة سنوات')));
@@ -278,5 +278,13 @@ test('removed generic photocell and fiber cement cannot be offered even with leg
   assert.equal(catalogRules.catalogKind(item),'removed');
   assert.equal(catalogRules.isAvailable(item),false);
   assert.equal(catalogRules.normalizeCatalogItem(item).is_active,false);
+ }
+});
+
+test('creating an Indoor Sales account requires a valid branch from Admin',async()=>{
+ for(const [actorRole,branch,status] of [['Admin',undefined,400],['Admin','Unknown',400],['HR','Karkh',403]]){
+  const route=employeeRoute({},actorRole);
+  const result=await route.POST({json:async()=>({fullName:'Employee',role:'Indoor Sales',username:'employee',password:'secure-example',branch})});
+  assert.equal(result.status,status);
  }
 });

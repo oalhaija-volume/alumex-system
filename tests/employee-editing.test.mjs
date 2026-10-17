@@ -110,3 +110,29 @@ test('legacy Sales User profiles can retain their role while editing information
   const result=await api.PATCH(request({...input,role:'Sales User'}));
   assert.equal(result.status,200);assert.equal(calls[0].args.p_role,'Sales User');
 });
+
+for (const branch of ['Karkh','Rasafa']) test(`Admin saves ${branch} together with the employee profile`,async()=>{
+ const {api,calls}=route();
+ const result=await api.PATCH(request({...input,role:'Indoor Sales',branch}));
+ assert.equal(result.status,200);assert.equal(calls[0].name,'update_employee_profile_with_branch');
+ assert.equal(calls[0].args.p_branch,branch);assert.equal(calls[0].args.p_actor,'actor');
+});
+test('invalid branches and non-admin branch edits never reach the database',async()=>{
+ for(const [role,branch,status] of [['Admin','Baghdad',400],['Admin',{},400],['HR','Karkh',403],['HR',null,403]]){
+  const {api,calls}=route({role});assert.equal((await api.PATCH(request({...input,branch}))).status,status);assert.equal(calls.length,0);
+ }
+});
+test('employee branch selector is available to Admin and hidden from HR',()=>{
+ assert.match(render('Admin',true),/<select name="branch"/);
+ assert.match(render('Admin',true),/<option value="Karkh">Karkh/);
+ assert.match(render('Admin',true),/<option value="Rasafa">Rasafa/);
+ assert.doesNotMatch(render('HR',true),/<select name="branch"/);
+});
+for (const branch of ['Karkh','Rasafa',null]) test(`printed document renders the stored branch: ${branch}`,()=>{
+ const {DocumentParties}=load('../src/components/workflow/CommercialDocument.tsx',{
+  'react/jsx-runtime':jsxRuntime,
+  '@/components/i18n/I18nProvider':{useI18n:()=>({term:value=>value})},
+ });
+ const markup=renderToStaticMarkup(React.createElement(DocumentParties,{client:{name:'Client',mobile:'07700000000'},project:{number:'PRJ-TEST',address:'Baghdad',branch}}));
+ if(branch)assert.match(markup,new RegExp('From '+branch));else assert.doesNotMatch(markup,/From Karkh|From Rasafa/);
+});

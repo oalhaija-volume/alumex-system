@@ -27,6 +27,11 @@ export async function POST(request: Request) {
   if(assignee&&(typeof assignee!=='string'||!/^[0-9a-f-]{36}$/i.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
   if(auth.role==='Indoor Sales'&&!assignee)return NextResponse.json({error:'Indoor Sales must assign an Outdoor Sales employee for measurements.'},{status:400});
   const admin = createAdminClient();
+  if (auth.role === 'Indoor Sales') {
+    const profile = await admin.from('profiles').select('branch').eq('id', auth.user.id).single();
+    if (profile.error) return NextResponse.json({error:'Unable to load your employee branch.'}, {status:503});
+    if (!profile.data.branch) return NextResponse.json({error:'Ask Admin to assign your Karkh or Rasafa branch before creating a project.'}, {status:400});
+  }
   if(assignee){const employee=await admin.from('profiles').select('id').eq('id',assignee).eq('role','Outdoor Sales').eq('is_active',true).eq('status','Active').maybeSingle();if(employee.error||!employee.data)return NextResponse.json({error:'Choose an active Outdoor Sales employee.'},{status:400});}
 
   const date = new Date();
@@ -55,7 +60,7 @@ export async function POST(request: Request) {
   if (projectError) {
     // Roll back only the client just created by this failed request.
     await admin.from("clients").delete().eq("id",client.id);
-    return NextResponse.json({error:"Unable to save the project registration. Please try again."}, {status:500});
+    return NextResponse.json({error:projectError.code === '22023' ? projectError.message : "Unable to save the project registration. Please try again."}, {status:projectError.code === '22023' ? 400 : 500});
   }
   return NextResponse.json({projectId:project.id,clientId:client.id,projectNumber}, {status:201});
 }

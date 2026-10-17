@@ -60,7 +60,7 @@ for (const role of ['Admin','Indoor Sales','Outdoor Sales']) for (const readines
    '@/lib/projects/numbering':{generateNextProjectNumber:()=> 'PRJ-TEST'},
    '@/lib/supabase/admin':{createAdminClient:()=>({from(table){
     assert.ok(['clients','projects','profiles'].includes(table));
-    return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'}}),like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table}})};
+    return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'}}),like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table,branch:table==='profiles'?'Karkh':undefined}})};
    }})},
   });
   const response=await route.POST({json:async()=>({client:{clientType:'individual',clientName:'Test',mobile:'07700000000'},project:{structureReadiness:readiness,assignedOutdoorSalesId:role==='Indoor Sales'?'dddddddd-dddd-4ddd-8ddd-dddddddddddd':null},created_by:'forged'})});
@@ -84,7 +84,7 @@ for (const scenario of ['corporate','individual','missing-company','missing-site
    '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
    '@/lib/location/coordinates':coordinates,
    '@/lib/projects/numbering':{generateNextProjectNumber:()=> 'PRJ-TEST'},
-   '@/lib/supabase/admin':{createAdminClient:()=>({from(table){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'}}),like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table}})};}})},
+   '@/lib/supabase/admin':{createAdminClient:()=>({from(table){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'}}),like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table,branch:table==='profiles'?'Karkh':undefined}})};}})},
   });
   const response=await route.POST({json:async()=>({
    client:{clientType:scenario==='invalid-type'?'unknown':scenario==='individual'?'individual':'company',clientName:'Example',mobile:'07701234567',...(scenario==='missing-company'?{}:{locationLatitude:33.1,locationLongitude:44.1})},

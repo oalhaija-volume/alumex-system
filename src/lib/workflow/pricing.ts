@@ -8,7 +8,7 @@ export type AdditionalChoice = {id:string;quantity:number;measurements?:SurfaceM
 export type Charge = {id:string;name:string;unit:string;rate:number;quantity:number;total:number};
 export type StandaloneCharge = Charge & {measurements?:SurfaceMeasurement[];extras?:Charge[]};
 export type QuoteLine = {opening:MeasuredOpening;system:Charge;glass:Charge|null;extras:Charge[];area:number;total:number};
-export type QuoteSnapshot = {lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;total:number;currency:"IQD";createdAt:string;preparedBy:string};
+export type QuoteSnapshot = {branch?:"Karkh"|"Rasafa"|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;total:number;currency:"IQD";createdAt:string;preparedBy:string};
 export const money = (n:number) => new Intl.NumberFormat('en-IQ',{maximumFractionDigits:0}).format(n)+' IQD';
 export function quotableOpenings(openings:MeasuredOpening[]) { return openings.filter(opening=>opening.opening_type!=='Skylight'); }
 export function defaultSystem(opening:MeasuredOpening,catalog:CatalogItem[]) {

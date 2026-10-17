@@ -52,7 +52,7 @@ export async function POST(request:Request,context:Context){
    if(openings.error||catalog.error)throw new Error('Unable to load pricing.');
    if(!Array.isArray(body.choices))throw new Error('Select a system for every opening.');
    const measured=quotationOpenings(openings.data??[],body.newOpenings??[]);
-   payload=priceQuotation(measured,body.choices as OpeningChoice[],catalog.data as CatalogItem[],auth.user.id,(body.additionalItems??[]) as AdditionalChoice[]) as unknown as Json;
+   payload={...priceQuotation(measured,body.choices as OpeningChoice[],catalog.data as CatalogItem[],auth.user.id,(body.additionalItems??[]) as AdditionalChoice[]),branch:project.branch} as unknown as Json;
   }
   if(action==='approve' && body.confirmed!==true)throw new Error('Confirm that the client approved this quotation.');
   if(action==='contract'){
@@ -61,7 +61,7 @@ export async function POST(request:Request,context:Context){
    const client=await admin.from('clients').select('name:client_name,mobile,client_type').eq('id',project.client_id).single();
    if(client.error)throw new Error('Unable to load client information.');
    const sections=uploadedContractTerms(kind);
-   payload={number:`CT-${project.project_number}-${revision}`,createdAt:new Date().toISOString(),client:client.data,project:{name:project.project_name,number:project.project_number,address:project.address},terms:sections,template:kind};
+   payload={number:`CT-${project.project_number}-${revision}`,createdAt:new Date().toISOString(),client:client.data,project:{branch:project.branch,name:project.project_name,number:project.project_number,address:project.address},terms:sections,template:kind};
   }
   if(action==='sign'){
    if(flow?.stage!=='contract')throw new Error('Only an unsigned generated contract can be signed.');

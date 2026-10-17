@@ -9,6 +9,7 @@ function load(path, dependencies = {}) {
   }).outputText;
   const exports = {};
   new Function('require', 'exports', source)(name => {
+    if(name==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts',{});
     assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
     return dependencies[name];
   }, exports);

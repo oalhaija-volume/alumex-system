@@ -2371,7 +2371,11 @@
     "All changed prices saved. Existing quotations and contracts retain their agreed prices.": "تم حفظ جميع الأسعار المعدّلة. تبقى أسعار عروض الأسعار والعقود الحالية كما اتُفق عليها.",
     "Enter a positive price for every changed item.": "أدخل سعراً موجباً لكل عنصر تم تعديله.",
     "One or more catalog items are unavailable. Reload the catalog and try again.": "عنصر أو أكثر غير متاح في دليل الأسعار. أعد تحميل الدليل وحاول مجدداً.",
-    "Unable to save catalog prices. Your changes have not been saved.": "تعذّر حفظ أسعار الدليل. لم تُحفظ تغييراتك."
+    "Unable to save catalog prices. Your changes have not been saved.": "تعذّر حفظ أسعار الدليل. لم تُحفظ تغييراتك.",
+    "Reason not ready for measurement": "سبب عدم الجاهزية للقياس",
+    "Explain what needs to be completed before measurements can start.": "وضّح ما يجب إكماله قبل البدء بالقياسات.",
+    "Add a note explaining why the project is not ready for measurement.": "أضف ملاحظة توضّح سبب عدم جاهزية المشروع للقياس.",
+    "Keep the readiness note under 2,000 characters.": "يجب ألا تتجاوز ملاحظة الجاهزية ٢٠٠٠ حرف."
   },
   "registration": {
     "title": "عميل ومشروع جديد",

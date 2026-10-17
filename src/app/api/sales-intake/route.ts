@@ -1,3 +1,4 @@
+import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -23,6 +24,8 @@ export async function POST(request: Request) {
   if (!name || !phone || !location.isValid || !["ready", "not_ready"].includes(readiness)) {
     return NextResponse.json({error:"Enter the client name, phone number, location pin, and site readiness."}, {status:400});
   }
+  let readinessNote:string|null;
+  try{readinessNote=normalizeReadinessNote(auth.role,readiness,body?.project?.readinessNote);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   const assignee=body?.project?.assignedOutdoorSalesId;
   if(assignee&&(typeof assignee!=='string'||!/^[0-9a-f-]{36}$/i.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
   if(auth.role==='Indoor Sales'&&!assignee)return NextResponse.json({error:'Choose yourself or an Outdoor Sales employee to collect the initial measurements.'},{status:400});
@@ -52,7 +55,7 @@ export async function POST(request: Request) {
       ? body.project.address.trim().slice(0, 2000)
       : `${location.latitude}, ${location.longitude}`,
     location_latitude:location.latitude, location_longitude:location.longitude,
-    structure_readiness:readiness, status:"Draft", sales_status:"new_lead",
+    readiness_note:readinessNote, structure_readiness:readiness, status:"Draft", sales_status:"new_lead",
     original_source:auth.role === "Outdoor Sales" ? "outdoor_sales" : "showroom_walk_in",
     original_creator_id:auth.user.id, original_creator_role:auth.role,
     created_by:auth.user.id, owner_id:auth.user.id, sales_engineer_id:auth.user.id,

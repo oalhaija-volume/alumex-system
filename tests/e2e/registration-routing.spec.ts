@@ -40,7 +40,10 @@ for (const actor of [fatma, ehab]) {
         await page.getByPlaceholder('Enter full name').fill('Routing test client');
         await page.getByPlaceholder('07xx xxx xxxx').fill('07700000000');
         await page.getByRole('button', { name: 'Project location map', exact: true }).click({ position: { x: 80, y: 80 } });
-        if (!ready) await page.getByRole('radio', { name: /Not ready yet/ }).check();
+        if (!ready) {
+          await page.getByRole('radio', { name: /Not ready yet/ }).check();
+          if(actor.role==='Outdoor Sales')await page.getByLabel('Reason not ready for measurement').fill('Plastering unfinished');
+        }
         if (actor.role === 'Indoor Sales') {
           await expect(page.locator('#outdoor-assignee')).toHaveValue(ehab.id);
           await expect(page.getByRole('button', { name: 'Continue to measurements', exact: false })).toHaveCount(0);
@@ -78,7 +81,7 @@ for (const actor of [fatma, ehab]) {
 }
 
 for (const role of ['Indoor Sales', 'Sales Director', 'Outdoor Sales', 'Admin', 'CEO', 'Company Owner']) {
-  test(`${role}: offline CRM and history enforce the same access policy`, async ({ page }) => {
+  test(`${role}: offline CRM and history enforce the same access policy`, async ({ page, isMobile }) => {
     const actor = { ...fatma, role };
     const state = {
       actor, indoorSales: [{ id: fatma.id, name: fatma.name }], outdoorSales: [{ id: ehab.id, name: ehab.name }],
@@ -116,11 +119,13 @@ for (const role of ['Indoor Sales', 'Sales Director', 'Outdoor Sales', 'Admin', 
         await expect(page.locator('article')).toHaveCount(1);
       }
     } else {
-      await expect(page.getByRole('alert').filter({ hasText: 'CRM access' })).toHaveText('CRM access is limited to Indoor Sales and company leadership.');
+      if(isMobile)await expect(page.getByRole('heading',{name:'Measurement assignments',exact:true})).toBeVisible();
+      else await expect(page.getByRole('alert').filter({ hasText: 'CRM access' })).toHaveText('CRM access is limited to Indoor Sales and company leadership.');
       await expect(page.getByRole('button', { name: 'Follow-ups', exact: true })).toHaveCount(0);
       await expect(page.locator('article')).toHaveCount(0);
       await page.goto('/offline?path=/projects/11111111-1111-4111-8111-111111111110/follow-ups');
-      await expect(page.getByRole('alert').filter({ hasText: 'CRM access' })).toHaveText('CRM access is limited to Indoor Sales and company leadership.');
+      if(isMobile)await expect(page.getByRole('heading',{name:'Measurement assignments',exact:true})).toBeVisible();
+      else await expect(page.getByRole('alert').filter({ hasText: 'CRM access' })).toHaveText('CRM access is limited to Indoor Sales and company leadership.');
       await expect(page.getByRole('heading', { name: 'Project follow-ups', exact: true })).toHaveCount(0);
     }
   });

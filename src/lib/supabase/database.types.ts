@@ -290,6 +290,7 @@ export type Database = {
           priority: "low" | "normal" | "high" | "urgent";
           estimated_value: number | null;
           project_notes: string | null;
+          readiness_note: string | null;
           last_updated_by: string | null;
           archived_at: string | null;
           archived_by: string | null;
@@ -341,6 +342,7 @@ export type Database = {
           priority?: "low" | "normal" | "high" | "urgent";
           estimated_value?: number | null;
           project_notes?: string | null;
+          readiness_note?: string | null;
           last_updated_by?: string | null;
           archived_at?: string | null;
           archived_by?: string | null;

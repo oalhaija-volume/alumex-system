@@ -9,6 +9,8 @@ import { useI18n } from "@/components/i18n/I18nProvider";
 import { ProjectLocationPicker } from "@/components/projects/ProjectLocationPicker";
 import { canAccessCRM } from '@/lib/auth/permissions';
 import Link from "next/link";
+import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
+
 
 export function OutdoorIntake() {
   const mobileOutdoor = useMobileOutdoor();
@@ -20,12 +22,14 @@ export function OutdoorIntake() {
   const [siteAddress, setSiteAddress] = useState("");
   const [location, setLocation] = useState<{ latitude: number | null; longitude: number | null }>({ latitude: null, longitude: null });
   const [readiness, setReadiness] = useState<"ready" | "not_ready" | "">("ready");
+  const [readinessNote, setReadinessNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState<{projectId:string;pending:boolean}|null>(null);
   const [offline,setOffline]=useState(false);
   const [employeeState,setEmployeeState]=useState<FieldState|null>(null);
   const [assignedOutdoorSalesId,setAssignedOutdoorSalesId]=useState('');
+  const needsReadinessNote = employeeState?.actor.role === 'Outdoor Sales' && readiness === 'not_ready';
   const canAssignMeasurements = canAccessCRM(employeeState?.actor.role);
   const outdoorAssignee = canAssignMeasurements ? assignedOutdoorSalesId || (employeeState?.actor.role === 'Indoor Sales' && employeeState.outdoorSales?.length === 1 ? employeeState.outdoorSales[0].id : '') : '';
   const selfAssigned = employeeState?.actor.role === 'Indoor Sales' && outdoorAssignee === employeeState.actor.id;
@@ -50,6 +54,7 @@ export function OutdoorIntake() {
     setSaving(true);
     setError("");
     try {
+      const note = normalizeReadinessNote(employeeState.actor.role, readiness, readinessNote);
       const response = await fieldFetch("/api/sales-intake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -63,6 +68,7 @@ export function OutdoorIntake() {
             locationLatitude: location.latitude,
             locationLongitude: location.longitude,
             structureReadiness: readiness,
+            readinessNote: note,
           },
         }),
       });
@@ -87,7 +93,7 @@ export function OutdoorIntake() {
       <p className="text-slate-600">{readiness === 'not_ready' ? term('The project is in the CRM queue. Indoor Sales will follow up until the site is ready for measurements.') : assignedEmployee ? term('The project is assigned to {name} for initial measurements.',{name:assignedEmployee.name}) : term('The project is ready. Outdoor Sales will collect the initial measurements.')}</p>
       {saved.pending && <p className="text-sm text-amber-800">{term('Saved on device · Pending sync')}</p>}
       <Link href={!canAccessCRM(employeeState?.actor.role) ? (saved.pending || offline ? "/offline?path=/dashboard" : "/dashboard") : saved.pending || offline ? '/offline?path=/mini-crm' : `/mini-crm#project-${saved.projectId}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700">{term(canAccessCRM(employeeState?.actor.role)?'Open follow-ups':mobileOutdoor?'Measurement assignments':'Dashboard')}</Link>
-      <button type="button" onClick={() => { setClientType("individual"); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setReadiness("ready"); setAssignedOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
+      <button type="button" onClick={() => { setClientType("individual"); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setReadiness("ready"); setReadinessNote(''); setAssignedOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
     </section>
   );
 
@@ -142,6 +148,11 @@ export function OutdoorIntake() {
             ))}
           </div>
         </fieldset>
+        {needsReadinessNote && <div>
+          <label htmlFor="readiness-note" className="block text-sm font-medium text-slate-800">{term('Reason not ready for measurement')} {term('(required)')}</label>
+          <p id="readiness-note-help" className="mt-2 text-xs leading-5 text-slate-500">{term('Explain what needs to be completed before measurements can start.')}</p>
+          <textarea id="readiness-note" required aria-describedby="readiness-note-help" maxLength={2000} rows={3} dir="auto" value={readinessNote} onChange={event => setReadinessNote(event.target.value)} className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
+        </div>}
         {canAssignMeasurements && <div><label className="block text-sm font-medium text-slate-800" htmlFor="outdoor-assignee">{term("Measurements by")} {employeeState?.actor.role==='Indoor Sales'?term("(required)"):term("(optional)")}</label>
           <select id="outdoor-assignee" value={outdoorAssignee} onChange={event=>setAssignedOutdoorSalesId(event.target.value)} required={employeeState?.actor.role==='Indoor Sales'} className="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base"><option value="">{employeeState?.actor.role==='Indoor Sales'?term("Choose who will record the initial measurements."):term("Not assigned")}</option>{employeeState?.actor.role==='Indoor Sales'&&<option value={employeeState.actor.id}>{term('Myself — {name}',{name:employeeState.actor.name==='Employee'?term('Employee'):employeeState.actor.name})}</option>}{employeeState?.outdoorSales?.map(employee=><option key={employee.id} value={employee.id}>{employee.name==='Employee'?term('Employee'):employee.name}</option>)}</select>
           <p className="mt-2 text-xs leading-5 text-slate-500">{employeeState?.actor.role==='Indoor Sales'?term("Choose yourself to enter measurements, or assign an Outdoor Sales employee."):term("Choose an Outdoor Sales employee if someone else will collect the measurements.")}</p>

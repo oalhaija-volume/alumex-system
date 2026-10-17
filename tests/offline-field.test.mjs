@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
+function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
 const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Employee',role:'Indoor Sales',branch:'Karkh'};
 const projectId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const payload={client:{clientType:'individual',clientName:'Client',mobile:'07000000000'},project:{assignedOutdoorSalesId:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',address:'Site',locationLatitude:33.3,locationLongitude:44.4,structureReadiness:'ready'}};
@@ -131,4 +131,21 @@ test('an empty synchronization queue makes no session or write requests',async()
  let calls=0;globalThis.fetch=async()=>{calls++;throw Error('Unexpected network request');};
  await x.client.syncFieldChanges();
  assert.equal(calls,0);assert.equal(x.active,actor.id);
+});
+
+test('Outdoor Sales cannot save a not-ready project locally without a note; the saved reason survives follow-up changes',async()=>{
+ const x=setup({actor:{...actor,role:'Outdoor Sales'}});
+ const notReady={...payload,project:{...payload.project,structureReadiness:'not_ready'}};
+ for(const readinessNote of [undefined,' \n\t ',23,'x'.repeat(2001)]){
+  await assert.rejects(x.client.saveFieldChange('register',projectId,{...notReady,project:{...notReady.project,readinessNote}}),/note/);
+  assert.equal(x.state.queue.length,0);assert.equal(x.state.projects.length,0);
+ }
+ await x.client.saveFieldChange('register',projectId,{...notReady,project:{...notReady.project,readinessNote:'  Plastering unfinished  '}});
+ assert.equal(x.state.projects[0].readiness_note,'Plastering unfinished');
+ assert.equal((await (await x.client.fieldFetch('/api/workspace')).json()).projects[0].readiness_note,'Plastering unfinished');
+ // Later CRM contact notes must not replace the original site-readiness reason.
+ x.state.actor.role='Indoor Sales';
+ await x.client.saveFieldChange('follow-up',projectId,{nextFollowUp:'2026-11-08T07:00:00Z',note:'Called client',followUpType:'call',followUpOwnerId:actor.id});
+ assert.equal(x.state.projects[0].readiness_note,'Plastering unfinished');
+ assert.equal(x.state.projects[0].project_notes,'Called client');
 });

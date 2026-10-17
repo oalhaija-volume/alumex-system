@@ -2371,7 +2371,11 @@
     "All changed prices saved. Existing quotations and contracts retain their agreed prices.": "All changed prices saved. Existing quotations and contracts retain their agreed prices.",
     "Enter a positive price for every changed item.": "Enter a positive price for every changed item.",
     "One or more catalog items are unavailable. Reload the catalog and try again.": "One or more catalog items are unavailable. Reload the catalog and try again.",
-    "Unable to save catalog prices. Your changes have not been saved.": "Unable to save catalog prices. Your changes have not been saved."
+    "Unable to save catalog prices. Your changes have not been saved.": "Unable to save catalog prices. Your changes have not been saved.",
+    "Reason not ready for measurement": "Reason not ready for measurement",
+    "Explain what needs to be completed before measurements can start.": "Explain what needs to be completed before measurements can start.",
+    "Add a note explaining why the project is not ready for measurement.": "Add a note explaining why the project is not ready for measurement.",
+    "Keep the readiness note under 2,000 characters.": "Keep the readiness note under 2,000 characters."
   },
   "registration": {
     "title": "New client & project",

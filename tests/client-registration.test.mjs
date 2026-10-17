@@ -75,7 +75,7 @@ for (const role of ['Admin','Indoor Sales','Outdoor Sales']) for (const readines
 }
 
 for (const scenario of ['corporate','individual','missing-company','missing-site','invalid-type']) {
- test(`registration separates company and site locations: ${scenario}`, async () => {
+ test(`registration requires only project site location: ${scenario}`, async () => {
   const writes=[];
   const coordinates=loadModule('../src/lib/location/coordinates.ts',{});
   const route=loadModule('../src/app/api/sales-intake/route.ts',{
@@ -87,16 +87,34 @@ for (const scenario of ['corporate','individual','missing-company','missing-site
    '@/lib/supabase/admin':{createAdminClient:()=>({from(table){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'}}),like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table}})};}})},
   });
   const response=await route.POST({json:async()=>({
-   client:{clientType:scenario==='invalid-type'?'unknown':scenario==='individual'?'individual':'company',clientName:'Example',mobile:'07701234567',locationLatitude:scenario==='missing-company'?null:33.1,locationLongitude:44.1},
+   client:{clientType:scenario==='invalid-type'?'unknown':scenario==='individual'?'individual':'company',clientName:'Example',mobile:'07701234567',...(scenario==='missing-company'?{}:{locationLatitude:33.1,locationLongitude:44.1})},
    project:{assignedOutdoorSalesId:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',address:'Selected project address',structureReadiness:'ready',locationLatitude:scenario==='missing-site'?null:33.9,locationLongitude:44.9},
   })});
-  if(['missing-company','missing-site','invalid-type'].includes(scenario)) {assert.equal(response.status,400);assert.equal(writes.length,0);return;}
+  if(['missing-site','invalid-type'].includes(scenario)) {assert.equal(response.status,400);assert.equal(writes.length,0);return;}
   assert.equal(response.status,201);
   const client=writes.find(w=>w.table==='clients').value,project=writes.find(w=>w.table==='projects').value;
-  assert.equal(client.client_type,scenario==='corporate'?'company':'individual');
-  assert.equal(client.company_name,scenario==='corporate'?'Example':null);
+  assert.equal(client.client_type,scenario==='individual'?'individual':'company');
+  assert.equal(client.company_name,scenario==='individual'?null:'Example');
   assert.equal(client.location_latitude,scenario==='corporate'?33.1:null);
   assert.equal(client.location_longitude,scenario==='corporate'?44.1:null);
   assert.equal(project.address,'Selected project address');assert.equal(project.location_latitude,33.9);assert.equal(project.location_longitude,44.9);
  });
 }
+
+for (const hasSite of [true,false]) test(`corporate offline sync requires only the project site: site=${hasSite}`,async()=>{
+ const writes=[];
+ const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const route=loadModule('../src/app/api/offline/route.ts',{
+  'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Admin',user:{id}})},
+  '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{writes.push({name,args});return {data:{id},error:null};}})},
+  '@/lib/workflow/followUps':{},'@/lib/auth/permissions':{},'@/lib/workflow/access':{salesRoles:['Admin']},
+  '@/lib/measurements/registrationOpening':{},'@/lib/location/coordinates':loadModule('../src/lib/location/coordinates.ts',{}),
+ });
+ const result=await route.POST({json:async()=>({id,userId:id,projectId:id,recordedAt:new Date().toISOString(),action:'register',payload:{client:{clientType:'company',clientName:'Example company',mobile:'07701234567'},project:{locationLatitude:hasSite?33.9:null,locationLongitude:44.9,structureReadiness:'ready'}}})});
+ if(!hasSite){assert.equal(result.status,400);assert.equal(writes.length,0);return;}
+ assert.equal(result.body.error,undefined);assert.equal(writes.length,1);
+ const payload=writes[0].args.p_payload;
+ assert.equal(payload.client.locationLatitude,null);assert.equal(payload.client.locationLongitude,null);
+ assert.equal(payload.project.locationLatitude,33.9);assert.equal(payload.project.locationLongitude,44.9);
+});

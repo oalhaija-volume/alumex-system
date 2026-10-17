@@ -40,7 +40,7 @@ export async function POST(request:Request){
   const c=body.payload.client,p=body.payload.project;
   const name=typeof c?.clientName==='string'?c.clientName.trim():'';const phone=typeof c?.mobile==='string'?c.mobile.trim():'';
   const location=parseProjectLocation(p?.locationLatitude,p?.locationLongitude);const company=parseProjectLocation(c?.locationLatitude,c?.locationLongitude);
-  if(!name||name.length>150||!phone||phone.length>80||!['individual','company'].includes(c?.clientType)||!['ready','not_ready'].includes(p?.structureReadiness)||!location.isValid||(c.clientType==='company'&&!company.isValid))return NextResponse.json({error:'Complete the client, phone, locations and site readiness.'},{status:400});
+  if(!name||name.length>150||!phone||phone.length>80||!['individual','company'].includes(c?.clientType)||!['ready','not_ready'].includes(p?.structureReadiness)||!location.isValid)return NextResponse.json({error:'Complete the client, phone, locations and site readiness.'},{status:400});
   const assignee=p?.assignedOutdoorSalesId;
   if(assignee && (typeof assignee!=='string'||!uuid.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
   if(auth.role==='Indoor Sales'&&!assignee)return NextResponse.json({error:'Indoor Sales must assign an Outdoor Sales employee for measurements.'},{status:400});

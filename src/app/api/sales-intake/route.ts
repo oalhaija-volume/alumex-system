@@ -18,9 +18,6 @@ export async function POST(request: Request) {
     return NextResponse.json({error:"Select Individual or Corporate."}, {status:400});
   }
   const companyLocation = parseProjectLocation(body?.client?.locationLatitude, body?.client?.locationLongitude);
-  if (clientType === "company" && !companyLocation.isValid) {
-    return NextResponse.json({error:"Choose the company location as well as the project site."}, {status:400});
-  }
   const readiness = body?.project?.structureReadiness;
   const location = parseProjectLocation(body?.project?.locationLatitude, body?.project?.locationLongitude);
   if (!name || !phone || !location.isValid || !["ready", "not_ready"].includes(readiness)) {

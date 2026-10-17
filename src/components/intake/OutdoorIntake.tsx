@@ -15,7 +15,6 @@ export function OutdoorIntake() {
   const { t, term,errorMessage } = useI18n();
 
   const [clientType, setClientType] = useState<"individual" | "company">("individual");
-  const [companyLocation, setCompanyLocation] = useState<{latitude:number|null;longitude:number|null}>({latitude:null,longitude:null});
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [siteAddress, setSiteAddress] = useState("");
@@ -45,10 +44,6 @@ export function OutdoorIntake() {
       setError(t("mobileIntake.required"));
       return;
     }
-    if (clientType === "company" && (companyLocation.latitude === null || companyLocation.longitude === null)) {
-      setError(t("registration.companyRequired"));
-      return;
-    }
     if(employeeState.actor.role==='Indoor Sales'&&!outdoorAssignee){setError('Assign an Outdoor Sales employee to collect the initial measurements.');return;}
     setSaving(true);
     setError("");
@@ -58,10 +53,7 @@ export function OutdoorIntake() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           registrationMode: "simple",
-          client: { clientType, clientName: name.trim(), mobile: phone.trim(),
-            locationLatitude: clientType === "company" ? companyLocation.latitude : null,
-            locationLongitude: clientType === "company" ? companyLocation.longitude : null,
-          },
+          client: { clientType, clientName: name.trim(), mobile: phone.trim() },
           project: {
             projectName: name.trim(),
             assignedOutdoorSalesId: outdoorAssignee||null,
@@ -93,7 +85,7 @@ export function OutdoorIntake() {
       <p className="text-slate-600">{readiness === 'not_ready' ? term('The project is in the CRM queue. Indoor Sales will follow up until the site is ready for measurements.') : assignedEmployee ? term('The project is assigned to {name} for initial measurements.',{name:assignedEmployee.name}) : term('The project is ready. Outdoor Sales will collect the initial measurements.')}</p>
       {saved.pending && <p className="text-sm text-amber-800">{term('Saved on device · Pending sync')}</p>}
       <Link href={!canAccessCRM(employeeState?.actor.role) ? (saved.pending || offline ? "/offline?path=/dashboard" : "/dashboard") : saved.pending || offline ? '/offline?path=/mini-crm' : `/mini-crm#project-${saved.projectId}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700">{term(canAccessCRM(employeeState?.actor.role)?'Open follow-ups':mobileOutdoor?'Measurement assignments':'Dashboard')}</Link>
-      <button type="button" onClick={() => { setClientType("individual"); setCompanyLocation({latitude:null,longitude:null}); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setReadiness("ready"); setAssignedOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
+      <button type="button" onClick={() => { setClientType("individual"); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setReadiness("ready"); setAssignedOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
     </section>
   );
 
@@ -108,7 +100,7 @@ export function OutdoorIntake() {
           <legend className="mb-3 text-sm font-medium text-slate-800">{t("registration.clientType")}</legend>
           <div className="grid grid-cols-2 gap-3">
             {(["individual", "company"] as const).map(type => <label key={type} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-md border px-4 text-sm ${clientType === type ? "border-blue-600 bg-blue-50/60" : "border-slate-300 bg-white"}`}>
-              <input type="radio" name="clientType" value={type} checked={clientType === type} onChange={() => { setClientType(type); setCompanyLocation({latitude:null,longitude:null}); setError(""); }} className="h-4 w-4 accent-blue-600" />
+              <input type="radio" name="clientType" value={type} checked={clientType === type} onChange={() => { setClientType(type); setError(""); }} className="h-4 w-4 accent-blue-600" />
               {t(`registration.${type}`)}
             </label>)}
           </div>
@@ -123,16 +115,6 @@ export function OutdoorIntake() {
             <input required maxLength={80} type="tel" dir="ltr" autoComplete="tel" placeholder="07xx xxx xxxx" value={phone} onChange={event => setPhone(event.target.value)} className="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
           </label>
         </div>
-        {clientType === "company" ? <ProjectLocationPicker key="company-location"
-          latitude={companyLocation.latitude} longitude={companyLocation.longitude} onChange={nextLocation => { setCompanyLocation(nextLocation); setError(""); }}
-          compact enableSearch={!offline} allowRadiusChange={false} showGeofence={false}
-          title={t("registration.companyLocation")} editableDescription={t("registration.companyLocationHelp")}
-          currentLocationLabel={t("registration.useLocation")}
-          searchLabel={t("registration.companyLocation")} searchPlaceholder={t("registration.searchPlaceholder")}
-          searchButtonLabel={t("registration.search")} mapAriaLabel={t("registration.companyMap")}
-          searchingLabel={t("common.loading")} locatingLabel={t("common.loading")}
-          pinPrompt={t("registration.companyPinPrompt")}
-        /> : null}
         <ProjectLocationPicker key="project-location" latitude={location.latitude} longitude={location.longitude} onChange={setLocation} onSearchSelect={setSiteAddress}
           compact enableSearch={!offline} allowRadiusChange={false} showGeofence={false}
           title={t("registration.location")} editableDescription=""
@@ -144,7 +126,7 @@ export function OutdoorIntake() {
         />
         {offline && <div className="space-y-4 rounded-md border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm text-amber-900">{term("Offline: map search needs internet. Use device location above, or enter coordinates below.")}</p>
-          {[{label:"Project site",value:location,set:setLocation},...(clientType === "company"?[{label:"Company",value:companyLocation,set:setCompanyLocation}]:[])].map(item=><fieldset key={item.label}><legend className="text-sm font-semibold">{term('{site} coordinates',{site:term(item.label)})}</legend><div className="mt-2 grid grid-cols-2 gap-3">{(["latitude","longitude"] as const).map(axis=><label key={axis} className="text-xs capitalize">{term(axis)}<input aria-label={term('{site} {axis}',{site:term(item.label),axis:term(axis)})} type="number" step="any" min={axis === "latitude"?-90:-180} max={axis === "latitude"?90:180} value={item.value[axis]??""} onChange={event=>item.set(current=>({...current,[axis]:event.target.value===""?null:Number(event.target.value)}))} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base"/></label>)}</div></fieldset>)}
+          {[{label:"Project site",value:location,set:setLocation}].map(item=><fieldset key={item.label}><legend className="text-sm font-semibold">{term('{site} coordinates',{site:term(item.label)})}</legend><div className="mt-2 grid grid-cols-2 gap-3">{(["latitude","longitude"] as const).map(axis=><label key={axis} className="text-xs capitalize">{term(axis)}<input aria-label={term('{site} {axis}',{site:term(item.label),axis:term(axis)})} type="number" step="any" min={axis === "latitude"?-90:-180} max={axis === "latitude"?90:180} value={item.value[axis]??""} onChange={event=>item.set(current=>({...current,[axis]:event.target.value===""?null:Number(event.target.value)}))} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base"/></label>)}</div></fieldset>)}
           <label className="block text-sm">{term("Project site address")}<input value={siteAddress} onChange={event=>setSiteAddress(event.target.value)} className="mt-2 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3"/></label>
         </div>}
         <fieldset>

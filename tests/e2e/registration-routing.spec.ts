@@ -56,6 +56,7 @@ for (const actor of [fatma, ehab]) {
             window.dispatchEvent(new Event('offline'));
           });
         }
+        if(!online&&actor.role==='Outdoor Sales')await page.locator('input[autocomplete="street-address"]').fill('Baghdad, Mansour');
         // Observe destinations without loading protected routes or creating records.
         await page.route('**/initial-measurements/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Measurement destination</h1>' }));
         await page.route(url => url.pathname === '/mini-crm', route => route.fulfill({ contentType: 'text/html', body: '<h1>Follow-up destination</h1>' }));

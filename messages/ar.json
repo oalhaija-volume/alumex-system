@@ -2065,6 +2065,8 @@
     "{site} {axis}": "{axis} — {site}",
     "latitude": "خط العرض",
     "longitude": "خط الطول",
+    "Enter the project site address.": "أدخل عنوان موقع المشروع.",
+    "Enter the address or area name. Coordinates are not required for offline registration.": "أدخل العنوان أو اسم المنطقة. لا يلزم إدخال الإحداثيات عند التسجيل دون اتصال.",
     "Project site address": "عنوان موقع المشروع",
     "Outdoor Sales for measurements": "موظف المبيعات الخارجية للقياسات",
     "(required)": "(مطلوب)",

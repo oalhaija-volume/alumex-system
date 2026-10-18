@@ -52,13 +52,16 @@ export async function POST(request:Request){
   const c=body.payload.client,p=body.payload.project;
   const name=typeof c?.clientName==='string'?c.clientName.trim():'';const phone=typeof c?.mobile==='string'?c.mobile.trim():'';
   const location=parseProjectLocation(p?.locationLatitude,p?.locationLongitude);const company=parseProjectLocation(c?.locationLatitude,c?.locationLongitude);
-  if(!name||name.length>150||!phone||phone.length>80||!['individual','company'].includes(c?.clientType)||!['ready','not_ready'].includes(p?.structureReadiness)||!location.isValid)return NextResponse.json({error:'Complete the client, phone, locations and site readiness.'},{status:400});
+  const address=typeof p?.address==='string'?p.address.trim():'';
+  const addressOnly=auth.role==='Outdoor Sales'&&p?.locationLatitude==null&&p?.locationLongitude==null;
+  if(addressOnly&&(!address||address.length>2000))return NextResponse.json({error:'Enter the project site address.'},{status:400});
+  if(!name||name.length>150||!phone||phone.length>80||!['individual','company'].includes(c?.clientType)||!['ready','not_ready'].includes(p?.structureReadiness)||(!location.isValid&&!addressOnly))return NextResponse.json({error:'Complete the client, phone, locations and site readiness.'},{status:400});
   let readinessNote:string|null;
   try{readinessNote=normalizeReadinessNote(auth.role,p.structureReadiness,p.readinessNote);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   const assignee=p?.assignedOutdoorSalesId;
   if(assignee && (typeof assignee!=='string'||!uuid.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
   if(auth.role==='Indoor Sales'&&!assignee)return NextResponse.json({error:'Choose yourself or an Outdoor Sales employee to collect the initial measurements.'},{status:400});
-  payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(assignee?{assignedOutdoorSalesId:assignee}:{}),address:typeof p.address==='string'?p.address.slice(0,2000):`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
+  payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(assignee?{assignedOutdoorSalesId:assignee}:{}),address:address.slice(0,2000)||`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
  }else if(body.action==='opening'){
   const opening=normalizeRegistrationOpening(body.payload);if(!opening)return NextResponse.json({error:'Complete the opening dimensions, floor, room and types.'},{status:400});payload=opening as unknown as Json;
  }else if(body.action==='follow-up'){

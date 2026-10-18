@@ -167,3 +167,22 @@ for (const endpoint of ['sales-intake','offline']) for (const note of [undefined
   else {assert.equal(writes.length,0);assert.match(response.body.error,/note/);}
  });
 }
+
+for(const scenario of ['address','omitted','blank','too-long','partial','invalid','indoor'])test(`offline address-only registration: ${scenario}`,async()=>{
+ const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',writes=[];
+ const role=scenario==='indoor'?'Indoor Sales':'Outdoor Sales';
+ const route=loadModule('../src/app/api/offline/route.ts',{
+  'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200})}},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,user:{id}})},
+  '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{writes.push(args);return {data:{id}};}})},
+  '@/lib/workflow/followUps':{},'@/lib/auth/permissions':{},'@/lib/workflow/access':{},
+  '@/lib/measurements/registrationOpening':{},'@/lib/location/coordinates':loadModule('../src/lib/location/coordinates.ts',{}),
+ });
+ const project={address:scenario==='blank'?'   ':scenario==='too-long'?'x'.repeat(2001):'  بغداد - المنصور  ',structureReadiness:'ready',...(scenario==='omitted'?{}:{locationLatitude:scenario==='partial'?33.3:scenario==='invalid'?999:null,locationLongitude:scenario==='invalid'?44.4:null})};
+ const response=await route.POST({json:async()=>({id,userId:id,projectId:id,action:'register',recordedAt:new Date().toISOString(),payload:{client:{clientType:'individual',clientName:'Offline client',mobile:'07700000000'},project}})});
+ if(!['address','omitted'].includes(scenario)){assert.equal(response.status,400);assert.equal(writes.length,0);return;}
+ assert.equal(response.status,200);assert.equal(writes.length,1);
+ assert.equal(writes[0].p_payload.project.address,'بغداد - المنصور');
+ assert.equal(writes[0].p_payload.project.locationLatitude,null);assert.equal(writes[0].p_payload.project.locationLongitude,null);
+ assert.equal(writes[0].p_actor,id);
+});

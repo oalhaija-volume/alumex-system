@@ -20,6 +20,7 @@ export function OutdoorIntake() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [siteAddress, setSiteAddress] = useState("");
+  const [offlineAddressStarted,setOfflineAddressStarted]=useState(false);
   const [location, setLocation] = useState<{ latitude: number | null; longitude: number | null }>({ latitude: null, longitude: null });
   const [readiness, setReadiness] = useState<"ready" | "not_ready" | "">("ready");
   const [readinessNote, setReadinessNote] = useState('');
@@ -29,6 +30,7 @@ export function OutdoorIntake() {
   const [offline,setOffline]=useState(false);
   const [employeeState,setEmployeeState]=useState<FieldState|null>(null);
   const [assignedOutdoorSalesId,setAssignedOutdoorSalesId]=useState('');
+  const addressOnly = employeeState?.actor.role === 'Outdoor Sales' && (offline || offlineAddressStarted);
   const needsReadinessNote = employeeState?.actor.role === 'Outdoor Sales' && readiness === 'not_ready';
   const canAssignMeasurements = canAccessCRM(employeeState?.actor.role);
   const outdoorAssignee = canAssignMeasurements ? assignedOutdoorSalesId || (employeeState?.actor.role === 'Indoor Sales' && employeeState.outdoorSales?.length === 1 ? employeeState.outdoorSales[0].id : '') : '';
@@ -45,10 +47,11 @@ export function OutdoorIntake() {
       setError('Employee workspace is still loading. Please try again.');
       return;
     }
-    if (!name.trim() || !phone.trim() || !readiness || location.latitude === null || location.longitude === null) {
+    if (!name.trim() || !phone.trim() || !readiness || (!addressOnly && (location.latitude === null || location.longitude === null))) {
       setError(t("mobileIntake.required"));
       return;
     }
+    if(addressOnly && !siteAddress.trim()){setError('Enter the project site address.');return;}
     if(employeeState.actor.role==='Indoor Sales'&&!employeeState.actor.branch){setError('Ask Admin to assign your Karkh or Rasafa branch before creating a project.');return;}
     if(employeeState.actor.role==='Indoor Sales'&&!outdoorAssignee){setError('Choose yourself or an Outdoor Sales employee to collect the initial measurements.');return;}
     setSaving(true);
@@ -64,7 +67,7 @@ export function OutdoorIntake() {
           project: {
             projectName: name.trim(),
             assignedOutdoorSalesId: outdoorAssignee||null,
-            address: siteAddress,
+            address: siteAddress.trim(),
             locationLatitude: location.latitude,
             locationLongitude: location.longitude,
             structureReadiness: readiness,
@@ -95,7 +98,7 @@ export function OutdoorIntake() {
       <p className="text-sm text-slate-600">{term('Created by')} <bdi>{saved.registeredBy==='Employee'?term('Employee'):saved.registeredBy}</bdi>{saved.createdAt&&<time dateTime={saved.createdAt} dir="ltr" className="mt-1 block w-fit max-w-full">{formatDateTime(saved.createdAt)}</time>}</p>
       {saved.pending && <p className="text-sm text-amber-800">{term('Saved on device · Pending sync')}</p>}
       <Link href={!canAccessCRM(employeeState?.actor.role) ? (saved.pending || offline ? "/offline?path=/dashboard" : "/dashboard") : saved.pending || offline ? '/offline?path=/mini-crm' : `/mini-crm#project-${saved.projectId}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700">{term(canAccessCRM(employeeState?.actor.role)?'Open follow-ups':mobileOutdoor?'Measurement assignments':'Dashboard')}</Link>
-      <button type="button" onClick={() => { setClientType("individual"); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setReadiness("ready"); setReadinessNote(''); setAssignedOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
+      <button type="button" onClick={() => { setClientType("individual"); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setOfflineAddressStarted(false); setReadiness("ready"); setReadinessNote(''); setAssignedOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
     </section>
   );
 
@@ -125,7 +128,7 @@ export function OutdoorIntake() {
             <input required maxLength={80} type="tel" dir="ltr" autoComplete="tel" placeholder="07xx xxx xxxx" value={phone} onChange={event => setPhone(event.target.value)} className="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
           </label>
         </div>
-        <ProjectLocationPicker key="project-location" latitude={location.latitude} longitude={location.longitude} onChange={setLocation} onSearchSelect={setSiteAddress}
+        {!addressOnly && <ProjectLocationPicker key="project-location" latitude={location.latitude} longitude={location.longitude} onChange={setLocation} onSearchSelect={setSiteAddress}
           compact enableSearch={!offline} allowRadiusChange={false} showGeofence={false}
           title={t("registration.location")} editableDescription=""
           currentLocationLabel={t("registration.useLocation")}
@@ -133,8 +136,12 @@ export function OutdoorIntake() {
           searchButtonLabel={t("registration.search")} mapAriaLabel={t("registration.map")}
           searchingLabel={t("common.loading")} locatingLabel={t("common.loading")}
           pinPrompt={t("registration.pinPrompt")}
-        />
-        {offline && <div className="space-y-4 rounded-md border border-amber-200 bg-amber-50 p-4">
+        />}
+        {addressOnly && <div>
+          <label className="block text-sm font-medium text-slate-800">{term("Project site address")} {term("(required)")}<input required maxLength={2000} autoComplete="street-address" dir="auto" value={siteAddress} onChange={event=>{setSiteAddress(event.target.value);setOfflineAddressStarted(true);}} className="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base"/></label>
+          <p className="mt-2 text-xs leading-5 text-slate-500">{term("Enter the address or area name. Coordinates are not required for offline registration.")}</p>
+        </div>}
+        {offline && !addressOnly && <div className="space-y-4 rounded-md border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm text-amber-900">{term("Offline: map search needs internet. Use device location above, or enter coordinates below.")}</p>
           {[{label:"Project site",value:location,set:setLocation}].map(item=><fieldset key={item.label}><legend className="text-sm font-semibold">{term('{site} coordinates',{site:term(item.label)})}</legend><div className="mt-2 grid grid-cols-2 gap-3">{(["latitude","longitude"] as const).map(axis=><label key={axis} className="text-xs capitalize">{term(axis)}<input aria-label={term('{site} {axis}',{site:term(item.label),axis:term(axis)})} type="number" step="any" min={axis === "latitude"?-90:-180} max={axis === "latitude"?90:180} value={item.value[axis]??""} onChange={event=>item.set(current=>({...current,[axis]:event.target.value===""?null:Number(event.target.value)}))} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base"/></label>)}</div></fieldset>)}
           <label className="block text-sm">{term("Project site address")}<input value={siteAddress} onChange={event=>setSiteAddress(event.target.value)} className="mt-2 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3"/></label>

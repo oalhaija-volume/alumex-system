@@ -2065,6 +2065,8 @@
     "{site} {axis}": "{site} {axis}",
     "latitude": "latitude",
     "longitude": "longitude",
+    "Enter the project site address.": "Enter the project site address.",
+    "Enter the address or area name. Coordinates are not required for offline registration.": "Enter the address or area name. Coordinates are not required for offline registration.",
     "Project site address": "Project site address",
     "Outdoor Sales for measurements": "Outdoor Sales for measurements",
     "(required)": "(required)",

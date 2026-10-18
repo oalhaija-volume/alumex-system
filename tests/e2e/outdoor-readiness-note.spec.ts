@@ -53,6 +53,7 @@ for (const online of [true, false]) for (const locale of ['en', 'ar']) test(`${l
     Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
     window.dispatchEvent(new Event('offline'));
   });
+  if(!online)await page.locator('input[autocomplete="street-address"]').fill('Baghdad, Mansour');
   const save = page.getByRole('button', { name: locale === 'en' ? 'Save registration' : 'حفظ التسجيل', exact: false });
   for (const value of ['', '   ']) {
     await page.locator('#readiness-note').fill(value);

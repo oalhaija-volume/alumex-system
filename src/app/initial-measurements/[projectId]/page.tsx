@@ -6,5 +6,5 @@ export default async function InitialMeasurementsPage({params}:{params:Promise<{
   const auth = await requireRole(["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Outdoor Sales"]);
   if (!auth.ok) redirect("/unauthorized");
   const {projectId} = await params;
-  return <RegistrationShell role={auth.role} mobileOutdoor={auth.mobileOutdoor}><InitialMeasurements projectId={projectId} /></RegistrationShell>;
+  return <RegistrationShell role={auth.role} mobileOutdoor={auth.mobileOutdoor}><InitialMeasurements projectId={projectId} role={auth.role} /></RegistrationShell>;
 }

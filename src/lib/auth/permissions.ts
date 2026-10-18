@@ -6,6 +6,10 @@ export const leadershipRoles = ['Admin', 'CEO', 'Sales Director', 'Company Owner
 export function isLeadershipRole(role: string | null | undefined) {
  return leadershipRoles.some(value => value === role);
 }
+export const quotationRoles = [...leadershipRoles, 'Indoor Sales'] as const;
+export function canPrepareQuotation(role: string | null | undefined) {
+ return quotationRoles.some(value => value === role);
+}
 export const crmRoles = [...leadershipRoles, 'Indoor Sales'] as const;
 export function canAccessCRM(role: string | null | undefined) {
  return role === 'Indoor Sales' || isLeadershipRole(role);
@@ -19,6 +23,7 @@ export function defaultRouteForRole(role: AppRole | null) {
 export function canAccessRoute(pathname: string, role: AppRole | null) {
  if(!role)return false;
  if(pathname === "/" || pathname === "/dashboard")return true;
+ if(/^\/(quotation|contract)\/[0-9a-f-]{36}$/i.test(pathname))return canPrepareQuotation(role);
  if(isCRMRoute(pathname))return canAccessCRM(role);
  if(pathname === "/hr")return isLeadershipRole(role) || role === "HR";
  if(pathname === "/catalog")return isLeadershipRole(role);

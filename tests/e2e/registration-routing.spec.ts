@@ -287,7 +287,7 @@ test.describe('Outdoor Sales phone workspace', () => {
       await expect(page.locator('#outdoor-assignee')).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.goto('/offline?path=/initial-measurements/' + projects[1].id);
-      await expect(page.getByText('Measurements submitted', { exact: true })).toBeVisible();
+      await expect(page.getByText('Measurements submitted. Indoor Sales will prepare the quotation.', { exact: true })).toBeVisible();
       await expect(page.getByRole('link', { name: 'Continue to quotation', exact: true })).toHaveCount(0);
       await page.getByRole('link', { name: 'Back to assignments', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Measurement assignments', exact: true })).toBeVisible();

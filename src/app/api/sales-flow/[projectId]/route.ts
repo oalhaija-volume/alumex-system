@@ -8,7 +8,7 @@ import type { SalesFlow } from '@/lib/workflow/types';
 type Context={params:Promise<{projectId:string}>};
 const unavailable='The sales workflow database update is required. Ask the administrator to apply the prepared migration.';
 export async function GET(request:Request,context:Context){
- const {projectId}=await context.params;const access=await salesProject(projectId);if(access.response)return access.response;
+ const {projectId}=await context.params;const access=await salesProject(projectId,'commercial');if(access.response)return access.response;
  const {admin,project}=access;
  const [flow,openings,catalog,client,history]=await Promise.all([
   admin.from('sales_workflows').select('*').eq('project_id',projectId).maybeSingle(),
@@ -29,7 +29,7 @@ export async function GET(request:Request,context:Context){
  return NextResponse.json({project,client:client.data,flow:flow.data,openings:openings.data,catalog:catalog.data,history:history.data},{headers:{'Cache-Control':'private, no-store'}});
 }
 export async function POST(request:Request,context:Context){
- const {projectId}=await context.params;const access=await salesProject(projectId);if(access.response)return access.response;
+ const {projectId}=await context.params;const access=await salesProject(projectId,'commercial');if(access.response)return access.response;
  const {admin,auth,project}=access;
  const saved=await admin.from('sales_workflows').select('*').eq('project_id',projectId).maybeSingle();
  if(saved.error)return NextResponse.json({error:unavailable},{status:503});

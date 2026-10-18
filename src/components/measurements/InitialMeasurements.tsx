@@ -1,4 +1,5 @@
 "use client";
+import { canPrepareQuotation } from '@/lib/auth/permissions';
 import { useMobileOutdoor } from "@/components/workflow/MobileOutdoorContext";
 import { ProjectRecord } from '@/components/workflow/ProjectRecord';
 import Link from "next/link";
@@ -9,8 +10,9 @@ import { useI18n } from "@/components/i18n/I18nProvider";
 import { normalizeRegistrationOpening, registrationRoomTypes, registrationStructureTypes, type RegistrationOpening, type RegistrationStructure } from "@/lib/measurements/registrationOpening";
 
 const field = "mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
-export function InitialMeasurements({projectId}:{projectId:string}) {
+export function InitialMeasurements({projectId,role}:{projectId:string;role?:string}) {
   const mobileOutdoor = useMobileOutdoor();
+  const canQuote = canPrepareQuotation(role);
   const {t,term,errorMessage,formatNumber} = useI18n();
   const [project,setProject] = useState<{project_name:string;project_number:string}|null>(null);
   const [openings,setOpenings] = useState<RegistrationOpening[]>([]);
@@ -147,6 +149,6 @@ export function InitialMeasurements({projectId}:{projectId:string}) {
       {!finished ? <><button type="button" disabled={saving || dirty} onClick={()=>void updateMeasurementStatus("finish")} className="mt-5 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50">{saving ? t("common.loading") : t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
     </div>:null}
     {!finished&&!openings.length&&!mobileOutdoor&&<Link href={`/quotation/${projectId}`} className="mt-6 block rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">{term('Quote facade services or standalone products without window and door openings')}</Link>}
-    {finished ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{mobileOutdoor ? term("Measurements submitted") : t("initialStep.done")}</p><button disabled={saving} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button>{mobileOutdoor ? <Link href="/dashboard" className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Back to assignments")}</Link> : <Link href={`/quotation/${projectId}`} onClick={async event=>{event.preventDefault();const state=await readFieldState();if(!navigator.onLine || state?.queue.some(c=>c.projectId===projectId)){setError("Your measurements are saved on this device. Wait for synchronization before preparing a quotation.");return;}window.location.assign(`/quotation/${projectId}`);}} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Continue to quotation")}</Link>}<Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
+    {finished ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{canQuote ? t("initialStep.done") : term("Measurements submitted. Indoor Sales will prepare the quotation.")}</p><button disabled={saving} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button>{!canQuote ? <Link href="/dashboard" className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term(mobileOutdoor?"Back to assignments":"Back to dashboard")}</Link> : <Link href={`/quotation/${projectId}`} onClick={async event=>{event.preventDefault();const state=await readFieldState();if(!navigator.onLine || state?.queue.some(c=>c.projectId===projectId)){setError("Your measurements are saved on this device. Wait for synchronization before preparing a quotation.");return;}window.location.assign(`/quotation/${projectId}`);}} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Continue to quotation")}</Link>}<Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
   </section>;
 }

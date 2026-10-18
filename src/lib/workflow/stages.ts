@@ -26,7 +26,7 @@ export function needsSalesFollowUp(p:ProjectProgress){return !['handoff','operat
 export function projectLink(p:ProjectProgress&{id:string},canUseCRM=true){
  const stage=projectStage(p);
  if(stage==='site')return canUseCRM?`/mini-crm#project-${p.id}`:`/projects#project-${p.id}`;
- if(stage==='measurements')return `/initial-measurements/${p.id}`;
+ if(!canUseCRM||stage==='measurements')return `/initial-measurements/${p.id}`;
  if(['contract-signature','handoff','operations'].includes(stage))return `/contract/${p.id}`;
  return `/quotation/${p.id}`;
 }

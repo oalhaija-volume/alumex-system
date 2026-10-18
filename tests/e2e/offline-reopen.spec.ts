@@ -59,7 +59,7 @@ for(const role of ['Indoor Sales','Outdoor Sales'])test(`${role}: real cached ap
   else{const coordinates=page.locator('input[type="number"]');await coordinates.nth(0).fill('33.3');await coordinates.nth(1).fill('44.4');await page.locator('#outdoor-assignee').selectOption(actor.id);}
   await page.getByRole('button',{name:/Continue to measurements/}).click();
   await expect(page.getByRole('heading',{name:'Initial measurements',exact:true})).toBeVisible();
-  await page.getByLabel('Floor',{exact:true}).fill('Ground');
+  await page.getByLabel('Floor',{exact:true}).selectOption('GF');
   await page.getByRole('combobox',{name:'Room',exact:true}).selectOption('Kitchen');
   await page.getByRole('combobox',{name:'Structural type',exact:true}).selectOption('Window');
   await page.getByRole('radio',{name:'Sliding',exact:true}).check();

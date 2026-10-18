@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { normalizeRegistrationOpening, registrationRoomTypes, registrationStructureTypes, type SkylightCapture, type RegistrationOpening, type RegistrationStructure } from "@/lib/measurements/registrationOpening";
 
+const measurementFloors = ["GF", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "Roof", "Basement"];
 const field = "mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
 export function InitialMeasurements({projectId,role}:{projectId:string;role?:string}) {
   const mobileOutdoor = useMobileOutdoor();
@@ -22,6 +23,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   const [project,setProject] = useState<FieldProject|null>(null);
   const [openings,setOpenings] = useState<RegistrationOpening[]>([]);
   const [floor,setFloor] = useState("");
+  const [otherFloor,setOtherFloor] = useState("");
   const [room,setRoom] = useState("");
   const [otherRoom,setOtherRoom] = useState("");
   const [width,setWidth] = useState("");
@@ -65,19 +67,19 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     return()=>{controller.abort();window.removeEventListener('field-change',refresh);};
   },[endpoint]);
   function resetForm(){
-    setEditing(null);setEditOperationId("");setSkylight({sections:[]});setQuantity("1");setFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setDraftId(crypto.randomUUID());
+    setEditing(null);setEditOperationId("");setSkylight({sections:[]});setQuantity("1");setFloor("");setOtherFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setDraftId(crypto.randomUUID());
   }
   function editOpening(opening:RegistrationOpening){
     if(saving||photoBusy||dirty)return;
     setEditing(opening);setEditOperationId(crypto.randomUUID());setDraftId(opening.id);
-    setFloor(opening.floor);setRoom(opening.room);setOtherRoom(opening.otherRoom);setWidth(String(opening.width));setHeight(String(opening.height));setQuantity(String(opening.quantity??1));setStructuralType(opening.structuralType);setOpeningType(opening.openingType??"");setError("");setNotice("");
+    setFloor(measurementFloors.includes(opening.floor)?opening.floor:"Other");setOtherFloor(measurementFloors.includes(opening.floor)?"":opening.floor);setRoom(opening.room);setOtherRoom(opening.otherRoom);setWidth(String(opening.width));setHeight(String(opening.height));setQuantity(String(opening.quantity??1));setStructuralType(opening.structuralType);setOpeningType(opening.openingType??"");setError("");setNotice("");
     formRef.current?.scrollIntoView({behavior:'smooth',block:'start'});
-    formRef.current?.querySelector('input')?.focus({preventScroll:true});
+    formRef.current?.querySelector('select')?.focus({preventScroll:true});
   }
   async function save(event:React.FormEvent) {
     event.preventDefault();
     if (saving || photoBusy) return;
-    const opening = normalizeRegistrationOpening({id:draftId,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor,room,otherRoom,...(!editing&&structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
+    const opening = normalizeRegistrationOpening({id:draftId,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor:floor==="Other"?otherFloor:floor,room,otherRoom,...(!editing&&structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
     if (!opening) {setError(t("initialStep.invalid"));return;}
     setSaving(true);setError("");setNotice("");
     try {
@@ -111,7 +113,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     finally{setSaving(false);}
   }
   const cancelled = project?.sales_status === 'cancelled';
-  const dirty = Boolean(editing || quantity !== "1" || width || height || structuralType || floor || room || otherRoom);
+  const dirty = Boolean(editing || quantity !== "1" || width || height || structuralType || floor || otherFloor || room || otherRoom);
   return <section className="mx-auto w-full max-w-[760px] px-5 py-8 sm:px-8 sm:py-10">
     <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{t("initialStep.title")}</h1>
     <p className="mt-2 text-sm leading-6 text-slate-500">{project ? `${project.project_name} · ${term(project.project_number)}` : t("initialStep.description")}</p>
@@ -138,7 +140,11 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           <legend className="mb-5 text-lg font-semibold text-slate-900">{editing?`${term("Edit opening")} ${formatNumber(openings.findIndex(o=>o.id===editing.id)+1)}`:t("initialStep.opening",{number:formatNumber(openings.length+1)})}</legend>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm font-medium text-slate-800">{t("initialStep.floor")}
-              <input required maxLength={100} value={floor} onChange={event=>setFloor(event.target.value)} placeholder={t("initialStep.floorPlaceholder")} className={field} />
+              <select required aria-label={t("initialStep.floor")} value={floor} onChange={event=>{setFloor(event.target.value);setOtherFloor("");}} className={field}>
+                <option value="">{term('Choose floor')}</option>
+                {measurementFloors.map(value=><option key={value} value={value}>{term(value)}</option>)}
+                <option value="Other">{term('Other')}</option>
+              </select>
             </label>
             <label className="block text-sm font-medium text-slate-800">{t("initialStep.room")}
               <select required aria-label={t("initialStep.room")} value={room} onChange={event=>{setRoom(event.target.value);setOtherRoom("");}} className={field}>
@@ -147,6 +153,9 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
               </select>
             </label>
           </div>
+          {floor === "Other" && <label className="block text-sm font-medium text-slate-800">{term('Specify floor')}
+            <input required maxLength={100} value={otherFloor} onChange={event=>setOtherFloor(event.target.value)} className={field}/>
+          </label>}
           {room === "Other" ? <label className="block text-sm font-medium text-slate-800">{t("initialStep.otherRoom")}
             <input required maxLength={100} value={otherRoom} onChange={event=>setOtherRoom(event.target.value)} className={field} placeholder={t("initialStep.otherRoomPlaceholder")} />
           </label> : null}

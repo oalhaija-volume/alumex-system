@@ -22,7 +22,7 @@ for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}
  const structure=page.getByRole('combobox',{name:label('Structural type','النوع الإنشائي'),exact:true});
  await expect(structure).toBeVisible();
  if(!online)await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});window.dispatchEvent(new Event('offline'));});
- await page.getByLabel(label('Floor','الطابق'),{exact:true}).fill('Roof');
+ await page.getByLabel(label('Floor','الطابق'),{exact:true}).selectOption('Roof');
  await page.getByRole('combobox',{name:label('Room','الغرفة'),exact:true}).selectOption('Kitchen');
  await structure.selectOption('Skylight');
  const camera=page.getByLabel(label('Take skylight photo','التقاط صورة للسكاي لايت'),{exact:true});

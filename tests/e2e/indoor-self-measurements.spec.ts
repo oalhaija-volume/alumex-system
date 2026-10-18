@@ -58,7 +58,7 @@ test.describe('Indoor Sales self measurement', () => {
     } else {
       await expect(page).toHaveURL(/\/offline\?project=[\da-f-]+$/);
       await expect(page.getByRole('heading', { name: 'Initial measurements', exact: true })).toBeVisible();
-      await page.getByLabel('Floor', { exact: true }).fill('Ground');
+      await page.getByLabel('Floor', { exact: true }).selectOption('GF');
       await page.getByRole('combobox', { name: 'Room', exact: true }).selectOption('Kitchen');
       await page.getByRole('combobox', { name: 'Structural type', exact: true }).selectOption('Window');
       await page.getByRole('radio', { name: 'Sliding', exact: true }).check();

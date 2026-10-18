@@ -21,7 +21,7 @@ for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}
   await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});window.dispatchEvent(new Event('offline'));});
   await page.addInitScript(()=>Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false}));
  }
- await page.getByLabel(locale==='en'?'Floor':'الطابق',{exact:true}).fill('Ground');
+ await page.getByLabel(locale==='en'?'Floor':'الطابق',{exact:true}).selectOption('GF');
  await page.getByRole('combobox',{name:locale==='en'?'Room':'الغرفة',exact:true}).selectOption('Kitchen');
  await page.getByRole('combobox',{name:locale==='en'?'Structural type':'النوع الإنشائي',exact:true}).selectOption('Window');
  await page.getByRole('radio',{name:locale==='en'?'Sliding':'سحاب',exact:true}).check();

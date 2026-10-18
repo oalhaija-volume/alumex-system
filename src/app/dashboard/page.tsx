@@ -8,5 +8,5 @@ import { RegistrationShell } from '@/components/intake/RegistrationShell';
 import { SalesDashboard } from '@/components/workflow/SalesDashboard';
 export default async function Page(){
  const auth=await requireRole(appRoles);if(!auth.ok)redirect('/unauthorized');
- return <RegistrationShell role={auth.role} mobileOutdoor={auth.mobileOutdoor}>{auth.mobileOutdoor?<OutdoorMobileWorkspace/>:salesRoles.some(role=>role===auth.role)?<SalesDashboard/>:<CompanyDashboard role={auth.role}/>}</RegistrationShell>;
+ return <RegistrationShell role={auth.role} mobileOutdoor={auth.mobileOutdoor}>{auth.role==='Outdoor Sales'?<OutdoorMobileWorkspace/>:salesRoles.some(role=>role===auth.role)?<SalesDashboard/>:<CompanyDashboard role={auth.role}/>}</RegistrationShell>;
 }

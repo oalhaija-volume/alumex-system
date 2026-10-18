@@ -41,7 +41,7 @@ for(const role of ['Indoor Sales','Outdoor Sales'])test(`${role}: real cached ap
  try{
   let page=await launch();
   await page.goto(base+'/offline?path=/dashboard');
-  await expect(page.getByRole('heading',{name:role==='Outdoor Sales'?(testInfo.project.name.includes('mobile')?'Measurement assignments':'My sales dashboard'):'Sales dashboard',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:role==='Outdoor Sales'?'Measurement assignments':'Sales dashboard',exact:true})).toBeVisible();
   if(role==='Indoor Sales')await expect(page.getByText('Synced · Offline saving ready',{exact:true})).toBeVisible();
   await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
   await expect.poll(()=>page.evaluate(async()=>(await (await caches.open('alumex-field-shell-v15')).keys()).some(r=>new URL(r.url).pathname==='/offline'))).toBe(true);

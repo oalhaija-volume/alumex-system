@@ -2528,7 +2528,16 @@
     "A saved Curtain Wall photo and note must remain attached to a Curtain Wall.": "يجب أن تبقى صورة وملاحظة الكرتن وول المحفوظتان مرتبطتين بفتحة كرتن وول.",
     "Connect once to download this Curtain Wall photo and note.": "اتصل بالإنترنت لتنزيل صورة وملاحظة الكرتن وول للاستخدام دون اتصال.",
     "Unable to load Curtain Wall details.": "تعذر تحميل تفاصيل الكرتن وول.",
-    "View Curtain Wall photos and notes": "عرض صور وملاحظات الكرتن وول"
+    "View Curtain Wall photos and notes": "عرض صور وملاحظات الكرتن وول",
+    "Work area": "نوع الأعمال",
+    "Internal works": "اعمال داخلية",
+    "Facade number": "رقم الواجهة",
+    "Facade {number}": "واجهة {number}",
+    "Work area / location": "نوع الأعمال / الموقع",
+    "Use the same number for openings on the same facade. Use another number for a different facade.": "استخدم نفس الرقم لفتحات الواجهة الواحدة، ورقماً آخر لكل واجهة مختلفة.",
+    "Choose Facade or Internal works.": "اختر واجهة أو اعمال داخلية.",
+    "Facade and Internal works are only available for commercial buildings.": "خيارات الواجهة والاعمال الداخلية متاحة للمباني التجارية فقط.",
+    "Choose a facade number between 1 and 1,000.": "اختر رقم واجهة من 1 إلى 1000."
   },
   "registration": {
     "title": "عميل ومشروع جديد",

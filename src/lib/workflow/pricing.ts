@@ -1,6 +1,6 @@
 import { catalogKind, compatibleAddon, compatibleGlass, isAvailable, isCurtainWall, isLouver, isRollerShutter, isShutterBox, normalizeCatalogItem } from './catalogRules';
 export type CatalogItem = {id:string;name:string;category:string|null;unit:string;unit_price:number;is_active:boolean};
-export type MeasuredOpening = {has_arch?:boolean;id:string;floor:string|null;room:string|null;width:number;height:number;quantity?:number;opening_type:string|null;opening_direction:string|null};
+export type MeasuredOpening = {work_area?:"facade"|"internal"|null;facade_number?:number|null;has_arch?:boolean;id:string;floor:string|null;room:string|null;width:number;height:number;quantity?:number;opening_type:string|null;opening_direction:string|null};
 export type ExtraChoice = {id:string;quantity:number};
 export type OpeningChoice = {openingId:string;systemId:string;glassId?:string;extras:ExtraChoice[]};
 export type SurfaceMeasurement = {label:string;width:number;height:number;quantity:number};

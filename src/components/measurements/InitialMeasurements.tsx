@@ -29,6 +29,9 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   const [openings,setOpenings] = useState<RegistrationOpening[]>([]);
   const [floor,setFloor] = useState("");
   const [otherFloor,setOtherFloor] = useState("");
+  const commercial=project?.building_type==='commercial_building';
+  const [workArea,setWorkArea] = useState<"facade"|"internal"|"">("");
+  const [facadeNumber,setFacadeNumber] = useState("1");
   const [room,setRoom] = useState("");
   const [otherRoom,setOtherRoom] = useState("");
   const [width,setWidth] = useState("");
@@ -75,10 +78,11 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     return()=>{controller.abort();window.removeEventListener('field-change',refresh);};
   },[endpoint]);
   function resetForm(){
-    setEditing(null);setEditOperationId("");setSkylight({sections:[]});setCurtainWall({note:''});setQuantity("1");setFloor("");setOtherFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setHasArch("");setDraftId(crypto.randomUUID());
+    setWorkArea("");setFacadeNumber("1");setEditing(null);setEditOperationId("");setSkylight({sections:[]});setCurtainWall({note:''});setQuantity("1");setFloor("");setOtherFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setHasArch("");setDraftId(crypto.randomUUID());
   }
   function editOpening(opening:RegistrationOpening){
     if(saving||photoBusy||dirty)return;
+    setWorkArea(opening.workArea??(commercial?"internal":""));setFacadeNumber(String(opening.facadeNumber??1));
     setEditing(opening);setEditOperationId(crypto.randomUUID());setDraftId(opening.id);
     setFloor(measurementFloors.includes(opening.floor)?opening.floor:"Other");setOtherFloor(measurementFloors.includes(opening.floor)?"":opening.floor);setRoom(opening.room);setOtherRoom(opening.otherRoom);setWidth(String(opening.width));setHeight(String(opening.height));setQuantity(String(opening.quantity??1));setStructuralType(opening.structuralType);setOpeningType(opening.openingType??"");setHasArch(opening.hasArch??false);setError("");setNotice("");
     formRef.current?.scrollIntoView({behavior:'smooth',block:'start'});
@@ -87,13 +91,14 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   async function save(event:React.FormEvent) {
     event.preventDefault();
     if (saving || photoBusy) return;
-    const opening = normalizeRegistrationOpening({id:draftId,hasArch:['Window','Door'].includes(structuralType)?hasArch:false,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor:floor==="Other"?otherFloor:floor,room,otherRoom,...(!editing&&structuralType==='Curtain Wall'&&(curtainWall.photo||curtainWall.note.trim())?{curtainWall}:{}),...(!editing&&structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
+    if(commercial&&!workArea){setError('Choose Facade or Internal works.');return;}
+    const opening = normalizeRegistrationOpening({...commercial&&{workArea,...(workArea==='facade'?{facadeNumber:Number(facadeNumber)}:{})},id:draftId,hasArch:['Window','Door'].includes(structuralType)?hasArch:false,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor:floor==="Other"?otherFloor:floor,room,otherRoom,...(!editing&&structuralType==='Curtain Wall'&&(curtainWall.photo||curtainWall.note.trim())?{curtainWall}:{}),...(!editing&&structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
     if (!opening) {setError(t("initialStep.invalid"));return;}
     setSaving(true);setError("");setNotice("");
     try {
       const response=await fieldFetch(endpoint,{method:editing?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(editing?{action:"edit-opening",opening,previous:editing,operationId:editOperationId}:opening)});
       const data=await response.json();if(!response.ok) throw new Error(data.error);
-      setOpenings(current=>editing?current.map(row=>row.id===opening.id?{...row,...opening}:row):current.some(row=>row.id===opening.id)?current:[...current,opening]);
+      setOpenings(current=>editing?current.map(row=>row.id===opening.id?{...row,...opening,workArea:opening.workArea,facadeNumber:opening.facadeNumber}:row):current.some(row=>row.id===opening.id)?current:[...current,opening]);
       setNotice(editing?term("Opening measurements updated."):t("initialStep.saved"));resetForm();
     } catch(cause) {setError(cause instanceof Error?cause.message:t("initialStep.failed"));}
     finally {setSaving(false);}
@@ -121,7 +126,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     finally{setSaving(false);}
   }
   const cancelled = project?.sales_status === 'cancelled';
-  const dirty = Boolean(editing || quantity !== "1" || width || height || structuralType || floor || otherFloor || room || otherRoom);
+  const dirty = Boolean(editing || workArea || facadeNumber!=="1" || quantity !== "1" || width || height || structuralType || floor || otherFloor || room || otherRoom);
   return <section className="mx-auto w-full max-w-[760px] px-5 py-8 sm:px-8 sm:py-10">
     <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{t("initialStep.title")}</h1>
     <p className="mt-2 text-sm leading-6 text-slate-500">{project ? `${project.project_name} · ${term(project.project_number)}` : t("initialStep.description")}</p>
@@ -149,6 +154,16 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
       <form ref={formRef} aria-label={term(editing?"Edit opening measurements":"New opening measurements")} onSubmit={save} className="mt-7 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
         <fieldset disabled={saving||photoBusy} className="min-w-0 space-y-5">
           <legend className="mb-5 text-lg font-semibold text-slate-900">{editing?`${term("Edit opening")} ${formatNumber(openings.findIndex(o=>o.id===editing.id)+1)}`:t("initialStep.opening",{number:formatNumber(openings.length+1)})}</legend>
+          {commercial&&<fieldset>
+            <legend className="mb-2 text-sm font-medium text-slate-800">{term('Work area')}</legend>
+            <div className="grid grid-cols-2 gap-3">{(['facade','internal'] as const).map(area=><label key={area} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-md border p-3 text-sm ${workArea===area?'border-blue-600 bg-blue-50':'border-slate-300'}`}>
+              <input required type="radio" name="workArea" value={area} checked={workArea===area} onChange={()=>{setWorkArea(area);setRoom('');setOtherRoom('');}} className="h-4 w-4 accent-blue-600"/>{term(area==='facade'?'Facade':'Internal works')}
+            </label>)}</div>
+          </fieldset>}
+          {commercial&&workArea==='facade'&&<label className="block text-sm font-medium text-slate-800">{term('Facade number')}
+            <input aria-label={term('Facade number')} aria-describedby="facade-number-help" required type="number" inputMode="numeric" min="1" max="1000" step="1" value={facadeNumber} onChange={event=>setFacadeNumber(event.target.value)} className={field}/>
+            <span id="facade-number-help" className="mt-2 block text-xs leading-5 text-slate-500">{term('Use the same number for openings on the same facade. Use another number for a different facade.')}</span>
+          </label>}
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm font-medium text-slate-800">{t("initialStep.floor")}
               <select required aria-label={t("initialStep.floor")} value={floor} onChange={event=>{setFloor(event.target.value);setOtherFloor("");}} className={field}>
@@ -157,17 +172,17 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
                 <option value="Other">{term('Other')}</option>
               </select>
             </label>
-            <label className="block text-sm font-medium text-slate-800">{t("initialStep.room")}
+            {(!commercial||workArea==='internal')&&<label className="block text-sm font-medium text-slate-800">{t("initialStep.room")}
               <select required aria-label={t("initialStep.room")} value={room} onChange={event=>{setRoom(event.target.value);setOtherRoom("");}} className={field}>
                 <option value="">{t("initialStep.chooseRoom")}</option>
                 {registrationRoomTypes.map(value=><option key={value} value={value}>{t(`initialStep.rooms.${value}`)}</option>)}
               </select>
-            </label>
+            </label>}
           </div>
           {floor === "Other" && <label className="block text-sm font-medium text-slate-800">{term('Specify floor')}
             <input required maxLength={100} value={otherFloor} onChange={event=>setOtherFloor(event.target.value)} className={field}/>
           </label>}
-          {room === "Other" ? <label className="block text-sm font-medium text-slate-800">{t("initialStep.otherRoom")}
+          {(!commercial||workArea==='internal')&&room === "Other" ? <label className="block text-sm font-medium text-slate-800">{t("initialStep.otherRoom")}
             <input required maxLength={100} value={otherRoom} onChange={event=>setOtherRoom(event.target.value)} className={field} placeholder={t("initialStep.otherRoomPlaceholder")} />
           </label> : null}
           <label className="block text-sm font-medium text-slate-800">{t("initialStep.structure")}
@@ -214,14 +229,14 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           <thead className="bg-slate-100 text-xs font-semibold text-slate-700">
             <tr>
               <th scope="col" className="sticky start-0 z-10 border-e border-slate-200 bg-slate-100 px-3 py-3 text-start">{t("initialStep.number")}</th>
-              {["floor","room","structure","movement","width","height","quantity"].map(column=><th key={column} scope="col" className="whitespace-nowrap px-3 py-3 text-start">{t(`initialStep.${column}`)}</th>)}
+              {["floor","room","structure","movement","width","height","quantity"].map(column=><th key={column} scope="col" className="whitespace-nowrap px-3 py-3 text-start">{commercial&&column==='room'?term('Work area / location'):t(`initialStep.${column}`)}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
             {openings.map((opening,index)=><tr key={opening.id} className="odd:bg-white even:bg-slate-50">
               <th scope="row" className={`sticky start-0 border-e border-slate-200 px-3 py-3 text-start font-semibold tabular-nums text-slate-700 ${index%2===0?"bg-white":"bg-slate-50"}`}>{formatNumber(index+1)}{!finished&&!project?.measurement_delayed&&!project?.additional_openings_original_ids?.includes(opening.id)&&<button type="button" disabled={saving||photoBusy||dirty} aria-label={`${term('Edit opening')} ${formatNumber(index+1)}`} onClick={()=>editOpening(opening)} className="mt-1 block min-h-11 rounded-md px-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-40">{term('Edit')}</button>}</th>
               <td className="max-w-40 break-words px-3 py-3 text-slate-700">{term(opening.floor)}</td>
-              <td className="max-w-48 break-words px-3 py-3 text-slate-700">{opening.room === "Other" ? opening.otherRoom : t(`initialStep.rooms.${opening.room}`)}</td>
+              <td className="max-w-48 break-words px-3 py-3 text-slate-700">{opening.workArea==='internal'&&<span className="block text-xs text-slate-500">{term('Internal works')}</span>}{opening.workArea==='facade'?term('Facade {number}',{number:String(opening.facadeNumber)}):opening.room === "Other" ? opening.otherRoom : t(`initialStep.rooms.${opening.room}`)}</td>
               <td className="px-3 py-3 text-slate-900">{t(`initialStep.types.${opening.structuralType}`)}{['Window','Door'].includes(opening.structuralType)&&<span className="mt-1 block text-xs text-slate-500">{term(opening.hasArch?'Arch':'No arch')}</span>}</td>
               <td className="px-3 py-3 text-slate-700">{opening.openingType ? t(`initialStep.${opening.openingType}`) : "—"}</td>
               <td className="whitespace-nowrap px-3 py-3 font-medium tabular-nums text-slate-900"><bdi>{formatNumber(opening.width)}</bdi></td>

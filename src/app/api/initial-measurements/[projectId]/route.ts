@@ -24,9 +24,9 @@ async function access(context: Context) {
 export async function GET(_request: Request, context: Context) {
   const result = await access(context);
   if (result.response) return result.response;
-  const {data,error} = await result.admin.from("openings").select("id, width, height, quantity,has_curtain_wall_capture,has_skylight_capture, floor, room, has_arch,opening_type, opening_direction").eq("project_id",result.project.id).order("created_at");
+  const {data,error} = await result.admin.from("openings").select("id, width, height, quantity,work_area,facade_number,has_curtain_wall_capture,has_skylight_capture, floor, room, has_arch,opening_type, opening_direction").eq("project_id",result.project.id).order("created_at");
   if (error) return NextResponse.json({error:"Unable to load openings."},{status:500});
-  return NextResponse.json({project:result.project,canCancelProject:canCancelProject(result.project,{id:result.auth.user.id,role:result.auth.role}),canDelayMeasurements:canDelayMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),canResumeMeasurements:canResumeMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),openings:(data ?? []).map(row=>({id:row.id,floor:row.floor ?? "",room:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? row.room : "Other",otherRoom:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? "" : row.room ?? "",width:Number(row.width),height:Number(row.height),quantity:row.quantity,hasArch:row.has_arch,hasCurtainWallCapture:row.has_curtain_wall_capture,hasSkylightCapture:row.has_skylight_capture,structuralType:row.opening_type,openingType:row.opening_direction}))});
+  return NextResponse.json({project:result.project,canCancelProject:canCancelProject(result.project,{id:result.auth.user.id,role:result.auth.role}),canDelayMeasurements:canDelayMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),canResumeMeasurements:canResumeMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),openings:(data ?? []).map(row=>({id:row.id,floor:row.floor ?? "",room:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? row.room : "Other",otherRoom:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? "" : row.room ?? "",width:Number(row.width),height:Number(row.height),quantity:row.quantity,hasArch:row.has_arch,...( row.work_area?{workArea:row.work_area,...(row.work_area==='facade'?{facadeNumber:row.facade_number}:{})}:{}),hasCurtainWallCapture:row.has_curtain_wall_capture,hasSkylightCapture:row.has_skylight_capture,structuralType:row.opening_type,openingType:row.opening_direction}))});
 }
 export async function POST(request: Request, context: Context) {
   const result = await access(context);
@@ -36,10 +36,11 @@ export async function POST(request: Request, context: Context) {
   if(result.project.additional_openings_state && result.auth.role==='Outdoor Sales' && result.project.assigned_outdoor_sales_id!==result.auth.user.id)return NextResponse.json({error:'Only the assigned employee can complete this task.'},{status:403});
   const opening = normalizeRegistrationOpening(await request.json().catch(()=>null));
   if (!opening) return NextResponse.json({error:"Enter floor, room, valid dimensions, structural type, and opening type."},{status:400});
+  if(opening.workArea&&result.project.building_type!=='commercial_building')return NextResponse.json({error:'Facade and Internal works are only available for commercial buildings.'},{status:400});
   // Existing storage calls the structural category opening_type. The movement
   // is stored separately in opening_direction; each row records the quantity of identical openings.
   const {error} = await result.admin.from("openings").insert({
-    curtain_wall_capture:opening.curtainWall??null, skylight_capture:opening.skylight??null, floor:opening.floor, room:opening.room === "Other" ? opening.otherRoom : opening.room,
+    work_area:opening.workArea??null, facade_number:opening.facadeNumber??null, curtain_wall_capture:opening.curtainWall??null, skylight_capture:opening.skylight??null, floor:opening.floor, room:opening.room === "Other" ? opening.otherRoom : opening.room,
     id:opening.id, project_id:result.project.id, opening_code:`OP-${opening.id}`, width:opening.width,height:opening.height,
     has_arch:opening.hasArch??false,opening_type:opening.structuralType,opening_direction:opening.openingType,quantity:opening.quantity??1,site_readiness:"ready",created_by:result.auth.user.id,
   });

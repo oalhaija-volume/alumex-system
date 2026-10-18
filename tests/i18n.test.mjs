@@ -45,3 +45,10 @@ test('business dates are zero-padded Gregorian dates across Baghdad day and year
  assert.equal(dates.formatBusinessDate('invalid'),'—');
  assert.equal(dates.formatBusinessDateTime('invalid'),'—');
 });
+
+test('commercial facade numbers and internal-work labels translate without changing stored values',()=>{
+ assert.equal(format.translateTerm('en','Facade 2'),'Facade 2');
+ assert.equal(format.translateTerm('ar','Facade 2'),'واجهة 2');
+ assert.equal(format.translateTerm('ar','Facade {number}',{number:'10'}),'واجهة 10');
+ assert.equal(format.translateTerm('ar','Internal works'),'اعمال داخلية');
+});

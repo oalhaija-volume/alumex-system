@@ -122,6 +122,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if(action==='opening'){
     if(p.structure_readiness!=='ready'||p.sales_status!=='new_lead')throw new Error('Reopen measurements before adding an opening.');
     const opening=normalizeRegistrationOpening(payload);if(!opening)throw new Error('Complete the opening details.');
+    if(opening.workArea&&p.building_type!=='commercial_building')throw new Error('Facade and Internal works are only available for commercial buildings.');
     if(openings.some(o=>o.id===opening.id))return s;
     openings.push({...opening,projectId});
    }
@@ -129,13 +130,14 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
     if(p.structure_readiness!=='ready'||p.sales_status!=='new_lead')throw new Error('Reopen measurements before editing an opening.');
     if(!canAccessCRM(s.actor.role)&&!(s.actor.role==='Outdoor Sales'&&(p.created_by===s.actor.id||p.assigned_outdoor_sales_id===s.actor.id)))throw new Error('Project is not available to this employee');
     const edit=normalizeOpeningEdit(payload);if(!edit)throw new Error('Complete the opening details.');
+    if(edit.opening.workArea&&p.building_type!=='commercial_building')throw new Error('Facade and Internal works are only available for commercial buildings.');
     const index=openings.findIndex(o=>o.id===edit.opening.id&&o.projectId===projectId);
     if(index<0)throw new Error('Opening not found in this project.');
     const existing=openings[index];
     if(!sameOpeningMeasurements(existing,edit.previous))throw new Error('This opening changed on another device. Reload measurements before editing it again.');
     if((existing.hasCurtainWallCapture||existing.curtainWall)&&edit.opening.structuralType!=='Curtain Wall')throw new Error('A saved Curtain Wall photo and note must remain attached to a Curtain Wall.');
     if((existing.hasSkylightCapture||existing.skylight)&&edit.opening.structuralType!=='Skylight')throw new Error('A saved skylight shape must remain attached to a skylight.');
-    openings[index]={...existing,...edit.opening};change.payload=edit;
+    openings[index]={...existing,...edit.opening,workArea:edit.opening.workArea,facadeNumber:edit.opening.facadeNumber};change.payload=edit;
    }
    if(action==='finish'){if(!openings.some(o=>o.projectId===projectId))throw new Error('Save at least one opening first.');if(payload.note||payload.photo)measurementReports.push({id:change.id,project_id:projectId,note:String(payload.note),photo:String(payload.photo)||null,has_photo:!!payload.photo,recorded_by:s.actor.id,recorded_by_name:s.actor.name,recorded_at:change.recordedAt});p={...p,sales_status:'ready_for_quotation',...(p.additional_openings_state==='requested'?{additional_openings_state:'submitted' as const}:{})};}
    if(action==='reopen')p={...p,sales_status:'new_lead'};

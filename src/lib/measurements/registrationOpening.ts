@@ -30,7 +30,7 @@ export function normalizeCurtainWallCapture(value:unknown):CurtainWallCapture|nu
  if(!media)return null;
  return {...(media.photo?{photo:media.photo}:{}),note};
 }
-export type RegistrationOpening = { curtainWall?:CurtainWallCapture; hasCurtainWallCapture?:boolean; hasArch?:boolean; skylight?:SkylightCapture; hasSkylightCapture?:boolean; id: string; floor: string; room: typeof registrationRoomTypes[number]; otherRoom: string; width: number; height: number; quantity?: number; structuralType: RegistrationStructure; openingType: "Sliding" | "Hinged" | null };
+export type RegistrationOpening = { workArea?:"facade"|"internal"; facadeNumber?:number; curtainWall?:CurtainWallCapture; hasCurtainWallCapture?:boolean; hasArch?:boolean; skylight?:SkylightCapture; hasSkylightCapture?:boolean; id: string; floor: string; room: typeof registrationRoomTypes[number]; otherRoom: string; width: number; height: number; quantity?: number; structuralType: RegistrationStructure; openingType: "Sliding" | "Hinged" | null };
 export function normalizeRegistrationOpening(value: unknown): RegistrationOpening | null {
   if (!value || typeof value !== "object") return null;
   const input = value as Record<string, unknown>;
@@ -40,8 +40,12 @@ export function normalizeRegistrationOpening(value: unknown): RegistrationOpenin
   const quantity = input.quantity === undefined ? 1 : input.quantity;
   if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity < 1 || quantity > 10000) return null;
   const floor = typeof input.floor === "string" ? input.floor.trim() : "";
-  const room = input.room as typeof registrationRoomTypes[number];
-  const otherRoom = room === "Other" && typeof input.otherRoom === "string" ? input.otherRoom.trim() : "";
+  const workArea=input.workArea===undefined||input.workArea===null?undefined:input.workArea;
+  if(workArea!==undefined&&workArea!=='facade'&&workArea!=='internal')return null;
+  const facadeNumber=input.facadeNumber===undefined||input.facadeNumber===null?undefined:input.facadeNumber;
+  if(workArea==='facade'?(typeof facadeNumber!=='number'||!Number.isInteger(facadeNumber)||facadeNumber<1||facadeNumber>1000):facadeNumber!==undefined)return null;
+  const room = (workArea==='facade'?'Other':input.room) as typeof registrationRoomTypes[number];
+  const otherRoom = workArea==='facade'?`Facade ${facadeNumber}`:room === "Other" && typeof input.otherRoom === "string" ? input.otherRoom.trim() : "";
   if (!floor || floor.length > 100 || !registrationRoomTypes.includes(room) || (room === "Other" && (!otherRoom || otherRoom.length > 100))) return null;
   const structuralType = input.structuralType as RegistrationStructure;
   if(input.hasArch!==undefined&&(typeof input.hasArch!=='boolean'||(input.hasArch&&!['Window','Door'].includes(structuralType))))return null;
@@ -52,7 +56,7 @@ export function normalizeRegistrationOpening(value: unknown): RegistrationOpenin
   const openingType = structuralType === "Louver" ? "Hinged" : structuralType === "Skylight" || structuralType === "Curtain Wall" ? null : input.openingType;
   if (openingType !== null && openingType !== "Sliding" && openingType !== "Hinged") return null;
   if ((structuralType === "Window" || structuralType === "Door") && openingType === null) return null;
-  return { ...(input.hasArch===undefined?{}:{hasArch:input.hasArch as boolean}),...(skylight?{skylight}:{}),...(curtainWall?{curtainWall}:{}),id:input.id, quantity, width:input.width, height:input.height, floor, room, otherRoom, structuralType, openingType };
+  return { ...(workArea?{workArea,...(workArea==='facade'?{facadeNumber:facadeNumber as number}:{})}:{}),...(input.hasArch===undefined?{}:{hasArch:input.hasArch as boolean}),...(skylight?{skylight}:{}),...(curtainWall?{curtainWall}:{}),id:input.id, quantity, width:input.width, height:input.height, floor, room, otherRoom, structuralType, openingType };
 }
 
 // Edits replace measurement fields only; saved opening media stays attached to its opening.

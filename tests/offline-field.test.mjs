@@ -405,3 +405,23 @@ test('offline Curtain Wall edits preserve capture and reject changing its type',
  const current=x.state.openings[0];
  await assert.rejects(x.client.saveFieldChange('edit-opening',projectId,{previous:current,opening:{...current,structuralType:'Window',openingType:'Sliding'}}),/must remain attached/);
 });
+
+test('commercial facade can become internal work offline without retaining its facade number',async()=>{
+ const previous={...delayOpening,workArea:'facade',facadeNumber:1,room:'Other',otherRoom:'Facade 1'};
+ const x=setup({actor:{...actor,role:'Outdoor Sales'},projects:[{...delayProject,building_type:'commercial_building'}],openings:[previous]});
+ await x.client.saveFieldChange('edit-opening',projectId,{previous,opening:{...previous,workArea:'internal',facadeNumber:undefined,room:'Office',otherRoom:''}});
+ assert.equal(x.state.openings[0].workArea,'internal');assert.equal(x.state.openings[0].facadeNumber,undefined);assert.equal(x.state.openings[0].room,'Office');
+ await assert.rejects(x.client.saveFieldChange('edit-opening',projectId,{previous,opening:{...previous,width:300}}),/changed on another device/);
+ const current=x.state.openings[0];
+ await x.client.saveFieldChange('edit-opening',projectId,{previous:current,opening:{...current,workArea:'facade',facadeNumber:3}});
+ assert.equal(x.state.openings[0].otherRoom,'Facade 3');assert.equal(x.state.queue.at(-1).payload.opening.facadeNumber,3);
+});
+test('residential projects reject commercial work-area metadata offline',async()=>{
+ for(const building_type of ['residential_building','villa_house',null]){
+  const x=setup({actor:{...actor,role:'Outdoor Sales'},projects:[{...delayProject,building_type}],openings:[delayOpening]});
+  const opening={...delayOpening,workArea:'facade',facadeNumber:1};
+  await assert.rejects(x.client.saveFieldChange('opening',projectId,opening),/only available for commercial buildings/);
+  await assert.rejects(x.client.saveFieldChange('edit-opening',projectId,{previous:delayOpening,opening}),/only available for commercial buildings/);
+  assert.equal(x.state.queue.length,0);
+ }
+});

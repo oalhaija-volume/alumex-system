@@ -385,6 +385,8 @@ export type Database = {
       openings: {
         Row: {
           has_arch: boolean;
+          work_area: "facade" | "internal" | null;
+          facade_number: number | null;
           curtain_wall_capture: Json | null;
           has_curtain_wall_capture: boolean;
           skylight_capture: Json | null;
@@ -420,6 +422,8 @@ export type Database = {
         };
         Insert: {
           has_arch?: boolean;
+          work_area?: "facade" | "internal" | null;
+          facade_number?: number | null;
           curtain_wall_capture?: Json | null;
           skylight_capture?: Json | null;
           id?: string;

@@ -8,6 +8,8 @@ export function interpolateMessage(message:string,replacements:Replacements={}) 
 }
 export function translateTerm(locale:Locale,value:string,replacements?:Replacements) {
  const terms:Record<string,string>=messagesByLocale[locale].terms;
+ const facade=value.match(/^Facade ([1-9][0-9]{0,3})$/);
+ if(facade)return interpolateMessage(terms['Facade {number}']??'Facade {number}',{number:facade[1]});
  return interpolateMessage(terms[value]??value,replacements);
 }
 

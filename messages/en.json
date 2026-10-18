@@ -2528,7 +2528,16 @@
     "A saved Curtain Wall photo and note must remain attached to a Curtain Wall.": "A saved Curtain Wall photo and note must remain attached to a Curtain Wall.",
     "Connect once to download this Curtain Wall photo and note.": "Connect once to download this Curtain Wall photo and note.",
     "Unable to load Curtain Wall details.": "Unable to load Curtain Wall details.",
-    "View Curtain Wall photos and notes": "View Curtain Wall photos and notes"
+    "View Curtain Wall photos and notes": "View Curtain Wall photos and notes",
+    "Work area": "Work area",
+    "Internal works": "Internal works",
+    "Facade number": "Facade number",
+    "Facade {number}": "Facade {number}",
+    "Work area / location": "Work area / location",
+    "Use the same number for openings on the same facade. Use another number for a different facade.": "Use the same number for openings on the same facade. Use another number for a different facade.",
+    "Choose Facade or Internal works.": "Choose Facade or Internal works.",
+    "Facade and Internal works are only available for commercial buildings.": "Facade and Internal works are only available for commercial buildings.",
+    "Choose a facade number between 1 and 1,000.": "Choose a facade number between 1 and 1,000."
   },
   "registration": {
     "title": "New client & project",

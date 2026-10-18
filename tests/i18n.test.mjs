@@ -13,7 +13,7 @@ test('Arabic covers every English key and preserves interpolation parameters',()
  check(en,ar);
 });
 test('translated labels leave stored codes and user-supplied text intact',()=>{
- assert.equal(format.translateTerm('ar','Sliding'),'سحاب');assert.equal(format.translateTerm('en','Sliding'),'Sliding');
+ assert.equal(format.translateTerm('ar','Sliding'),'سلايد');assert.equal(format.translateTerm('en','Sliding'),'Sliding');
  assert.equal(format.translateTerm('ar','Custom atrium 42'),'Custom atrium 42');
  assert.equal(format.interpolateMessage('{name} / {number}',{name:'{number}',number:7}),'{number} / 7');
  assert.equal(format.translateTerm('ar','Opening {number}',{number:3}),'الفتحة 3');

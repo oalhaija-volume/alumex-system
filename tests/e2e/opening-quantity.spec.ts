@@ -24,7 +24,7 @@ for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}
  await page.getByLabel(locale==='en'?'Floor':'الطابق',{exact:true}).selectOption('GF');
  await page.getByRole('combobox',{name:locale==='en'?'Room':'الغرفة',exact:true}).selectOption('Kitchen');
  await page.getByRole('combobox',{name:locale==='en'?'Structural type':'النوع الإنشائي',exact:true}).selectOption('Window');
- await page.getByRole('radio',{name:locale==='en'?'Sliding':'سحاب',exact:true}).check();
+ await page.getByRole('radio',{name:locale==='en'?'Sliding':'سلايد',exact:true}).check();
  await page.getByLabel(locale==='en'?'Width (cm)':'العرض (سم)',{exact:true}).fill('120');
  await page.getByLabel(locale==='en'?'Height (cm)':'الارتفاع (سم)',{exact:true}).fill('150');
  const save=page.getByRole('button',{name:locale==='en'?'Save & add opening':'حفظ وإضافة فتحة',exact:true});

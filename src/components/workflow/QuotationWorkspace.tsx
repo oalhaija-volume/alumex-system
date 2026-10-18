@@ -66,6 +66,7 @@ function QuoteEditor({data,projectId,reload}:{data:QuoteData;projectId:string;re
   <Notice error={error}/>
   {needsRevision&&<p role="status" className="mb-5 rounded-md bg-amber-50 p-4 text-sm text-amber-900 print:hidden">{term(waiting?'Additional openings are being measured. Wait for submission before revising the quotation.':'Additional measurements received. Save a quotation revision before approval or contract signing.')}</p>}
   {['ready_for_quotation','quotation_in_progress','quotation_approved','contract_generated'].includes(data.project.sales_status)&&<Link href={`/mini-crm#project-${projectId}`} className={`${secondary} mb-5 inline-flex print:hidden`}>{term('Add more openings')}</Link>}
+   {data.openings.some(o=>o.opening_type==='Curtain Wall')&&<Link href={`/initial-measurements/${projectId}`} className="block min-h-11 text-sm font-semibold text-blue-700 underline print:hidden">{term('View Curtain Wall photos and notes')}</Link>}
   {editing&&canEdit?<fieldset disabled={busy} className="min-w-0 space-y-5 print:hidden">
    <div className="rounded-md bg-blue-50 p-4 text-sm leading-6 text-blue-900">
     <p>{flow?term('Editing revision {current}. Saving creates revision {next} and requires new client approval.',{current:formatNumber(flow.quotation.version??1),next:formatNumber((flow.quotation.version??1)+1)}):term("Alumex is selected by default. Choose the specifications requested by the client.")}</p>

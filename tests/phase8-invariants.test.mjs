@@ -13,5 +13,5 @@ test('only approved rebuilt workflow pages exist', () => {
 });
 test('only the approved rebuilt APIs exist; legacy workflow endpoints stay absent', () => {
  assert.deepEqual(files(new URL('api/',root)).filter(p=>p.endsWith('route.ts')).sort(),
-  ['admin/users/route.ts','auth/bootstrap-profile/route.ts','auth/resolve-login/route.ts','catalog/route.ts','dashboard/route.ts','initial-measurements/[projectId]/route.ts','location-search/route.ts','measurement-reports/[projectId]/route.ts','offline/route.ts','operations/route.ts','projects/[projectId]/follow-ups/route.ts','sales-flow/[projectId]/route.ts','sales-intake/route.ts','skylight-capture/[projectId]/[openingId]/route.ts','workspace/route.ts']);
+  ['admin/users/route.ts','auth/bootstrap-profile/route.ts','auth/resolve-login/route.ts','catalog/route.ts','curtain-wall-capture/[projectId]/[openingId]/route.ts','dashboard/route.ts','initial-measurements/[projectId]/route.ts','location-search/route.ts','measurement-reports/[projectId]/route.ts','offline/route.ts','operations/route.ts','projects/[projectId]/follow-ups/route.ts','sales-flow/[projectId]/route.ts','sales-intake/route.ts','skylight-capture/[projectId]/[openingId]/route.ts','workspace/route.ts']);
 });

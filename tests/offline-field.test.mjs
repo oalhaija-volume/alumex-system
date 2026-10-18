@@ -379,3 +379,29 @@ test('keeping the reviewed server version drops a discarded completion report wi
  await x.client.keepReviewedServerVersion({project:delayProject,openings:[delayOpening],measurementReports:[]});
  assert.equal(x.state.queue.length,0);assert.equal(x.state.measurementReports.length,0);assert.equal(x.state.projects[0].sales_status,'new_lead');
 });
+
+test('curtainWall captures survive metadata refreshes and remain isolated to the matching project',async()=>{
+ const curtainWall={photo:'data:image/jpeg;base64,/9j/AAAA',note:'Review anchors'};
+ const opening={...delayOpening,structuralType:'Curtain Wall',openingType:null,curtainWall};
+ const x=setup({projects:[delayProject],openings:[opening]});
+ const remote={...opening,curtainWall:undefined,hasCurtainWallCapture:true};
+ navigator.onLine=true;globalThis.fetch=async()=>Response.json({...x.state,openings:[remote]});
+ await x.client.prepareOffline();assert.deepEqual(x.state.openings[0].curtainWall,curtainWall);
+ globalThis.fetch=async()=>Response.json({project:delayProject,openings:[remote]});
+ await x.client.fieldFetch('/api/initial-measurements/'+projectId);assert.deepEqual(x.state.openings[0].curtainWall,curtainWall);
+ assert.equal(x.client.retainSkylightCapture({...remote,projectId:'other'},[opening]).curtainWall,undefined);
+ assert.equal(x.client.retainSkylightCapture({...remote,hasCurtainWallCapture:false},[opening]).curtainWall,undefined);
+ globalThis.fetch=async()=>Response.json({...x.state,projects:[],openings:[]});
+ await x.client.prepareOffline();assert.equal(x.state.openings.length,0);
+});
+
+test('offline Curtain Wall edits preserve capture and reject changing its type',async()=>{
+ const curtainWall={note:'Review anchors',photo:'data:image/jpeg;base64,/9j/AAAA'};
+ const previous={...delayOpening,structuralType:'Curtain Wall',openingType:null,curtainWall};
+ const x=setup({actor:{...actor,role:'Outdoor Sales'},projects:[delayProject],openings:[previous]});
+ await x.client.saveFieldChange('edit-opening',projectId,{previous,opening:{...previous,width:700}});
+ assert.equal(x.state.openings[0].width,700);assert.deepEqual(x.state.openings[0].curtainWall,curtainWall);
+ assert.equal(x.state.queue[0].payload.opening.curtainWall,undefined);
+ const current=x.state.openings[0];
+ await assert.rejects(x.client.saveFieldChange('edit-opening',projectId,{previous:current,opening:{...current,structuralType:'Window',openingType:'Sliding'}}),/must remain attached/);
+});

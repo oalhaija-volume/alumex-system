@@ -2517,7 +2517,18 @@
     "Connect once to download this measurement photo.": "Connect once to download this measurement photo.",
     "Keep the measurement note under 2,000 characters.": "Keep the measurement note under 2,000 characters.",
     "Choose a valid measurement photo.": "Choose a valid measurement photo.",
-    "Measurements already submitted. Reload this project.": "Measurements already submitted. Reload this project."
+    "Measurements already submitted. Reload this project.": "Measurements already submitted. Reload this project.",
+    "Curtain Wall photo and note": "Curtain Wall photo and note",
+    "Take Curtain Wall photo": "Take Curtain Wall photo",
+    "Choose Curtain Wall photo": "Choose Curtain Wall photo",
+    "Curtain Wall site photo": "Curtain Wall site photo",
+    "Curtain Wall note (optional)": "Curtain Wall note (optional)",
+    "Photo and note are optional. Indoor Sales can review them with this opening.": "Photo and note are optional. Indoor Sales can review them with this opening.",
+    "Saved Curtain Wall photo and note are preserved.": "Saved Curtain Wall photo and note are preserved.",
+    "A saved Curtain Wall photo and note must remain attached to a Curtain Wall.": "A saved Curtain Wall photo and note must remain attached to a Curtain Wall.",
+    "Connect once to download this Curtain Wall photo and note.": "Connect once to download this Curtain Wall photo and note.",
+    "Unable to load Curtain Wall details.": "Unable to load Curtain Wall details.",
+    "View Curtain Wall photos and notes": "View Curtain Wall photos and notes"
   },
   "registration": {
     "title": "New client & project",

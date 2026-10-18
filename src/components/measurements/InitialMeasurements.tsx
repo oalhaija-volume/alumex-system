@@ -2,6 +2,8 @@
 import {MeasurementCompletionDialog} from "./MeasurementCompletionDialog";
 import {MeasurementReports} from "./MeasurementReports";
 import type {MeasurementCompletion} from "@/lib/measurements/completion";
+import { CurtainWallCaptureEditor } from './CurtainWallCaptureEditor';
+import { CurtainWallCapturePreview } from './CurtainWallCapturePreview';
 import { SkylightCaptureEditor } from './SkylightCaptureEditor';
 import { SkylightCapturePreview } from './SkylightCapturePreview';
 import { ClientCancellation } from './ClientCancellation';
@@ -15,7 +17,7 @@ import { readFieldState } from "@/lib/offline/store";
 import { fieldFetch,isDeviceWorkspace } from "@/lib/offline/client";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
-import { normalizeRegistrationOpening, registrationRoomTypes, registrationStructureTypes, type SkylightCapture, type RegistrationOpening, type RegistrationStructure } from "@/lib/measurements/registrationOpening";
+import { normalizeRegistrationOpening, registrationRoomTypes, registrationStructureTypes, type CurtainWallCapture, type SkylightCapture, type RegistrationOpening, type RegistrationStructure } from "@/lib/measurements/registrationOpening";
 
 const measurementFloors = ["GF", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "Roof", "Basement"];
 const field = "mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
@@ -30,6 +32,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   const [room,setRoom] = useState("");
   const [otherRoom,setOtherRoom] = useState("");
   const [width,setWidth] = useState("");
+  const [curtainWall,setCurtainWall] = useState<CurtainWallCapture>({note:''});
   const [skylight,setSkylight] = useState<SkylightCapture>({sections:[]});
   const [photoBusy,setPhotoBusy] = useState(false);
   const [quantity,setQuantity] = useState("1");
@@ -72,7 +75,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     return()=>{controller.abort();window.removeEventListener('field-change',refresh);};
   },[endpoint]);
   function resetForm(){
-    setEditing(null);setEditOperationId("");setSkylight({sections:[]});setQuantity("1");setFloor("");setOtherFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setHasArch("");setDraftId(crypto.randomUUID());
+    setEditing(null);setEditOperationId("");setSkylight({sections:[]});setCurtainWall({note:''});setQuantity("1");setFloor("");setOtherFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setHasArch("");setDraftId(crypto.randomUUID());
   }
   function editOpening(opening:RegistrationOpening){
     if(saving||photoBusy||dirty)return;
@@ -84,7 +87,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   async function save(event:React.FormEvent) {
     event.preventDefault();
     if (saving || photoBusy) return;
-    const opening = normalizeRegistrationOpening({id:draftId,hasArch:['Window','Door'].includes(structuralType)?hasArch:false,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor:floor==="Other"?otherFloor:floor,room,otherRoom,...(!editing&&structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
+    const opening = normalizeRegistrationOpening({id:draftId,hasArch:['Window','Door'].includes(structuralType)?hasArch:false,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor:floor==="Other"?otherFloor:floor,room,otherRoom,...(!editing&&structuralType==='Curtain Wall'&&(curtainWall.photo||curtainWall.note.trim())?{curtainWall}:{}),...(!editing&&structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
     if (!opening) {setError(t("initialStep.invalid"));return;}
     setSaving(true);setError("");setNotice("");
     try {
@@ -168,7 +171,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
             <input required maxLength={100} value={otherRoom} onChange={event=>setOtherRoom(event.target.value)} className={field} placeholder={t("initialStep.otherRoomPlaceholder")} />
           </label> : null}
           <label className="block text-sm font-medium text-slate-800">{t("initialStep.structure")}
-            <select disabled={!!(editing?.hasSkylightCapture||editing?.skylight)} aria-label={t("initialStep.structure")} required className={field} value={structuralType} onChange={event=>{setStructuralType(event.target.value as RegistrationStructure);setOpeningType("");setHasArch("");setNotice("");}}>
+            <select disabled={!!(editing?.hasCurtainWallCapture||editing?.curtainWall||editing?.hasSkylightCapture||editing?.skylight)} aria-label={t("initialStep.structure")} required className={field} value={structuralType} onChange={event=>{setStructuralType(event.target.value as RegistrationStructure);setOpeningType("");setHasArch("");setNotice("");}}>
               <option value="">{t("initialStep.choose")}</option>
               {registrationStructureTypes.map(type=><option key={type} value={type}>{t(`initialStep.types.${type}`)}</option>)}
             </select>
@@ -192,6 +195,8 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           <label className="block text-sm font-medium text-slate-800">{term('Number of identical openings')}<input required type="number" inputMode="numeric" min="1" max="10000" step="1" className={field} value={quantity} onChange={event=>setQuantity(event.target.value)} aria-describedby="opening-quantity-help"/></label>
           <p id="opening-quantity-help" className="text-xs leading-5 text-slate-500">{term('Use one entry for openings with the same dimensions, type, floor and room. Record different openings separately.')}</p>
           {editing&&(editing.hasSkylightCapture||editing.skylight)&&<p className="text-sm text-slate-600">{term('Saved skylight photos, drawings and sections are preserved.')}</p>}
+          {editing&&(editing.hasCurtainWallCapture||editing.curtainWall)&&<p className="text-sm text-slate-600">{term('Saved Curtain Wall photo and note are preserved.')}</p>}
+          {!editing&&structuralType==='Curtain Wall'&&<CurtainWallCaptureEditor key={draftId} value={curtainWall} onChange={setCurtainWall} busy={photoBusy||saving} onBusyChange={setPhotoBusy}/>}
           {!editing&&structuralType==='Skylight'&&<SkylightCaptureEditor key={draftId} value={skylight} onChange={setSkylight} busy={photoBusy||saving} onBusyChange={setPhotoBusy}/>}
           <button type="submit" className="min-h-12 w-full rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{saving?t("common.loading"):editing?term("Save measurement changes"):t("initialStep.add")}</button>
           {editing&&<button type="button" onClick={()=>{resetForm();setError("");}} className="min-h-12 w-full rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700">{term("Cancel editing")}</button>}
@@ -226,6 +231,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           </tbody>
         </table>
       </div>
+      {openings.map((opening,index)=>opening.structuralType==='Curtain Wall'&&(opening.curtainWall||opening.hasCurtainWallCapture)?<CurtainWallCapturePreview key={opening.id} projectId={projectId} opening={opening} number={index+1}/>:null)}
       {openings.map((opening,index)=>opening.structuralType==='Skylight'&&(opening.skylight||opening.hasSkylightCapture)?<SkylightCapturePreview key={opening.id} projectId={projectId} opening={opening} number={index+1}/>:null)}
       {!finished && !project?.measurement_delayed ? <><button type="button" disabled={saving || photoBusy || dirty} onClick={()=>{if(role!=='Outdoor Sales'){void updateMeasurementStatus("finish");return;}if(project?.additional_openings_state==='requested'&&!openings.some(o=>!project.additional_openings_original_ids?.includes(o.id))){setError('Add at least one new opening before submitting this task.');return;}setError('');setFinishOpen(true);}} className="mt-5 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50">{saving ? t("common.loading") : t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
     </div>:null}

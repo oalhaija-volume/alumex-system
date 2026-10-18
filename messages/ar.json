@@ -2517,7 +2517,18 @@
     "Connect once to download this measurement photo.": "اتصل بالإنترنت لتنزيل صورة القياسات على هذا الجهاز.",
     "Keep the measurement note under 2,000 characters.": "يجب ألا تتجاوز ملاحظة القياسات ٢٠٠٠ حرف.",
     "Choose a valid measurement photo.": "اختر صورة صالحة للقياسات.",
-    "Measurements already submitted. Reload this project.": "تم إرسال القياسات مسبقاً. أعد تحميل المشروع."
+    "Measurements already submitted. Reload this project.": "تم إرسال القياسات مسبقاً. أعد تحميل المشروع.",
+    "Curtain Wall photo and note": "صورة وملاحظة الكرتن وول",
+    "Take Curtain Wall photo": "التقاط صورة للكرتن وول",
+    "Choose Curtain Wall photo": "اختيار صورة للكرتن وول",
+    "Curtain Wall site photo": "صورة الكرتن وول في الموقع",
+    "Curtain Wall note (optional)": "ملاحظة الكرتن وول (اختياري)",
+    "Photo and note are optional. Indoor Sales can review them with this opening.": "الصورة والملاحظة اختياريتان. يمكن للمبيعات الداخلية مراجعتهما مع هذه الفتحة.",
+    "Saved Curtain Wall photo and note are preserved.": "يتم الاحتفاظ بصورة وملاحظة الكرتن وول المحفوظتين.",
+    "A saved Curtain Wall photo and note must remain attached to a Curtain Wall.": "يجب أن تبقى صورة وملاحظة الكرتن وول المحفوظتان مرتبطتين بفتحة كرتن وول.",
+    "Connect once to download this Curtain Wall photo and note.": "اتصل بالإنترنت لتنزيل صورة وملاحظة الكرتن وول للاستخدام دون اتصال.",
+    "Unable to load Curtain Wall details.": "تعذر تحميل تفاصيل الكرتن وول.",
+    "View Curtain Wall photos and notes": "عرض صور وملاحظات الكرتن وول"
   },
   "registration": {
     "title": "عميل ومشروع جديد",

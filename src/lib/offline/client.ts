@@ -11,7 +11,7 @@ import type { FieldChange,FieldProject,FieldState } from './types';
 // Captures are immutable after save. Keep downloaded media when refreshing lightweight metadata.
 export function retainSkylightCapture<T extends RegistrationOpening & {projectId:string}>(opening:T,cached:FieldState['openings']):T {
  const previous=cached.find(o=>o.id===opening.id&&o.projectId===opening.projectId);
- return opening.hasSkylightCapture&&previous?.skylight?{...opening,skylight:previous.skylight}:opening;
+ return {...opening,...(opening.hasSkylightCapture&&previous?.skylight?{skylight:previous.skylight}:{}),...(opening.hasCurtainWallCapture&&previous?.curtainWall?{curtainWall:previous.curtainWall}:{})};
 }
 export function isDeviceWorkspace(){return typeof window!=='undefined'&&window.location?.pathname==='/offline';}
 let connectionAvailable=true;
@@ -133,6 +133,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
     if(index<0)throw new Error('Opening not found in this project.');
     const existing=openings[index];
     if(!sameOpeningMeasurements(existing,edit.previous))throw new Error('This opening changed on another device. Reload measurements before editing it again.');
+    if((existing.hasCurtainWallCapture||existing.curtainWall)&&edit.opening.structuralType!=='Curtain Wall')throw new Error('A saved Curtain Wall photo and note must remain attached to a Curtain Wall.');
     if((existing.hasSkylightCapture||existing.skylight)&&edit.opening.structuralType!=='Skylight')throw new Error('A saved skylight shape must remain attached to a skylight.');
     openings[index]={...existing,...edit.opening};change.payload=edit;
    }

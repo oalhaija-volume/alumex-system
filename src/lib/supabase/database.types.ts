@@ -291,6 +291,10 @@ export type Database = {
           estimated_value: number | null;
           project_notes: string | null;
           readiness_note: string | null;
+          measurement_delayed: boolean;
+          measurement_delay_note: string | null;
+          measurement_delayed_at: string | null;
+          measurement_delayed_by: string | null;
           last_updated_by: string | null;
           archived_at: string | null;
           archived_by: string | null;
@@ -343,6 +347,10 @@ export type Database = {
           estimated_value?: number | null;
           project_notes?: string | null;
           readiness_note?: string | null;
+          measurement_delayed?: boolean;
+          measurement_delay_note?: string | null;
+          measurement_delayed_at?: string | null;
+          measurement_delayed_by?: string | null;
           last_updated_by?: string | null;
           archived_at?: string | null;
           archived_by?: string | null;

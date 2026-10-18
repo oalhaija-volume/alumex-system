@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+test.use({ serviceWorkers: 'block' }); // Keep mocked responses available after reload.
+
 const actor = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Fatma', role: 'Indoor Sales' };
 const employee = { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Ehab' };
 const projects = ['Alpha residence', 'Beta office'].map((project_name, index) => ({
@@ -48,6 +50,9 @@ for (const path of ['/mini-crm', '/projects', '/dashboard']) for (const locale o
     const requestCount = await setup(page, path, path === '/dashboard' ? 'CEO' : 'Indoor Sales', locale);
     const first = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Alpha residence', exact: true }) });
     const second = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Beta office', exact: true }) });
+    if (path === '/dashboard') {
+      for (const card of [first, second]) await card.locator('summary').filter({ hasText: locale === 'en' ? 'Follow-up history' : 'سجل المتابعات' }).click();
+    }
     const firstTable = first.getByRole('table');
     await first.locator('h4').last().scrollIntoViewIfNeeded();
     await expect(firstTable).toBeVisible();
@@ -130,9 +135,10 @@ test('CRM saves a new row immediately offline and preserves all previous rows af
 
 });
 
-test('Outdoor Sales project lists never load CRM history', async ({ page }) => {
+test('Outdoor Sales project lists never load CRM history', async ({ page }, testInfo) => {
   const requests = await setup(page, '/projects', 'Outdoor Sales');
-  await expect(page.locator('article')).toHaveCount(2);
+  if (testInfo.project.name === 'mobile') await expect(page.getByRole('heading', { name: 'Measurement assignments', exact: true })).toBeVisible();
+  else await expect(page.locator('article')).toHaveCount(2);
   await expect(page.getByRole('table')).toHaveCount(0);
   expect(requests()).toBe(0);
 });

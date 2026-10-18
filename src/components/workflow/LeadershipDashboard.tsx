@@ -1,4 +1,5 @@
 "use client";
+import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDelayNotice';
 
 import Link from 'next/link';
 import { useState } from 'react';
@@ -20,7 +21,7 @@ export const dashboardTones = {
   rose: { surface: 'border-rose-200 bg-rose-50 text-rose-900', dot: 'bg-rose-600', edge: 'border-t-rose-600' },
 };
 export const dashboardStageTone: Record<ProjectStage, keyof typeof dashboardTones> = {
-  site: 'slate', measurements: 'blue', 'quotation-preparation': 'amber', 'quotation-response': 'amber',
+  site: 'slate', measurements: 'blue', 'measurement-delayed': 'amber', 'quotation-preparation': 'amber', 'quotation-response': 'amber',
   'contract-preparation': 'violet', 'contract-signature': 'violet', handoff: 'teal', operations: 'emerald', closed: 'slate',
 };
 type Scope = 'all' | 'sales' | 'overdue' | 'operations' | 'unscheduled';
@@ -28,6 +29,7 @@ type Scope = 'all' | 'sales' | 'overdue' | 'operations' | 'unscheduled';
 function actionFor(project: FieldProject, leadership: boolean) {
   const stage = projectStage(project);
   if (stage === 'site') return { href: `/mini-crm#project-${project.id}`, label: 'Follow up on site readiness' };
+  if (stage === 'measurement-delayed') return { href: projectLink(project), label: 'Review delayed visit' };
   if (stage === 'measurements') return { href: projectLink(project), label: 'Review measurements' };
   if (stage === 'quotation-preparation') return { href: projectLink(project), label: 'Prepare the quotation' };
   if (stage === 'quotation-response') return { href: projectLink(project), label: 'Open quotation' };
@@ -110,7 +112,7 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
               <div className="flex flex-wrap items-center justify-between gap-2"><span className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-semibold ${tone.surface}`}><span aria-hidden="true" className={`h-2 w-2 rounded-full ${tone.dot}`}/>{term(details.label)}</span>{project.pending && <span className="text-xs text-slate-500">{term('Saved on device')}</span>}</div>
               <h3 className="mt-4 break-words text-xl font-semibold text-slate-950">{project.project_name}</h3><p className="mt-1 text-xs font-medium text-slate-500">{term(project.project_number)}{project.branch && <span> · {term(project.branch === 'Karkh' ? 'From Karkh' : 'From Rasafa')}</span>}</p>
               <div className="mt-4"><p className="text-xs font-medium text-slate-500">{term('Next step')}</p><p className="mt-1 text-sm font-semibold">{term(details.action)}</p></div>
-              <dl className="mt-4 grid grid-cols-2 gap-4 text-sm"><div><dt className="text-xs text-slate-500">{term('Responsible Indoor Sales')}</dt><dd className="mt-1 break-words font-medium text-slate-800">{project.followUpOwner ?? term('Not assigned')}</dd></div><div><dt className="text-xs text-slate-500">{term('Measurements by')}</dt><dd className="mt-1 break-words font-medium text-slate-800">{outdoor ?? term('Not assigned')}</dd></div></dl>
+              <MeasurementDelayNotice project={project}/><dl className="mt-4 grid grid-cols-2 gap-4 text-sm"><div><dt className="text-xs text-slate-500">{term('Responsible Indoor Sales')}</dt><dd className="mt-1 break-words font-medium text-slate-800">{project.followUpOwner ?? term('Not assigned')}</dd></div><div><dt className="text-xs text-slate-500">{term('Measurements by')}</dt><dd className="mt-1 break-words font-medium text-slate-800">{outdoor ?? term('Not assigned')}</dd></div></dl>
               {needsSalesFollowUp(project) && <div className={`mt-4 rounded-lg border px-3 py-3 text-sm ${overdue(project) ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-slate-200 bg-slate-50 text-slate-600'}`}><p className="text-xs font-semibold">{term(overdue(project) ? 'Overdue follow-up' : 'Next follow-up')}</p><p className="mt-1">{project.next_follow_up_at ? formatDateTime(project.next_follow_up_at) : term('Follow-up date not set')}</p></div>}
               <details className="mt-3 border-t border-slate-100 pt-1"><summary className="min-h-11 cursor-pointer py-3 text-sm font-medium text-slate-600">{term('Project details')}</summary><dl className="grid gap-3 pb-3 text-sm sm:grid-cols-2"><div><dt className="text-xs text-slate-500">{term('Phone')}</dt><dd className="mt-1">{project.phone ? <a href={`tel:${project.phone}`} className="inline-flex min-h-11 items-center text-blue-700" dir="ltr">{project.phone}</a> : '—'}</dd></div><div><dt className="text-xs text-slate-500">{term('Created by')}</dt><dd className="mt-1"><bdi>{project.registeredBy === 'Employee' ? term('Employee') : project.registeredBy}</bdi><time dateTime={project.created_at} dir="ltr" className="mt-1 block text-xs text-slate-500 w-fit max-w-full">{formatDateTime(project.created_at)}</time></dd></div><div className="sm:col-span-2"><dt className="text-xs text-slate-500">{term('Address')}</dt><dd className="mt-1 break-words">{project.address ?? '—'}</dd></div><div><dt className="text-xs text-slate-500">{term('Last updated')}</dt><dd className="mt-1">{formatDateTime(project.updated_at)}</dd></div>{project.readiness_note&&<div className="sm:col-span-2"><dt className="text-xs text-slate-500">{term('Reason not ready for measurement')}</dt><dd dir="auto" className="mt-1 whitespace-pre-wrap break-words">{project.readiness_note}</dd></div>}{project.project_notes && <div className="sm:col-span-2"><dt className="text-xs text-slate-500">{term('Latest follow-up note')}</dt><dd className="mt-1 whitespace-pre-wrap break-words">{project.project_notes}</dd></div>}</dl></details>
             </div>

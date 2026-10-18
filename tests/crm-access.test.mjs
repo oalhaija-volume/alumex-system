@@ -6,7 +6,7 @@ import ts from 'typescript';
 function load(path, dependencies = {}) {
  const source = ts.transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
  const result = {};
- new Function('require', 'exports', source)(name => {
+ new Function('require', 'exports', source)(name => {if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});
     if(name==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts',{});
   if (name === '@/lib/auth/permissions') return load('../src/lib/auth/permissions.ts');
   assert.ok(name in dependencies, name);

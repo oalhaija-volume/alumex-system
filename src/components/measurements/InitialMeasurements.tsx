@@ -1,4 +1,6 @@
 "use client";
+import { MeasurementDelayNotice } from './MeasurementDelayNotice';
+import type { FieldProject } from '@/lib/offline/types';
 import { canPrepareQuotation } from '@/lib/auth/permissions';
 import { useMobileOutdoor } from "@/components/workflow/MobileOutdoorContext";
 import { ProjectRecord } from '@/components/workflow/ProjectRecord';
@@ -14,7 +16,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   const mobileOutdoor = useMobileOutdoor();
   const canQuote = canPrepareQuotation(role);
   const {t,term,errorMessage,formatNumber} = useI18n();
-  const [project,setProject] = useState<{project_name:string;project_number:string}|null>(null);
+  const [project,setProject] = useState<FieldProject|null>(null);
   const [openings,setOpenings] = useState<RegistrationOpening[]>([]);
   const [floor,setFloor] = useState("");
   const [room,setRoom] = useState("");
@@ -28,6 +30,9 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   const [saving,setSaving] = useState(false);
   const [error,setError] = useState("");
   const [notice,setNotice] = useState("");
+  const [canDelay,setCanDelay] = useState(false);
+  const [canResume,setCanResume] = useState(false);
+  const [delayNote,setDelayNote] = useState('');
   const [finished,setFinished] = useState(false);
   const endpoint = `/api/initial-measurements/${projectId}`;
   useEffect(()=>{
@@ -40,7 +45,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
         const data=await response.json();
         if(controller.signal.aborted||current!==version)return;
         if(!response.ok)throw new Error(data.error);
-        setProject(data.project);setOpenings(data.openings);setFinished(data.project.sales_status!=="new_lead");
+        setProject(data.project);setCanDelay(data.canDelayMeasurements===true);setCanResume(data.canResumeMeasurements===true);setOpenings(data.openings);setFinished(data.project.sales_status!=="new_lead");
         setDraftId(existing=>existing||crypto.randomUUID());setError("");
       }catch(cause){if(!controller.signal.aborted&&current===version)setError(cause instanceof Error?cause.message:"Unable to load measurements.");}
       finally{if(!controller.signal.aborted&&current===version)setLoading(false);}
@@ -76,13 +81,36 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     } catch(cause) {setError(cause instanceof Error ? cause.message : t("initialStep.failed"));}
     finally {setSaving(false);}
   }
+  async function updateVisit(action:'delay-measurements'|'resume-measurements') {
+    if(saving)return;
+    setSaving(true);setError('');setNotice('');
+    try {
+      const response=await fieldFetch(endpoint,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,note:delayNote})});
+      const result=await response.json();if(!response.ok)throw new Error(result.error);
+      const refreshed=await fieldFetch(endpoint);const data=await refreshed.json();if(!refreshed.ok)throw new Error(data.error);
+      setProject(data.project);setDelayNote('');
+    }catch(cause){setError(cause instanceof Error?cause.message:t('initialStep.failed'));}
+    finally{setSaving(false);}
+  }
   const dirty = Boolean(width || height || structuralType || floor || room || otherRoom);
   return <section className="mx-auto w-full max-w-[760px] px-5 py-8 sm:px-8 sm:py-10">
     <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{t("initialStep.title")}</h1>
     <p className="mt-2 text-sm leading-6 text-slate-500">{project ? `${project.project_name} · ${term(project.project_number)}` : t("initialStep.description")}</p>
     {loading ? <p className="mt-6" role="status">{t("common.loading")}</p> : null}
     {error ? <p role="alert" className="mt-5 rounded-md bg-red-50 p-3 text-sm text-red-700">{errorMessage(error)}</p> : null}
-    <ProjectRecord projectId={projectId}/>{project && !finished ? <>
+    <ProjectRecord projectId={projectId}/>
+    {project && <MeasurementDelayNotice project={project}/>}
+    {project && !finished && (project.measurement_delayed ? canResume && <button type="button" disabled={saving} onClick={()=>void updateVisit('resume-measurements')} className="mt-4 min-h-12 rounded-md bg-blue-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{term('Resume measurements')}</button> : canDelay && <details className="mt-5 rounded-lg border border-amber-200 bg-white p-4">
+      <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-amber-900">{term('Client asked to visit later')}</summary>
+      <form aria-label={term('Report client delay')} onSubmit={event=>{event.preventDefault();void updateVisit('delay-measurements');}} className="mt-3">
+        <fieldset disabled={saving}>
+          <label className="block text-sm font-medium">{term('Client delay note')}<textarea required maxLength={2000} value={delayNote} onChange={event=>setDelayNote(event.target.value)} className="mt-2 min-h-28 w-full rounded-md border border-slate-300 p-3 text-base"/></label>
+          <p className="mt-2 text-xs leading-5 text-slate-600">{term('The project stays assigned to you. Resume measurements when the client is available.')}</p>
+          <button className="mt-4 min-h-12 rounded-md bg-amber-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{term('Mark delayed by client')}</button>
+        </fieldset>
+      </form>
+    </details>)}
+    {project && !finished && !project.measurement_delayed ? <>
       <form onSubmit={save} className="mt-7 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
         <fieldset disabled={saving} className="min-w-0 space-y-5">
           <legend className="mb-5 text-lg font-semibold text-slate-900">{t("initialStep.opening",{number:formatNumber(openings.length+1)})}</legend>
@@ -146,9 +174,9 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           </tbody>
         </table>
       </div>
-      {!finished ? <><button type="button" disabled={saving || dirty} onClick={()=>void updateMeasurementStatus("finish")} className="mt-5 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50">{saving ? t("common.loading") : t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
+      {!finished && !project?.measurement_delayed ? <><button type="button" disabled={saving || dirty} onClick={()=>void updateMeasurementStatus("finish")} className="mt-5 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50">{saving ? t("common.loading") : t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
     </div>:null}
-    {!finished&&!openings.length&&!mobileOutdoor&&<Link href={`/quotation/${projectId}`} className="mt-6 block rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">{term('Quote facade services or standalone products without window and door openings')}</Link>}
+    {!finished&&!project?.measurement_delayed&&!openings.length&&canQuote&&<Link href={`/quotation/${projectId}`} className="mt-6 block rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">{term('Quote facade services or standalone products without window and door openings')}</Link>}
     {finished ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{canQuote ? t("initialStep.done") : term("Measurements submitted. Indoor Sales will prepare the quotation.")}</p><button disabled={saving} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button>{!canQuote ? <Link href="/dashboard" className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term(mobileOutdoor?"Back to assignments":"Back to dashboard")}</Link> : <Link href={`/quotation/${projectId}`} onClick={async event=>{event.preventDefault();const state=await readFieldState();if(!navigator.onLine || state?.queue.some(c=>c.projectId===projectId)){setError("Your measurements are saved on this device. Wait for synchronization before preparing a quotation.");return;}window.location.assign(`/quotation/${projectId}`);}} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Continue to quotation")}</Link>}<Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
   </section>;
 }

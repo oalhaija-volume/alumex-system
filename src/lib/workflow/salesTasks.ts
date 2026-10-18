@@ -4,7 +4,7 @@ import { needsSalesFollowUp,projectStage } from './stages';
 
 export function measurementTasks(projects:FieldProject[],actor?:FieldActor) {
  if(!actor)return [];
- return projects.filter(p=>projectStage(p)==='measurements' && (
+ return projects.filter(p=>['measurements','measurement-delayed'].includes(projectStage(p)) && (
   ['Admin','Sales Director','CEO','Company Owner'].includes(actor.role) || (actor.role==='Outdoor Sales' &&
    (p.assigned_outdoor_sales_id===actor.id || (!p.assigned_outdoor_sales_id&&p.created_by===actor.id)))
  ));

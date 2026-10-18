@@ -1,4 +1,5 @@
 "use client";
+import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDelayNotice';
 import Link from 'next/link';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import type { SalesWorkspaceData } from '@/lib/offline/types';
@@ -21,7 +22,8 @@ export function OutdoorMobileWorkspace() {
             <p className="mt-2 text-xs leading-5 text-slate-500">{term('Created by')} <bdi>{project.registeredBy==='Employee'?term('Employee'):project.registeredBy}</bdi><time dateTime={project.created_at} dir="ltr" className="block w-fit max-w-full">{formatDateTime(project.created_at)}</time></p>
             {project.address && <p className="mt-2 text-sm leading-6 text-slate-600">{project.address}</p>}
             {project.phone && <a href={`tel:${project.phone}`} className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-blue-700" dir="ltr">{project.phone}</a>}
-            <Link href={`/initial-measurements/${project.id}`} className={`${button} mt-4 block text-center`}>{term('Record measurements')}</Link>
+   <MeasurementDelayNotice project={project}/>
+            <Link href={`/initial-measurements/${project.id}`} className={`${button} mt-4 block text-center`}>{term(project.measurement_delayed?'Review delayed visit':'Record measurements')}</Link>
           </li>)}
         </ul>}
       </>}

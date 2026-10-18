@@ -1,6 +1,7 @@
-export type ProjectProgress={structure_readiness:string;sales_status:string;status?:string|null};
+export type ProjectProgress={measurement_delayed?:boolean;structure_readiness:string;sales_status:string;status?:string|null};
 export const projectStages=[
  {id:'site',label:'Awaiting site readiness',action:'Follow up on site readiness'},
+ {id:'measurement-delayed',label:'Delayed by client',action:'Arrange another measurement visit'},
  {id:'measurements',label:'Initial measurements',action:'Complete initial measurements'},
  {id:'quotation-preparation',label:'Ready for quotation',action:'Prepare the quotation'},
  {id:'quotation-response',label:'Quotation awaiting response',action:'Follow up on the quotation'},
@@ -19,6 +20,7 @@ export function projectStage(p:ProjectProgress):ProjectStage{
  if(p.sales_status==='quotation_approved')return 'contract-preparation';
  if(p.sales_status==='quotation_in_progress')return 'quotation-response';
  if(p.sales_status==='ready_for_quotation')return 'quotation-preparation';
+ if(p.measurement_delayed)return 'measurement-delayed';
  return p.structure_readiness==='ready'?'measurements':'site';
 }
 export function stageDetails(p:ProjectProgress){return projectStages.find(s=>s.id===projectStage(p))!;}
@@ -26,7 +28,7 @@ export function needsSalesFollowUp(p:ProjectProgress){return !['handoff','operat
 export function projectLink(p:ProjectProgress&{id:string},canUseCRM=true){
  const stage=projectStage(p);
  if(stage==='site')return canUseCRM?`/mini-crm#project-${p.id}`:`/projects#project-${p.id}`;
- if(!canUseCRM||stage==='measurements')return `/initial-measurements/${p.id}`;
+ if(!canUseCRM||['measurements','measurement-delayed'].includes(stage))return `/initial-measurements/${p.id}`;
  if(['contract-signature','handoff','operations'].includes(stage))return `/contract/${p.id}`;
  return `/quotation/${p.id}`;
 }

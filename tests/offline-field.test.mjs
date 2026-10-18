@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
+function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
 const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Employee',role:'Indoor Sales',branch:'Karkh'};
 const projectId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const payload={client:{clientType:'individual',clientName:'Client',mobile:'07000000000'},project:{assignedOutdoorSalesId:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',address:'Site',locationLatitude:33.3,locationLongitude:44.4,structureReadiness:'ready'}};
@@ -188,4 +188,38 @@ test('cancelling an online read does not mark the device disconnected or return 
  globalThis.fetch=async(url,init)=>{assert.equal(init.signal.aborted,true);throw new DOMException('Aborted','AbortError');};
  await assert.rejects(x.client.fieldFetch('/api/workspace',{signal:controller.signal}),{name:'AbortError'});
  assert.equal(x.client.isFieldOnline(),true);
+});
+
+const delayProject={id:projectId,project_number:'PRJ-DELAY',project_name:'Delayed visit',created_by:'creator',assigned_outdoor_sales_id:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-10-18T00:00:00Z'};
+const delayOpening={id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',projectId,floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'};
+test('offline client delay, reopen, and completion preserve measurements and synchronize in order',async()=>{
+ const outdoor={...actor,role:'Outdoor Sales'};
+ const x=setup({actor:outdoor,projects:[delayProject],openings:[delayOpening]});
+ for(const note of [undefined,'  ',5,'x'.repeat(2001)])await assert.rejects(x.client.saveFieldChange('delay-measurements',projectId,{note}));
+ assert.equal(x.state.queue.length,0);
+ await x.client.saveFieldChange('delay-measurements',projectId,{note:'  Client asked for next week  '});
+ assert.equal(x.state.projects[0].measurement_delayed,true);assert.equal(x.state.projects[0].measurement_delay_note,'Client asked for next week');
+ assert.equal(x.state.projects[0].measurement_delayed_by,actor.id);assert.equal(x.state.projects[0].assigned_outdoor_sales_id,actor.id);
+ for(const action of ['opening','finish','reopen'])await assert.rejects(x.client.saveFieldChange(action,projectId,delayOpening),/Resume measurements/);
+ const view=await (await x.client.fieldFetch('/api/initial-measurements/'+projectId)).json();
+ assert.equal(view.canDelayMeasurements,true);assert.equal(view.canResumeMeasurements,true);assert.equal(view.openings.length,1);
+ await x.client.saveFieldChange('resume-measurements',projectId,{});
+ assert.equal(x.state.projects[0].measurement_delayed,false);assert.equal(x.state.projects[0].measurement_delay_note,'Client asked for next week');
+ await x.client.saveFieldChange('finish',projectId,{});
+ assert.deepEqual(x.state.queue.map(c=>c.action),['delay-measurements','resume-measurements','finish']);
+ assert.equal(x.state.openings.length,1);
+});
+test('client delay is restricted to the assigned Outdoor employee and the measurement stage',async()=>{
+ for(const options of [{actor},{actor:{...actor,role:'Outdoor Sales'},projects:[{...delayProject,assigned_outdoor_sales_id:'another'}]},{actor:{...actor,role:'Outdoor Sales'},projects:[{...delayProject,sales_status:'ready_for_quotation'}]}]){
+  const x=setup({projects:[delayProject],...options});
+  await assert.rejects(x.client.saveFieldChange('delay-measurements',projectId,{note:'Visit later'}));assert.equal(x.state.queue.length,0);
+ }
+});
+test('delayed visits remain visible tasks and follow-ups, never completed measurements',()=>{
+ const stages=load('../src/lib/workflow/stages.ts');
+ const tasks=load('../src/lib/workflow/salesTasks.ts',{'./stages':stages});
+ const project={...delayProject,measurement_delayed:true};
+ assert.equal(stages.projectStage(project),'measurement-delayed');assert.equal(stages.needsSalesFollowUp(project),true);
+ assert.equal(tasks.measurementTasks([project],{...actor,role:'Outdoor Sales'}).length,1);
+ assert.equal(stages.projectLink(project,true),'/initial-measurements/'+projectId);
 });

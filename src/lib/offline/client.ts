@@ -1,3 +1,4 @@
+import { canDelayMeasurements, canResumeMeasurements, normalizeMeasurementDelayNote } from '@/lib/measurements/measurementDelay';
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
 import { canAccessCRM } from '@/lib/auth/permissions';
 import { normalizeFollowUp,type FollowUpInput } from '@/lib/workflow/followUps';
@@ -79,7 +80,20 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    p={branch:s.actor.role==='Indoor Sales'?s.actor.branch:null,assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:s.actor.role==='Indoor Sales'?s.actor.id:null,followUpOwner:s.actor.role==='Indoor Sales'?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
   }else{
    if(!p)throw new Error('Open this project online once before working on it offline.');
+   if(['opening','finish','reopen'].includes(action)&&p.measurement_delayed)throw new Error('Resume measurements before recording or completing them.');
    if(['opening','finish','reopen'].includes(action)&&!['new_lead','ready_for_quotation'].includes(p.sales_status))throw new Error('Measurements are locked after quotation creation.');
+   if(action==='delay-measurements'||action==='resume-measurements'){
+    if(!(action==='delay-measurements'?canDelayMeasurements(p,s.actor):canResumeMeasurements(p,s.actor)))throw new Error('Only the assigned Outdoor Sales employee can report a client delay.');
+    if(p.structure_readiness!=='ready'||p.sales_status!=='new_lead')throw new Error('Client delays can only be recorded before measurements are completed.');
+    if(action==='delay-measurements'){
+     if(p.measurement_delayed)throw new Error('This project is already delayed by the client.');
+     const note=normalizeMeasurementDelayNote(payload.note);change.payload={note};
+     p={...p,measurement_delayed:true,measurement_delay_note:note,measurement_delayed_at:change.recordedAt,measurement_delayed_by:s.actor.id,measurementDelayedBy:s.actor.name};
+    }else{
+     if(!p.measurement_delayed)throw new Error('This project is not delayed by the client.');
+     p={...p,measurement_delayed:false};
+    }
+   }
    if(action==='opening'){
     if(p.structure_readiness!=='ready'||p.sales_status!=='new_lead')throw new Error('Reopen measurements before adding an opening.');
     const opening=normalizeRegistrationOpening(payload);if(!opening)throw new Error('Complete the opening details.');
@@ -139,7 +153,7 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
   if(!s)return Response.json({error:'Open this workspace online once before working offline.'},{status:503});
   if(url==='/api/workspace')return Response.json({actor:s.actor,outdoorSales:s.outdoorSales??[],indoorSales:s.indoorSales??[],projects:s.projects});
   const p=s.projects.find(p=>p.id===id);
-  return p?Response.json({project:p,openings:s.openings.filter(o=>o.projectId===id)}):Response.json({error:'This project is not downloaded on this device.'},{status:404});
+  return p?Response.json({project:p,canDelayMeasurements:canDelayMeasurements(p,s.actor),canResumeMeasurements:canResumeMeasurements(p,s.actor),openings:s.openings.filter(o=>o.projectId===id)}):Response.json({error:'This project is not downloaded on this device.'},{status:404});
  }
  try{
   const body=JSON.parse(String(init?.body??'{}')) as Record<string,unknown>;

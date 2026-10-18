@@ -1,4 +1,5 @@
 "use client";
+import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDelayNotice';
 
 import Link from 'next/link';
 import { useState } from 'react';
@@ -124,10 +125,10 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
   const overdue = due !== null && now > due;
   const today = due !== null && now > 0 && baghdadDay.format(due) === baghdadDay.format(now);
   const stage = stageDetails(project);
-  const canAssign = project.sales_status === 'new_lead' && ['site', 'measurements'].includes(stage.id);
+  const canAssign = project.sales_status === 'new_lead' && ['site', 'measurements', 'measurement-delayed'].includes(stage.id);
   const indoorCreator = project.original_creator_role === 'Indoor Sales' ? data?.indoorSales?.find(employee => employee.id === project.created_by) : undefined;
   const measurementEmployees = [...(indoorCreator ? [indoorCreator] : []), ...(data?.outdoorSales ?? [])];
-  const stageTone = ['contract-signature', 'contract-preparation'].includes(stage.id) ? 'bg-indigo-50 text-indigo-800' : stage.id === 'site' ? 'bg-slate-100 text-slate-700' : 'bg-blue-50 text-blue-800';
+  const stageTone = stage.id === 'measurement-delayed' ? 'bg-amber-50 text-amber-900' : ['contract-signature', 'contract-preparation'].includes(stage.id) ? 'bg-indigo-50 text-indigo-800' : stage.id === 'site' ? 'bg-slate-100 text-slate-700' : 'bg-blue-50 text-blue-800';
   return <article id={`project-${project.id}`} aria-labelledby={`project-name-${project.id}`} className="scroll-mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm target:ring-2 target:ring-blue-500">
     <div aria-hidden="true" className={`hidden ${projectColumns} border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-600 lg:grid`}>
       <span>{term('Client / project')}</span><span>{term('Project stage')}</span><span>{term('Next follow-up')}</span><span>{term('Action')}</span>
@@ -141,7 +142,7 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
    {project.readiness_note&&<p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-700"><span className="font-semibold">{term('Reason not ready for measurement')}: </span><span dir="auto">{project.readiness_note}</span></p>}
         {project.phone && <a dir="ltr" href={`tel:${project.phone}`} className={`${focus} mt-1 inline-flex min-h-8 items-center text-xs font-medium text-blue-700 hover:underline`}>{project.phone}</a>}
       </div>
-      <div className="min-w-0 border-t border-slate-100 pt-4 lg:border-0 lg:pt-0"><p className={mobileLabel}>{term('Project stage')}</p><span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium leading-5 ${stageTone}`}>{term(stage.label)}</span><p className="mt-2 text-xs leading-5 text-slate-500">{term(stage.action)}</p>{canAssign&&<p className="mt-2 text-xs font-medium text-slate-700">{term('Measurements by')}: {project.assignedOutdoorSales??term('Not assigned')}</p>}</div>
+      <div className="min-w-0 border-t border-slate-100 pt-4 lg:border-0 lg:pt-0"><p className={mobileLabel}>{term('Project stage')}</p><span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium leading-5 ${stageTone}`}>{term(stage.label)}</span><p className="mt-2 text-xs leading-5 text-slate-500">{term(stage.action)}</p><MeasurementDelayNotice project={project}/>{canAssign&&<p className="mt-2 text-xs font-medium text-slate-700">{term('Measurements by')}: {project.assignedOutdoorSales??term('Not assigned')}</p>}</div>
       <div className="min-w-0 border-t border-slate-100 pt-4 lg:border-0 lg:pt-0">
         <p className={mobileLabel}>{term('Next follow-up')}</p>
         <p className={`flex items-center gap-1.5 text-xs font-semibold ${overdue ? 'text-amber-800' : today ? 'text-blue-700' : 'text-slate-500'}`}><Icon kind="clock" className="h-3.5 w-3.5" />{term(overdue ? 'Overdue' : today ? 'Due today' : due === null ? 'Unscheduled' : 'Upcoming')}</p>

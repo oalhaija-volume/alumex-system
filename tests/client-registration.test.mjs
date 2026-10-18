@@ -9,6 +9,7 @@ function loadModule(path, dependencies) {
   }).outputText;
   const exports = {};
   new Function('require', 'exports', source)((name) => {
+    if(name==='@/lib/measurements/measurementDelay')return loadModule('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':loadModule('../src/lib/auth/permissions.ts',{})});
     if(name==='@/lib/intake/readinessNote')return loadModule('../src/lib/intake/readinessNote.ts',{});
     if (!(name in dependencies)) throw new Error(`Unexpected dependency: ${name}`);
     return dependencies[name];

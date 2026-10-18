@@ -22,8 +22,7 @@ for (const locale of ['en', 'ar']) for (const offline of [false, true]) test(`${
   await page.locator('input[name="buildingType"][value="villa_house"]').check();
   await page.locator('input[autocomplete="name"]').fill('Waiting for CRM');
   await page.locator('input[type="tel"]').fill('07700000000');
-  await page.locator('input[value="not_ready"]').check();
-  await page.locator('#readiness-note').fill('Walls unfinished');
+  await expect(page.locator('input[name="readiness"]:checked')).toHaveCount(0);
   if (offline) {
     await page.evaluate(() => { Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }); window.dispatchEvent(new Event('offline')); });
     await page.locator('input[autocomplete="street-address"]').fill('Baghdad, Mansour');
@@ -31,8 +30,13 @@ for (const locale of ['en', 'ar']) for (const offline of [false, true]) test(`${
     await page.getByRole('button', { name: locale === 'en' ? 'Project location map' : 'خريطة موقع المشروع', exact: true }).click({ position: { x: 80, y: 80 } });
   }
   await page.getByRole('button', { name: locale === 'en' ? /Save registration/ : /حفظ التسجيل/ }).click();
+  await expect(page.locator('p[role="alert"]')).toBeVisible();
+  expect((await savedFieldState(page)).projects).toHaveLength(0);
+  await page.locator('input[value="not_ready"]').check();
+  await page.locator('#readiness-note').fill('Walls unfinished');
+  await page.getByRole('button', { name: locale === 'en' ? /Save registration/ : /حفظ التسجيل/ }).click();
   await expect(page.getByRole('heading', { name: locale === 'en' ? 'Registration saved' : 'تم حفظ التسجيل', exact: true })).toBeVisible();
-  expect((await savedFieldState(page)).projects[0].structure_readiness).toBe('not_ready');
+  expect((await savedFieldState(page)).projects[0]).toMatchObject({structure_readiness:'not_ready',assigned_outdoor_sales_id:null});
   const nav = page.getByRole('navigation', { name: locale === 'en' ? 'Outdoor Sales workspace' : 'مساحة عمل المبيعات الخارجية' });
   await nav.getByRole('button', { name: locale === 'en' ? 'Measurement assignments' : 'مهام القياسات', exact: true }).click();
   await expect(page.getByRole('heading', { name: locale === 'en' ? 'Measurement assignments' : 'مهام القياسات', exact: true })).toBeVisible();
@@ -45,7 +49,10 @@ for (const locale of ['en', 'ar']) for (const offline of [false, true]) test(`${
   }
   await expect.poll(async () => (await savedFieldState(page)).queue.length).toBe(0);
   expect(writes).toHaveLength(1);
+  const unassigned={...state.projects[0],id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',project_name:'Unassigned registration',structure_readiness:'ready'};
+  state.projects.push(unassigned);
   await page.reload();
+  await expect(page.getByText('Unassigned registration',{exact:true})).toHaveCount(0);
   await expect(page.getByText(locale === 'en' ? 'No measurement tasks waiting.' : 'لا توجد مهام قياسات بانتظار التنفيذ.', { exact: true })).toBeVisible();
   await expect(page.getByText('Waiting for CRM', { exact: true })).toHaveCount(0);
 

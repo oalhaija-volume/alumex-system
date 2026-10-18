@@ -24,7 +24,7 @@ export function OutdoorIntake() {
   const [siteAddress, setSiteAddress] = useState("");
   const [offlineAddressStarted,setOfflineAddressStarted]=useState(false);
   const [location, setLocation] = useState<{ latitude: number | null; longitude: number | null }>({ latitude: null, longitude: null });
-  const [readiness, setReadiness] = useState<"ready" | "not_ready" | "">("ready");
+  const [readiness, setReadiness] = useState<"ready" | "not_ready" | "">("");
   const [readinessNote, setReadinessNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -102,7 +102,7 @@ export function OutdoorIntake() {
       <p className="text-sm text-slate-600">{term('Created by')} <bdi>{saved.registeredBy==='Employee'?term('Employee'):saved.registeredBy}</bdi>{saved.createdAt&&<time dateTime={saved.createdAt} dir="ltr" className="mt-1 block w-fit max-w-full">{formatDateTime(saved.createdAt)}</time>}</p>
       {saved.pending && <p className="text-sm text-amber-800">{term('Saved on device · Pending sync')}</p>}
       <Link href={!canAccessCRM(employeeState?.actor.role) ? (saved.pending || offline ? "/offline?path=/dashboard" : "/dashboard") : saved.pending || offline ? '/offline?path=/mini-crm' : `/mini-crm#project-${saved.projectId}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700">{term(canAccessCRM(employeeState?.actor.role)?'Open follow-ups':mobileOutdoor?'Measurement assignments':'Dashboard')}</Link>
-      <button type="button" onClick={() => { setBuildingType(''); setClientType("individual"); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setOfflineAddressStarted(false); setReadiness("ready"); setReadinessNote(''); setAssignedOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
+      <button type="button" onClick={() => { setBuildingType(''); setClientType("individual"); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setOfflineAddressStarted(false); setReadiness(""); setReadinessNote(''); setAssignedOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
     </section>
   );
 
@@ -162,7 +162,7 @@ export function OutdoorIntake() {
           <div className="grid gap-3 sm:grid-cols-2">
             {(["ready", "not_ready"] as const).map(value => (
               <label key={value} className={`flex cursor-pointer items-start gap-3 rounded-md border p-4 transition-colors ${readiness === value ? "border-blue-600 bg-blue-50/60" : "border-slate-200 bg-white hover:border-slate-400"}`}>
-                <input type="radio" name="readiness" value={value} checked={readiness === value} onChange={() => setReadiness(value)} className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600" />
+                <input required type="radio" name="readiness" value={value} checked={readiness === value} onChange={() => setReadiness(value)} className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600" />
                 <span><span className="block text-sm font-semibold text-slate-900">{t(`registration.${value}`)}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{value === 'ready' && employeeState?.actor.role === 'Indoor Sales' ? term(selfAssigned ? 'You will enter the initial measurements.' : 'The assigned employee will collect the initial measurements.') : t(`registration.${value}Help`)}</span></span>
               </label>
             ))}

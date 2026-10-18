@@ -29,9 +29,9 @@ test('quotation and unsigned contract reminders remain active; signed and closed
  for(const sales_status of ['new_lead','ready_for_quotation','quotation_in_progress','quotation_approved','contract_generated'])assert.equal(tasks.dueFollowUps([{...base,sales_status}],indoor,now).length,1,sales_status);
  for(const sales_status of ['contract_signed','transferred_to_operations','cancelled','lost','closed'])assert.equal(tasks.dueFollowUps([{...base,sales_status}],indoor,now).length,0,sales_status);
 });
-test('measurement tasks include assigned ready sites and self-created sites, and clear on completion',()=>{
+test('measurement tasks require an explicit assignment and a ready site, and clear on completion',()=>{
  assert.equal(tasks.measurementTasks([base],outdoor).length,1);
- assert.equal(tasks.measurementTasks([{...base,assigned_outdoor_sales_id:null}],outdoor).length,1);
+ assert.equal(tasks.measurementTasks([{...base,assigned_outdoor_sales_id:null}],outdoor).length,0);
  assert.equal(tasks.measurementTasks([{...base,assigned_outdoor_sales_id:'another'}],outdoor).length,0);
  assert.equal(tasks.measurementTasks([{...base,structure_readiness:'not_ready'}],outdoor).length,0);
  assert.equal(tasks.measurementTasks([{...base,sales_status:'ready_for_quotation'}],outdoor).length,0);
@@ -46,4 +46,16 @@ test('the follow-up API rejects incomplete scheduling before calling the databas
  });
  const incomplete=await route.PATCH({json:async()=>({projectId:'project',action:'follow-up',nextFollowUp:schedule.nextFollowUp})});assert.equal(incomplete.status,400);assert.equal(calls,0);
  const result=await route.PATCH({json:async()=>({projectId:'project',action:'follow-up',...schedule})});assert.equal(result.status,200);assert.equal(calls,1);assert.equal(payload.followUpOwnerId,indoor.id);assert.equal(payload.followUpType,'call');
+});
+
+test('not-ready sites and unassigned registrations never become tasks or badge counts',()=>{
+ for(const actor of [outdoor,{id:'admin',role:'Admin'}]){
+  for(const structure_readiness of ['not_ready','partially_ready','unknown','']){
+   for(const assigned_outdoor_sales_id of [outdoor.id,null]){
+    assert.equal(tasks.measurementTasks([{...base,structure_readiness,assigned_outdoor_sales_id}],actor).length,0);
+   }
+  }
+  assert.equal(tasks.measurementTasks([{...base,assigned_outdoor_sales_id:null}],actor).length,0);
+ }
+ assert.equal(tasks.measurementTasks([{...base,sales_status:'unexpected'}],outdoor).length,0);
 });

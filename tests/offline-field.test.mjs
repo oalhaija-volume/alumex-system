@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
+function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
 const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Employee',role:'Indoor Sales',branch:'Karkh'};
 const projectId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const payload={client:{clientType:'individual',clientName:'Client',mobile:'07000000000'},project:{buildingType:'villa_house',assignedOutdoorSalesId:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',address:'Site',locationLatitude:33.3,locationLongitude:44.4,structureReadiness:'ready'}};
@@ -351,4 +351,31 @@ test('additional opening tasks reject Outdoor requests, unassigned creators and 
   const y=setup({projects:[{...delayProject,sales_status}]});
   await assert.rejects(y.client.saveFieldChange('request-openings',projectId,{assignedOutdoorSalesId:actor.id}),/before signing/);
  }
+});
+
+test('completion notes and photos save with the offline finish and survive metadata synchronization',async()=>{
+ const x=setup({projects:[delayProject],openings:[delayOpening]});
+ const photo='data:image/jpeg;base64,/9j/AAAA';
+ await assert.rejects(x.client.saveFieldChange('finish',projectId,{photo:'invalid'}),/photo/);
+ assert.equal(x.state.queue.length,0);assert.equal(x.state.projects[0].sales_status,'new_lead');
+ await x.client.saveFieldChange('finish',projectId,{note:'  Site note  ',photo});
+ assert.equal(x.state.projects[0].sales_status,'ready_for_quotation');
+ assert.deepEqual(x.state.queue[0].payload,{note:'Site note',photo});
+ const report=x.state.measurementReports[0];assert.equal(report.id,x.state.queue[0].id);assert.equal(report.note,'Site note');assert.equal(report.photo,photo);
+ navigator.onLine=true;
+ globalThis.fetch=async()=>Response.json({...x.state,projects:[],measurementReports:[]});
+ await x.client.prepareOffline();assert.equal(x.state.measurementReports[0].photo,photo,'Pending report must survive refresh');
+ x.state.queue=[];
+ globalThis.fetch=async()=>Response.json({...x.state,measurementReports:[{...report,photo:undefined}]});
+ await x.client.prepareOffline();assert.equal(x.state.measurementReports[0].photo,photo,'Synced metadata must retain downloaded photo');
+ globalThis.fetch=async()=>Response.json({...x.state,projects:[],measurementReports:[]});
+ await x.client.prepareOffline();assert.equal(x.state.measurementReports.length,0,'Deleted or inaccessible projects must not retain reports');
+});
+
+test('keeping the reviewed server version drops a discarded completion report with its queued finish',async()=>{
+ const x=setup({projects:[delayProject],openings:[delayOpening]});
+ await x.client.saveFieldChange('finish',projectId,{note:'Unsent note'});
+ assert.equal(x.state.measurementReports.length,1);
+ await x.client.keepReviewedServerVersion({project:delayProject,openings:[delayOpening],measurementReports:[]});
+ assert.equal(x.state.queue.length,0);assert.equal(x.state.measurementReports.length,0);assert.equal(x.state.projects[0].sales_status,'new_lead');
 });

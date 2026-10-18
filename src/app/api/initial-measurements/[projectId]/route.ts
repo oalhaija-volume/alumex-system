@@ -1,3 +1,4 @@
+import {normalizeMeasurementCompletion} from '@/lib/measurements/completion';
 import type { Json } from '@/lib/supabase/database.types';
 import { canCancelProject, normalizeClientCancellation, canDelayMeasurements, canResumeMeasurements, normalizeMeasurementDelayNote } from '@/lib/measurements/measurementDelay';
 import { NextResponse } from "next/server";
@@ -57,6 +58,12 @@ export async function PATCH(request: Request, context: Context) {
   if (result.response) return result.response;
   if (!["new_lead","ready_for_quotation"].includes(result.project.sales_status ?? "")) return NextResponse.json({error:"Measurements are locked once a quotation has been saved."},{status:409});
   const body = await request.json().catch(()=>null);
+  if(body?.action==='finish'&&(body.note!==undefined||body.photo!==undefined)){
+    let completion;
+    try{completion=normalizeMeasurementCompletion(body);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+    const saved=await result.admin.rpc('sync_field_change',{p_operation:crypto.randomUUID(),p_actor:result.auth.user.id,p_project:result.project.id,p_action:'finish',p_payload:completion,p_recorded_at:new Date().toISOString(),p_expected_updated_at:result.project.updated_at});
+    return saved.error?NextResponse.json({error:saved.error.message},{status:409}):NextResponse.json({project:saved.data,salesStatus:'ready_for_quotation'});
+  }
   if(result.project.additional_openings_state && ['finish','reopen','edit-opening'].includes(body?.action)){
     const payload=body.action==='edit-opening'?normalizeOpeningEdit(body):{};
     if(!payload)return NextResponse.json({error:'Complete the opening details.'},{status:400});

@@ -47,6 +47,7 @@ for (const locale of ['en','ar']) for (const quoted of [false,true]) test(`${loc
  await page.getByRole('button',{name:locale==='en'?'Save & add opening':'حفظ وإضافة فتحة',exact:true}).click();
  await expect.poll(async()=>(await savedFieldState(page)).openings.length).toBe(2);
  await finish.click();
+ await page.getByRole('dialog').getByRole('button',{name:locale==='en'?'Submit measurements':'إرسال القياسات',exact:true}).click();
  await expect.poll(async()=>(await savedFieldState(page)).projects[0].additional_openings_state).toBe('submitted');
  expect((await savedFieldState(page)).openings[0]).toEqual(original);
  await expect(nav.getByRole('status')).toHaveCount(0);

@@ -1,3 +1,4 @@
+import {normalizeMeasurementCompletion,retainMeasurementReport} from '@/lib/measurements/completion';
 import { normalizeBuildingType } from '@/lib/intake/buildingType';
 import { canCancelProject, normalizeClientCancellation, canDelayMeasurements, canResumeMeasurements, normalizeMeasurementDelayNote } from '@/lib/measurements/measurementDelay';
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
@@ -28,7 +29,7 @@ export async function prepareOffline():Promise<FieldState>{
   const remote=await response.json() as FieldState;
   const state=await updateFieldState(remote.actor.id,old=>{
    const pending=new Set(old?.queue.map(c=>c.projectId)??[]);
-   return {...remote,followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remote.projects.some(p=>p.id===id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id))??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)).map(o=>retainSkylightCapture(o,old?.openings??[])),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
+   return {...remote,measurementReports:[...(remote.measurementReports??[]).filter(r=>!pending.has(r.project_id)).map(r=>retainMeasurementReport(r,old?.measurementReports??[])),...(old?.measurementReports??[]).filter(r=>pending.has(r.project_id))],followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remote.projects.some(p=>p.id===id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id))??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)).map(o=>retainSkylightCapture(o,old?.openings??[])),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
   },'snapshot');
   setFieldUser(remote.actor.id);return state;
  })();
@@ -71,10 +72,10 @@ export async function syncFieldChanges(){
  syncing=Promise.resolve('locks' in navigator?navigator.locks.request('alumex-field-sync',run):run()).then(()=>undefined).finally(()=>{syncing=null;});return syncing;
 }
 export async function saveFieldChange(action:FieldChange['action'],projectId:string,payload:Record<string,unknown>){
- const state=await stateForWrite();if(['follow-up','ready','assign-measurements','request-openings'].includes(action)&&!canAccessCRM(state.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');if(action==='follow-up')payload=normalizeFollowUp(payload);const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
+ const state=await stateForWrite();if(['follow-up','ready','assign-measurements','request-openings'].includes(action)&&!canAccessCRM(state.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');if(action==='follow-up')payload=normalizeFollowUp(payload);if(action==='finish')payload=normalizeMeasurementCompletion(payload);const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
  await updateFieldState(state.actor.id,s=>{
   if(!s)throw new Error('Offline account unavailable.');
-  let projects=[...s.projects];const openings=[...s.openings];let p=projects.find(p=>p.id===projectId);
+  const measurementReports=[...(s.measurementReports??[])];let projects=[...s.projects];const openings=[...s.openings];let p=projects.find(p=>p.id===projectId);
   if(action==='register'){
    const client=payload.client as Record<string,unknown>,project=payload.project as Record<string,unknown>;
    const buildingType=normalizeBuildingType(project.buildingType,s.actor.role==='Outdoor Sales');
@@ -135,7 +136,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
     if((existing.hasSkylightCapture||existing.skylight)&&edit.opening.structuralType!=='Skylight')throw new Error('A saved skylight shape must remain attached to a skylight.');
     openings[index]={...existing,...edit.opening};change.payload=edit;
    }
-   if(action==='finish'){if(!openings.some(o=>o.projectId===projectId))throw new Error('Save at least one opening first.');p={...p,sales_status:'ready_for_quotation',...(p.additional_openings_state==='requested'?{additional_openings_state:'submitted' as const}:{})};}
+   if(action==='finish'){if(!openings.some(o=>o.projectId===projectId))throw new Error('Save at least one opening first.');if(payload.note||payload.photo)measurementReports.push({id:change.id,project_id:projectId,note:String(payload.note),photo:String(payload.photo)||null,has_photo:!!payload.photo,recorded_by:s.actor.id,recorded_by_name:s.actor.name,recorded_at:change.recordedAt});p={...p,sales_status:'ready_for_quotation',...(p.additional_openings_state==='requested'?{additional_openings_state:'submitted' as const}:{})};}
    if(action==='reopen')p={...p,sales_status:'new_lead'};
    if(action==='ready'||action==='assign-measurements'){
     if(p.sales_status!=='new_lead'||(action==='assign-measurements'&&p.structure_readiness!=='ready'))throw new Error('Measurement assignment is only available before measurements are completed.');
@@ -153,7 +154,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    }
    projects=projects.map(row=>row.id===projectId?{...p!,pending:true}:row);
   }
-  return {...s,projects,openings,queue:[...s.queue,change]};
+  return {...s,measurementReports,projects,openings,queue:[...s.queue,change]};
  });
  // Local durability is the save boundary. Network synchronization may finish later.
  void syncFieldChanges().catch(()=>{});
@@ -206,7 +207,7 @@ export async function reviewServerProject(projectId:string){
  const response=await fetch('/api/offline',{cache:'no-store'});if(!response.ok)throw new Error('Connect and sign in to review the latest version.');
  const data=await response.json() as FieldState;if(data.actor.id!==activeFieldUser())throw new Error('Sign in with the employee who saved this work.');
  const project=data.projects.find(p=>p.id===projectId);if(!project)throw new Error('Project no longer available. Your saved work remains on this device.');
- return {project,openings:data.openings.filter(o=>o.projectId===projectId)};
+ return {project,openings:data.openings.filter(o=>o.projectId===projectId),measurementReports:(data.measurementReports??[]).filter(r=>r.project_id===projectId)};
 }
 export async function retryReviewedProject(projectId:string,updatedAt:string,correction?:{changeId:string;values:FollowUpInput}){
  const id=activeFieldUser();if(!id)return;
@@ -224,7 +225,7 @@ export async function retryReviewedProject(projectId:string,updatedAt:string,cor
 
 export async function keepReviewedServerVersion(review:Awaited<ReturnType<typeof reviewServerProject>>){
  const id=activeFieldUser();if(!id)throw new Error('Sign in before resolving saved work.');
- await updateFieldState(id,s=>({...s!,queue:s!.queue.filter(c=>c.projectId!==review.project.id),projects:s!.projects.map(p=>p.id===review.project.id?{...review.project,pending:false}:p),openings:[...s!.openings.filter(o=>o.projectId!==review.project.id),...review.openings.map(o=>retainSkylightCapture(o,s!.openings))]}));
+ await updateFieldState(id,s=>({...s!,measurementReports:[...(s!.measurementReports??[]).filter(r=>r.project_id!==review.project.id),...review.measurementReports.map(r=>retainMeasurementReport(r,s!.measurementReports??[]))],queue:s!.queue.filter(c=>c.projectId!==review.project.id),projects:s!.projects.map(p=>p.id===review.project.id?{...review.project,pending:false}:p),openings:[...s!.openings.filter(o=>o.projectId!==review.project.id),...review.openings.map(o=>retainSkylightCapture(o,s!.openings))]}));
 }
 
 export async function deleteOnlineProject(projectId:string){
@@ -234,6 +235,6 @@ export async function deleteOnlineProject(projectId:string){
  const response=await fetch('/api/workspace',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId,confirmed:true})});
  const result=await response.json();if(!response.ok)throw new Error(result.error??'Unable to delete project.');
  const id=activeFieldUser();
- if(state&&id===state.actor.id)await updateFieldState(id,s=>({...s!,followUpHistories:Object.fromEntries(Object.entries(s!.followUpHistories??{}).filter(([key])=>key!==projectId)),projects:s!.projects.filter(p=>p.id!==projectId),openings:s!.openings.filter(o=>o.projectId!==projectId)}));
+ if(state&&id===state.actor.id)await updateFieldState(id,s=>({...s!,measurementReports:(s!.measurementReports??[]).filter(r=>r.project_id!==projectId),followUpHistories:Object.fromEntries(Object.entries(s!.followUpHistories??{}).filter(([key])=>key!==projectId)),projects:s!.projects.filter(p=>p.id!==projectId),openings:s!.openings.filter(o=>o.projectId!==projectId)}));
  return result as {ok:boolean;cleanupPending:boolean};
 }

@@ -8,7 +8,7 @@ function load(path, dependencies = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', source)(name => {if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});
+  new Function('require', 'exports', source)(name => {if(name==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});
     if(name==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts',{});
     if(name==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts',{});
     assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
@@ -56,10 +56,11 @@ for (const endpoint of ['workspace', 'offline']) {
     // Contacts, employee names, and measurements must all start before any finishes.
     assert.ok(started.has('clients'));
     assert.ok(started.has('people'));
-    if (endpoint === 'offline') assert.ok(started.has('openings'));
+    if (endpoint === 'offline') {assert.ok(started.has('openings'));assert.ok(started.has('measurement_completion_reports'));}
     started.get('people')([{ id: actor.id, full_name: 'Employee' }]);
     started.get('clients')([{ id: 'client', mobile: '07700000000' }]);
     started.get('openings')?.([]);
+    started.get('measurement_completion_reports')?.([]);
     const result = await response;
     assert.equal(result.status, 200);
     assert.equal(result.body.actor.id, actor.id);

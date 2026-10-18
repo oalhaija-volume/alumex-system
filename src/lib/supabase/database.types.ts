@@ -90,6 +90,12 @@ export type Database = {
         | "document";
     };
     Tables: {
+      measurement_completion_reports: {
+        Row: {id:string;project_id:string;note:string;photo:string|null;has_photo:boolean;recorded_by:string|null;recorded_by_name:string;recorded_at:string};
+        Insert: {id:string;project_id:string;note?:string;photo?:string|null;recorded_by?:string|null;recorded_by_name:string;recorded_at:string};
+        Update: never;
+        Relationships: [];
+      };
       field_sync_receipts: {
         Row: {operation_id:string;actor_id:string;project_id:string;action:string;payload_hash:string;recorded_at:string;synced_at:string;result:Json};
         Insert: {operation_id:string;actor_id:string;project_id:string;action:string;payload_hash:string;recorded_at:string;synced_at?:string;result:Json};

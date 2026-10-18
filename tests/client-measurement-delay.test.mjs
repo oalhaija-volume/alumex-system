@@ -5,7 +5,7 @@ import ts from 'typescript';
 function load(path,deps={}) {
  const code=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
  const exports={};new Function('require','exports',code)(name=>{
-  if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');
+  if(name==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');
   if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');
   if(name==='@/lib/measurements/registrationOpening')return load('../src/lib/measurements/registrationOpening.ts');
   assert.ok(name in deps,name);return deps[name];

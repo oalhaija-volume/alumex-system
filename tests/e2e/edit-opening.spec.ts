@@ -52,6 +52,7 @@ for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}
  await expect.poll(async()=>(await savedFieldState(page)).openings[0].width).toBe(185);
  if(online)await expect.poll(()=>posts.length).toBe(2);
  await page.getByRole('button',{name:locale==='en'?'Finish measurements — ready for quotation':'إنهاء القياسات — جاهز لعرض السعر',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:locale==='en'?'Submit measurements':'إرسال القياسات',exact:true}).click();
  await expect(editButton).toHaveCount(0);
  if(!online)await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});window.dispatchEvent(new Event('online'));});
  await expect.poll(()=>posts.length).toBe(3);

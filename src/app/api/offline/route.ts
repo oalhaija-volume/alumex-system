@@ -1,3 +1,4 @@
+import {normalizeMeasurementCompletion} from '@/lib/measurements/completion';
 import { normalizeBuildingType } from '@/lib/intake/buildingType';
 import { normalizeClientCancellation, normalizeMeasurementDelayNote } from '@/lib/measurements/measurementDelay';
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
@@ -29,19 +30,20 @@ export async function GET(request:Request){
  if(projects.error)return NextResponse.json({error:'Unable to download projects.'},{status:500});
  const ids=projects.data.map(p=>p.id);const clientIds=[...new Set(projects.data.map(p=>p.client_id))];
  const peopleIds=[...new Set(projects.data.flatMap(p=>[p.created_by,p.assigned_outdoor_sales_id,p.follow_up_owner_id,p.measurement_delayed_by,p.client_cancelled_by]).filter((id):id is string=>!!id))];
- const [people,openings,clients]=await Promise.all([
+ const [people,openings,clients,reports]=await Promise.all([
   peopleIds.length?admin.from('profiles').select('id,full_name,username').in('id',peopleIds):{data:[],error:null},
   ids.length?admin.from('openings').select('id,project_id,floor,room,width,height,quantity,has_skylight_capture,has_arch,opening_type,opening_direction').in('project_id',ids):{data:[],error:null},
-  clientIds.length?admin.from('clients').select('id,mobile').in('id',clientIds):{data:[],error:null}
+  clientIds.length?admin.from('clients').select('id,mobile').in('id',clientIds):{data:[],error:null},
+  ids.length?admin.from('measurement_completion_reports').select('id,project_id,note,has_photo,recorded_by,recorded_by_name,recorded_at').in('project_id',ids):{data:[],error:null}
  ]);
  if(directory.error||people.error)return NextResponse.json({error:'Unable to load employee assignments.'},{status:500});
- if(openings.error||clients.error)return NextResponse.json({error:'Unable to download measurements.'},{status:500});
+ if(openings.error||clients.error||reports.error)return NextResponse.json({error:'Unable to download measurements.'},{status:500});
  const indoorSales=directory.data.filter(p=>p.role==='Indoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'}));
  const outdoorSales=directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'}));
  const employees=new Map((people.data??[]).map(p=>[p.id,p]));
  const contacts=new Map(clients.data.map(c=>[c.id,c.mobile]));
  const name=(id:string|null)=>id?(employees.get(id)?.full_name??employees.get(id)?.username):null;
- return NextResponse.json({actor,outdoorSales,indoorSales,queue:[],syncedAt:null,projects:projects.data.map(p=>({...p,clientCancelledBy:name(p.client_cancelled_by)??null,measurementDelayedBy:name(p.measurement_delayed_by)??null,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)??null,registeredBy:name(p.created_by)??'Employee',assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===actor.id,serverUpdatedAt:p.updated_at})),openings:openings.data.map(o=>({id:o.id,projectId:o.project_id,floor:o.floor??'',room:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?o.room:'Other',otherRoom:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?'':o.room??'',width:Number(o.width),height:Number(o.height),quantity:o.quantity,hasArch:o.has_arch,hasSkylightCapture:o.has_skylight_capture,structuralType:o.opening_type,openingType:o.opening_direction}))},{headers:{'Cache-Control':'private, no-store'}});
+ return NextResponse.json({measurementReports:reports.data??[],actor,outdoorSales,indoorSales,queue:[],syncedAt:null,projects:projects.data.map(p=>({...p,clientCancelledBy:name(p.client_cancelled_by)??null,measurementDelayedBy:name(p.measurement_delayed_by)??null,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)??null,registeredBy:name(p.created_by)??'Employee',assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===actor.id,serverUpdatedAt:p.updated_at})),openings:openings.data.map(o=>({id:o.id,projectId:o.project_id,floor:o.floor??'',room:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?o.room:'Other',otherRoom:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?'':o.room??'',width:Number(o.width),height:Number(o.height),quantity:o.quantity,hasArch:o.has_arch,hasSkylightCapture:o.has_skylight_capture,structuralType:o.opening_type,openingType:o.opening_direction}))},{headers:{'Cache-Control':'private, no-store'}});
 }
 export async function POST(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
@@ -66,6 +68,8 @@ export async function POST(request:Request){
   if(assignee && (typeof assignee!=='string'||!uuid.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
   if(auth.role==='Indoor Sales'&&!assignee)return NextResponse.json({error:'Choose yourself or an Outdoor Sales employee to collect the initial measurements.'},{status:400});
   payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(p.buildingType===undefined?{}:{buildingType}),...(assignee?{assignedOutdoorSalesId:assignee}:{}),address:address.slice(0,2000)||`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
+ }else if(body.action==='finish'){
+  try{payload=body.payload.note===undefined&&body.payload.photo===undefined?{}:normalizeMeasurementCompletion(body.payload);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  }else if(body.action==='opening'){
   const opening=normalizeRegistrationOpening(body.payload);if(!opening)return NextResponse.json({error:'Complete the opening dimensions, floor, room and types.'},{status:400});payload=opening as unknown as Json;
  }else if(body.action==='edit-opening'){

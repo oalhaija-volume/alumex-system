@@ -8,6 +8,7 @@ import { isShutterBox, isRollerShutter, normalizeCatalogItem } from '@/lib/workf
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
 import type { RegistrationOpening } from '@/lib/measurements/registrationOpening';
 import type { QuotationRevision,SalesFlow } from '@/lib/workflow/types';
+import {MeasurementReports} from "@/components/measurements/MeasurementReports";
 import { ProjectRecord } from './ProjectRecord';
 import { QuotationOpeningForm } from './QuotationOpeningForm';
 import { DocumentHeader,DocumentParties,OpeningSchedule,DocumentFooter,DocumentPaper } from './CommercialDocument';
@@ -128,5 +129,5 @@ export function QuotationWorkspace({projectId}:{projectId:string}) {
  const resource=useResource<QuoteData>(`/api/sales-flow/${projectId}`);
  const [reset,setReset]=useState(0);
  async function reload(){await resource.reload();setReset(n=>n+1);}
- return <Workspace title={term("Quotation")} description={term("Prepare and revise the client’s quotation using measured openings and preset catalog prices.")}><ProjectRecord projectId={projectId}/><Notice error={resource.error}/>{resource.loading?<p>{term("Loading quotation…")}</p>:resource.data?<QuoteEditor key={`${resource.data.flow?.revision??0}:${reset}`} data={resource.data} projectId={projectId} reload={reload}/>:null}</Workspace>;
+ return <Workspace title={term("Quotation")} description={term("Prepare and revise the client’s quotation using measured openings and preset catalog prices.")}><ProjectRecord projectId={projectId}/><MeasurementReports projectId={projectId}/><Notice error={resource.error}/>{resource.loading?<p>{term("Loading quotation…")}</p>:resource.data?<QuoteEditor key={`${resource.data.flow?.revision??0}:${reset}`} data={resource.data} projectId={projectId} reload={reload}/>:null}</Workspace>;
 }

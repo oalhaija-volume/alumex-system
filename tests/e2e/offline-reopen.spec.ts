@@ -67,6 +67,7 @@ for(const role of ['Indoor Sales','Outdoor Sales'])test(`${role}: real cached ap
   await page.getByRole('button',{name:'Save & add opening',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Saved openings (1)',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Finish measurements — ready for quotation',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'Submit measurements',exact:true}).click();
   await expect(page.getByText(role==='Outdoor Sales'?'Measurements submitted. Indoor Sales will prepare the quotation.':'Measurements complete. This project is ready for quotation.',{exact:true})).toBeVisible();
   const before=await savedState(page);expect(before.queue.map(c=>c.action)).toEqual(['register','opening','finish']);
   const url=page.url();await context!.close();context=undefined;

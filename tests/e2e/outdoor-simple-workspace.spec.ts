@@ -36,6 +36,7 @@ for(const locale of ['en','ar'])test(`${locale}: simplified Outdoor workspace co
  await page.goto('/offline?path=/initial-measurements/'+state.projects[0].id);
  await page.evaluate(()=>Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false}));
  await page.getByRole('button',{name:locale==='en'?'Finish measurements — ready for quotation':'إنهاء القياسات — جاهز لعرض السعر',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:locale==='en'?'Submit measurements':'إرسال القياسات',exact:true}).click();
  await expect(badge).toHaveText(locale==='en'?'1':'١');expect(posts).toHaveLength(0);
  expect((await savedFieldState(page)).queue).toHaveLength(1);
  network=true;await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});window.dispatchEvent(new Event('online'));});

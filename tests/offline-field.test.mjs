@@ -276,3 +276,15 @@ test('Outdoor Sales must choose a building type before queueing a new project',a
   assert.equal((await (await x.client.fieldFetch('/api/workspace')).json()).projects[0].building_type,buildingType);
  }
 });
+
+for(const assigned of [undefined,null,'another'])test(`offline creator cannot report visit outcomes without their assignment (${assigned})`,async()=>{
+ const project={...delayProject,created_by:actor.id,assigned_outdoor_sales_id:assigned};
+ const x=setup({actor:{...actor,role:'Outdoor Sales'},projects:[project],openings:[delayOpening]});
+ const before=structuredClone(x.state);
+ const view=await (await x.client.fieldFetch('/api/initial-measurements/'+projectId)).json();
+ assert.equal(view.canDelayMeasurements,false);assert.equal(view.canCancelProject,false);
+ for(const action of ['delay-measurements','cancel-project']){
+  await assert.rejects(x.client.saveFieldChange(action,projectId,{note:'Client request',confirmed:true}));
+ }
+ assert.deepEqual(x.state,before);
+});

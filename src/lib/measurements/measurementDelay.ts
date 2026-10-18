@@ -3,8 +3,7 @@ import { canAccessCRM } from '@/lib/auth/permissions';
 type Assignment = { sales_status?: string; created_by: string; assigned_outdoor_sales_id?: string | null };
 type Actor = { id: string; role: string };
 export function canDelayMeasurements(project: Assignment, actor: Actor) {
-  return actor.role === 'Outdoor Sales' && (project.assigned_outdoor_sales_id === actor.id ||
-    (!project.assigned_outdoor_sales_id && project.created_by === actor.id));
+  return actor.role === 'Outdoor Sales' && project.assigned_outdoor_sales_id === actor.id;
 }
 export function canResumeMeasurements(project: Assignment, actor: Actor) {
   return canAccessCRM(actor.role) && project.sales_status === 'new_lead';

@@ -235,6 +235,7 @@ export type Database = {
       };
       projects: {
         Row: {
+          building_type: "commercial_building" | "residential_building" | "villa_house" | null;
           id: string;
           project_number: string;
           project_name: string;
@@ -310,6 +311,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          building_type?: "commercial_building" | "residential_building" | "villa_house" | null;
           id?: string;
           project_number: string;
           project_name: string;

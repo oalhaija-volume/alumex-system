@@ -29,7 +29,7 @@ for(const role of ['Indoor Sales','Outdoor Sales'])test(`${role}: real cached ap
    const project=remote.projects.find(p=>p.id===change.projectId);
    if(change.action==='register'){
     const p=change.payload.project as Record<string,unknown>,client=change.payload.client as Record<string,unknown>;
-    remote.projects.push({id:change.projectId,project_name:String(client.clientName),project_number:'PRJ-OFFLINE',created_by:actor.id,registeredBy:actor.name,branch:actor.branch,assigned_outdoor_sales_id:actor.id,assignedOutdoorSales:actor.name,assignedToYou:true,original_creator_role:actor.role,created_at:change.recordedAt,updated_at:change.recordedAt,address:String(p.address??''),phone:String(client.mobile),structure_readiness:String(p.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,project_notes:null});
+    remote.projects.push({id:change.projectId,project_name:String(client.clientName),project_number:'PRJ-OFFLINE',created_by:actor.id,registeredBy:actor.name,branch:actor.branch,assigned_outdoor_sales_id:actor.id,assignedOutdoorSales:actor.name,assignedToYou:true,original_creator_role:actor.role,created_at:change.recordedAt,updated_at:change.recordedAt,building_type:p.buildingType as 'villa_house'|undefined,address:String(p.address??''),phone:String(client.mobile),structure_readiness:String(p.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,project_notes:null});
    }else if(change.action==='opening')remote.openings.push({...change.payload,projectId:change.projectId} as FieldState['openings'][number]);
    else if(change.action==='finish'&&project)project.sales_status='ready_for_quotation';
    const result=remote.projects.find(p=>p.id===change.projectId)!;result.updated_at=new Date().toISOString();
@@ -52,6 +52,7 @@ for(const role of ['Indoor Sales','Outdoor Sales'])test(`${role}: real cached ap
   const began=Date.now();await page.goto(base+'/offline?path=/intake');
   await expect(page.getByPlaceholder('Enter full name')).toBeVisible();
   const reopenMs=Date.now()-began;
+  if(role==='Outdoor Sales')await page.locator('input[name="buildingType"][value="villa_house"]').check();
   await page.getByPlaceholder('Enter full name').fill('Offline reopening sample');
   await page.getByPlaceholder('07xx xxx xxxx').fill('07700000000');
   if(role==='Outdoor Sales')await page.locator('input[autocomplete="street-address"]').fill('Baghdad, Mansour');

@@ -12,6 +12,7 @@ function load(path, dependencies = {}) {
   }).outputText;
   const exports = {};
   new Function('require', 'exports', source)(name => {if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});
+    if(name==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts',{});
     if(name==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts',{});
     if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');
     assert.ok(name in dependencies, `Unexpected dependency: ${name}`);

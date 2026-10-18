@@ -1,3 +1,4 @@
+import { normalizeBuildingType } from '@/lib/intake/buildingType';
 import { normalizeClientCancellation, normalizeMeasurementDelayNote } from '@/lib/measurements/measurementDelay';
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
 import { NextResponse } from 'next/server';
@@ -20,7 +21,7 @@ export async function GET(request:Request){
   if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
   return NextResponse.json({actor:actorFromProfile(profile.data)},{headers:{'Cache-Control':'no-store'}});
  }
- let query=admin.from('projects').select('id,branch,project_number,project_name,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,project_notes,readiness_note,measurement_delayed,measurement_delay_note,measurement_delayed_at,measurement_delayed_by,client_cancellation_note,client_cancelled_at,client_cancelled_by,created_at,created_by,updated_at,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role').order('created_at',{ascending:false});
+ let query=admin.from('projects').select('id,building_type,branch,project_number,project_name,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,project_notes,readiness_note,measurement_delayed,measurement_delay_note,measurement_delayed_at,measurement_delayed_by,client_cancellation_note,client_cancelled_at,client_cancelled_by,created_at,created_by,updated_at,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role').order('created_at',{ascending:false});
  if(auth.role==='Outdoor Sales')query=query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);
  const [profile,projects,directory]=await Promise.all([profileQuery,query,admin.from('profiles').select('id,full_name,username,role').in('role',['Indoor Sales','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name')]);
  if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
@@ -58,10 +59,13 @@ export async function POST(request:Request){
   if(!name||name.length>150||!phone||phone.length>80||!['individual','company'].includes(c?.clientType)||!['ready','not_ready'].includes(p?.structureReadiness)||(!location.isValid&&!addressOnly))return NextResponse.json({error:'Complete the client, phone, locations and site readiness.'},{status:400});
   let readinessNote:string|null;
   try{readinessNote=normalizeReadinessNote(auth.role,p.structureReadiness,p.readinessNote);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+  // Older installed clients can still deliver previously queued registrations without this field.
+  let buildingType;
+  try{buildingType=normalizeBuildingType(p.buildingType,auth.role==='Outdoor Sales'&&p.buildingType!==undefined);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   const assignee=p?.assignedOutdoorSalesId;
   if(assignee && (typeof assignee!=='string'||!uuid.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
   if(auth.role==='Indoor Sales'&&!assignee)return NextResponse.json({error:'Choose yourself or an Outdoor Sales employee to collect the initial measurements.'},{status:400});
-  payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(assignee?{assignedOutdoorSalesId:assignee}:{}),address:address.slice(0,2000)||`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
+  payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(p.buildingType===undefined?{}:{buildingType}),...(assignee?{assignedOutdoorSalesId:assignee}:{}),address:address.slice(0,2000)||`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
  }else if(body.action==='opening'){
   const opening=normalizeRegistrationOpening(body.payload);if(!opening)return NextResponse.json({error:'Complete the opening dimensions, floor, room and types.'},{status:400});payload=opening as unknown as Json;
  }else if(body.action==='follow-up'){

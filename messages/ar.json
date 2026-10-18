@@ -2457,7 +2457,12 @@
     "Photo loaded, but device storage is unavailable for offline use.": "تم تحميل الصورة، لكن تعذّر حفظها على الجهاز للاستخدام دون إنترنت.",
     "View skylight photos and drawings": "عرض صور ورسومات السكاي لايت",
     "Outdoor Sales workspace": "مساحة عمل المبيعات الخارجية",
-    "{count} measurement tasks waiting": "{count} مهام قياسات بانتظار التنفيذ"
+    "{count} measurement tasks waiting": "{count} مهام قياسات بانتظار التنفيذ",
+    "Building type": "نوع المبنى",
+    "Commercial building": "مبنى تجاري",
+    "Residential building": "مبنى سكني",
+    "Villa / House": "فيلا / منزل",
+    "Choose the building type: commercial building, residential building, or villa / house.": "اختر نوع المبنى: مبنى تجاري أو مبنى سكني أو فيلا / منزل."
   },
   "registration": {
     "title": "عميل ومشروع جديد",

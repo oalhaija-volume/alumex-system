@@ -18,6 +18,7 @@ for(const locale of ['en','ar'])for(const readiness of ['ready','not_ready'])tes
  await expect(page.locator('input[autocomplete="name"]')).toBeVisible();
  await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});window.dispatchEvent(new Event('offline'));});
  await page.addInitScript(()=>Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false}));
+ await page.locator('input[name="buildingType"][value="villa_house"]').check();
  await page.locator('input[autocomplete="name"]').fill('Offline address client');
  await page.locator('input[type="tel"]').fill('07700000000');
  await page.locator(`input[value="${readiness}"]`).check();

@@ -38,6 +38,7 @@ for (const actor of [fatma, ehab]) {
           window.dispatchEvent(new Event('field-change'));
         }, state);
         await expect(page.getByPlaceholder('Enter full name')).toBeVisible();
+        if(actor.role==='Outdoor Sales')await page.locator('input[name="buildingType"][value="villa_house"]').check();
         await page.getByPlaceholder('Enter full name').fill('Routing test client');
         await page.getByPlaceholder('07xx xxx xxxx').fill('07700000000');
         await page.getByRole('button', { name: 'Project location map', exact: true }).click({ position: { x: 80, y: 80 } });

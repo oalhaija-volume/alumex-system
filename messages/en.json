@@ -2457,7 +2457,12 @@
     "Photo loaded, but device storage is unavailable for offline use.": "Photo loaded, but device storage is unavailable for offline use.",
     "View skylight photos and drawings": "View skylight photos and drawings",
     "Outdoor Sales workspace": "Outdoor Sales workspace",
-    "{count} measurement tasks waiting": "{count} measurement tasks waiting"
+    "{count} measurement tasks waiting": "{count} measurement tasks waiting",
+    "Building type": "Building type",
+    "Commercial building": "Commercial building",
+    "Residential building": "Residential building",
+    "Villa / House": "Villa / House",
+    "Choose the building type: commercial building, residential building, or villa / house.": "Choose the building type: commercial building, residential building, or villa / house."
   },
   "registration": {
     "title": "New client & project",

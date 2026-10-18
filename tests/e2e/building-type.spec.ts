@@ -1,0 +1,35 @@
+import {expect,test} from '@playwright/test';
+import {savedFieldState} from './helpers/fieldState';
+import type {FieldChange,FieldState} from '../../src/lib/offline/types';
+test.use({serviceWorkers:'block'});
+for(const locale of ['en','ar'])for(const type of ['commercial_building','residential_building','villa_house'] as const)test(`${locale}: ${type} is chosen first and survives offline registration and sync`,async({page})=>{
+ const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Outdoor employee',role:'Outdoor Sales'};
+ const state:FieldState={actor,projects:[],openings:[],queue:[],syncedAt:null,outdoorSales:[],indoorSales:[]};
+ const posts:FieldChange[]=[];
+ await page.addInitScript(locale=>localStorage.setItem('alumex_locale',locale),locale);
+ await page.route('**/api/**',async route=>{
+  if(route.request().method()!=='POST')return route.fulfill({json:state});
+  const change=route.request().postDataJSON();posts.push(change);state.projects=(await savedFieldState(page)).projects.map(p=>({...p,project_number:'PRJ-BUILDING',pending:false}));
+  return route.fulfill({json:{project:state.projects.find(p=>p.id===change.projectId)}});
+ });
+ await page.goto('/offline?path=/intake');
+ const choices=page.locator('input[name="buildingType"]');await expect(choices).toHaveCount(3);await expect(page.locator('input[name="buildingType"]:checked')).toHaveCount(0);
+ const first=await choices.first().boundingBox(),clientType=await page.locator('input[name="clientType"]').first().boundingBox();expect(first!.y).toBeLessThan(clientType!.y);
+ await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});window.dispatchEvent(new Event('offline'));});
+ await page.addInitScript(()=>Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false}));
+ await page.locator('input[autocomplete="name"]').fill('Building classification test');await page.locator('input[type="tel"]').fill('07700000000');await page.locator('input[autocomplete="street-address"]').fill('Baghdad, Mansour');
+ const save=page.getByRole('button',{name:locale==='en'?/Continue to measurements/:/متابعة إلى القياسات/});
+ await save.click();expect((await savedFieldState(page)).projects).toHaveLength(0);
+ await expect(page.locator('p[role="alert"]')).toContainText(locale==='en'?'Choose the building type':'اختر نوع المبنى');
+ await page.locator(`input[name="buildingType"][value="${type}"]`).check();
+ await page.screenshot({path:test.info().outputPath('building-choice.png'),fullPage:true});
+ await save.click();await expect(page).toHaveURL(/\/offline\?project=/);
+ await expect.poll(async()=>(await savedFieldState(page)).queue.length).toBe(1);
+ const saved=await savedFieldState(page);expect(saved.projects[0].building_type).toBe(type);expect(saved.queue[0].payload.project).toMatchObject({buildingType:type});expect(posts).toHaveLength(0);
+ const labels={commercial_building:['Commercial building','مبنى تجاري'],residential_building:['Residential building','مبنى سكني'],villa_house:['Villa / House','فيلا / منزل']};
+ const record=page.getByRole('region',{name:locale==='en'?'Project record':'سجل المشروع'});await expect(record).toContainText(labels[type][locale==='en'?0:1]);
+ await page.reload();await expect(record).toContainText(labels[type][locale==='en'?0:1]);
+ await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});window.dispatchEvent(new Event('online'));});
+ await expect.poll(async()=>(await savedFieldState(page)).queue.length).toBe(0);expect(posts).toHaveLength(1);expect(posts[0].payload.project).toMatchObject({buildingType:type});
+ expect((await savedFieldState(page)).projects[0].building_type).toBe(type);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

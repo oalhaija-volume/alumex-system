@@ -40,3 +40,17 @@ export function normalizeRegistrationOpening(value: unknown): RegistrationOpenin
   if ((structuralType === "Window" || structuralType === "Door") && openingType === null) return null;
   return { ...(skylight?{skylight}:{}),id:input.id, quantity, width:input.width, height:input.height, floor, room, otherRoom, structuralType, openingType };
 }
+
+// Edits replace measurement fields only; saved skylight media stays attached to its opening.
+export function normalizeOpeningEdit(value: unknown): {opening:RegistrationOpening;previous:RegistrationOpening}|null {
+  if(!value||typeof value!=='object')return null;
+  const input=value as Record<string,unknown>;
+  const measurements=(value:unknown)=>value&&typeof value==='object'
+    ? normalizeRegistrationOpening({...value,skylight:undefined}) : null;
+  const opening=measurements(input.opening),previous=measurements(input.previous);
+  return opening&&previous&&opening.id===previous.id?{opening,previous}:null;
+}
+export function sameOpeningMeasurements(left:RegistrationOpening,right:RegistrationOpening):boolean {
+  const normalized=normalizeOpeningEdit({opening:left,previous:right});
+  return !!normalized&&JSON.stringify(normalized.opening)===JSON.stringify(normalized.previous);
+}

@@ -1,9 +1,10 @@
+import type { Json } from '@/lib/supabase/database.types';
 import { canCancelProject, normalizeClientCancellation, canDelayMeasurements, canResumeMeasurements, normalizeMeasurementDelayNote } from '@/lib/measurements/measurementDelay';
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseServiceRoleKey } from "@/lib/supabase/config";
-import { normalizeRegistrationOpening, registrationRoomTypes } from "@/lib/measurements/registrationOpening";
+import { normalizeOpeningEdit, normalizeRegistrationOpening, registrationRoomTypes } from "@/lib/measurements/registrationOpening";
 
 type Context = { params: Promise<{projectId: string}> };
 async function access(context: Context) {
@@ -67,6 +68,14 @@ export async function PATCH(request: Request, context: Context) {
     return saved.error?NextResponse.json({error:saved.error.message},{status:409}):NextResponse.json({project:saved.data});
   }
   if(result.project.measurement_delayed)return NextResponse.json({error:"Resume measurements before recording or completing them."},{status:409});
+  if(body?.action==='edit-opening'){
+    if(result.project.sales_status!=='new_lead')return NextResponse.json({error:'Reopen measurements before editing an opening.'},{status:409});
+    const edit=normalizeOpeningEdit(body);
+    if(!edit||typeof body.operationId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.operationId))return NextResponse.json({error:'Complete the opening details.'},{status:400});
+    const saved=await result.admin.rpc('sync_field_change',{p_operation:body.operationId,p_actor:result.auth.user.id,p_project:result.project.id,
+      p_action:'edit-opening',p_payload:edit as unknown as Json,p_recorded_at:new Date().toISOString(),p_expected_updated_at:result.project.updated_at});
+    return saved.error?NextResponse.json({error:saved.error.message},{status:409}):NextResponse.json({id:edit.opening.id});
+  }
   if (body?.action !== "finish" && body?.action !== "reopen") return NextResponse.json({error:"Invalid measurement action."},{status:400});
   if (body.action === "finish") {
     const {data:openings,error} = await result.admin.from("openings")

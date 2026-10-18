@@ -74,3 +74,15 @@ test('outcome visibility requires an explicit Outdoor assignment while preservin
   }
  }
 });
+
+test('opening edits use the authenticated actor and a stable operation ID',async()=>{
+ const previous={id,floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'};
+ const {api,calls}=route();
+ const result=await api.PATCH(request({action:'edit-opening',operationId:id,previous,opening:{...previous,width:180,quantity:3}}),context);
+ assert.equal(result.status,200);assert.equal(calls[0].args.p_actor,'employee');assert.equal(calls[0].args.p_operation,id);
+ assert.equal(calls[0].args.p_action,'edit-opening');assert.equal(calls[0].args.p_payload.previous.width,120);assert.equal(calls[0].args.p_payload.opening.width,180);
+});
+for(const patch of [{opening:{}},{previous:null},{operationId:'invalid'}])test(`invalid opening edit rejected before database write: ${Object.keys(patch)}`,async()=>{
+ const previous={id,floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'};
+ const {api,calls}=route();assert.equal((await api.PATCH(request({action:'edit-opening',operationId:id,previous,opening:{...previous,width:180},...patch}),context)).status,400);assert.equal(calls.length,0);
+});

@@ -10,7 +10,7 @@ import { ProjectRecord } from '@/components/workflow/ProjectRecord';
 import Link from "next/link";
 import { readFieldState } from "@/lib/offline/store";
 import { fieldFetch,isDeviceWorkspace } from "@/lib/offline/client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { normalizeRegistrationOpening, registrationRoomTypes, registrationStructureTypes, type SkylightCapture, type RegistrationOpening, type RegistrationStructure } from "@/lib/measurements/registrationOpening";
 
@@ -32,6 +32,9 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   const [structuralType,setStructuralType] = useState<RegistrationStructure|"">("");
   const [openingType,setOpeningType] = useState("");
   const [draftId,setDraftId] = useState("");
+  const [editing,setEditing] = useState<RegistrationOpening|null>(null);
+  const [editOperationId,setEditOperationId] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
   const [loading,setLoading] = useState(true);
   const [saving,setSaving] = useState(false);
   const [error,setError] = useState("");
@@ -61,18 +64,27 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     if(isDeviceWorkspace())window.addEventListener('field-change',refresh);
     return()=>{controller.abort();window.removeEventListener('field-change',refresh);};
   },[endpoint]);
+  function resetForm(){
+    setEditing(null);setEditOperationId("");setSkylight({sections:[]});setQuantity("1");setFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setDraftId(crypto.randomUUID());
+  }
+  function editOpening(opening:RegistrationOpening){
+    if(saving||photoBusy||dirty)return;
+    setEditing(opening);setEditOperationId(crypto.randomUUID());setDraftId(opening.id);
+    setFloor(opening.floor);setRoom(opening.room);setOtherRoom(opening.otherRoom);setWidth(String(opening.width));setHeight(String(opening.height));setQuantity(String(opening.quantity??1));setStructuralType(opening.structuralType);setOpeningType(opening.openingType??"");setError("");setNotice("");
+    formRef.current?.scrollIntoView({behavior:'smooth',block:'start'});
+    formRef.current?.querySelector('input')?.focus({preventScroll:true});
+  }
   async function save(event:React.FormEvent) {
     event.preventDefault();
     if (saving || photoBusy) return;
-    const opening = normalizeRegistrationOpening({id:draftId,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor,room,otherRoom,...(structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
+    const opening = normalizeRegistrationOpening({id:draftId,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor,room,otherRoom,...(!editing&&structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
     if (!opening) {setError(t("initialStep.invalid"));return;}
     setSaving(true);setError("");setNotice("");
     try {
-      const response=await fieldFetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(opening)});
+      const response=await fieldFetch(endpoint,{method:editing?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(editing?{action:"edit-opening",opening,previous:editing,operationId:editOperationId}:opening)});
       const data=await response.json();if(!response.ok) throw new Error(data.error);
-      setOpenings(current=>current.some(row=>row.id===opening.id)?current:[...current,opening]);
-      setSkylight({sections:[]});setQuantity("1");setFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setDraftId(crypto.randomUUID());
-      setNotice(t("initialStep.saved"));
+      setOpenings(current=>editing?current.map(row=>row.id===opening.id?{...row,...opening}:row):current.some(row=>row.id===opening.id)?current:[...current,opening]);
+      setNotice(editing?term("Opening measurements updated."):t("initialStep.saved"));resetForm();
     } catch(cause) {setError(cause instanceof Error?cause.message:t("initialStep.failed"));}
     finally {setSaving(false);}
   }
@@ -99,7 +111,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     finally{setSaving(false);}
   }
   const cancelled = project?.sales_status === 'cancelled';
-  const dirty = Boolean(quantity !== "1" || width || height || structuralType || floor || room || otherRoom);
+  const dirty = Boolean(editing || quantity !== "1" || width || height || structuralType || floor || room || otherRoom);
   return <section className="mx-auto w-full max-w-[760px] px-5 py-8 sm:px-8 sm:py-10">
     <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{t("initialStep.title")}</h1>
     <p className="mt-2 text-sm leading-6 text-slate-500">{project ? `${project.project_name} · ${term(project.project_number)}` : t("initialStep.description")}</p>
@@ -121,9 +133,9 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
       </form>
     </details>)}
     {project && !finished && !project.measurement_delayed ? <>
-      <form onSubmit={save} className="mt-7 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
+      <form ref={formRef} aria-label={term(editing?"Edit opening measurements":"New opening measurements")} onSubmit={save} className="mt-7 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
         <fieldset disabled={saving||photoBusy} className="min-w-0 space-y-5">
-          <legend className="mb-5 text-lg font-semibold text-slate-900">{t("initialStep.opening",{number:formatNumber(openings.length+1)})}</legend>
+          <legend className="mb-5 text-lg font-semibold text-slate-900">{editing?`${term("Edit opening")} ${formatNumber(openings.findIndex(o=>o.id===editing.id)+1)}`:t("initialStep.opening",{number:formatNumber(openings.length+1)})}</legend>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm font-medium text-slate-800">{t("initialStep.floor")}
               <input required maxLength={100} value={floor} onChange={event=>setFloor(event.target.value)} placeholder={t("initialStep.floorPlaceholder")} className={field} />
@@ -139,7 +151,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
             <input required maxLength={100} value={otherRoom} onChange={event=>setOtherRoom(event.target.value)} className={field} placeholder={t("initialStep.otherRoomPlaceholder")} />
           </label> : null}
           <label className="block text-sm font-medium text-slate-800">{t("initialStep.structure")}
-            <select aria-label={t("initialStep.structure")} required className={field} value={structuralType} onChange={event=>{setStructuralType(event.target.value as RegistrationStructure);setOpeningType("");setNotice("");}}>
+            <select disabled={!!(editing?.hasSkylightCapture||editing?.skylight)} aria-label={t("initialStep.structure")} required className={field} value={structuralType} onChange={event=>{setStructuralType(event.target.value as RegistrationStructure);setOpeningType("");setNotice("");}}>
               <option value="">{t("initialStep.choose")}</option>
               {registrationStructureTypes.map(type=><option key={type} value={type}>{t(`initialStep.types.${type}`)}</option>)}
             </select>
@@ -156,8 +168,10 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           </div>
           <label className="block text-sm font-medium text-slate-800">{term('Number of identical openings')}<input required type="number" inputMode="numeric" min="1" max="10000" step="1" className={field} value={quantity} onChange={event=>setQuantity(event.target.value)} aria-describedby="opening-quantity-help"/></label>
           <p id="opening-quantity-help" className="text-xs leading-5 text-slate-500">{term('Use one entry for openings with the same dimensions, type, floor and room. Record different openings separately.')}</p>
-          {structuralType==='Skylight'&&<SkylightCaptureEditor key={draftId} value={skylight} onChange={setSkylight} busy={photoBusy||saving} onBusyChange={setPhotoBusy}/>}
-          <button type="submit" className="min-h-12 w-full rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{saving?t("common.loading"):t("initialStep.add")}</button>
+          {editing&&(editing.hasSkylightCapture||editing.skylight)&&<p className="text-sm text-slate-600">{term('Saved skylight photos, drawings and sections are preserved.')}</p>}
+          {!editing&&structuralType==='Skylight'&&<SkylightCaptureEditor key={draftId} value={skylight} onChange={setSkylight} busy={photoBusy||saving} onBusyChange={setPhotoBusy}/>}
+          <button type="submit" className="min-h-12 w-full rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{saving?t("common.loading"):editing?term("Save measurement changes"):t("initialStep.add")}</button>
+          {editing&&<button type="button" onClick={()=>{resetForm();setError("");}} className="min-h-12 w-full rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700">{term("Cancel editing")}</button>}
         </fieldset>
       </form>
       {notice ? <p role="status" className="mt-4 text-sm text-green-800">{errorMessage(notice)}</p>:null}
@@ -177,7 +191,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           </thead>
           <tbody className="divide-y divide-slate-200">
             {openings.map((opening,index)=><tr key={opening.id} className="odd:bg-white even:bg-slate-50">
-              <th scope="row" className={`sticky start-0 border-e border-slate-200 px-3 py-3 text-start font-semibold tabular-nums text-slate-700 ${index%2===0?"bg-white":"bg-slate-50"}`}>{formatNumber(index+1)}</th>
+              <th scope="row" className={`sticky start-0 border-e border-slate-200 px-3 py-3 text-start font-semibold tabular-nums text-slate-700 ${index%2===0?"bg-white":"bg-slate-50"}`}>{formatNumber(index+1)}{!finished&&!project?.measurement_delayed&&<button type="button" disabled={saving||photoBusy||dirty} aria-label={`${term('Edit opening')} ${formatNumber(index+1)}`} onClick={()=>editOpening(opening)} className="mt-1 block min-h-11 rounded-md px-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-40">{term('Edit')}</button>}</th>
               <td className="max-w-40 break-words px-3 py-3 text-slate-700">{term(opening.floor)}</td>
               <td className="max-w-48 break-words px-3 py-3 text-slate-700">{opening.room === "Other" ? opening.otherRoom : t(`initialStep.rooms.${opening.room}`)}</td>
               <td className="px-3 py-3 text-slate-900">{t(`initialStep.types.${opening.structuralType}`)}</td>

@@ -7,7 +7,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeFollowUp,normalizeMeasurementAssignment } from '@/lib/workflow/followUps';
 import { canAccessCRM } from '@/lib/auth/permissions';
 import { salesRoles } from '@/lib/workflow/access';
-import { normalizeRegistrationOpening,registrationRoomTypes } from '@/lib/measurements/registrationOpening';
+import { normalizeOpeningEdit,normalizeRegistrationOpening,registrationRoomTypes } from '@/lib/measurements/registrationOpening';
 import { parseProjectLocation } from '@/lib/location/coordinates';
 import type { Json } from '@/lib/supabase/database.types';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -68,6 +68,8 @@ export async function POST(request:Request){
   payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(p.buildingType===undefined?{}:{buildingType}),...(assignee?{assignedOutdoorSalesId:assignee}:{}),address:address.slice(0,2000)||`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
  }else if(body.action==='opening'){
   const opening=normalizeRegistrationOpening(body.payload);if(!opening)return NextResponse.json({error:'Complete the opening dimensions, floor, room and types.'},{status:400});payload=opening as unknown as Json;
+ }else if(body.action==='edit-opening'){
+  const edit=normalizeOpeningEdit(body.payload);if(!edit)return NextResponse.json({error:'Complete the opening details.'},{status:400});payload=edit as unknown as Json;
  }else if(body.action==='follow-up'){
   try{payload=normalizeFollowUp(body.payload);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  }else if(body.action==='assign-measurements'||(body.action==='ready'&&body.payload.assignedOutdoorSalesId!==undefined)){

@@ -206,3 +206,19 @@ for(const endpoint of ['sales-intake','offline'])for(const buildingType of [unde
  if(valid){const saved=writes.find(w=>w.table===(endpoint==='offline'?'rpc':'projects')).value;assert.equal(saved[endpoint==='offline'?'buildingType':'building_type'],buildingType);if(buildingType===undefined)assert.equal(Object.hasOwn(saved,'buildingType'),false,'Preserve legacy receipt fingerprints');}
  else{assert.equal(writes.length,0);assert.match(response.body.error,/building type/);}
 });
+
+for(const scenario of ['valid','invalid','conflict'])test(`offline opening edit endpoint: ${scenario}`,async()=>{
+ const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',writes=[];
+ const route=loadModule('../src/app/api/offline/route.ts',{
+  'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200})}},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',user:{id}})},
+  '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{writes.push(args);return scenario==='conflict'?{error:{message:'This opening changed on another device.'}}:{data:{id}};}})},
+  '@/lib/workflow/followUps':{},'@/lib/auth/permissions':{},'@/lib/workflow/access':{},'@/lib/location/coordinates':{},
+  '@/lib/measurements/registrationOpening':loadModule('../src/lib/measurements/registrationOpening.ts',{}),
+ });
+ const previous={id,floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'};
+ const response=await route.POST({json:async()=>({id,userId:id,projectId:id,action:'edit-opening',recordedAt:new Date().toISOString(),payload:{previous,opening:{...previous,width:scenario==='invalid'?0:180,quantity:4}}})});
+ assert.equal(response.status,scenario==='invalid'?400:scenario==='conflict'?409:200);
+ if(scenario==='invalid')assert.equal(writes.length,0);
+ else{assert.equal(writes.length,1);assert.equal(writes[0].p_action,'edit-opening');assert.equal(writes[0].p_actor,id);assert.equal(writes[0].p_payload.opening.width,180);assert.equal(writes[0].p_payload.previous.width,120);}
+});

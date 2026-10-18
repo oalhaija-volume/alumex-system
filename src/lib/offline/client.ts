@@ -4,7 +4,7 @@ import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
 import { canAccessCRM } from '@/lib/auth/permissions';
 import { normalizeFollowUp,type FollowUpInput } from '@/lib/workflow/followUps';
 import { needsSalesFollowUp } from '@/lib/workflow/stages';
-import { normalizeRegistrationOpening, type RegistrationOpening } from '@/lib/measurements/registrationOpening';
+import { normalizeOpeningEdit, sameOpeningMeasurements, normalizeRegistrationOpening, type RegistrationOpening } from '@/lib/measurements/registrationOpening';
 import { activeFieldUser,readFieldState,setFieldUser,updateFieldState } from './store';
 import type { FieldChange,FieldProject,FieldState } from './types';
 // Captures are immutable after save. Keep downloaded media when refreshing lightweight metadata.
@@ -87,8 +87,8 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    p={building_type:buildingType,branch:s.actor.role==='Indoor Sales'?s.actor.branch:null,assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:s.actor.role==='Indoor Sales'?s.actor.id:null,followUpOwner:s.actor.role==='Indoor Sales'?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
   }else{
    if(!p)throw new Error('Open this project online once before working on it offline.');
-   if(['opening','finish','reopen'].includes(action)&&p.measurement_delayed)throw new Error('Resume measurements before recording or completing them.');
-   if(['opening','finish','reopen'].includes(action)&&!['new_lead','ready_for_quotation'].includes(p.sales_status))throw new Error('Measurements are locked after quotation creation.');
+   if(['opening','edit-opening','finish','reopen'].includes(action)&&p.measurement_delayed)throw new Error('Resume measurements before recording or completing them.');
+   if(['opening','edit-opening','finish','reopen'].includes(action)&&!['new_lead','ready_for_quotation'].includes(p.sales_status))throw new Error('Measurements are locked after quotation creation.');
    if(action==='cancel-project'){
     if(!canCancelProject(p,s.actor))throw new Error('This project cannot be cancelled by this employee at its current stage.');
     const cancellation=normalizeClientCancellation(payload);change.payload=cancellation;
@@ -111,6 +111,17 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
     const opening=normalizeRegistrationOpening(payload);if(!opening)throw new Error('Complete the opening details.');
     if(openings.some(o=>o.id===opening.id))return s;
     openings.push({...opening,projectId});
+   }
+   if(action==='edit-opening'){
+    if(p.structure_readiness!=='ready'||p.sales_status!=='new_lead')throw new Error('Reopen measurements before editing an opening.');
+    if(!canAccessCRM(s.actor.role)&&!(s.actor.role==='Outdoor Sales'&&(p.created_by===s.actor.id||p.assigned_outdoor_sales_id===s.actor.id)))throw new Error('Project is not available to this employee');
+    const edit=normalizeOpeningEdit(payload);if(!edit)throw new Error('Complete the opening details.');
+    const index=openings.findIndex(o=>o.id===edit.opening.id&&o.projectId===projectId);
+    if(index<0)throw new Error('Opening not found in this project.');
+    const existing=openings[index];
+    if(!sameOpeningMeasurements(existing,edit.previous))throw new Error('This opening changed on another device. Reload measurements before editing it again.');
+    if((existing.hasSkylightCapture||existing.skylight)&&edit.opening.structuralType!=='Skylight')throw new Error('A saved skylight shape must remain attached to a skylight.');
+    openings[index]={...existing,...edit.opening};change.payload=edit;
    }
    if(action==='finish'){if(!openings.some(o=>o.projectId===projectId))throw new Error('Save at least one opening first.');p={...p,sales_status:'ready_for_quotation'};}
    if(action==='reopen')p={...p,sales_status:'new_lead'};

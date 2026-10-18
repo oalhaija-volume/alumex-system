@@ -288,3 +288,37 @@ for(const assigned of [undefined,null,'another'])test(`offline creator cannot re
  }
  assert.deepEqual(x.state,before);
 });
+
+test('Outdoor edits preserve opening identity and media, queue in order, and reject stale drafts',async()=>{
+ const skylight={drawing:'data:image/png;base64,iVBORw0KGgoAAAA=',sections:[{label:'A',width:100,length:200}]};
+ const previous={...delayOpening,structuralType:'Skylight',openingType:null,quantity:2,skylight,hasSkylightCapture:true};
+ const x=setup({actor:{...actor,role:'Outdoor Sales'},projects:[delayProject],openings:[previous]});
+ const opening={...previous,width:180,height:250,quantity:4,floor:'First'};
+ await x.client.saveFieldChange('edit-opening',projectId,{opening,previous});
+ assert.equal(x.state.openings.length,1);assert.equal(x.state.openings[0].id,previous.id);
+ assert.equal(x.state.openings[0].width,180);assert.equal(x.state.openings[0].quantity,4);assert.deepEqual(x.state.openings[0].skylight,skylight);
+ assert.equal(x.state.queue[0].payload.opening.skylight,undefined);
+ await assert.rejects(x.client.saveFieldChange('edit-opening',projectId,{opening:{...opening,width:199},previous}),/changed on another device/);
+ await x.client.saveFieldChange('edit-opening',projectId,{opening:{...opening,width:190},previous:opening});
+ assert.deepEqual(x.state.queue.map(c=>c.action),['edit-opening','edit-opening']);
+ assert.equal(x.state.queue[1].payload.previous.width,180);
+ await assert.rejects(x.client.saveFieldChange('edit-opening',projectId,{opening:{...opening,structuralType:'Window',openingType:'Sliding'},previous:{...opening,width:190}}),/skylight/);
+});
+test('offline editing requires a current editable project and an opening belonging to it',async()=>{
+ for(const patch of [{sales_status:'ready_for_quotation'},{sales_status:'quotation_in_progress'},{sales_status:'cancelled'},{measurement_delayed:true},{structure_readiness:'not_ready'},{created_by:'other',assigned_outdoor_sales_id:'other'}]){
+  const x=setup({actor:{...actor,role:'Outdoor Sales'},projects:[{...delayProject,...patch}],openings:[delayOpening]});
+  await assert.rejects(x.client.saveFieldChange('edit-opening',projectId,{opening:{...delayOpening,width:200},previous:delayOpening}));
+  assert.equal(x.state.queue.length,0);assert.equal(x.state.openings[0].width,120);
+ }
+ const x=setup({projects:[delayProject],openings:[{...delayOpening,projectId:'another-project'}]});
+ await assert.rejects(x.client.saveFieldChange('edit-opening',projectId,{opening:{...delayOpening,width:200},previous:delayOpening}),/not found/);
+});
+test('a newly saved offline opening can be edited before its first synchronization',async()=>{
+ const x=setup({projects:[delayProject]});
+ await x.client.saveFieldChange('opening',projectId,delayOpening);
+ await x.client.saveFieldChange('edit-opening',projectId,{previous:delayOpening,opening:{...delayOpening,width:199,quantity:3}});
+ assert.deepEqual(x.state.queue.map(c=>c.action),['opening','edit-opening']);assert.equal(x.state.openings.length,1);assert.equal(x.state.openings[0].width,199);
+ navigator.onLine=true;const posted=[];
+ globalThis.fetch=async(url,init)=>{if(!init?.method)return Response.json({actor});const change=JSON.parse(init.body);posted.push(change);return Response.json({project:delayProject});};
+ await x.client.syncFieldChanges();assert.deepEqual(posted.map(c=>c.action),['opening','edit-opening']);assert.equal(x.state.queue.length,0);
+});

@@ -1,5 +1,7 @@
 "use client";
 
+import { OutdoorWorkspaceNav } from '@/components/workflow/OutdoorWorkspaceNav';
+import { useFieldState } from '@/components/offline/useFieldState';
 import { MobileOutdoorProvider } from "@/components/workflow/MobileOutdoorContext";
 import { SalesReminders } from "@/components/workflow/SalesReminders";
 import { OfflineStatus } from "@/components/offline/OfflineStatus";
@@ -33,6 +35,7 @@ function Brand({ small = false }: { small?: boolean }) {
 export function RegistrationShell({ children, role, mobileOutdoor = false }: { children: React.ReactNode; role: AppRole; mobileOutdoor?: boolean }) {
   const { t, locale, term } = useI18n();
   const pathname = usePathname();
+  const fieldState = useFieldState();
   const drawer = useRef<HTMLDialogElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuLabel = locale === "ar" ? "القائمة الرئيسية" : "Main menu";
@@ -97,7 +100,7 @@ export function RegistrationShell({ children, role, mobileOutdoor = false }: { c
         </div>
       </dialog>
 
-      <main className="min-w-0 lg:ps-64 print:ps-0" onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a[href]');const href=link?.getAttribute('href');if(!isFieldOnline()&&href?.startsWith('/')&&href!=='/offline'){event.preventDefault();event.stopPropagation();window.location.assign('/offline?path='+encodeURIComponent(href));}}}>{role && ["Admin","Sales Director","CEO", "Company Owner","Indoor Sales","Outdoor Sales"].includes(role) && <><OfflineStatus/><SalesReminders/></>}{children}</main>
+      <main className="min-w-0 lg:ps-64 print:ps-0" onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a[href]');const href=link?.getAttribute('href');if(!isFieldOnline()&&href?.startsWith('/')&&href!=='/offline'){event.preventDefault();event.stopPropagation();window.location.assign('/offline?path='+encodeURIComponent(href));}}}>{role && ["Admin","Sales Director","CEO", "Company Owner","Indoor Sales","Outdoor Sales"].includes(role) && <><OfflineStatus quiet={role==='Outdoor Sales'}/><SalesReminders/>{role==='Outdoor Sales'&&<OutdoorWorkspaceNav state={fieldState} path={pathname} onNavigate={path=>window.location.assign(isFieldOnline()?path:'/offline?path='+encodeURIComponent(path))}/>} </>}{children}</main>
     </div></MobileOutdoorProvider>
   );
 }

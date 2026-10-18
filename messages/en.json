@@ -2455,7 +2455,9 @@
     "Connect once to download this skylight photo and drawing.": "Connect once to download this skylight photo and drawing.",
     "Unable to load skylight details.": "Unable to load skylight details.",
     "Photo loaded, but device storage is unavailable for offline use.": "Photo loaded, but device storage is unavailable for offline use.",
-    "View skylight photos and drawings": "View skylight photos and drawings"
+    "View skylight photos and drawings": "View skylight photos and drawings",
+    "Outdoor Sales workspace": "Outdoor Sales workspace",
+    "{count} measurement tasks waiting": "{count} measurement tasks waiting"
   },
   "registration": {
     "title": "New client & project",

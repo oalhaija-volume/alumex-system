@@ -143,7 +143,7 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
   // OfflineStatus refreshes it in the background; reads need no second API call.
   const savedProject=s?.projects.find(p=>p.id===id);
   const useSaved=isDeviceWorkspace()&&s&&(url==='/api/workspace'||savedProject);
-  if(!useSaved && !pending && navigator.onLine){
+  if(!useSaved && !pending && isFieldOnline()){
    const controller=new AbortController();
    const abort=()=>controller.abort();
    const timeout=setTimeout(abort,8000);

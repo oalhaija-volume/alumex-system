@@ -2455,7 +2455,9 @@
     "Connect once to download this skylight photo and drawing.": "اتصل بالإنترنت لتنزيل صورة السكاي لايت والرسم على هذا الجهاز.",
     "Unable to load skylight details.": "تعذّر تحميل تفاصيل السكاي لايت.",
     "Photo loaded, but device storage is unavailable for offline use.": "تم تحميل الصورة، لكن تعذّر حفظها على الجهاز للاستخدام دون إنترنت.",
-    "View skylight photos and drawings": "عرض صور ورسومات السكاي لايت"
+    "View skylight photos and drawings": "عرض صور ورسومات السكاي لايت",
+    "Outdoor Sales workspace": "مساحة عمل المبيعات الخارجية",
+    "{count} measurement tasks waiting": "{count} مهام قياسات بانتظار التنفيذ"
   },
   "registration": {
     "title": "عميل ومشروع جديد",

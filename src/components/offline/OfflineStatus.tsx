@@ -4,7 +4,7 @@ import { useEffect,useState } from 'react';
 import { prepareOffline,syncFieldChanges,isFieldOnline } from '@/lib/offline/client';
 import { activeFieldUser,readFieldState } from '@/lib/offline/store';
 
-export function OfflineStatus(){
+export function OfflineStatus({quiet=false}:{quiet?:boolean}){
  const { term,errorMessage,formatNumber,formatDateTime } = useI18n();
  const [online,setOnline]=useState(true);
  const [count,setCount]=useState(0);
@@ -55,6 +55,9 @@ export function OfflineStatus(){
  },[]);
  const issue=error||setupError||shellError;
  const status=!ready?term('Preparing offline storage…'):count?term(count===1?'{count} change saved on this device · {status}':'{count} changes saved on this device · {status}',{count:formatNumber(count),status:term(online?'Sync pending':'Offline')}):!shellReady?term('Saved data ready · Preparing offline reopening…'):online?term('Synced · Offline saving ready'):term('Offline · Saved work is available on this device');
+ // Outdoor staff need an alert only when saved work needs attention. Synchronization
+ // and shell preparation keep running even when the routine status is not rendered.
+ if(quiet)return issue?<div role="alert" className="mx-auto max-w-5xl px-5 pt-4 text-sm text-red-700">{errorMessage(issue)} {error&&<button onClick={()=>void syncFieldChanges()} className="min-h-11 px-2 font-semibold underline">{term('Retry sync')}</button>}</div>:null;
  return <div className="border-b border-slate-200 bg-white px-5 py-3 text-sm print:hidden">
   <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
    <div><p role="status" className={issue?'text-red-700':!online||count?'text-amber-800':'text-slate-600'}>{status}</p>{syncedAt&&<p className="mt-1 text-xs text-slate-500">{term('Last synced')} <time dateTime={syncedAt} dir="ltr" className="inline-block">{formatDateTime(syncedAt)}</time></p>}</div>

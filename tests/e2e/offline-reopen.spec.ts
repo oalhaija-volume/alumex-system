@@ -2,9 +2,9 @@ import { savedFieldState as savedState } from './helpers/fieldState';
 import { chromium, devices, expect, test, type BrowserContext } from '@playwright/test';
 import type { FieldChange, FieldState } from '../../src/lib/offline/types';
 
-test('real cached app survives browser restart, saves measurements offline, and reconnects exactly once',async({},testInfo)=>{
+for(const role of ['Indoor Sales','Outdoor Sales'])test(`${role}: real cached app survives browser restart, saves measurements offline, and reconnects exactly once`,async({},testInfo)=>{
  test.setTimeout(90000);
- const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Offline employee',role:'Indoor Sales',branch:'Karkh' as const};
+ const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Offline employee',role,branch:'Karkh' as const};
  const remote:FieldState={actor,projects:[],openings:[],queue:[],outdoorSales:[],indoorSales:[{id:actor.id,name:actor.name}],syncedAt:null};
  const received:FieldChange[]=[];
  const errors:string[]=[];
@@ -41,9 +41,10 @@ test('real cached app survives browser restart, saves measurements offline, and 
  try{
   let page=await launch();
   await page.goto(base+'/offline?path=/dashboard');
-  await expect(page.getByRole('heading',{name:'Sales dashboard',exact:true})).toBeVisible();
-  await expect(page.getByText('Synced · Offline saving ready',{exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:role==='Outdoor Sales'?(testInfo.project.name.includes('mobile')?'Measurement assignments':'My sales dashboard'):'Sales dashboard',exact:true})).toBeVisible();
+  if(role==='Indoor Sales')await expect(page.getByText('Synced · Offline saving ready',{exact:true})).toBeVisible();
   await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
+  await expect.poll(()=>page.evaluate(async()=>(await (await caches.open('alumex-field-shell-v15')).keys()).some(r=>new URL(r.url).pathname==='/offline'))).toBe(true);
   const cachePaths=await page.evaluate(async()=>{const cache=await caches.open('alumex-field-shell-v15');return(await cache.keys()).map(r=>new URL(r.url).pathname);});
   expect(cachePaths).toContain('/offline');expect(cachePaths.some(p=>p.startsWith('/api/'))).toBe(false);
   await context!.close();context=undefined;
@@ -53,8 +54,8 @@ test('real cached app survives browser restart, saves measurements offline, and 
   const reopenMs=Date.now()-began;
   await page.getByPlaceholder('Enter full name').fill('Offline reopening sample');
   await page.getByPlaceholder('07xx xxx xxxx').fill('07700000000');
-  const coordinates=page.locator('input[type="number"]');await coordinates.nth(0).fill('33.3');await coordinates.nth(1).fill('44.4');
-  await page.locator('#outdoor-assignee').selectOption(actor.id);
+  if(role==='Outdoor Sales')await page.locator('input[autocomplete="street-address"]').fill('Baghdad, Mansour');
+  else{const coordinates=page.locator('input[type="number"]');await coordinates.nth(0).fill('33.3');await coordinates.nth(1).fill('44.4');await page.locator('#outdoor-assignee').selectOption(actor.id);}
   await page.getByRole('button',{name:/Continue to measurements/}).click();
   await expect(page.getByRole('heading',{name:'Initial measurements',exact:true})).toBeVisible();
   await page.getByLabel('Floor',{exact:true}).fill('Ground');
@@ -65,7 +66,7 @@ test('real cached app survives browser restart, saves measurements offline, and 
   await page.getByRole('button',{name:'Save & add opening',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Saved openings (1)',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Finish measurements — ready for quotation',exact:true}).click();
-  await expect(page.getByText('Measurements complete. This project is ready for quotation.',{exact:true})).toBeVisible();
+  await expect(page.getByText(role==='Outdoor Sales'?'Measurements submitted. Indoor Sales will prepare the quotation.':'Measurements complete. This project is ready for quotation.',{exact:true})).toBeVisible();
   const before=await savedState(page);expect(before.queue.map(c=>c.action)).toEqual(['register','opening','finish']);
   const url=page.url();await context!.close();context=undefined;
   page=await launch(true);await page.goto(url);
@@ -78,7 +79,7 @@ test('real cached app survives browser restart, saves measurements offline, and 
   expect(remote.projects).toHaveLength(1);expect(remote.projects[0].sales_status).toBe('ready_for_quotation');expect(remote.openings).toHaveLength(1);
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
   await page.waitForTimeout(400);expect(received).toHaveLength(3);
-  await expect(page.getByText('Synced · Offline saving ready',{exact:true})).toBeVisible();
+  if(role==='Indoor Sales')await expect(page.getByText('Synced · Offline saving ready',{exact:true})).toBeVisible();
   await expect(page.getByText('Offline reopening sample · PRJ-OFFLINE',{exact:true})).toBeVisible();
   expect(errors).toEqual([]);
   await testInfo.attach('offline-reopen-timing',{body:JSON.stringify({reopenMs,browserRestart:true,queuedChanges:3,synchronizedChanges:3}),contentType:'application/json'});

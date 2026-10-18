@@ -278,7 +278,7 @@ test.describe('Outdoor Sales phone workspace', () => {
       for (const name of ['Phone sample 1', 'Phone sample 2', 'Phone sample 3', 'Project stages', 'All projects']) {
         await expect(page.getByRole('heading', { name, exact: true })).toHaveCount(0);
       }
-      await expect(page.locator('nav button')).toHaveText(['Measurement assignments', 'New project']);
+      await expect(page.locator('nav button')).toHaveText(['Measurement assignments1', 'New project']);
       await page.getByRole('link', { name: 'Record measurements', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Initial measurements', exact: true })).toBeVisible();
       await expect(page.getByRole('region', { name: 'Project record' })).toContainText('Created by');

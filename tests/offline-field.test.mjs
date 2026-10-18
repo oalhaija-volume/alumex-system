@@ -252,3 +252,13 @@ test('skylight captures survive metadata refreshes and remain isolated to the ma
  globalThis.fetch=async()=>Response.json({...x.state,projects:[],openings:[]});
  await x.client.prepareOffline();assert.equal(x.state.openings.length,0);
 });
+
+test('known internet outage uses cached reads until automatic reconnection succeeds',async()=>{
+ const x=setup({projects:[delayProject],openings:[delayOpening]});navigator.onLine=true;
+ let calls=0;globalThis.fetch=async()=>{calls++;throw Error('Internet unavailable despite Wi-Fi');};
+ const first=await (await x.client.fieldFetch('/api/initial-measurements/'+projectId)).json();assert.equal(first.openings.length,1);assert.equal(x.client.isFieldOnline(),false);
+ await x.client.fieldFetch('/api/initial-measurements/'+projectId);assert.equal(calls,1,'Known outages must not stall each read');
+ globalThis.fetch=async()=>{calls++;return Response.json(x.state);};
+ await x.client.prepareOffline();assert.equal(x.client.isFieldOnline(),true);
+ await x.client.fieldFetch('/api/workspace');assert.equal(calls,3,'Server reads resume after reconnection');
+});

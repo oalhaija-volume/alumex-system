@@ -2543,7 +2543,21 @@
     "Roller shutter type": "Roller shutter type",
     "Choose roller shutter type": "Choose roller shutter type",
     "This window requires roller shutters. Choose a roller shutter add-on.": "This window requires roller shutters. Choose a roller shutter add-on.",
-    "Roller shutters can only be requested for a window.": "Roller shutters can only be requested for a window."
+    "Roller shutters can only be requested for a window.": "Roller shutters can only be requested for a window.",
+    "Enter the full facade dimensions. Save each facade separately.": "Enter the full facade dimensions. Save each facade separately.",
+    "This facade number is already saved. Edit it or choose another number.": "This facade number is already saved. Edit it or choose another number.",
+    "Facade saved.": "Facade saved.",
+    "Facade measurements": "Facade measurements",
+    "Saved facades": "Saved facades",
+    "Save facade": "Save facade",
+    "Add another facade": "Add another facade",
+    "Add internal opening": "Add internal opening",
+    "Edit facade {number}": "Edit facade {number}",
+    "Whole building": "Whole building",
+    "Recorded facade dimensions": "Recorded facade dimensions",
+    "Choose a facade service below to price the recorded areas.": "Choose a facade service below to price the recorded areas.",
+    "Use recorded facade dimensions": "Use recorded facade dimensions",
+    "Facade dimensions changed. Reload the quotation.": "Facade dimensions changed. Reload the quotation."
   },
   "registration": {
     "title": "New client & project",

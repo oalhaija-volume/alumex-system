@@ -2,7 +2,7 @@
 import { useI18n } from '@/components/i18n/I18nProvider';
 import Link from 'next/link';
 import { useState } from 'react';
-import { defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice } from '@/lib/workflow/pricing';
+import { recordedFacadeAreas,defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice } from '@/lib/workflow/pricing';
 import { StandaloneItems } from './StandaloneItems';
 import { isShutterBox, isRollerShutter, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
@@ -101,7 +101,12 @@ function QuoteEditor({data,projectId,reload}:{data:QuoteData;projectId:string;re
    })}
    {data.openings.some(o=>o.opening_type==='Skylight')&&<p className="rounded-lg bg-blue-50 p-4 text-sm">{term('Skylights are priced separately in the calculator and are not included in this quotation.')} <Link href="/skylight" className="font-semibold underline">{term('Open skylight calculator')}</Link> · <Link href={`/initial-measurements/${projectId}`} className="font-semibold underline">{term('View skylight photos and drawings')}</Link></p>}
    {addingOpening?<QuotationOpeningForm onAdd={addOpening} onCancel={()=>setAddingOpening(false)}/>:<button type="button" disabled={newOpenings.length>=100} onClick={()=>setAddingOpening(true)} className={secondary}>{term("+ Add opening")}</button>}
-   <StandaloneItems items={additionalItems} catalog={catalog} onChange={setAdditionalItems}/>
+   {data.openings.some(o=>o.opening_type==='Facade')&&<section className={card} aria-label={term('Recorded facade dimensions')}>
+    <h2 className="font-semibold">{term('Recorded facade dimensions')}</h2>
+    <table className="mt-3 w-full text-start text-sm"><thead><tr>{['Facade','Width (cm)','Length (cm)'].map(label=><th key={label} className="py-2 text-start">{term(label)}</th>)}</tr></thead><tbody>{data.openings.filter(o=>o.opening_type==='Facade').map(o=><tr key={o.id} className="border-t border-slate-200"><th scope="row" className="py-3 text-start">{term('Facade {number}',{number:String(o.facade_number)})}</th><td>{formatNumber(o.width)}</td><td>{formatNumber(o.height)}</td></tr>)}</tbody></table>
+    <p className="mt-2 text-sm text-slate-600">{term('Choose a facade service below to price the recorded areas.')}</p>
+   </section>}
+   <StandaloneItems recordedAreas={recordedFacadeAreas(data.openings)} items={additionalItems} catalog={catalog} onChange={setAdditionalItems}/>
    <div className={card}>
     <div className="flex flex-wrap justify-between gap-3"><div><p className="text-sm font-semibold">{flow?term("Revised total"):term("Quotation total")}</p>{flow&&<p className="mt-1 text-xs text-slate-500">{term("Currently saved:")} {formatMoney(flow.quotation.total)}</p>}</div><p className="text-xl font-semibold" aria-label={term("Draft total")}>{draftTotal===undefined?term("Complete selections"):formatMoney(draftTotal)}</p></div>
     {pricingError&&<p role="status" className="mt-3 text-sm text-amber-800">{errorMessage(pricingError)}</p>}

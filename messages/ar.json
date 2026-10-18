@@ -2543,7 +2543,21 @@
     "Roller shutter type": "نوع الاباجور",
     "Choose roller shutter type": "اختر نوع الاباجور",
     "This window requires roller shutters. Choose a roller shutter add-on.": "هذه النافذة تتطلب اباجور. اختر الاباجور من الإضافات.",
-    "Roller shutters can only be requested for a window.": "يمكن طلب الاباجور للنوافذ فقط."
+    "Roller shutters can only be requested for a window.": "يمكن طلب الاباجور للنوافذ فقط.",
+    "Enter the full facade dimensions. Save each facade separately.": "أدخل أبعاد الواجهة بالكامل. احفظ كل واجهة بشكل منفصل.",
+    "This facade number is already saved. Edit it or choose another number.": "رقم الواجهة محفوظ مسبقاً. عدّل الواجهة أو اختر رقماً آخر.",
+    "Facade saved.": "تم حفظ الواجهة.",
+    "Facade measurements": "قياسات الواجهة",
+    "Saved facades": "الواجهات المحفوظة",
+    "Save facade": "حفظ الواجهة",
+    "Add another facade": "إضافة واجهة أخرى",
+    "Add internal opening": "إضافة فتحة داخلية",
+    "Edit facade {number}": "تعديل واجهة {number}",
+    "Whole building": "المبنى بالكامل",
+    "Recorded facade dimensions": "أبعاد الواجهات المسجلة",
+    "Choose a facade service below to price the recorded areas.": "اختر خدمة واجهات أدناه لتسعير المساحات المسجلة.",
+    "Use recorded facade dimensions": "استخدام أبعاد الواجهات المسجلة",
+    "Facade dimensions changed. Reload the quotation.": "تغيرت أبعاد الواجهات. أعد تحميل عرض السعر."
   },
   "registration": {
     "title": "عميل ومشروع جديد",

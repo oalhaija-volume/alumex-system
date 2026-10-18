@@ -26,38 +26,50 @@ for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}
  const save=page.getByRole('button',{name:label('Save & add opening','حفظ وإضافة فتحة'),exact:true});
  await expect(facade).toBeVisible();await expect(room).toHaveCount(0);
  if(!online){await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});window.dispatchEvent(new Event('offline'));});await page.addInitScript(()=>Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false}));}
- for(const [index,area,location,type] of [[0,'facade','1','Curtain Wall'],[1,'facade','2','Curtain Wall'],[2,'internal','Office','Window'],[3,'internal','Bathroom','Door']] as const){
-  await (area==='facade'?facade:internal).check();
-  if(area==='facade'){await expect(room).toHaveCount(0);await number.fill(location);}
-  else{await expect(number).toHaveCount(0);await room.selectOption(location);}
-  await page.getByLabel(label('Floor','الطابق'),{exact:true}).selectOption('GF');
+ for(let index=0;index<4;index++){
+  if(index===0)await facade.check();
+  else await page.getByRole('button',{name:label('Add another facade','إضافة واجهة أخرى'),exact:true}).click();
+  await expect(number).toHaveValue(String(index+1));
+  await expect(room).toHaveCount(0);await expect(structure).toHaveCount(0);
+  await expect(page.getByLabel(label('Floor','الطابق'),{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel(label('Number of identical openings','عدد الفتحات المتطابقة'),{exact:true})).toHaveCount(0);
+  await page.getByLabel(label('Width (cm)','العرض (سم)'),{exact:true}).fill(String(1000+index*100));
+  await page.getByLabel(label('Length (cm)','الطول (سم)'),{exact:true}).fill(String(2000+index*100));
+  if(index===0)await page.screenshot({path:test.info().outputPath('facade-form.png'),fullPage:true});
+  await page.getByRole('button',{name:label('Save facade','حفظ الواجهة'),exact:true}).click();
+  await expect.poll(async()=>(await savedFieldState(page)).openings.length).toBe(index+1);
+ }
+ for(const [index,location,type] of [[4,'Office','Window'],[5,'Bathroom','Door']] as const){
+  await page.getByRole('button',{name:label('Add internal opening','إضافة فتحة داخلية'),exact:true}).click();
+  await expect(internal).toBeChecked();await expect(number).toHaveCount(0);await room.selectOption(location);
+  await page.getByLabel(label('Floor','الطابق'),{exact:true}).selectOption('F1');
   await structure.selectOption(type);
-  if(type==='Curtain Wall')await expect(page.getByRole('button',{name:label('Take photo','التقاط صورة'),exact:true})).toBeVisible();
-  else{await page.getByRole('radio',{name:label('No arch','بدون قوس'),exact:true}).check();await page.getByRole('radio',{name:label('Sliding','سلايد'),exact:true}).check();}
+  await page.getByRole('radio',{name:label('No arch','بدون قوس'),exact:true}).check();
+  await page.getByRole('radio',{name:label('Sliding','سلايد'),exact:true}).check();
   await page.getByLabel(label('Width (cm)','العرض (سم)'),{exact:true}).fill('200');
   await page.getByLabel(label('Height (cm)','الارتفاع (سم)'),{exact:true}).fill('300');
-  if(index===0||index===2)await page.screenshot({path:test.info().outputPath(area+'-form.png'),fullPage:true});
+  if(index===4)await page.screenshot({path:test.info().outputPath('internal-form.png'),fullPage:true});
   await save.click();await expect.poll(async()=>(await savedFieldState(page)).openings.length).toBe(index+1);
  }
  await page.reload();
- await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(4);
- await expect(page.getByRole('table')).toContainText(label('Facade 1','واجهة 1'));
- await expect(page.getByRole('table')).toContainText(label('Facade 2','واجهة 2'));
- await expect(page.getByRole('table')).toContainText(label('Internal works','اعمال داخلية'));
- await page.getByRole('button',{name:label('Edit opening 1','تعديل الفتحة ١'),exact:true}).click();
+ const facadeList=page.getByRole('region',{name:label('Saved facades','الواجهات المحفوظة'),exact:true});
+ await expect(facadeList.getByRole('table').locator('tbody tr')).toHaveCount(4);
+ await expect(page.getByRole('table').last().locator('tbody tr')).toHaveCount(2);
+ await page.getByRole('button',{name:label('Edit facade 1','تعديل واجهة 1'),exact:true}).click();
  await expect(facade).toBeChecked();await expect(number).toHaveValue('1');await expect(room).toHaveCount(0);
- await number.fill('3');
+ await page.getByLabel(label('Length (cm)','الطول (سم)'),{exact:true}).fill('2500');
  await page.getByRole('button',{name:label('Save measurement changes','حفظ تعديلات القياسات'),exact:true}).click();
- await expect.poll(async()=>(await savedFieldState(page)).openings[0].facadeNumber).toBe(3);
+ await expect.poll(async()=>(await savedFieldState(page)).openings[0].height).toBe(2500);
  const openings=(await savedFieldState(page)).openings;
- expect(openings[0]).toMatchObject({workArea:'facade',facadeNumber:3,otherRoom:'Facade 3'});
- expect(openings[2]).toMatchObject({workArea:'internal',room:'Office',structuralType:'Window'});
- expect(openings[3]).toMatchObject({workArea:'internal',room:'Bathroom',structuralType:'Door'});
+ expect(openings[0]).toMatchObject({workArea:'facade',facadeNumber:1,otherRoom:'Facade 1',structuralType:'Facade',floor:'Whole building',quantity:1,width:1000,height:2500,openingType:null});
+ expect(openings[4]).toMatchObject({workArea:'internal',room:'Office',structuralType:'Window'});
+ expect(openings[5]).toMatchObject({workArea:'internal',room:'Bathroom',structuralType:'Door'});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:test.info().outputPath('saved-areas.png'),fullPage:true});
  if(!online){expect(posts).toHaveLength(0);await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});window.dispatchEvent(new Event('online'));});}
- await expect.poll(()=>posts.length).toBe(5);await expect.poll(async()=>(await savedFieldState(page)).queue.length).toBe(0);
- expect(posts[0].payload).toMatchObject({workArea:'facade',facadeNumber:1});expect(posts[4].payload.opening).toMatchObject({workArea:'facade',facadeNumber:3});
+ await expect.poll(()=>posts.length).toBe(7);await expect.poll(async()=>(await savedFieldState(page)).queue.length).toBe(0);
+ expect(posts[0].payload).toMatchObject({structuralType:'Facade',workArea:'facade',facadeNumber:1});expect(posts[6].payload.opening).toMatchObject({workArea:'facade',facadeNumber:1,height:2500});
+
 });
 for(const locale of ['en','ar'])for(const type of ['villa_house','residential_building'] as const)test(`${locale}: ${type} retains the existing room menu`,async({page})=>{
  await page.addInitScript(locale=>localStorage.setItem('alumex_locale',locale),locale);

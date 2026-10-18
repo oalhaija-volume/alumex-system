@@ -41,6 +41,16 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   const [quantity,setQuantity] = useState("1");
   const [height,setHeight] = useState("");
   const [structuralType,setStructuralType] = useState<RegistrationStructure|"">("");
+  const wholeFacade=structuralType==='Facade';
+  const facades=openings.filter(o=>o.structuralType==='Facade');
+  const internalOpenings=openings.filter(o=>o.structuralType!=='Facade');
+  const nextFacadeNumber=()=>String(Math.max(0,...openings.map(o=>o.facadeNumber??0))+1);
+  function chooseWorkArea(area:'facade'|'internal'){
+    setWorkArea(area);setRoom('');setOtherRoom('');setStructuralType(area==='facade'?'Facade':'');
+    setOpeningType('');setHasArch('');setHasRollerShutter(false);setQuantity('1');
+    setFloor('');setOtherFloor('');setWidth('');setHeight('');
+    if(area==='facade')setFacadeNumber(nextFacadeNumber());
+  }
   const [openingType,setOpeningType] = useState("");
   const [hasRollerShutter,setHasRollerShutter] = useState(false);
   const [hasArch,setHasArch] = useState<boolean|"">("");
@@ -87,20 +97,21 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     setEditing(opening);setEditOperationId(crypto.randomUUID());setDraftId(opening.id);
     setFloor(measurementFloors.includes(opening.floor)?opening.floor:"Other");setOtherFloor(measurementFloors.includes(opening.floor)?"":opening.floor);setRoom(opening.room);setOtherRoom(opening.otherRoom);setWidth(String(opening.width));setHeight(String(opening.height));setQuantity(String(opening.quantity??1));setStructuralType(opening.structuralType);setOpeningType(opening.openingType??"");setHasArch(opening.hasArch??false);setHasRollerShutter(opening.hasRollerShutter??false);setError("");setNotice("");
     formRef.current?.scrollIntoView({behavior:'smooth',block:'start'});
-    formRef.current?.querySelector('select')?.focus({preventScroll:true});
+    formRef.current?.querySelector<HTMLInputElement|HTMLSelectElement>('input[type="number"], select')?.focus({preventScroll:true});
   }
   async function save(event:React.FormEvent) {
     event.preventDefault();
     if (saving || photoBusy) return;
     if(commercial&&!workArea){setError('Choose Facade or Internal works.');return;}
     const opening = normalizeRegistrationOpening({...commercial&&{workArea,...(workArea==='facade'?{facadeNumber:Number(facadeNumber)}:{})},id:draftId,hasRollerShutter:structuralType==='Window'&&hasRollerShutter,hasArch:['Window','Door'].includes(structuralType)?hasArch:false,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor:floor==="Other"?otherFloor:floor,room,otherRoom,...(!editing&&structuralType==='Curtain Wall'&&(curtainWall.photo||curtainWall.note.trim())?{curtainWall}:{}),...(!editing&&structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
+    if(wholeFacade&&facades.some(o=>o.id!==draftId&&o.facadeNumber===Number(facadeNumber))){setError("This facade number is already saved. Edit it or choose another number.");return;}
     if (!opening) {setError(t("initialStep.invalid"));return;}
     setSaving(true);setError("");setNotice("");
     try {
       const response=await fieldFetch(endpoint,{method:editing?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(editing?{action:"edit-opening",opening,previous:editing,operationId:editOperationId}:opening)});
       const data=await response.json();if(!response.ok) throw new Error(data.error);
       setOpenings(current=>editing?current.map(row=>row.id===opening.id?{...row,...opening,workArea:opening.workArea,facadeNumber:opening.facadeNumber}:row):current.some(row=>row.id===opening.id)?current:[...current,opening]);
-      setNotice(editing?term("Opening measurements updated."):t("initialStep.saved"));resetForm();
+      setNotice(editing?term("Opening measurements updated."):wholeFacade?term("Facade saved."):t("initialStep.saved"));resetForm();
     } catch(cause) {setError(cause instanceof Error?cause.message:t("initialStep.failed"));}
     finally {setSaving(false);}
   }
@@ -152,20 +163,20 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     </details>)}
     {project?.additional_openings_state==='requested'&&<p role="status" className="mt-5 rounded-md bg-amber-50 p-4 text-sm text-amber-900">{term('Add the requested new openings, then submit them to Indoor Sales. Existing measurements are preserved.')}</p>}
     {project && !finished && !project.measurement_delayed ? <>
-      <form ref={formRef} aria-label={term(editing?"Edit opening measurements":"New opening measurements")} onSubmit={save} className="mt-7 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
+      <form ref={formRef} aria-label={term(wholeFacade?"Facade measurements":editing?"Edit opening measurements":"New opening measurements")} onSubmit={save} className="mt-7 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
         <fieldset disabled={saving||photoBusy} className="min-w-0 space-y-5">
-          <legend className="mb-5 text-lg font-semibold text-slate-900">{editing?`${term("Edit opening")} ${formatNumber(openings.findIndex(o=>o.id===editing.id)+1)}`:t("initialStep.opening",{number:formatNumber(openings.length+1)})}</legend>
+          <legend className="mb-5 text-lg font-semibold text-slate-900">{wholeFacade?term("Facade {number}",{number:facadeNumber}):editing?`${term("Edit opening")} ${formatNumber(internalOpenings.findIndex(o=>o.id===editing.id)+1)}`:t("initialStep.opening",{number:formatNumber(internalOpenings.length+1)})}</legend>
           {commercial&&<fieldset>
             <legend className="mb-2 text-sm font-medium text-slate-800">{term('Work area')}</legend>
             <div className="grid grid-cols-2 gap-3">{(['facade','internal'] as const).map(area=><label key={area} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-md border p-3 text-sm ${workArea===area?'border-blue-600 bg-blue-50':'border-slate-300'}`}>
-              <input required type="radio" name="workArea" value={area} checked={workArea===area} onChange={()=>{setWorkArea(area);setRoom('');setOtherRoom('');}} className="h-4 w-4 accent-blue-600"/>{term(area==='facade'?'Facade':'Internal works')}
+              <input required type="radio" name="workArea" value={area} checked={workArea===area} disabled={!!editing} onChange={()=>chooseWorkArea(area)} className="h-4 w-4 accent-blue-600"/>{term(area==='facade'?'Facade':'Internal works')}
             </label>)}</div>
           </fieldset>}
           {commercial&&workArea==='facade'&&<label className="block text-sm font-medium text-slate-800">{term('Facade number')}
             <input aria-label={term('Facade number')} aria-describedby="facade-number-help" required type="number" inputMode="numeric" min="1" max="1000" step="1" value={facadeNumber} onChange={event=>setFacadeNumber(event.target.value)} className={field}/>
-            <span id="facade-number-help" className="mt-2 block text-xs leading-5 text-slate-500">{term('Use the same number for openings on the same facade. Use another number for a different facade.')}</span>
+            <span id="facade-number-help" className="mt-2 block text-xs leading-5 text-slate-500">{term('Enter the full facade dimensions. Save each facade separately.')}</span>
           </label>}
-          <div className="grid gap-4 sm:grid-cols-2">
+          {!wholeFacade&&<div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm font-medium text-slate-800">{t("initialStep.floor")}
               <select required aria-label={t("initialStep.floor")} value={floor} onChange={event=>{setFloor(event.target.value);setOtherFloor("");}} className={field}>
                 <option value="">{term('Choose floor')}</option>
@@ -179,19 +190,19 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
                 {registrationRoomTypes.map(value=><option key={value} value={value}>{t(`initialStep.rooms.${value}`)}</option>)}
               </select>
             </label>}
-          </div>
-          {floor === "Other" && <label className="block text-sm font-medium text-slate-800">{term('Specify floor')}
+          </div>}
+          {!wholeFacade&&floor === "Other" && <label className="block text-sm font-medium text-slate-800">{term('Specify floor')}
             <input required maxLength={100} value={otherFloor} onChange={event=>setOtherFloor(event.target.value)} className={field}/>
           </label>}
           {(!commercial||workArea==='internal')&&room === "Other" ? <label className="block text-sm font-medium text-slate-800">{t("initialStep.otherRoom")}
             <input required maxLength={100} value={otherRoom} onChange={event=>setOtherRoom(event.target.value)} className={field} placeholder={t("initialStep.otherRoomPlaceholder")} />
           </label> : null}
-          <label className="block text-sm font-medium text-slate-800">{t("initialStep.structure")}
+          {!wholeFacade&&<label className="block text-sm font-medium text-slate-800">{t("initialStep.structure")}
             <select disabled={!!(editing?.hasCurtainWallCapture||editing?.curtainWall||editing?.hasSkylightCapture||editing?.skylight)} aria-label={t("initialStep.structure")} required className={field} value={structuralType} onChange={event=>{setStructuralType(event.target.value as RegistrationStructure);setOpeningType("");setHasArch("");setHasRollerShutter(false);setNotice("");}}>
               <option value="">{t("initialStep.choose")}</option>
               {registrationStructureTypes.map(type=><option key={type} value={type}>{t(`initialStep.types.${type}`)}</option>)}
             </select>
-          </label>
+          </label>}
           {structuralType==='Window'&&<label className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-md border p-3 text-sm ${hasRollerShutter?'border-blue-600 bg-blue-50':'border-slate-300'}`}>
             <input type="checkbox" checked={hasRollerShutter} onChange={event=>setHasRollerShutter(event.target.checked)} className="h-5 w-5 accent-blue-600"/>{term('Roller shutter')}
           </label>}
@@ -209,27 +220,40 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           </fieldset> : structuralType === "Louver" ? <p className="text-sm text-slate-600">{t("initialStep.louverHelp")}</p> : null}
           <div className="grid grid-cols-2 gap-4">
             <label className="block text-sm font-medium text-slate-800">{t("initialStep.width")}<input required type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" className={field} value={width} onChange={event=>setWidth(event.target.value)} /></label>
-            <label className="block text-sm font-medium text-slate-800">{structuralType==='Skylight'?term('Length (cm)'):t("initialStep.height")}<input required type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" className={field} value={height} onChange={event=>setHeight(event.target.value)} /></label>
+            <label className="block text-sm font-medium text-slate-800">{(wholeFacade||structuralType==='Skylight')?term('Length (cm)'):t("initialStep.height")}<input required type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" className={field} value={height} onChange={event=>setHeight(event.target.value)} /></label>
           </div>
-          <label className="block text-sm font-medium text-slate-800">{term('Number of identical openings')}<input required type="number" inputMode="numeric" min="1" max="10000" step="1" className={field} value={quantity} onChange={event=>setQuantity(event.target.value)} aria-describedby="opening-quantity-help"/></label>
-          <p id="opening-quantity-help" className="text-xs leading-5 text-slate-500">{term('Use one entry for openings with the same dimensions, type, floor and room. Record different openings separately.')}</p>
+          {!wholeFacade&&<><label className="block text-sm font-medium text-slate-800">{term('Number of identical openings')}<input required type="number" inputMode="numeric" min="1" max="10000" step="1" className={field} value={quantity} onChange={event=>setQuantity(event.target.value)} aria-describedby="opening-quantity-help"/></label>
+          <p id="opening-quantity-help" className="text-xs leading-5 text-slate-500">{term('Use one entry for openings with the same dimensions, type, floor and room. Record different openings separately.')}</p></>}
           {editing&&(editing.hasSkylightCapture||editing.skylight)&&<p className="text-sm text-slate-600">{term('Saved skylight photos, drawings and sections are preserved.')}</p>}
           {editing&&(editing.hasCurtainWallCapture||editing.curtainWall)&&<p className="text-sm text-slate-600">{term('Saved Curtain Wall photo and note are preserved.')}</p>}
           {!editing&&structuralType==='Curtain Wall'&&<CurtainWallCaptureEditor key={draftId} value={curtainWall} onChange={setCurtainWall} busy={photoBusy||saving} onBusyChange={setPhotoBusy}/>}
           {!editing&&structuralType==='Skylight'&&<SkylightCaptureEditor key={draftId} value={skylight} onChange={setSkylight} busy={photoBusy||saving} onBusyChange={setPhotoBusy}/>}
-          <button type="submit" className="min-h-12 w-full rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{saving?t("common.loading"):editing?term("Save measurement changes"):t("initialStep.add")}</button>
+          <button type="submit" className="min-h-12 w-full rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{saving?t("common.loading"):editing?term("Save measurement changes"):wholeFacade?term("Save facade"):t("initialStep.add")}</button>
           {editing&&<button type="button" onClick={()=>{resetForm();setError("");}} className="min-h-12 w-full rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700">{term("Cancel editing")}</button>}
         </fieldset>
       </form>
       {notice ? <p role="status" className="mt-4 text-sm text-green-800">{errorMessage(notice)}</p>:null}
     </> : null}
+    {commercial&&facades.length>0&&<section className="mt-7 rounded-lg border border-slate-200 bg-white p-4" aria-label={term('Saved facades')}>
+      <h2 className="font-semibold">{term('Saved facades')}</h2>
+      <table className="mt-3 w-full text-start text-sm"><thead><tr>{['Facade','Width (cm)','Length (cm)','Edit'].map(label=><th className="py-3 text-start" key={label}>{term(label)}</th>)}</tr></thead>
+        <tbody>{facades.map(facade=><tr key={facade.id} className="border-t border-slate-200">
+          <th scope="row" className="py-3 text-start">{term('Facade {number}',{number:String(facade.facadeNumber)})}</th><td><bdi>{formatNumber(facade.width)}</bdi></td><td><bdi>{formatNumber(facade.height)}</bdi></td>
+          <td>{!finished&&!project?.measurement_delayed&&!project?.additional_openings_original_ids?.includes(facade.id)&&<button type="button" disabled={saving||photoBusy||dirty} aria-label={term('Edit facade {number}',{number:String(facade.facadeNumber)})} onClick={()=>editOpening(facade)} className="min-h-11 px-2 font-semibold text-blue-700 disabled:opacity-40">{term('Edit')}</button>}</td>
+        </tr>)}</tbody>
+      </table>
+      {!finished&&!project?.measurement_delayed&&<div className="mt-3 flex flex-wrap gap-3">
+        {(['facade','internal'] as const).map(area=><button key={area} type="button" disabled={saving||photoBusy||dirty} onClick={()=>{chooseWorkArea(area);formRef.current?.scrollIntoView({behavior:'smooth'});}} className="min-h-11 rounded-md border border-blue-200 px-3 text-sm font-semibold text-blue-700 disabled:opacity-40">{term(area==='facade'?'Add another facade':'Add internal opening')}</button>)}
+      </div>}
+    </section>}
     {openings.length ? <div className="mt-7">
-      <h2 id="saved-openings-heading" className="text-base font-semibold text-slate-900">{t("initialStep.list",{count:formatNumber(openings.length)})}</h2>
-      <p className="mt-2 text-sm text-slate-600">{term("Total openings")}: {formatNumber(openings.reduce((sum,opening)=>sum+(opening.quantity??1),0))}</p>
+      {internalOpenings.length>0&&<>
+      <h2 id="saved-openings-heading" className="text-base font-semibold text-slate-900">{t("initialStep.list",{count:formatNumber(internalOpenings.length)})}</h2>
+      <p className="mt-2 text-sm text-slate-600">{term("Total openings")}: {formatNumber(internalOpenings.reduce((sum,opening)=>sum+(opening.quantity??1),0))}</p>
       <p id="saved-openings-scroll-hint" className="mt-2 text-xs text-slate-500 sm:hidden">{t("initialStep.tableScrollHint")}</p>
       <div role="region" aria-labelledby="saved-openings-heading" tabIndex={0} className="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
         <table className="w-full min-w-[640px] border-collapse text-start text-sm">
-          <caption className="sr-only">{t("initialStep.list",{count:formatNumber(openings.length)})}</caption>
+          <caption className="sr-only">{t("initialStep.list",{count:formatNumber(internalOpenings.length)})}</caption>
           <thead className="bg-slate-100 text-xs font-semibold text-slate-700">
             <tr>
               <th scope="col" className="sticky start-0 z-10 border-e border-slate-200 bg-slate-100 px-3 py-3 text-start">{t("initialStep.number")}</th>
@@ -237,7 +261,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {openings.map((opening,index)=><tr key={opening.id} className="odd:bg-white even:bg-slate-50">
+            {internalOpenings.map((opening,index)=><tr key={opening.id} className="odd:bg-white even:bg-slate-50">
               <th scope="row" className={`sticky start-0 border-e border-slate-200 px-3 py-3 text-start font-semibold tabular-nums text-slate-700 ${index%2===0?"bg-white":"bg-slate-50"}`}>{formatNumber(index+1)}{!finished&&!project?.measurement_delayed&&!project?.additional_openings_original_ids?.includes(opening.id)&&<button type="button" disabled={saving||photoBusy||dirty} aria-label={`${term('Edit opening')} ${formatNumber(index+1)}`} onClick={()=>editOpening(opening)} className="mt-1 block min-h-11 rounded-md px-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-40">{term('Edit')}</button>}</th>
               <td className="max-w-40 break-words px-3 py-3 text-slate-700">{term(opening.floor)}</td>
               <td className="max-w-48 break-words px-3 py-3 text-slate-700">{opening.workArea==='internal'&&<span className="block text-xs text-slate-500">{term('Internal works')}</span>}{opening.workArea==='facade'?term('Facade {number}',{number:String(opening.facadeNumber)}):opening.room === "Other" ? opening.otherRoom : t(`initialStep.rooms.${opening.room}`)}</td>
@@ -250,8 +274,9 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           </tbody>
         </table>
       </div>
-      {openings.map((opening,index)=>opening.structuralType==='Curtain Wall'&&(opening.curtainWall||opening.hasCurtainWallCapture)?<CurtainWallCapturePreview key={opening.id} projectId={projectId} opening={opening} number={index+1}/>:null)}
-      {openings.map((opening,index)=>opening.structuralType==='Skylight'&&(opening.skylight||opening.hasSkylightCapture)?<SkylightCapturePreview key={opening.id} projectId={projectId} opening={opening} number={index+1}/>:null)}
+      </>}
+      {internalOpenings.map((opening,index)=>opening.structuralType==='Curtain Wall'&&(opening.curtainWall||opening.hasCurtainWallCapture)?<CurtainWallCapturePreview key={opening.id} projectId={projectId} opening={opening} number={index+1}/>:null)}
+      {internalOpenings.map((opening,index)=>opening.structuralType==='Skylight'&&(opening.skylight||opening.hasSkylightCapture)?<SkylightCapturePreview key={opening.id} projectId={projectId} opening={opening} number={index+1}/>:null)}
       {!finished && !project?.measurement_delayed ? <><button type="button" disabled={saving || photoBusy || dirty} onClick={()=>{if(role!=='Outdoor Sales'){void updateMeasurementStatus("finish");return;}if(project?.additional_openings_state==='requested'&&!openings.some(o=>!project.additional_openings_original_ids?.includes(o.id))){setError('Add at least one new opening before submitting this task.');return;}setError('');setFinishOpen(true);}} className="mt-5 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50">{saving ? t("common.loading") : t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
     </div>:null}
     {!finished&&!cancelled&&!project?.measurement_delayed&&!openings.length&&canQuote&&<Link href={`/quotation/${projectId}`} className="mt-6 block rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">{term('Quote facade services or standalone products without window and door openings')}</Link>}

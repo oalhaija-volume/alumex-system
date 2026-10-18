@@ -48,10 +48,14 @@ export function OpeningSchedule({quote}:{quote:QuoteSnapshot}) {
    })}
   </table>
  </div>}
+ {!!quote.facadeMeasurements?.length&&<section className="document-opening">
+  <div className="document-section-heading"><h3>{term('Recorded facade dimensions')}</h3></div>
+  <table><caption className="sr-only">{term('Recorded facade dimensions')}</caption><thead><tr>{['Facade','Width (cm)','Length (cm)'].map(label=><th key={label}>{term(label)}</th>)}</tr></thead><tbody>{quote.facadeMeasurements.map(o=><tr key={o.id}><th scope="row">{term('Facade {number}',{number:String(o.facade_number)})}</th><td>{formatNumber(o.width)}</td><td>{formatNumber(o.height)}</td></tr>)}</tbody></table>
+ </section>}
  {!!quote.additionalItems?.length&&<div className="document-section-heading"><h3>{term('Standalone products & facade services')}{locale==='en'&&<span lang="ar">منتجات مستقلة وخدمات واجهات</span>}</h3></div>}
  {quote.additionalItems?.map(item=><section key={item.id} className="document-opening">
   <div className="document-opening-heading"><h4>{term(item.name)}</h4></div>
-  {!!item.measurements?.length&&<table><caption className="sr-only">{term('Measured facade areas')}</caption><thead><tr><th>{term('Area / elevation name')}</th><th>{term('Dimensions (m)')}</th><th>{term('Quantity')}</th><th>{term('Area (m²)')}</th></tr></thead><tbody>{item.measurements.map((area,index)=><tr key={index}><td dir="auto">{area.label}</td><td><bdi>{formatNumber(area.width,3)} × {formatNumber(area.height,3)}</bdi></td><td>{formatNumber(area.quantity)}</td><td>{formatNumber(area.width*area.height*area.quantity,3)}</td></tr>)}</tbody></table>}
+  {!!item.measurements?.length&&<table><caption className="sr-only">{term('Measured facade areas')}</caption><thead><tr><th>{term('Area / elevation name')}</th><th>{term('Dimensions (m)')}</th><th>{term('Quantity')}</th><th>{term('Area (m²)')}</th></tr></thead><tbody>{item.measurements.map((area,index)=><tr key={index}><td dir="auto">{term(area.label)}</td><td><bdi>{formatNumber(area.width,3)} × {formatNumber(area.height,3)}</bdi></td><td>{formatNumber(area.quantity)}</td><td>{formatNumber(area.width*area.height*area.quantity,3)}</td></tr>)}</tbody></table>}
   <table><caption className="sr-only">{term('Project products and services')}</caption><thead><tr><th>{term('Product / service')}</th><th>{term('Basis')}</th><th>{term('Rate · IQD')}</th><th>{term('Amount · IQD')}</th></tr></thead><tbody><ChargeRows items={[item,...(item.extras??[])]}/></tbody></table>
  </section>)}
  {quote.skylightsPricedSeparately&&<p className="document-note">{term('Skylights are priced separately in the calculator and are not included in this quotation.')}</p>}

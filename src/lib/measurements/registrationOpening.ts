@@ -1,6 +1,6 @@
 export const registrationRoomTypes = ["Living room", "Bedroom", "Kitchen", "Bathroom", "Dining room", "Office", "Hallway", "Staircase", "Balcony", "Storage room", "Other"] as const;
 export const registrationStructureTypes = ["Window", "Door", "Louver", "Curtain Wall", "Skylight"] as const;
-export type RegistrationStructure = typeof registrationStructureTypes[number];
+export type RegistrationStructure = typeof registrationStructureTypes[number] | "Facade";
 export type SkylightCapture = { photo?: string; drawing?: string; sections: { label: string; width: number; length: number }[] };
 export function normalizeSkylightCapture(value:unknown):SkylightCapture|null {
  if(!value||typeof value!=='object'||Array.isArray(value))return null;
@@ -36,10 +36,10 @@ export function normalizeRegistrationOpening(value: unknown): RegistrationOpenin
   const input = value as Record<string, unknown>;
   if (typeof input.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.id)) return null;
   if (typeof input.width !== "number" || !Number.isFinite(input.width) || input.width <= 0 || input.width > 100000 || typeof input.height !== "number" || !Number.isFinite(input.height) || input.height <= 0 || input.height > 100000) return null;
-  if (!registrationStructureTypes.includes(input.structuralType as RegistrationStructure)) return null;
+  if (input.structuralType!=="Facade" && !registrationStructureTypes.some(type=>type===input.structuralType)) return null;
   const quantity = input.quantity === undefined ? 1 : input.quantity;
   if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity < 1 || quantity > 10000) return null;
-  const floor = typeof input.floor === "string" ? input.floor.trim() : "";
+  const floor = input.structuralType==="Facade" ? "Whole building" : typeof input.floor === "string" ? input.floor.trim() : "";
   const workArea=input.workArea===undefined||input.workArea===null?undefined:input.workArea;
   if(workArea!==undefined&&workArea!=='facade'&&workArea!=='internal')return null;
   const facadeNumber=input.facadeNumber===undefined||input.facadeNumber===null?undefined:input.facadeNumber;
@@ -48,13 +48,14 @@ export function normalizeRegistrationOpening(value: unknown): RegistrationOpenin
   const otherRoom = workArea==='facade'?`Facade ${facadeNumber}`:room === "Other" && typeof input.otherRoom === "string" ? input.otherRoom.trim() : "";
   if (!floor || floor.length > 100 || !registrationRoomTypes.includes(room) || (room === "Other" && (!otherRoom || otherRoom.length > 100))) return null;
   const structuralType = input.structuralType as RegistrationStructure;
+  if(structuralType==='Facade'&&(workArea!=='facade'||quantity!==1))return null;
   if(input.hasRollerShutter!==undefined&&(typeof input.hasRollerShutter!=='boolean'||(input.hasRollerShutter&&structuralType!=='Window')))return null;
   if(input.hasArch!==undefined&&(typeof input.hasArch!=='boolean'||(input.hasArch&&!['Window','Door'].includes(structuralType))))return null;
   const skylight=input.skylight===undefined||input.skylight===null?undefined:normalizeSkylightCapture(input.skylight);
   if(skylight===null||(skylight&&structuralType!=='Skylight'))return null;
   const curtainWall=input.curtainWall===undefined||input.curtainWall===null?undefined:normalizeCurtainWallCapture(input.curtainWall);
   if(curtainWall===null||(curtainWall&&structuralType!=='Curtain Wall'))return null;
-  const openingType = structuralType === "Louver" ? "Hinged" : structuralType === "Skylight" || structuralType === "Curtain Wall" ? null : input.openingType;
+  const openingType = structuralType === "Louver" ? "Hinged" : structuralType === "Facade" || structuralType === "Skylight" || structuralType === "Curtain Wall" ? null : input.openingType;
   if (openingType !== null && openingType !== "Sliding" && openingType !== "Hinged") return null;
   if ((structuralType === "Window" || structuralType === "Door") && openingType === null) return null;
   return { ...(input.hasRollerShutter===undefined?{}:{hasRollerShutter:input.hasRollerShutter as boolean}),...(workArea?{workArea,...(workArea==='facade'?{facadeNumber:facadeNumber as number}:{})}:{}),...(input.hasArch===undefined?{}:{hasArch:input.hasArch as boolean}),...(skylight?{skylight}:{}),...(curtainWall?{curtainWall}:{}),id:input.id, quantity, width:input.width, height:input.height, floor, room, otherRoom, structuralType, openingType };

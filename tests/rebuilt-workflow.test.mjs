@@ -336,3 +336,15 @@ test('a requested roller shutter must be priced using the measured area and repe
  // Unticked legacy windows remain quotable without a shutter.
  assert.ok(pricing.priceQuotation([opening],[choice],catalog,'actor'));
 });
+test('whole facade dimensions are separate from priced openings, convert cm to metres and survive quotation snapshots',()=>{
+ const facades=[1,2,3,4].map(n=>({...opening,id:'facade-'+n,opening_type:'Facade',opening_direction:null,work_area:'facade',facade_number:n,room:'Facade '+n,width:1200,height:2500}));
+ assert.deepEqual(pricing.quotableOpenings([...facades,opening]),[opening]);
+ const areas=pricing.recordedFacadeAreas([...facades,opening]);
+ assert.equal(areas.length,4);assert.deepEqual(areas[0],{label:'Facade 1',width:12,height:25,quantity:1});
+ const service={id:'facade',name:'Cladding',category:'facade_service',unit:'sqm',unit_price:1000,is_active:true};
+ const q=pricing.priceQuotation([...facades,opening],[choice],[...catalog,service],'actor',[{id:'facade',quantity:1,measurements:areas}]);
+ assert.equal(q.lines.length,1);assert.deepEqual(q.facadeMeasurements,facades);assert.equal(q.additionalItems[0].quantity,1200);assert.equal(q.additionalItems[0].total,1200000);
+ const facadeOnly=pricing.priceQuotation(facades,[],[service],'actor',[{id:'facade',quantity:1,measurements:areas}]);
+ assert.equal(facadeOnly.lines.length,0);assert.equal(facadeOnly.total,1200000);
+ assert.throws(()=>quotationOpenings.quotationOpenings([], [{id:'11111111-1111-4111-8111-111111111111',structuralType:'Facade',workArea:'facade',facadeNumber:1,width:1200,height:2500}]),/Complete the floor/);
+});

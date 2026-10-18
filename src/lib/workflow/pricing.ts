@@ -8,9 +8,12 @@ export type AdditionalChoice = {id:string;quantity:number;measurements?:SurfaceM
 export type Charge = {id:string;name:string;unit:string;rate:number;quantity:number;total:number};
 export type StandaloneCharge = Charge & {measurements?:SurfaceMeasurement[];extras?:Charge[]};
 export type QuoteLine = {opening:MeasuredOpening;system:Charge;glass:Charge|null;extras:Charge[];area:number;total:number};
-export type QuoteSnapshot = {branch?:"Karkh"|"Rasafa"|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;total:number;currency:"IQD";createdAt:string;preparedBy:string};
+export type QuoteSnapshot = {facadeMeasurements?:MeasuredOpening[];branch?:"Karkh"|"Rasafa"|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;total:number;currency:"IQD";createdAt:string;preparedBy:string};
 export const money = (n:number) => new Intl.NumberFormat('en-IQ',{maximumFractionDigits:0}).format(n)+' IQD';
-export function quotableOpenings(openings:MeasuredOpening[]) { return openings.filter(opening=>opening.opening_type!=='Skylight'); }
+export function quotableOpenings(openings:MeasuredOpening[]) { return openings.filter(opening=>opening.opening_type!=='Skylight'&&opening.opening_type!=='Facade'); }
+export function recordedFacadeAreas(openings:MeasuredOpening[]):SurfaceMeasurement[] {
+ return openings.filter(o=>o.opening_type==='Facade').map(o=>({label:`Facade ${o.facade_number}`,width:o.width/100,height:o.height/100,quantity:1}));
+}
 export function defaultSystem(opening:MeasuredOpening,catalog:CatalogItem[]) {
  const options=systemOptions(opening,catalog);
  const name=['Window','Door'].includes(opening.opening_type??'')?'Alumex System':opening.opening_type;
@@ -95,5 +98,5 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
  });
  const total=lines.reduce((sum,line)=>sum+line.total,0)+additional.reduce((sum,item)=>sum+item.total+(item.extras?.reduce((s,e)=>s+e.total,0)??0),0);
  if(!Number.isSafeInteger(total)||total<=0)throw new Error('Add a measured opening, facade service or standalone product before quoting.');
- return {lines,additionalItems:additional,...(openings.some(o=>o.opening_type==='Skylight')?{skylightsPricedSeparately:true}:{}),total,currency:'IQD',createdAt:new Date().toISOString(),preparedBy:actor};
+ return {lines,additionalItems:additional,...(openings.some(o=>o.opening_type==='Facade')?{facadeMeasurements:openings.filter(o=>o.opening_type==='Facade')}:{ }),...(openings.some(o=>o.opening_type==='Skylight')?{skylightsPricedSeparately:true}:{}),total,currency:'IQD',createdAt:new Date().toISOString(),preparedBy:actor};
 }

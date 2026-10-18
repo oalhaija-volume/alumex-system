@@ -28,3 +28,11 @@ test('area and facade changes participate in stale measurement comparisons',()=>
  assert.equal(rules.sameOpeningMeasurements(facade,{...facade,workArea:undefined,facadeNumber:undefined}),false);
  assert.equal(rules.sameOpeningMeasurements(facade,{...facade}),true);
 });
+test('whole facade records need only dimensions and number, keep one quantity and do not require floor or room',()=>{
+ const input={id:opening.id,width:1200,height:2400,structuralType:'Facade',workArea:'facade',facadeNumber:1};
+ const facade=rules.normalizeRegistrationOpening(input);
+ assert.equal(facade.floor,'Whole building');assert.equal(facade.room,'Other');assert.equal(facade.otherRoom,'Facade 1');assert.equal(facade.quantity,1);assert.equal(facade.openingType,null);
+ for(const patch of [{workArea:'internal'},{workArea:undefined},{quantity:2},{hasArch:true},{hasRollerShutter:true},{curtainWall:{note:'wrong type'}},{width:0},{height:-1}])assert.equal(rules.normalizeRegistrationOpening({...input,...patch}),null);
+ assert.equal(rules.sameOpeningMeasurements(facade,{...facade,height:2300}),false);
+ assert.ok(rules.normalizeOpeningEdit({previous:facade,opening:{...facade,height:2300}}));
+});

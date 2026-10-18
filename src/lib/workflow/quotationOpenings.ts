@@ -8,7 +8,7 @@ export function quotationOpenings(existing:MeasuredOpening[], input:unknown):Mea
  const ids=new Set(existing.map(o=>o.id));
  const additions=input.map(value=>{
   const o=normalizeRegistrationOpening(value);
-  if(!o)throw new Error('Complete the floor, room, dimensions and types for each new opening.');
+  if(!o||o.structuralType==='Facade')throw new Error('Complete the floor, room, dimensions and types for each new opening.');
   if(ids.has(o.id))throw new Error('Each opening must be registered separately. Reload and try again.');
   ids.add(o.id);
   return {has_roller_shutter:o.hasRollerShutter??false,has_arch:o.hasArch??false,id:o.id,floor:o.floor,room:o.room==='Other'?o.otherRoom:o.room,width:o.width,height:o.height,quantity:o.quantity??1,opening_type:o.structuralType,opening_direction:o.openingType};

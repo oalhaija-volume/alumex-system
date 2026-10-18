@@ -25,12 +25,12 @@ for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}
  await page.getByLabel(label('Floor','الطابق'),{exact:true}).selectOption('Roof');
  await page.getByRole('combobox',{name:label('Room','الغرفة'),exact:true}).selectOption('Kitchen');
  await structure.selectOption('Curtain Wall');
- const camera=page.getByLabel(label('Take Curtain Wall photo','التقاط صورة للكرتن وول'),{exact:true});
+ const camera=page.getByLabel(label('Take Curtain Wall photo','التقاط صورة للكيرتن'),{exact:true});
  await expect(camera).toHaveAttribute('capture','environment');
  const fixture=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=1600;c.height=1200;const ctx=c.getContext('2d')!;ctx.fillStyle='#e2e8f0';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#334155';ctx.fillRect(100,100,300,900);ctx.fillRect(100,700,1200,300);return c.toDataURL('image/png').split(',')[1];});
  await camera.setInputFiles({name:'curtainWall.png',mimeType:'image/png',buffer:Buffer.from(fixture,'base64')});
- await expect(page.getByAltText(label('Curtain Wall site photo','صورة الكرتن وول في الموقع'))).toBeVisible();
- await page.getByLabel(label('Curtain Wall note (optional)','ملاحظة الكرتن وول (اختياري)'),{exact:true}).fill('Check fixing points before installation.');
+ await expect(page.getByAltText(label('Curtain Wall site photo','صورة الكيرتن في الموقع'))).toBeVisible();
+ await page.getByLabel(label('Curtain Wall note (optional)','ملاحظة الكيرتن (اختياري)'),{exact:true}).fill('Check fixing points before installation.');
  await page.screenshot({path:test.info().outputPath('curtain-wall-editor.png'),fullPage:true});
  await page.getByLabel(label('Width (cm)','العرض (سم)'),{exact:true}).fill('500');
  await page.getByLabel(label('Height (cm)','الارتفاع (سم)'),{exact:true}).fill('600');
@@ -41,10 +41,10 @@ for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}
  expect(saved.note).toBe('Check fixing points before installation.');
  if(!online){expect(posts).toHaveLength(0);await page.addInitScript(()=>Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false}));}
  await page.reload();
- const view=page.getByRole('button',{name:new RegExp(label('Curtain Wall photo and note','صورة وملاحظة الكرتن وول'))});
+ const view=page.getByRole('button',{name:new RegExp(label('Curtain Wall photo and note','صورة وملاحظة الكيرتن'))});
  await view.click();
  await expect(page.getByText('Check fixing points before installation.',{exact:true})).toBeVisible();
- await expect(page.getByAltText(label('Curtain Wall site photo','صورة الكرتن وول في الموقع'))).toBeVisible();
+ await expect(page.getByAltText(label('Curtain Wall site photo','صورة الكيرتن في الموقع'))).toBeVisible();
  expect((await savedFieldState(page)).openings[0].curtainWall).toEqual(saved);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:test.info().outputPath('curtainWall-saved.png'),fullPage:true});

@@ -72,12 +72,12 @@ test('failed Auth reset does not return success or expose internal error details
 
 const employees=[{id,full_name:'Employee One',username:'employee.one',email:'employee.one@auth.alumex.local',role:'Indoor Sales',status:'Active',is_active:true,updated_at:input.updatedAt},
   {id:'admin-id',full_name:'Admin Employee',username:'admin',email:'admin@alumex.com',role:'Admin',status:'Active',is_active:true,updated_at:input.updatedAt}];
-function render(role,editing=false){
+function render(role,editing=false,employeeRole='Indoor Sales'){
   const component=load('../src/components/workflow/EmployeeWorkspace.tsx',{
     'react':{...React,useState(initial){const state=React.useState(initial);return editing&&initial===null?[id,()=>{}]:state;}},'react/jsx-runtime':jsxRuntime,
     '@/components/i18n/I18nProvider':{useI18n:()=>({term:(value,replacements={})=>value?.replace(/\{name\}/g,replacements.name)})},
     '@/components/auth/useCurrentRole':{useCurrentRole:()=>({role,userId:'actor'})},
-    './ui':{useResource:()=>({data:{users:employees},error:'',loading:false}),Workspace:({children})=>children,Notice:()=>null},
+    './ui':{useResource:()=>({data:{users:employees.map(employee=>employee.id===id?{...employee,role:employeeRole,branch:'Karkh'}:employee)},error:'',loading:false}),Workspace:({children})=>children,Notice:()=>null},
   });
   return renderToStaticMarkup(React.createElement(component.EmployeeWorkspace));
 }
@@ -124,7 +124,7 @@ test('invalid branches and non-admin branch edits never reach the database',asyn
 });
 test('employee branch selector is available to Admin and hidden from HR',()=>{
  assert.match(render('Admin',true),/<select name="branch"/);
- assert.match(render('Admin',true),/<option value="Karkh">Karkh/);
+ assert.match(render('Admin',true),/<option value="Karkh"[^>]*>Karkh/);
  assert.match(render('Admin',true),/<option value="Rasafa">Rasafa/);
  assert.doesNotMatch(render('HR',true),/<select name="branch"/);
 });
@@ -135,4 +135,23 @@ for (const branch of ['Karkh','Rasafa',null]) test(`printed document renders the
  });
  const markup=renderToStaticMarkup(React.createElement(DocumentParties,{client:{name:'Client',mobile:'07700000000'},project:{number:'PRJ-TEST',address:'Baghdad',branch}}));
  if(branch)assert.match(markup,new RegExp('From '+branch));else assert.doesNotMatch(markup,/From Karkh|From Rasafa/);
+});
+
+for (const branch of ['Karkh', 'Rasafa', null]) test(`Outdoor profile edits discard old branch: ${branch}`, async () => {
+ const {api,calls}=route();
+ const result=await api.PATCH(request({...input,role:'Outdoor Sales',branch}));
+ assert.equal(result.status,200); assert.equal(calls[0].args.p_branch,null);
+});
+for (const role of ['Admin','HR']) test(`${role} can switch an employee to Outdoor without assigning a branch`,async()=>{
+ const {api,calls}=route({role});
+ assert.equal((await api.PATCH(request({...input,role:'Outdoor Sales'}))).status,200);
+ assert.equal(calls[0].name,'update_employee_profile');
+ assert.equal(calls[0].args.p_role,'Outdoor Sales');
+});
+test('Outdoor employee editor and card show both branches even with obsolete profile metadata',()=>{
+ const markup=render('Admin',true,'Outdoor Sales');
+ assert.match(markup,/Both branches/);
+ assert.match(markup,/Outdoor Sales serve both Karkh and Rasafa/);
+ assert.doesNotMatch(markup,/<select name="branch"/);
+ assert.doesNotMatch(markup,/Branch: Karkh/);
 });

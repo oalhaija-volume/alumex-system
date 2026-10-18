@@ -304,3 +304,10 @@ for(const branch of ['Karkh','Rasafa',null,'invalid','lookup-error'])test(`contr
   assert.equal(input.p_payload.project.branch,projectBranch);assert.equal(input.p_actor,'creator');
  }else{assert.equal(result.status,400);assert.equal(input,undefined);assert.match(result.body.error,/branch/);}
 });
+
+for(const branch of ['Karkh','Rasafa',undefined]) test(`Outdoor employee creation ignores obsolete branch: ${branch}`,async()=>{
+ let profileInput;
+ const route=employeeRoute({from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null}),upsert:async(value)=>{profileInput=value;return {error:null};}};},auth:{admin:{createUser:async()=>({data:{user:{id:'new-user'}},error:null})}}});
+ const result=await route.POST({json:async()=>({fullName:'Outdoor employee',role:'Outdoor Sales',branch,username:'outdoor.employee',password:'test-only-password'})});
+ assert.equal(result.status,201);assert.equal(profileInput.branch,null);assert.equal(result.body.user.branch,null);
+});

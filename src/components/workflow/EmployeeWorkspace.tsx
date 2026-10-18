@@ -89,7 +89,8 @@ function EmployeeEditor({ employee, isAdmin, isSelf, onCancel, onSaved }: {
         body: JSON.stringify({ id: employee.id, action: 'update-profile', updatedAt: employee.updated_at,
           fullName: values.get('fullName'), username: values.get('username'),
           role: accessLocked ? employee.role : values.get('role'),
-          ...(isAdmin ? { branch: values.get('branch') } : {}),
+          ...(isAdmin ? { branch: selectedRole === 'Outdoor Sales' ? null
+            : selectedRole === 'Indoor Sales' ? values.get('branch') : employee.branch ?? null } : {}),
           isActive: accessLocked ? employee.is_active : values.get('status') === 'Active' }),
       });
       onSaved(result.user);
@@ -109,9 +110,10 @@ function EmployeeEditor({ employee, isAdmin, isSelf, onCancel, onSaved }: {
           <label>{term('Role')}<select required name="role" value={selectedRole} onChange={event => setSelectedRole(event.target.value)} disabled={accessLocked} className={`${field} disabled:bg-slate-100`}>
             {options.map(role => <option key={role} value={role}>{term(role)}</option>)}
           </select></label>
-          {isAdmin && <label>{term('Branch')}<select name="branch" defaultValue={employee.branch ?? ''} required={selectedRole === 'Indoor Sales'} className={field}>
+          {isAdmin && selectedRole === 'Indoor Sales' && <label>{term('Branch')}<select name="branch" defaultValue={employee.role === 'Indoor Sales' ? employee.branch ?? '' : ''} required className={field}>
             <option value="">{term('Not assigned')}</option><option value="Karkh">{term('Karkh')}</option><option value="Rasafa">{term('Rasafa')}</option>
           </select><span className="mt-2 block text-xs text-slate-500">{term('New projects use this branch. Existing projects keep their original branch.')}</span></label>}
+          {selectedRole === 'Outdoor Sales' && <p className="self-center text-sm text-slate-600">{term('Outdoor Sales serve both Karkh and Rasafa.')}</p>}
           <label>{term('Account status')}<select name="status" defaultValue={employee.is_active ? 'Active' : 'Inactive'} disabled={accessLocked} className={`${field} disabled:bg-slate-100`}>
             <option value="Active">{term('Active')}</option><option value="Inactive">{term('Inactive')}</option>
           </select></label>
@@ -170,9 +172,10 @@ export function EmployeeWorkspace() {
         <div className="grid gap-5 sm:grid-cols-2">
           <label>{term('Employee name')}<input required name="fullName" maxLength={150} autoComplete="off" className={field} /></label>
           <label>{term('Role')}<select required name="role" aria-label={term('Role')} value={newRole} onChange={event => setNewRole(event.target.value)} className={field}><option value="">{term('Choose role')}</option>{[...employeeRoles, ...(isAdmin ? ['Admin', 'Company Owner'] : [])].map(option => <option key={option} value={option}>{term(option)}</option>)}</select></label>
-          {isAdmin && <label>{term('Branch')}<select name="branch" required={newRole === 'Indoor Sales'} className={field}>
+          {isAdmin && newRole === 'Indoor Sales' && <label>{term('Branch')}<select name="branch" required className={field}>
             <option value="">{term('Not assigned')}</option><option value="Karkh">{term('Karkh')}</option><option value="Rasafa">{term('Rasafa')}</option>
           </select><span className="mt-2 block text-xs text-slate-500">{term('Required for Indoor Sales. New quotations and contracts show this branch.')}</span></label>}
+          {newRole === 'Outdoor Sales' && <p className="self-center text-sm text-slate-600">{term('Outdoor Sales serve both Karkh and Rasafa.')}</p>}
           <label>{term('Username')}<input required name="username" dir="ltr" autoComplete="off" pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]{1,62}[a-zA-Z0-9]" className={field} /></label>
           <label>{term('Password')}<input required name="password" aria-label={term('Password')} aria-describedby="password-help" type={show ? 'text' : 'password'} autoComplete="new-password" minLength={8} className={field} /><span id="password-help" className="mt-2 block text-xs text-slate-500">{term('At least 8 characters. Passwords are never shown in the employee list.')}</span></label>
         </div>
@@ -188,7 +191,7 @@ export function EmployeeWorkspace() {
       const editable = isAdmin || (role === 'HR' && !['Admin','Company Owner'].includes(employee.role??'') && !primaryAdmin(employee));
       return <article key={employee.id} className={card}>
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0"><h3 className="break-words font-semibold">{employee.full_name || employee.username}</h3><p dir="ltr" className="mt-1 break-all text-sm text-slate-500">{employee.username}</p><p className="mt-2 text-sm text-slate-600">{term(employee.role)} · {term(employee.status)}</p>{(employee.role === 'Indoor Sales' || employee.branch) && <p className="mt-2 text-sm font-medium text-slate-700">{term('Branch')}: {term(employee.branch ?? 'Not assigned')}</p>}</div>
+          <div className="min-w-0"><h3 className="break-words font-semibold">{employee.full_name || employee.username}</h3><p dir="ltr" className="mt-1 break-all text-sm text-slate-500">{employee.username}</p><p className="mt-2 text-sm text-slate-600">{term(employee.role)} · {term(employee.status)}</p>{employee.role === 'Outdoor Sales' ? <p className="mt-2 text-sm font-medium text-slate-700">{term('Both branches')}</p> : (employee.role === 'Indoor Sales' || employee.branch) && <p className="mt-2 text-sm font-medium text-slate-700">{term('Branch')}: {term(employee.branch ?? 'Not assigned')}</p>}</div>
           {editable && <button type="button" className={secondary} aria-label={term('Edit {name}', { name: employee.full_name || employee.username || term('Employee') })} aria-expanded={editingId === employee.id} disabled={editingId !== null} onClick={event => { editButton.current = event.currentTarget; setEditingId(employee.id); setNotice(''); }}>{term('Edit')}</button>}
         </div>
         {editingId === employee.id && <EmployeeEditor employee={employee} isAdmin={isAdmin} isSelf={employee.id === userId} onCancel={closeEditor} onSaved={saved} />}

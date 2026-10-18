@@ -112,7 +112,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const branch = body?.branch === "" || body?.branch == null ? null : body.branch;
+  // Older employee forms may still submit a branch for Outdoor Sales.
+  const branch = role === "Outdoor Sales" || body?.branch === "" || body?.branch == null ? null : body.branch;
   if (branch !== null && branch !== "Karkh" && branch !== "Rasafa") {
     return NextResponse.json({ error: "Choose Karkh or Rasafa." }, { status: 400 });
   }
@@ -280,7 +281,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Enter a valid employee name, username, role and status." }, { status: 400 });
   }
   const hasBranch = Object.hasOwn(body, "branch");
-  const branch = body.branch === "" || body.branch == null ? null : body.branch;
+  const branch = body.role === "Outdoor Sales" || body.branch === "" || body.branch == null ? null : body.branch;
   if (hasBranch && branch !== null && branch !== "Karkh" && branch !== "Rasafa") {
     return NextResponse.json({ error: "Choose Karkh or Rasafa." }, { status: 400 });
   }

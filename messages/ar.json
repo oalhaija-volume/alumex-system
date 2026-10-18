@@ -1285,6 +1285,8 @@
     "From Karkh": "من فرع الكرخ",
     "From Rasafa": "من فرع الرصافة",
     "New projects use this branch. Existing projects keep their original branch.": "تستخدم المشاريع الجديدة هذا الفرع. وتحتفظ المشاريع السابقة بفرعها الأصلي.",
+    "Both branches": "كلا الفرعين",
+    "Outdoor Sales serve both Karkh and Rasafa.": "موظفو المبيعات الخارجية يعملون في فرعي الكرخ والرصافة.",
     "Required for Indoor Sales. New quotations and contracts show this branch.": "مطلوب للمبيعات الداخلية. يظهر هذا الفرع في عروض الأسعار والعقود الجديدة.",
     "Choose Karkh or Rasafa.": "اختر الكرخ أو الرصافة.",
     "Only Admin can assign employee branches.": "يمكن للمسؤول فقط تعيين فروع الموظفين.",

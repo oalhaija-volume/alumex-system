@@ -13,7 +13,7 @@ export async function GET(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const admin=createAdminClient();
  const profileQuery=admin.from('profiles').select('full_name,username,branch').eq('id',auth.user.id).single();
- const actorFromProfile=(profile:{full_name:string|null;username:string|null;branch:string|null}|null)=>({id:auth.user.id,name:profile?.full_name??profile?.username??'Employee',role:auth.role,branch:profile?.branch??null});
+ const actorFromProfile=(profile:{full_name:string|null;username:string|null;branch:string|null}|null)=>({id:auth.user.id,name:profile?.full_name??profile?.username??'Employee',role:auth.role,branch:auth.role==='Outdoor Sales'?null:profile?.branch??null});
  if(new URL(request.url).searchParams.has('session')){
   const profile=await profileQuery;
   if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});

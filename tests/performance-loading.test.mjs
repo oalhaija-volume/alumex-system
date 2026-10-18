@@ -88,7 +88,7 @@ test('the synchronization identity check does not download projects or directori
   });
   const response = await route.GET(new Request('http://localhost:3003/api/offline?session=1'));
   assert.equal(response.status, 200);
-  assert.equal(response.body.actor.branch, 'Karkh');
+  assert.equal(response.body.actor.branch, null, 'Outdoor Sales never inherit a cached single-branch assignment');
   assert.deepEqual(tables, ['profiles']);
 });
 

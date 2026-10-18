@@ -372,6 +372,8 @@ export type Database = {
       };
       openings: {
         Row: {
+          skylight_capture: Json | null;
+          has_skylight_capture: boolean;
           id: string;
           project_id: string;
           floor: string | null;
@@ -402,6 +404,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          skylight_capture?: Json | null;
           id?: string;
           project_id: string;
           floor?: string | null;

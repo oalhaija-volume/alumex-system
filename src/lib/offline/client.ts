@@ -3,9 +3,14 @@ import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
 import { canAccessCRM } from '@/lib/auth/permissions';
 import { normalizeFollowUp,type FollowUpInput } from '@/lib/workflow/followUps';
 import { needsSalesFollowUp } from '@/lib/workflow/stages';
-import { normalizeRegistrationOpening } from '@/lib/measurements/registrationOpening';
+import { normalizeRegistrationOpening, type RegistrationOpening } from '@/lib/measurements/registrationOpening';
 import { activeFieldUser,readFieldState,setFieldUser,updateFieldState } from './store';
 import type { FieldChange,FieldProject,FieldState } from './types';
+// Captures are immutable after save. Keep downloaded media when refreshing lightweight metadata.
+export function retainSkylightCapture<T extends RegistrationOpening & {projectId:string}>(opening:T,cached:FieldState['openings']):T {
+ const previous=cached.find(o=>o.id===opening.id&&o.projectId===opening.projectId);
+ return opening.hasSkylightCapture&&previous?.skylight?{...opening,skylight:previous.skylight}:opening;
+}
 export function isDeviceWorkspace(){return typeof window!=='undefined'&&window.location?.pathname==='/offline';}
 let connectionAvailable=true;
 export function isFieldOnline(){return typeof navigator!=="undefined" && navigator.onLine && connectionAvailable;}
@@ -22,7 +27,7 @@ export async function prepareOffline():Promise<FieldState>{
   const remote=await response.json() as FieldState;
   const state=await updateFieldState(remote.actor.id,old=>{
    const pending=new Set(old?.queue.map(c=>c.projectId)??[]);
-   return {...remote,followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remote.projects.some(p=>p.id===id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id))??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
+   return {...remote,followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remote.projects.some(p=>p.id===id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id))??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)).map(o=>retainSkylightCapture(o,old?.openings??[])),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
   },'snapshot');
   setFieldUser(remote.actor.id);return state;
  })();
@@ -148,7 +153,7 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
    const response=await fetch(url,{...init,signal:controller.signal});connection(true);
    if(response.ok){
     const data=await response.clone().json();
-    if(s && url!=='/api/workspace' && data.project && data.openings)await updateFieldState(s.actor.id,old=>old?.queue.some(c=>c.projectId===id)?old:{...old!,projects:old!.projects.map(p=>p.id===id?{...p,...data.project}:p),openings:[...old!.openings.filter(o=>o.projectId!==id),...data.openings.map((o:Record<string,unknown>)=>({...o,projectId:id}))]});
+    if(s && url!=='/api/workspace' && data.project && data.openings)await updateFieldState(s.actor.id,old=>old?.queue.some(c=>c.projectId===id)?old:{...old!,projects:old!.projects.map(p=>p.id===id?{...p,...data.project}:p),openings:[...old!.openings.filter(o=>o.projectId!==id),...data.openings.map((o:RegistrationOpening)=>retainSkylightCapture({...o,projectId:id!},old!.openings))]});
     return response;
    }
    if(response.status<500)return response;
@@ -194,7 +199,7 @@ export async function retryReviewedProject(projectId:string,updatedAt:string,cor
 
 export async function keepReviewedServerVersion(review:Awaited<ReturnType<typeof reviewServerProject>>){
  const id=activeFieldUser();if(!id)throw new Error('Sign in before resolving saved work.');
- await updateFieldState(id,s=>({...s!,queue:s!.queue.filter(c=>c.projectId!==review.project.id),projects:s!.projects.map(p=>p.id===review.project.id?{...review.project,pending:false}:p),openings:[...s!.openings.filter(o=>o.projectId!==review.project.id),...review.openings]}));
+ await updateFieldState(id,s=>({...s!,queue:s!.queue.filter(c=>c.projectId!==review.project.id),projects:s!.projects.map(p=>p.id===review.project.id?{...review.project,pending:false}:p),openings:[...s!.openings.filter(o=>o.projectId!==review.project.id),...review.openings.map(o=>retainSkylightCapture(o,s!.openings))]}));
 }
 
 export async function deleteOnlineProject(projectId:string){

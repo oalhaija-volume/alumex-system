@@ -1,4 +1,6 @@
 "use client";
+import { SkylightCaptureEditor } from './SkylightCaptureEditor';
+import { SkylightCapturePreview } from './SkylightCapturePreview';
 import { ClientCancellation } from './ClientCancellation';
 import { MeasurementDelayNotice } from './MeasurementDelayNotice';
 import type { FieldProject } from '@/lib/offline/types';
@@ -10,7 +12,7 @@ import { readFieldState } from "@/lib/offline/store";
 import { fieldFetch,isDeviceWorkspace } from "@/lib/offline/client";
 import { useEffect, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
-import { normalizeRegistrationOpening, registrationRoomTypes, registrationStructureTypes, type RegistrationOpening, type RegistrationStructure } from "@/lib/measurements/registrationOpening";
+import { normalizeRegistrationOpening, registrationRoomTypes, registrationStructureTypes, type SkylightCapture, type RegistrationOpening, type RegistrationStructure } from "@/lib/measurements/registrationOpening";
 
 const field = "mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
 export function InitialMeasurements({projectId,role}:{projectId:string;role?:string}) {
@@ -23,6 +25,8 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   const [room,setRoom] = useState("");
   const [otherRoom,setOtherRoom] = useState("");
   const [width,setWidth] = useState("");
+  const [skylight,setSkylight] = useState<SkylightCapture>({sections:[]});
+  const [photoBusy,setPhotoBusy] = useState(false);
   const [quantity,setQuantity] = useState("1");
   const [height,setHeight] = useState("");
   const [structuralType,setStructuralType] = useState<RegistrationStructure|"">("");
@@ -59,21 +63,21 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   },[endpoint]);
   async function save(event:React.FormEvent) {
     event.preventDefault();
-    if (saving) return;
-    const opening = normalizeRegistrationOpening({id:draftId,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor,room,otherRoom});
+    if (saving || photoBusy) return;
+    const opening = normalizeRegistrationOpening({id:draftId,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor,room,otherRoom,...(structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
     if (!opening) {setError(t("initialStep.invalid"));return;}
     setSaving(true);setError("");setNotice("");
     try {
       const response=await fieldFetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(opening)});
       const data=await response.json();if(!response.ok) throw new Error(data.error);
       setOpenings(current=>current.some(row=>row.id===opening.id)?current:[...current,opening]);
-      setQuantity("1");setFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setDraftId(crypto.randomUUID());
+      setSkylight({sections:[]});setQuantity("1");setFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setDraftId(crypto.randomUUID());
       setNotice(t("initialStep.saved"));
     } catch(cause) {setError(cause instanceof Error?cause.message:t("initialStep.failed"));}
     finally {setSaving(false);}
   }
   async function updateMeasurementStatus(action: "finish" | "reopen") {
-    if (saving) return;
+    if (saving || photoBusy) return;
     setSaving(true);setError("");
     try {
       const response = await fieldFetch(endpoint,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({action})});
@@ -84,7 +88,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     finally {setSaving(false);}
   }
   async function updateVisit(action:'delay-measurements'|'cancel-project',note=delayNote) {
-    if(saving)return;
+    if(saving||photoBusy)return;
     setSaving(true);setError('');setNotice('');
     try {
       const response=await fieldFetch(endpoint,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,note,...(action==='cancel-project'?{confirmed:true}:{})})});
@@ -105,11 +109,11 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     {project && <MeasurementDelayNotice project={project}/>}
     {project?.measurement_delayed && <div className="mt-4 space-y-3 text-sm"><p>{term('Returned to CRM. Indoor Sales will arrange and assign the next measurement visit.')}</p><Link href={canQuote?`/mini-crm#project-${projectId}`:'/dashboard'} className="inline-flex min-h-11 items-center font-semibold text-blue-700">{term(canQuote?'Open CRM':'Back to assignments')}</Link></div>}
     {cancelled && <Link href="/dashboard" className="mt-4 inline-flex min-h-11 items-center font-semibold text-blue-700">{term('Back to dashboard')}</Link>}
-    {project && canCancel && <ClientCancellation busy={saving} onSubmit={form=>void updateVisit('cancel-project',String(new FormData(form).get('note')??''))}/>}
+    {project && canCancel && <ClientCancellation busy={saving||photoBusy} onSubmit={form=>void updateVisit('cancel-project',String(new FormData(form).get('note')??''))}/>}
     {project && !finished && !project.measurement_delayed && (canDelay && <details className="mt-5 rounded-lg border border-amber-200 bg-white p-4">
       <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-amber-900">{term('Client asked to visit later')}</summary>
       <form aria-label={term('Report client delay')} onSubmit={event=>{event.preventDefault();void updateVisit('delay-measurements');}} className="mt-3">
-        <fieldset disabled={saving}>
+        <fieldset disabled={saving||photoBusy}>
           <label className="block text-sm font-medium">{term('Client delay note')}<textarea required maxLength={2000} value={delayNote} onChange={event=>setDelayNote(event.target.value)} className="mt-2 min-h-28 w-full rounded-md border border-slate-300 p-3 text-base"/></label>
           <p className="mt-2 text-xs leading-5 text-slate-600">{term('The project returns to CRM. Indoor Sales will assign the next measurement visit.')}</p>
           <button className="mt-4 min-h-12 rounded-md bg-amber-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{term('Mark delayed by client')}</button>
@@ -118,7 +122,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     </details>)}
     {project && !finished && !project.measurement_delayed ? <>
       <form onSubmit={save} className="mt-7 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
-        <fieldset disabled={saving} className="min-w-0 space-y-5">
+        <fieldset disabled={saving||photoBusy} className="min-w-0 space-y-5">
           <legend className="mb-5 text-lg font-semibold text-slate-900">{t("initialStep.opening",{number:formatNumber(openings.length+1)})}</legend>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm font-medium text-slate-800">{t("initialStep.floor")}
@@ -148,10 +152,11 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           </fieldset> : structuralType === "Louver" ? <p className="text-sm text-slate-600">{t("initialStep.louverHelp")}</p> : null}
           <div className="grid grid-cols-2 gap-4">
             <label className="block text-sm font-medium text-slate-800">{t("initialStep.width")}<input required type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" className={field} value={width} onChange={event=>setWidth(event.target.value)} /></label>
-            <label className="block text-sm font-medium text-slate-800">{t("initialStep.height")}<input required type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" className={field} value={height} onChange={event=>setHeight(event.target.value)} /></label>
+            <label className="block text-sm font-medium text-slate-800">{structuralType==='Skylight'?term('Length (cm)'):t("initialStep.height")}<input required type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" className={field} value={height} onChange={event=>setHeight(event.target.value)} /></label>
           </div>
           <label className="block text-sm font-medium text-slate-800">{term('Number of identical openings')}<input required type="number" inputMode="numeric" min="1" max="10000" step="1" className={field} value={quantity} onChange={event=>setQuantity(event.target.value)} aria-describedby="opening-quantity-help"/></label>
           <p id="opening-quantity-help" className="text-xs leading-5 text-slate-500">{term('Use one entry for openings with the same dimensions, type, floor and room. Record different openings separately.')}</p>
+          {structuralType==='Skylight'&&<SkylightCaptureEditor key={draftId} value={skylight} onChange={setSkylight} busy={photoBusy||saving} onBusyChange={setPhotoBusy}/>}
           <button type="submit" className="min-h-12 w-full rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{saving?t("common.loading"):t("initialStep.add")}</button>
         </fieldset>
       </form>
@@ -184,9 +189,10 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           </tbody>
         </table>
       </div>
-      {!finished && !project?.measurement_delayed ? <><button type="button" disabled={saving || dirty} onClick={()=>void updateMeasurementStatus("finish")} className="mt-5 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50">{saving ? t("common.loading") : t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
+      {openings.map((opening,index)=>opening.structuralType==='Skylight'&&(opening.skylight||opening.hasSkylightCapture)?<SkylightCapturePreview key={opening.id} projectId={projectId} opening={opening} number={index+1}/>:null)}
+      {!finished && !project?.measurement_delayed ? <><button type="button" disabled={saving || photoBusy || dirty} onClick={()=>void updateMeasurementStatus("finish")} className="mt-5 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50">{saving ? t("common.loading") : t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
     </div>:null}
     {!finished&&!cancelled&&!project?.measurement_delayed&&!openings.length&&canQuote&&<Link href={`/quotation/${projectId}`} className="mt-6 block rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">{term('Quote facade services or standalone products without window and door openings')}</Link>}
-    {finished && !cancelled ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{canQuote ? t("initialStep.done") : term("Measurements submitted. Indoor Sales will prepare the quotation.")}</p><button disabled={saving} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button>{!canQuote ? <Link href="/dashboard" className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term(mobileOutdoor?"Back to assignments":"Back to dashboard")}</Link> : <Link href={`/quotation/${projectId}`} onClick={async event=>{event.preventDefault();const state=await readFieldState();if(!navigator.onLine || state?.queue.some(c=>c.projectId===projectId)){setError("Your measurements are saved on this device. Wait for synchronization before preparing a quotation.");return;}window.location.assign(`/quotation/${projectId}`);}} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Continue to quotation")}</Link>}<Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
+    {finished && !cancelled ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{canQuote ? t("initialStep.done") : term("Measurements submitted. Indoor Sales will prepare the quotation.")}</p><button disabled={saving||photoBusy} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button>{!canQuote ? <Link href="/dashboard" className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term(mobileOutdoor?"Back to assignments":"Back to dashboard")}</Link> : <Link href={`/quotation/${projectId}`} onClick={async event=>{event.preventDefault();const state=await readFieldState();if(!navigator.onLine || state?.queue.some(c=>c.projectId===projectId)){setError("Your measurements are saved on this device. Wait for synchronization before preparing a quotation.");return;}window.location.assign(`/quotation/${projectId}`);}} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Continue to quotation")}</Link>}<Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
   </section>;
 }

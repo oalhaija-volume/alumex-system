@@ -237,3 +237,18 @@ test('offline cancellation closes active work without removing project or measur
  for(const action of ['opening','finish','reopen','delay-measurements','resume-measurements'])await assert.rejects(x.client.saveFieldChange(action,projectId,delayOpening));
  const stages=load('../src/lib/workflow/stages.ts');assert.equal(stages.projectStage(x.state.projects[0]),'client-cancelled');assert.equal(stages.needsSalesFollowUp(x.state.projects[0]),false);
 });
+
+test('skylight captures survive metadata refreshes and remain isolated to the matching project',async()=>{
+ const skylight={photo:'data:image/jpeg;base64,/9j/AAAA',drawing:'data:image/png;base64,iVBORw0KGgoAAAA=',sections:[{label:'A',width:200,length:600}]};
+ const opening={...delayOpening,structuralType:'Skylight',openingType:null,skylight};
+ const x=setup({projects:[delayProject],openings:[opening]});
+ const remote={...opening,skylight:undefined,hasSkylightCapture:true};
+ navigator.onLine=true;globalThis.fetch=async()=>Response.json({...x.state,openings:[remote]});
+ await x.client.prepareOffline();assert.deepEqual(x.state.openings[0].skylight,skylight);
+ globalThis.fetch=async()=>Response.json({project:delayProject,openings:[remote]});
+ await x.client.fieldFetch('/api/initial-measurements/'+projectId);assert.deepEqual(x.state.openings[0].skylight,skylight);
+ assert.equal(x.client.retainSkylightCapture({...remote,projectId:'other'},[opening]).skylight,undefined);
+ assert.equal(x.client.retainSkylightCapture({...remote,hasSkylightCapture:false},[opening]).skylight,undefined);
+ globalThis.fetch=async()=>Response.json({...x.state,projects:[],openings:[]});
+ await x.client.prepareOffline();assert.equal(x.state.openings.length,0);
+});

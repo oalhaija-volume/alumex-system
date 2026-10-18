@@ -14,7 +14,7 @@ async function access(context: Context) {
   const {projectId} = await context.params;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) return {response:NextResponse.json({error:"Project not found."},{status:404})};
   const admin = createAdminClient();
-  const {data:project,error} = await admin.from("projects").select("id, building_type, project_name, project_number, created_by, assigned_outdoor_sales_id, follow_up_owner_id, structure_readiness, sales_status, updated_at, measurement_delayed, measurement_delay_note, measurement_delayed_at, measurement_delayed_by, client_cancellation_note, client_cancelled_at, client_cancelled_by").eq("id",projectId).maybeSingle();
+  const {data:project,error} = await admin.from("projects").select("id, additional_openings_state,additional_openings_original_ids,building_type, project_name, project_number, created_by, assigned_outdoor_sales_id, follow_up_owner_id, structure_readiness, sales_status, updated_at, measurement_delayed, measurement_delay_note, measurement_delayed_at, measurement_delayed_by, client_cancellation_note, client_cancelled_at, client_cancelled_by").eq("id",projectId).maybeSingle();
   if (error) return {response:NextResponse.json({error:"Unable to load project."},{status:500})};
   if (!project || (!["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales"].includes(auth.role) && project.created_by !== auth.user.id && !(auth.role === "Outdoor Sales" && project.assigned_outdoor_sales_id === auth.user.id) && !(auth.role === "Indoor Sales" && project.follow_up_owner_id === auth.user.id))) return {response:NextResponse.json({error:"Project not found."},{status:404})};
   if (project.structure_readiness !== "ready") return {response:NextResponse.json({error:"The site must be ready before measurements can be recorded."},{status:409})};
@@ -32,6 +32,7 @@ export async function POST(request: Request, context: Context) {
   if (result.response) return result.response;
   if (result.project.sales_status !== "new_lead") return NextResponse.json({error:"Reopen measurements before adding another opening."},{status:409});
   if(result.project.measurement_delayed)return NextResponse.json({error:"Resume measurements before recording or completing them."},{status:409});
+  if(result.project.additional_openings_state && result.auth.role==='Outdoor Sales' && result.project.assigned_outdoor_sales_id!==result.auth.user.id)return NextResponse.json({error:'Only the assigned employee can complete this task.'},{status:403});
   const opening = normalizeRegistrationOpening(await request.json().catch(()=>null));
   if (!opening) return NextResponse.json({error:"Enter floor, room, valid dimensions, structural type, and opening type."},{status:400});
   // Existing storage calls the structural category opening_type. The movement
@@ -56,6 +57,12 @@ export async function PATCH(request: Request, context: Context) {
   if (result.response) return result.response;
   if (!["new_lead","ready_for_quotation"].includes(result.project.sales_status ?? "")) return NextResponse.json({error:"Measurements are locked once a quotation has been saved."},{status:409});
   const body = await request.json().catch(()=>null);
+  if(result.project.additional_openings_state && ['finish','reopen','edit-opening'].includes(body?.action)){
+    const payload=body.action==='edit-opening'?normalizeOpeningEdit(body):{};
+    if(!payload)return NextResponse.json({error:'Complete the opening details.'},{status:400});
+    const saved=await result.admin.rpc('sync_field_change',{p_operation:body.action==='edit-opening'?body.operationId:crypto.randomUUID(),p_actor:result.auth.user.id,p_project:result.project.id,p_action:body.action,p_payload:payload as unknown as Json,p_recorded_at:new Date().toISOString(),p_expected_updated_at:result.project.updated_at});
+    return saved.error?NextResponse.json({error:saved.error.message},{status:409}):NextResponse.json({project:saved.data,salesStatus:body.action==='finish'?'ready_for_quotation':'new_lead'});
+  }
   if (body?.action === 'cancel-project' || body?.action === 'delay-measurements' || body?.action === 'resume-measurements') {
     const actor={id:result.auth.user.id,role:result.auth.role};
     if (!(body.action === 'cancel-project' ? canCancelProject(result.project,actor) : body.action === 'delay-measurements' ? canDelayMeasurements(result.project,actor) : canResumeMeasurements(result.project,actor)))

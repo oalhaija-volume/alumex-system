@@ -43,6 +43,7 @@ export async function POST(request:Request,context:Context){
   const file=form.get('file');upload=file instanceof File?file:null;
  }else{body=await request.json().catch(()=>({}));}
  const action=body.action;const revision=body.revision;
+ if(project.additional_openings_state==='requested'||(project.additional_openings_state==='submitted'&&action!=='save'))return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.'},{status:409});
  if(!['save','approve','contract','sign'].includes(String(action))||!Number.isInteger(revision)||revision!==(flow?.revision??0))return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
  let payload:Json={};let uploadedPath:string|null=null;
  try{

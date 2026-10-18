@@ -6,7 +6,7 @@ import { normalizeFollowUp,normalizeMeasurementAssignment } from '@/lib/workflow
 import { salesProject,salesRoles } from '@/lib/workflow/access';
 export async function GET(){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
- const admin=createAdminClient();let query=admin.from('projects').select('id,building_type,branch,project_name,project_number,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,created_by,created_at,updated_at,project_notes,readiness_note,measurement_delayed,measurement_delay_note,measurement_delayed_at,measurement_delayed_by,client_cancellation_note,client_cancelled_at,client_cancelled_by,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role').order('created_at',{ascending:false});
+ const admin=createAdminClient();let query=admin.from('projects').select('id,additional_openings_state,additional_openings_original_ids,building_type,branch,project_name,project_number,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,created_by,created_at,updated_at,project_notes,readiness_note,measurement_delayed,measurement_delay_note,measurement_delayed_at,measurement_delayed_by,client_cancellation_note,client_cancelled_at,client_cancelled_by,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role').order('created_at',{ascending:false});
  if(auth.role==='Outdoor Sales')query=query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);
  const [result,directory]=await Promise.all([query,admin.from('profiles').select('id,full_name,username,role').in('role',['Indoor Sales','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name')]);
  if(result.error)return NextResponse.json({error:'Unable to load projects.'},{status:500});
@@ -28,9 +28,9 @@ export async function GET(){
 export async function PATCH(request:Request){
  const body=await request.json().catch(()=>null);if(typeof body?.projectId!=='string')return NextResponse.json({error:'Project is required.'},{status:400});
  const access=await salesProject(body.projectId,true);if(access.response)return access.response;
- if(!['ready','assign-measurements','follow-up','cancel-project'].includes(body.action))return NextResponse.json({error:'Invalid action.'},{status:400});
+ if(!['ready','assign-measurements','request-openings','follow-up','cancel-project'].includes(body.action))return NextResponse.json({error:'Invalid action.'},{status:400});
  let payload={};
- try{if(body.action==='cancel-project')payload=normalizeClientCancellation(body);else if(body.action==='follow-up')payload=normalizeFollowUp(body);else if(body.action==='assign-measurements'||body.assignedOutdoorSalesId!==undefined)payload=normalizeMeasurementAssignment(body);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+ try{if(body.action==='cancel-project')payload=normalizeClientCancellation(body);else if(body.action==='follow-up')payload=normalizeFollowUp(body);else if(body.action==='request-openings'||body.action==='assign-measurements'||body.assignedOutdoorSalesId!==undefined)payload=normalizeMeasurementAssignment(body);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  const result=await access.admin.rpc('sync_field_change',{p_operation:crypto.randomUUID(),p_actor:access.auth.user.id,p_project:body.projectId,p_action:body.action,p_payload:payload,p_recorded_at:new Date().toISOString(),p_expected_updated_at:access.project.updated_at});
  return result.error?NextResponse.json({error:result.error.message},{status:409}):NextResponse.json({ok:true});
 }

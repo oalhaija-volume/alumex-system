@@ -2484,7 +2484,19 @@
     "Commercial building": "Commercial building",
     "Residential building": "Residential building",
     "Villa / House": "Villa / House",
-    "Choose the building type: commercial building, residential building, or villa / house.": "Choose the building type: commercial building, residential building, or villa / house."
+    "Choose the building type: commercial building, residential building, or villa / house.": "Choose the building type: commercial building, residential building, or villa / house.",
+    "Add more openings": "Add more openings",
+    "Assign a return visit to measure additional openings. Existing measurements and quotations are kept.": "Assign a return visit to measure additional openings. Existing measurements and quotations are kept.",
+    "Send additional-openings task": "Send additional-openings task",
+    "Add the requested new openings, then submit them to Indoor Sales. Existing measurements are preserved.": "Add the requested new openings, then submit them to Indoor Sales. Existing measurements are preserved.",
+    "Additional openings are being measured. Wait for submission before revising the quotation.": "Additional openings are being measured. Wait for submission before revising the quotation.",
+    "Additional measurements received. Save a quotation revision before approval or contract signing.": "Additional measurements received. Save a quotation revision before approval or contract signing.",
+    "Complete the additional measurements and save a quotation revision before continuing.": "Complete the additional measurements and save a quotation revision before continuing.",
+    "Ask Indoor Sales to assign another additional-openings task.": "Ask Indoor Sales to assign another additional-openings task.",
+    "Only the assigned employee can complete this task.": "Only the assigned employee can complete this task.",
+    "Existing measurements are preserved. Add the new openings separately.": "Existing measurements are preserved. Add the new openings separately.",
+    "Add at least one new opening before submitting this task.": "Add at least one new opening before submitting this task.",
+    "Additional openings can only be requested after measurements and before signing.": "Additional openings can only be requested after measurements and before signing."
   },
   "registration": {
     "title": "New client & project",

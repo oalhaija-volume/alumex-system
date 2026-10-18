@@ -322,3 +322,33 @@ test('a newly saved offline opening can be edited before its first synchronizati
  globalThis.fetch=async(url,init)=>{if(!init?.method)return Response.json({actor});const change=JSON.parse(init.body);posted.push(change);return Response.json({project:delayProject});};
  await x.client.syncFieldChanges();assert.deepEqual(posted.map(c=>c.action),['opening','edit-opening']);assert.equal(x.state.queue.length,0);
 });
+
+test('CRM can queue additional openings while retaining original measurements and requiring a new opening',async()=>{
+ const original={id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',projectId,floor:'GF',room:'Kitchen',width:120,height:150,quantity:2,structuralType:'Window',openingType:'Sliding'};
+ const project={...delayProject,created_by:actor.id,sales_status:'quotation_in_progress',measurement_delayed:false};
+ const x=setup({projects:[project],openings:[original],outdoorSales:[{id:actor.id,name:actor.name}]});
+ await x.client.saveFieldChange('request-openings',projectId,{assignedOutdoorSalesId:actor.id});
+ assert.equal(x.state.projects[0].sales_status,'new_lead');
+ assert.equal(x.state.projects[0].additional_openings_state,'requested');
+ assert.deepEqual(x.state.projects[0].additional_openings_original_ids,[original.id]);
+ assert.deepEqual(x.state.openings,[original]);
+ await assert.rejects(x.client.saveFieldChange('finish',projectId,{}),/at least one new opening/);
+ await assert.rejects(x.client.saveFieldChange('edit-opening',projectId,{opening:{...original,width:999},previous:original}),/Existing measurements are preserved/);
+ const added={...original,id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',width:200};
+ await x.client.saveFieldChange('opening',projectId,added);
+ await x.client.saveFieldChange('edit-opening',projectId,{opening:{...added,width:210},previous:added});
+ await x.client.saveFieldChange('finish',projectId,{});
+ assert.equal(x.state.projects[0].additional_openings_state,'submitted');
+ assert.equal(x.state.projects[0].sales_status,'ready_for_quotation');
+ assert.deepEqual(x.state.openings[0],original);
+ await assert.rejects(x.client.saveFieldChange('reopen',projectId,{}),/Ask Indoor Sales/);
+});
+test('additional opening tasks reject Outdoor requests, unassigned creators and closed stages',async()=>{
+ const x=setup({actor:{...actor,role:'Outdoor Sales'},projects:[{...delayProject,created_by:actor.id,assigned_outdoor_sales_id:'another',additional_openings_state:'requested',additional_openings_original_ids:[]}]});
+ await assert.rejects(x.client.saveFieldChange('request-openings',projectId,{assignedOutdoorSalesId:actor.id}),/CRM access is limited/);
+ await assert.rejects(x.client.saveFieldChange('opening',projectId,{}),/Only the assigned employee/);
+ for(const sales_status of ['new_lead','contract_signed','transferred_to_operations','cancelled']){
+  const y=setup({projects:[{...delayProject,sales_status}]});
+  await assert.rejects(y.client.saveFieldChange('request-openings',projectId,{assignedOutdoorSalesId:actor.id}),/before signing/);
+ }
+});

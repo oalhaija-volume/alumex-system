@@ -55,7 +55,7 @@ test('Indoor Sales can open and follow up projects across the company', async ()
  assert.equal((await access.salesProject(id, true)).response, undefined);
 });
 
-for (const action of ['follow-up', 'ready', 'assign-measurements']) test(`Outdoor Sales cannot submit ${action} through offline sync`, async () => {
+for (const action of ['follow-up', 'ready', 'assign-measurements', 'request-openings']) test(`Outdoor Sales cannot submit ${action} through offline sync`, async () => {
  const route = load('../src/app/api/offline/route.ts', {
   'next/server': json,
   '@/lib/auth/adminServer': { requireRole: async () => ({ ok: true, role: 'Outdoor Sales', user: { id } }) },

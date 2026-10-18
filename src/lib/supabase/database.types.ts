@@ -235,6 +235,8 @@ export type Database = {
       };
       projects: {
         Row: {
+          additional_openings_state: "requested" | "submitted" | null;
+          additional_openings_original_ids: string[];
           building_type: "commercial_building" | "residential_building" | "villa_house" | null;
           id: string;
           project_number: string;
@@ -311,6 +313,8 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          additional_openings_state?: "requested" | "submitted" | null;
+          additional_openings_original_ids?: string[];
           building_type?: "commercial_building" | "residential_building" | "villa_house" | null;
           id?: string;
           project_number: string;

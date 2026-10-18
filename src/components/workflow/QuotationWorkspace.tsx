@@ -13,7 +13,7 @@ import { QuotationOpeningForm } from './QuotationOpeningForm';
 import { DocumentHeader,DocumentParties,OpeningSchedule,DocumentFooter,DocumentPaper } from './CommercialDocument';
 import { api,button,card,field,Notice,secondary,useResource,Workspace } from './ui';
 
-type QuoteData={project:{branch?:"Karkh"|"Rasafa"|null;project_name:string;project_number:string;address:string;sales_status:string};client:{name:string;mobile:string;client_type?:string};openings:MeasuredOpening[];catalog:CatalogItem[];flow:SalesFlow|null;history:QuotationRevision[]};
+type QuoteData={project:{additional_openings_state?:'requested'|'submitted'|null;branch?:"Karkh"|"Rasafa"|null;project_name:string;project_number:string;address:string;sales_status:string};client:{name:string;mobile:string;client_type?:string};openings:MeasuredOpening[];catalog:CatalogItem[];flow:SalesFlow|null;history:QuotationRevision[]};
 const quantityLabel=(unit?:string)=>unit==='sqm'?'Area (m²)':unit==='meter'?'Length (m)':'Quantity';
 
 function QuoteEditor({data,projectId,reload}:{data:QuoteData;projectId:string;reload:()=>Promise<void>}) {
@@ -36,7 +36,9 @@ function QuoteEditor({data,projectId,reload}:{data:QuoteData;projectId:string;re
  const [replaceContract,setReplaceContract]=useState(false);
  const [viewVersion,setViewVersion]=useState('current');
  const [template,setTemplate]=useState<'residential'|'commercial'>(['company','corporate'].includes(data.client.client_type??'')?'commercial':'residential');
- const canEdit=!flow||(!flow.signed_at&&['quotation','approved','contract'].includes(flow.stage));
+ const waiting=data.project.additional_openings_state==='requested';
+ const needsRevision=!!data.project.additional_openings_state;
+ const canEdit=!waiting&&(!flow||(!flow.signed_at&&['quotation','approved','contract'].includes(flow.stage)));
  const archived=viewVersion==='current'?undefined:data.history?.find(h=>String(h.version)===viewVersion);
  const shown=archived?.quotation??flow?.quotation;
  const reference=`QT-${data.project.project_number}-R${archived?.version??shown?.version??1}`;
@@ -61,6 +63,8 @@ function QuoteEditor({data,projectId,reload}:{data:QuoteData;projectId:string;re
  async function cancel(){setBusy(true);setError('');try{await reload();setEditing(false);setAddingOpening(false);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  return <>
   <Notice error={error}/>
+  {needsRevision&&<p role="status" className="mb-5 rounded-md bg-amber-50 p-4 text-sm text-amber-900 print:hidden">{term(waiting?'Additional openings are being measured. Wait for submission before revising the quotation.':'Additional measurements received. Save a quotation revision before approval or contract signing.')}</p>}
+  {['ready_for_quotation','quotation_in_progress','quotation_approved','contract_generated'].includes(data.project.sales_status)&&<Link href={`/mini-crm#project-${projectId}`} className={`${secondary} mb-5 inline-flex print:hidden`}>{term('Add more openings')}</Link>}
   {editing&&canEdit?<fieldset disabled={busy} className="min-w-0 space-y-5 print:hidden">
    <div className="rounded-md bg-blue-50 p-4 text-sm leading-6 text-blue-900">
     <p>{flow?term('Editing revision {current}. Saving creates revision {next} and requires new client approval.',{current:formatNumber(flow.quotation.version??1),next:formatNumber((flow.quotation.version??1)+1)}):term("Alumex is selected by default. Choose the specifications requested by the client.")}</p>
@@ -101,7 +105,7 @@ function QuoteEditor({data,projectId,reload}:{data:QuoteData;projectId:string;re
   {flow&&<section className="mt-6">
    {!editing&&<div className="mb-5 flex flex-wrap items-end justify-between gap-3 print:hidden">
     <label className="min-w-0 text-sm">{term("Quotation version")}<select aria-label={term("Quotation version")} value={viewVersion} onChange={e=>{setViewVersion(e.target.value);setApproved(false);}} className={field}><option value="current">{term('Revision {number} · Current',{number:formatNumber(flow.quotation.version??1)})}</option>{data.history?.map(h=><option key={h.version} value={h.version}>{term('Revision {number} · Superseded',{number:formatNumber(h.version)})}</option>)}</select></label>
-    {canEdit?<button className={button} onClick={()=>{setEditing(true);setViewVersion('current');setApproved(false);}}>{term("Edit quotation")}</button>:<p className="text-sm text-slate-600">{term("Signed contract · Quotation locked")}</p>}
+    {canEdit?<button className={button} onClick={()=>{setEditing(true);setViewVersion('current');setApproved(false);}}>{term("Edit quotation")}</button>:waiting?null:<p className="text-sm text-slate-600">{term("Signed contract · Quotation locked")}</p>}
    </div>}
    {editing&&<p className="mb-3 text-sm text-slate-500 print:hidden">{term("Saved quotation below. Your draft changes will appear after saving.")}</p>}
    {shown&&<DocumentPaper>
@@ -112,8 +116,8 @@ function QuoteEditor({data,projectId,reload}:{data:QuoteData;projectId:string;re
    </DocumentPaper>}
    <div className="mt-6 flex flex-wrap gap-3 print:hidden">
     <button disabled={editing} onClick={()=>window.print()} className={secondary}>{term("Print quotation")}</button>
-    {!editing&&!archived&&flow.stage==='quotation'&&<div className="w-full border-t border-slate-200 pt-5"><label className="mb-4 flex items-center gap-3 text-sm"><input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)}/>{term("The client approved this saved quotation.")}</label><button disabled={busy||!approved} onClick={()=>void act('approve')} className={button}>{term("Record client approval")}</button></div>}
-    {!editing&&!archived&&flow.stage==='approved'&&<div className="w-full space-y-4"><label className="block text-sm">{term("Contract template")}<select aria-label={term("Contract template")} value={template} onChange={e=>setTemplate(e.target.value as 'residential'|'commercial')} className={field}><option value="residential">{term("Residential — uploaded Arabic terms")}</option><option value="commercial">{term("Commercial — uploaded Arabic terms")}</option></select></label><p className="text-sm text-slate-500">{term("Each template has its own payment schedule. Review all terms before signing.")}</p><button disabled={busy} onClick={()=>void act('contract')} className={button}>{term("Generate contract")}</button></div>}
+    {!editing&&!archived&&!needsRevision&&flow.stage==='quotation'&&<div className="w-full border-t border-slate-200 pt-5"><label className="mb-4 flex items-center gap-3 text-sm"><input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)}/>{term("The client approved this saved quotation.")}</label><button disabled={busy||!approved} onClick={()=>void act('approve')} className={button}>{term("Record client approval")}</button></div>}
+    {!editing&&!archived&&!needsRevision&&flow.stage==='approved'&&<div className="w-full space-y-4"><label className="block text-sm">{term("Contract template")}<select aria-label={term("Contract template")} value={template} onChange={e=>setTemplate(e.target.value as 'residential'|'commercial')} className={field}><option value="residential">{term("Residential — uploaded Arabic terms")}</option><option value="commercial">{term("Commercial — uploaded Arabic terms")}</option></select></label><p className="text-sm text-slate-500">{term("Each template has its own payment schedule. Review all terms before signing.")}</p><button disabled={busy} onClick={()=>void act('contract')} className={button}>{term("Generate contract")}</button></div>}
     {!editing&&flow.contract&&<Link href={`/contract/${projectId}`} className={button}>{term("Open contract →")}</Link>}
    </div>
   </section>}

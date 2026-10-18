@@ -18,6 +18,7 @@ export function OutdoorMobileWorkspace() {
         {!tasks.length ? <p className={card}>{term('No measurement tasks waiting.')}</p> : <ul className="space-y-4">
           {tasks.map(project => <li key={project.id} className={card}>
             <p className="text-xs font-semibold text-blue-700">{term(project.project_number)}</p>
+            {project.additional_openings_state==='requested'&&<p className="mt-2 text-sm font-semibold text-amber-800">{term('Add more openings')}</p>}
             <h3 className="mt-2 text-lg font-semibold">{project.project_name}</h3>
             <p className="mt-2 text-xs leading-5 text-slate-500">{term('Created by')} <bdi>{project.registeredBy==='Employee'?term('Employee'):project.registeredBy}</bdi><time dateTime={project.created_at} dir="ltr" className="block w-fit max-w-full">{formatDateTime(project.created_at)}</time></p>
             {project.address && <p className="mt-2 text-sm leading-6 text-slate-600">{project.address}</p>}

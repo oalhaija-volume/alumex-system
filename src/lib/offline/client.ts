@@ -52,7 +52,7 @@ export async function syncFieldChanges(){
   for(const change of (await readFieldState(id))?.queue??[]){
    if(activeFieldUser()!==id)return;
    if(failed.has(change.projectId))continue;
-   if(['follow-up','ready','assign-measurements'].includes(change.action)&&!canAccessCRM(identity.actor.role)){await updateFieldState(id,s=>({...s!,queue:s!.queue.map(c=>c.id===change.id?{...c,error:'CRM access is limited to Indoor Sales and company leadership.'}:c)}));failed.add(change.projectId);continue;}
+   if(['follow-up','ready','assign-measurements','request-openings'].includes(change.action)&&!canAccessCRM(identity.actor.role)){await updateFieldState(id,s=>({...s!,queue:s!.queue.map(c=>c.id===change.id?{...c,error:'CRM access is limited to Indoor Sales and company leadership.'}:c)}));failed.add(change.projectId);continue;}
    const current=await readFieldState(id);const project=current?.projects.find(p=>p.id===change.projectId);
    let response:Response;
    try{response=await fetch('/api/offline',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(20000),body:JSON.stringify({...change,expectedUpdatedAt:project?.serverUpdatedAt??project?.updated_at})});}catch{connection(false);return;}
@@ -71,7 +71,7 @@ export async function syncFieldChanges(){
  syncing=Promise.resolve('locks' in navigator?navigator.locks.request('alumex-field-sync',run):run()).then(()=>undefined).finally(()=>{syncing=null;});return syncing;
 }
 export async function saveFieldChange(action:FieldChange['action'],projectId:string,payload:Record<string,unknown>){
- const state=await stateForWrite();if(['follow-up','ready','assign-measurements'].includes(action)&&!canAccessCRM(state.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');if(action==='follow-up')payload=normalizeFollowUp(payload);const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
+ const state=await stateForWrite();if(['follow-up','ready','assign-measurements','request-openings'].includes(action)&&!canAccessCRM(state.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');if(action==='follow-up')payload=normalizeFollowUp(payload);const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
  await updateFieldState(state.actor.id,s=>{
   if(!s)throw new Error('Offline account unavailable.');
   let projects=[...s.projects];const openings=[...s.openings];let p=projects.find(p=>p.id===projectId);
@@ -87,6 +87,18 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    p={building_type:buildingType,branch:s.actor.role==='Indoor Sales'?s.actor.branch:null,assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:s.actor.role==='Indoor Sales'?s.actor.id:null,followUpOwner:s.actor.role==='Indoor Sales'?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
   }else{
    if(!p)throw new Error('Open this project online once before working on it offline.');
+   if(p.additional_openings_state && ['opening','edit-opening','finish','reopen'].includes(action)){
+    if(p.additional_openings_state!=='requested')throw new Error('Ask Indoor Sales to assign another additional-openings task.');
+    if(s.actor.role==='Outdoor Sales'&&p.assigned_outdoor_sales_id!==s.actor.id)throw new Error('Only the assigned employee can complete this task.');
+    if(action==='edit-opening'&&p.additional_openings_original_ids?.includes(String((payload.opening as Record<string,unknown>)?.id)))throw new Error('Existing measurements are preserved. Add the new openings separately.');
+    if(action==='finish'&&!openings.some(o=>o.projectId===projectId&&!p!.additional_openings_original_ids?.includes(o.id)))throw new Error('Add at least one new opening before submitting this task.');
+   }
+   if(action==='request-openings'){
+    if(!['ready_for_quotation','quotation_in_progress','quotation_approved','contract_generated'].includes(p.sales_status)||p.structure_readiness!=='ready')throw new Error('Additional openings can only be requested after measurements and before signing.');
+    const employee=s.outdoorSales?.find(e=>e.id===payload.assignedOutdoorSalesId);
+    if(!employee)throw new Error('Choose an active Outdoor Sales employee.');
+    p={...p,additional_openings_state:'requested',additional_openings_original_ids:openings.filter(o=>o.projectId===projectId).map(o=>o.id),sales_status:'new_lead',measurement_delayed:false,assigned_outdoor_sales_id:employee.id,assignedOutdoorSales:employee.name,assignedToYou:employee.id===s.actor.id,measurement_assignment_id:change.id};
+   }
    if(['opening','edit-opening','finish','reopen'].includes(action)&&p.measurement_delayed)throw new Error('Resume measurements before recording or completing them.');
    if(['opening','edit-opening','finish','reopen'].includes(action)&&!['new_lead','ready_for_quotation'].includes(p.sales_status))throw new Error('Measurements are locked after quotation creation.');
    if(action==='cancel-project'){
@@ -123,7 +135,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
     if((existing.hasSkylightCapture||existing.skylight)&&edit.opening.structuralType!=='Skylight')throw new Error('A saved skylight shape must remain attached to a skylight.');
     openings[index]={...existing,...edit.opening};change.payload=edit;
    }
-   if(action==='finish'){if(!openings.some(o=>o.projectId===projectId))throw new Error('Save at least one opening first.');p={...p,sales_status:'ready_for_quotation'};}
+   if(action==='finish'){if(!openings.some(o=>o.projectId===projectId))throw new Error('Save at least one opening first.');p={...p,sales_status:'ready_for_quotation',...(p.additional_openings_state==='requested'?{additional_openings_state:'submitted' as const}:{})};}
    if(action==='reopen')p={...p,sales_status:'new_lead'};
    if(action==='ready'||action==='assign-measurements'){
     if(p.sales_status!=='new_lead'||(action==='assign-measurements'&&p.structure_readiness!=='ready'))throw new Error('Measurement assignment is only available before measurements are completed.');

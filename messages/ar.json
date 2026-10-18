@@ -2484,7 +2484,19 @@
     "Commercial building": "مبنى تجاري",
     "Residential building": "مبنى سكني",
     "Villa / House": "فيلا / منزل",
-    "Choose the building type: commercial building, residential building, or villa / house.": "اختر نوع المبنى: مبنى تجاري أو مبنى سكني أو فيلا / منزل."
+    "Choose the building type: commercial building, residential building, or villa / house.": "اختر نوع المبنى: مبنى تجاري أو مبنى سكني أو فيلا / منزل.",
+    "Add more openings": "إضافة فتحات جديدة",
+    "Assign a return visit to measure additional openings. Existing measurements and quotations are kept.": "عيّن زيارة أخرى لقياس فتحات إضافية. ستُحفظ القياسات وعروض الأسعار الحالية.",
+    "Send additional-openings task": "إرسال مهمة إضافة فتحات",
+    "Add the requested new openings, then submit them to Indoor Sales. Existing measurements are preserved.": "أضف الفتحات الجديدة المطلوبة ثم أرسلها إلى المبيعات الداخلية. ستبقى القياسات الحالية محفوظة.",
+    "Additional openings are being measured. Wait for submission before revising the quotation.": "يجري قياس الفتحات الإضافية. انتظر إرسال القياسات قبل تعديل عرض السعر.",
+    "Additional measurements received. Save a quotation revision before approval or contract signing.": "تم استلام القياسات الإضافية. احفظ نسخة محدّثة من عرض السعر قبل الموافقة أو توقيع العقد.",
+    "Complete the additional measurements and save a quotation revision before continuing.": "أكمل القياسات الإضافية واحفظ نسخة محدّثة من عرض السعر قبل المتابعة.",
+    "Ask Indoor Sales to assign another additional-openings task.": "اطلب من المبيعات الداخلية تعيين مهمة جديدة لإضافة فتحات.",
+    "Only the assigned employee can complete this task.": "الموظف المكلّف فقط يمكنه إكمال هذه المهمة.",
+    "Existing measurements are preserved. Add the new openings separately.": "القياسات الحالية محفوظة. أضف الفتحات الجديدة بشكل منفصل.",
+    "Add at least one new opening before submitting this task.": "أضف فتحة جديدة واحدة على الأقل قبل إرسال هذه المهمة.",
+    "Additional openings can only be requested after measurements and before signing.": "يمكن طلب فتحات إضافية بعد إكمال القياسات وقبل توقيع العقد فقط."
   },
   "registration": {
     "title": "عميل ومشروع جديد",

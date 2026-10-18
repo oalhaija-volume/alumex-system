@@ -21,7 +21,7 @@ export async function GET(request:Request){
   if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
   return NextResponse.json({actor:actorFromProfile(profile.data)},{headers:{'Cache-Control':'no-store'}});
  }
- let query=admin.from('projects').select('id,building_type,branch,project_number,project_name,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,project_notes,readiness_note,measurement_delayed,measurement_delay_note,measurement_delayed_at,measurement_delayed_by,client_cancellation_note,client_cancelled_at,client_cancelled_by,created_at,created_by,updated_at,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role').order('created_at',{ascending:false});
+ let query=admin.from('projects').select('id,additional_openings_state,additional_openings_original_ids,building_type,branch,project_number,project_name,address,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,project_notes,readiness_note,measurement_delayed,measurement_delay_note,measurement_delayed_at,measurement_delayed_by,client_cancellation_note,client_cancelled_at,client_cancelled_by,created_at,created_by,updated_at,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role').order('created_at',{ascending:false});
  if(auth.role==='Outdoor Sales')query=query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);
  const [profile,projects,directory]=await Promise.all([profileQuery,query,admin.from('profiles').select('id,full_name,username,role').in('role',['Indoor Sales','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name')]);
  if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
@@ -47,7 +47,7 @@ export async function POST(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const body=await request.json().catch(()=>null);
  if(!body||body.userId!==auth.user.id||!uuid.test(body.id)||!uuid.test(body.projectId)||!body.payload||!Number.isFinite(Date.parse(body.recordedAt)))return NextResponse.json({error:'Invalid saved change or account. Sign in with the employee who recorded this work.'},{status:400});
- if(['follow-up','ready','assign-measurements'].includes(body.action)&&!canAccessCRM(auth.role))return NextResponse.json({error:'CRM access is limited to Indoor Sales and company leadership.'},{status:403});
+ if(['follow-up','ready','assign-measurements','request-openings'].includes(body.action)&&!canAccessCRM(auth.role))return NextResponse.json({error:'CRM access is limited to Indoor Sales and company leadership.'},{status:403});
  let payload:Json={};
  if(body.action==='register'){
   const c=body.payload.client,p=body.payload.project;
@@ -72,7 +72,7 @@ export async function POST(request:Request){
   const edit=normalizeOpeningEdit(body.payload);if(!edit)return NextResponse.json({error:'Complete the opening details.'},{status:400});payload=edit as unknown as Json;
  }else if(body.action==='follow-up'){
   try{payload=normalizeFollowUp(body.payload);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
- }else if(body.action==='assign-measurements'||(body.action==='ready'&&body.payload.assignedOutdoorSalesId!==undefined)){
+ }else if(body.action==='request-openings'||body.action==='assign-measurements'||(body.action==='ready'&&body.payload.assignedOutdoorSalesId!==undefined)){
   try{payload=normalizeMeasurementAssignment(body.payload);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  }else if(body.action==='cancel-project'){
   try{payload=normalizeClientCancellation(body.payload);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}

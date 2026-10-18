@@ -5,8 +5,8 @@ import { useFieldState } from '@/components/offline/useFieldState';
 import { MobileOutdoorProvider } from "@/components/workflow/MobileOutdoorContext";
 import { SalesReminders } from "@/components/workflow/SalesReminders";
 import { OfflineStatus } from "@/components/offline/OfflineStatus";
-import { pendingFieldChanges,isFieldOnline } from "@/lib/offline/client";
-import { setFieldUser } from "@/lib/offline/store";
+import { isFieldOnline } from "@/lib/offline/client";
+import { FieldLogoutButton } from "@/components/offline/FieldLogoutButton";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -33,7 +33,7 @@ function Brand({ small = false }: { small?: boolean }) {
 }
 
 export function RegistrationShell({ children, role, mobileOutdoor = false }: { children: React.ReactNode; role: AppRole; mobileOutdoor?: boolean }) {
-  const { t, locale, term } = useI18n();
+  const { locale, term } = useI18n();
   const pathname = usePathname();
   const fieldState = useFieldState();
   const drawer = useRef<HTMLDialogElement>(null);
@@ -60,14 +60,7 @@ export function RegistrationShell({ children, role, mobileOutdoor = false }: { c
   function accountControls() {
     return <div className="mt-auto space-y-4 border-t border-slate-200 p-5">
       <LanguageSwitcher />
-      <form action="/auth/logout" method="post" onSubmit={async event=>{
-        event.preventDefault();const form=event.currentTarget;
-        if(!isFieldOnline()){alert(term("Connect to the internet before signing out."));return;}
-        if(await pendingFieldChanges()){alert(locale === "ar" ? "يرجى مزامنة التغييرات المحفوظة قبل تسجيل الخروج." : "Sync the changes saved on this device before signing out.");return;}
-        setFieldUser(null);form.submit();
-      }}>
-        <button type="submit" className="min-h-11 w-full rounded-md px-3 text-start text-sm text-slate-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600">{t("mobileAccess.signOut")}</button>
-      </form>
+      <FieldLogoutButton className="min-h-11 w-full rounded-md px-3 text-start text-sm text-slate-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:opacity-60" />
     </div>;
   }
 

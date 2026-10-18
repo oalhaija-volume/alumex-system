@@ -41,6 +41,7 @@ for (const locale of ['en','ar']) for (const quoted of [false,true]) test(`${loc
  await page.getByRole('combobox',{name:locale==='en'?'Room':'الغرفة',exact:true}).selectOption('Kitchen');
  await page.getByRole('combobox',{name:locale==='en'?'Structural type':'النوع الإنشائي',exact:true}).selectOption('Window');
  await page.getByRole('radio',{name:locale==='en'?'Sliding':'سلايد',exact:true}).check();
+ await page.getByRole('radio',{name:locale==='en'?'No arch':'بدون قوس',exact:true}).check();
  await page.getByLabel(locale==='en'?'Width (cm)':'العرض (سم)',{exact:true}).fill('200');
  await page.getByLabel(locale==='en'?'Height (cm)':'الارتفاع (سم)',{exact:true}).fill('220');
  await page.getByRole('button',{name:locale==='en'?'Save & add opening':'حفظ وإضافة فتحة',exact:true}).click();

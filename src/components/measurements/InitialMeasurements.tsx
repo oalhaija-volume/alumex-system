@@ -33,6 +33,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   const [height,setHeight] = useState("");
   const [structuralType,setStructuralType] = useState<RegistrationStructure|"">("");
   const [openingType,setOpeningType] = useState("");
+  const [hasArch,setHasArch] = useState<boolean|"">("");
   const [draftId,setDraftId] = useState("");
   const [editing,setEditing] = useState<RegistrationOpening|null>(null);
   const [editOperationId,setEditOperationId] = useState("");
@@ -67,19 +68,19 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     return()=>{controller.abort();window.removeEventListener('field-change',refresh);};
   },[endpoint]);
   function resetForm(){
-    setEditing(null);setEditOperationId("");setSkylight({sections:[]});setQuantity("1");setFloor("");setOtherFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setDraftId(crypto.randomUUID());
+    setEditing(null);setEditOperationId("");setSkylight({sections:[]});setQuantity("1");setFloor("");setOtherFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setHasArch("");setDraftId(crypto.randomUUID());
   }
   function editOpening(opening:RegistrationOpening){
     if(saving||photoBusy||dirty)return;
     setEditing(opening);setEditOperationId(crypto.randomUUID());setDraftId(opening.id);
-    setFloor(measurementFloors.includes(opening.floor)?opening.floor:"Other");setOtherFloor(measurementFloors.includes(opening.floor)?"":opening.floor);setRoom(opening.room);setOtherRoom(opening.otherRoom);setWidth(String(opening.width));setHeight(String(opening.height));setQuantity(String(opening.quantity??1));setStructuralType(opening.structuralType);setOpeningType(opening.openingType??"");setError("");setNotice("");
+    setFloor(measurementFloors.includes(opening.floor)?opening.floor:"Other");setOtherFloor(measurementFloors.includes(opening.floor)?"":opening.floor);setRoom(opening.room);setOtherRoom(opening.otherRoom);setWidth(String(opening.width));setHeight(String(opening.height));setQuantity(String(opening.quantity??1));setStructuralType(opening.structuralType);setOpeningType(opening.openingType??"");setHasArch(opening.hasArch??false);setError("");setNotice("");
     formRef.current?.scrollIntoView({behavior:'smooth',block:'start'});
     formRef.current?.querySelector('select')?.focus({preventScroll:true});
   }
   async function save(event:React.FormEvent) {
     event.preventDefault();
     if (saving || photoBusy) return;
-    const opening = normalizeRegistrationOpening({id:draftId,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor:floor==="Other"?otherFloor:floor,room,otherRoom,...(!editing&&structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
+    const opening = normalizeRegistrationOpening({id:draftId,hasArch:['Window','Door'].includes(structuralType)?hasArch:false,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor:floor==="Other"?otherFloor:floor,room,otherRoom,...(!editing&&structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
     if (!opening) {setError(t("initialStep.invalid"));return;}
     setSaving(true);setError("");setNotice("");
     try {
@@ -161,11 +162,17 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
             <input required maxLength={100} value={otherRoom} onChange={event=>setOtherRoom(event.target.value)} className={field} placeholder={t("initialStep.otherRoomPlaceholder")} />
           </label> : null}
           <label className="block text-sm font-medium text-slate-800">{t("initialStep.structure")}
-            <select disabled={!!(editing?.hasSkylightCapture||editing?.skylight)} aria-label={t("initialStep.structure")} required className={field} value={structuralType} onChange={event=>{setStructuralType(event.target.value as RegistrationStructure);setOpeningType("");setNotice("");}}>
+            <select disabled={!!(editing?.hasSkylightCapture||editing?.skylight)} aria-label={t("initialStep.structure")} required className={field} value={structuralType} onChange={event=>{setStructuralType(event.target.value as RegistrationStructure);setOpeningType("");setHasArch("");setNotice("");}}>
               <option value="">{t("initialStep.choose")}</option>
               {registrationStructureTypes.map(type=><option key={type} value={type}>{t(`initialStep.types.${type}`)}</option>)}
             </select>
           </label>
+          {['Window','Door'].includes(structuralType)&&<fieldset>
+            <legend className="mb-2 text-sm font-medium text-slate-800">{term('Opening arch')}</legend>
+            <div className="grid grid-cols-2 gap-3">{[true,false].map(value=><label key={String(value)} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-md border p-3 text-sm ${hasArch===value?"border-blue-600 bg-blue-50 text-slate-900":"border-slate-300 text-slate-700"}`}>
+              <input required type="radio" name="hasArch" value={String(value)} checked={hasArch===value} onChange={()=>setHasArch(value)} className="h-4 w-4 accent-blue-600"/>{term(value?'Arch':'No arch')}
+            </label>)}</div>
+          </fieldset>}
           {structuralType === "Window" || structuralType === "Door" ? <fieldset>
             <legend className="mb-2 text-sm font-medium text-slate-800">{t("initialStep.movement")}</legend>
             <div className="grid grid-cols-2 gap-3">{["Sliding","Hinged"].map(type=><label key={type} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-md border p-3 text-sm ${openingType===type?"border-blue-600 bg-blue-50 text-slate-900":"border-slate-300 text-slate-700"}`}>
@@ -204,7 +211,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
               <th scope="row" className={`sticky start-0 border-e border-slate-200 px-3 py-3 text-start font-semibold tabular-nums text-slate-700 ${index%2===0?"bg-white":"bg-slate-50"}`}>{formatNumber(index+1)}{!finished&&!project?.measurement_delayed&&!project?.additional_openings_original_ids?.includes(opening.id)&&<button type="button" disabled={saving||photoBusy||dirty} aria-label={`${term('Edit opening')} ${formatNumber(index+1)}`} onClick={()=>editOpening(opening)} className="mt-1 block min-h-11 rounded-md px-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-40">{term('Edit')}</button>}</th>
               <td className="max-w-40 break-words px-3 py-3 text-slate-700">{term(opening.floor)}</td>
               <td className="max-w-48 break-words px-3 py-3 text-slate-700">{opening.room === "Other" ? opening.otherRoom : t(`initialStep.rooms.${opening.room}`)}</td>
-              <td className="px-3 py-3 text-slate-900">{t(`initialStep.types.${opening.structuralType}`)}</td>
+              <td className="px-3 py-3 text-slate-900">{t(`initialStep.types.${opening.structuralType}`)}{['Window','Door'].includes(opening.structuralType)&&<span className="mt-1 block text-xs text-slate-500">{term(opening.hasArch?'Arch':'No arch')}</span>}</td>
               <td className="px-3 py-3 text-slate-700">{opening.openingType ? t(`initialStep.${opening.openingType}`) : "—"}</td>
               <td className="whitespace-nowrap px-3 py-3 font-medium tabular-nums text-slate-900"><bdi>{formatNumber(opening.width)}</bdi></td>
               <td className="whitespace-nowrap px-3 py-3 font-medium tabular-nums text-slate-900"><bdi>{formatNumber(opening.height)}</bdi></td>

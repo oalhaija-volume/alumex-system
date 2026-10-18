@@ -378,6 +378,7 @@ export type Database = {
       };
       openings: {
         Row: {
+          has_arch: boolean;
           skylight_capture: Json | null;
           has_skylight_capture: boolean;
           id: string;
@@ -410,6 +411,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          has_arch?: boolean;
           skylight_capture?: Json | null;
           id?: string;
           project_id: string;

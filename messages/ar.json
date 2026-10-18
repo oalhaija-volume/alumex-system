@@ -2496,7 +2496,11 @@
     "Only the assigned employee can complete this task.": "الموظف المكلّف فقط يمكنه إكمال هذه المهمة.",
     "Existing measurements are preserved. Add the new openings separately.": "القياسات الحالية محفوظة. أضف الفتحات الجديدة بشكل منفصل.",
     "Add at least one new opening before submitting this task.": "أضف فتحة جديدة واحدة على الأقل قبل إرسال هذه المهمة.",
-    "Additional openings can only be requested after measurements and before signing.": "يمكن طلب فتحات إضافية بعد إكمال القياسات وقبل توقيع العقد فقط."
+    "Additional openings can only be requested after measurements and before signing.": "يمكن طلب فتحات إضافية بعد إكمال القياسات وقبل توقيع العقد فقط.",
+    "Opening arch": "قوس الفتحة",
+    "Arch": "قوس",
+    "No arch": "بدون قوس",
+    "Choose arch option": "حدد وجود قوس"
   },
   "registration": {
     "title": "عميل ومشروع جديد",

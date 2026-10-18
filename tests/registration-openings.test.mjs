@@ -65,3 +65,17 @@ for(const scenario of ['complete','repeated','invalid-quantity','empty','incompl
  if(['empty','incomplete','invalid-quantity'].includes(scenario)) assert.equal(updates.length,0);
  else assert.equal(updates[0].sales_status,scenario==='reopen'?'new_lead':'ready_for_quotation');
 });
+
+for (const structuralType of ['Window','Door']) test(`${structuralType} retains the arch choice and rejects non-boolean values`,()=>{
+ const opening={...base,structuralType,openingType:'Sliding'};
+ for(const hasArch of [true,false])assert.equal(rules.normalizeRegistrationOpening({...opening,hasArch}).hasArch,hasArch);
+ for(const hasArch of [null,'true',1,''])assert.equal(rules.normalizeRegistrationOpening({...opening,hasArch}),null);
+});
+test('arches only apply to windows and doors, and legacy false remains compatible with edits',()=>{
+ for(const structuralType of ['Skylight','Curtain Wall','Louver'])assert.equal(rules.normalizeRegistrationOpening({...base,structuralType,hasArch:true}),null);
+ const opening={...base,structuralType:'Window',openingType:'Sliding'};
+ assert.ok(rules.sameOpeningMeasurements(opening,{...opening,hasArch:false}));
+ assert.ok(rules.sameOpeningMeasurements({...opening,hasArch:false},opening));
+ assert.equal(rules.sameOpeningMeasurements(opening,{...opening,hasArch:true}),false);
+ assert.equal(rules.sameOpeningMeasurements({...opening,hasArch:true},{...opening,hasArch:false}),false);
+});

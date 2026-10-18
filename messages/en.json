@@ -2496,7 +2496,11 @@
     "Only the assigned employee can complete this task.": "Only the assigned employee can complete this task.",
     "Existing measurements are preserved. Add the new openings separately.": "Existing measurements are preserved. Add the new openings separately.",
     "Add at least one new opening before submitting this task.": "Add at least one new opening before submitting this task.",
-    "Additional openings can only be requested after measurements and before signing.": "Additional openings can only be requested after measurements and before signing."
+    "Additional openings can only be requested after measurements and before signing.": "Additional openings can only be requested after measurements and before signing.",
+    "Opening arch": "Opening arch",
+    "Arch": "Arch",
+    "No arch": "No arch",
+    "Choose arch option": "Choose arch option"
   },
   "registration": {
     "title": "New client & project",

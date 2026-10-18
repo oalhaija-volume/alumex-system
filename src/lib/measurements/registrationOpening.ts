@@ -19,7 +19,7 @@ export function normalizeSkylightCapture(value:unknown):SkylightCapture|null {
  }
  return {...(photo?{photo}:{}),...(drawing?{drawing}:{}),sections};
 }
-export type RegistrationOpening = { skylight?:SkylightCapture; hasSkylightCapture?:boolean; id: string; floor: string; room: typeof registrationRoomTypes[number]; otherRoom: string; width: number; height: number; quantity?: number; structuralType: RegistrationStructure; openingType: "Sliding" | "Hinged" | null };
+export type RegistrationOpening = { hasArch?:boolean; skylight?:SkylightCapture; hasSkylightCapture?:boolean; id: string; floor: string; room: typeof registrationRoomTypes[number]; otherRoom: string; width: number; height: number; quantity?: number; structuralType: RegistrationStructure; openingType: "Sliding" | "Hinged" | null };
 export function normalizeRegistrationOpening(value: unknown): RegistrationOpening | null {
   if (!value || typeof value !== "object") return null;
   const input = value as Record<string, unknown>;
@@ -33,12 +33,13 @@ export function normalizeRegistrationOpening(value: unknown): RegistrationOpenin
   const otherRoom = room === "Other" && typeof input.otherRoom === "string" ? input.otherRoom.trim() : "";
   if (!floor || floor.length > 100 || !registrationRoomTypes.includes(room) || (room === "Other" && (!otherRoom || otherRoom.length > 100))) return null;
   const structuralType = input.structuralType as RegistrationStructure;
+  if(input.hasArch!==undefined&&(typeof input.hasArch!=='boolean'||(input.hasArch&&!['Window','Door'].includes(structuralType))))return null;
   const skylight=input.skylight===undefined||input.skylight===null?undefined:normalizeSkylightCapture(input.skylight);
   if(skylight===null||(skylight&&structuralType!=='Skylight'))return null;
   const openingType = structuralType === "Louver" ? "Hinged" : structuralType === "Skylight" || structuralType === "Curtain Wall" ? null : input.openingType;
   if (openingType !== null && openingType !== "Sliding" && openingType !== "Hinged") return null;
   if ((structuralType === "Window" || structuralType === "Door") && openingType === null) return null;
-  return { ...(skylight?{skylight}:{}),id:input.id, quantity, width:input.width, height:input.height, floor, room, otherRoom, structuralType, openingType };
+  return { ...(input.hasArch===undefined?{}:{hasArch:input.hasArch as boolean}),...(skylight?{skylight}:{}),id:input.id, quantity, width:input.width, height:input.height, floor, room, otherRoom, structuralType, openingType };
 }
 
 // Edits replace measurement fields only; saved skylight media stays attached to its opening.
@@ -51,6 +52,6 @@ export function normalizeOpeningEdit(value: unknown): {opening:RegistrationOpeni
   return opening&&previous&&opening.id===previous.id?{opening,previous}:null;
 }
 export function sameOpeningMeasurements(left:RegistrationOpening,right:RegistrationOpening):boolean {
-  const normalized=normalizeOpeningEdit({opening:left,previous:right});
-  return !!normalized&&JSON.stringify(normalized.opening)===JSON.stringify(normalized.previous);
+  const normalized=normalizeOpeningEdit({opening:{...left,hasArch:left.hasArch??false},previous:{...right,hasArch:right.hasArch??false}});
+  return !!normalized&&JSON.stringify({...normalized.opening,hasArch:normalized.opening.hasArch??false})===JSON.stringify({...normalized.previous,hasArch:normalized.previous.hasArch??false});
 }

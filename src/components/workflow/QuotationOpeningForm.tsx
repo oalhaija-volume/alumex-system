@@ -12,7 +12,7 @@ export function QuotationOpeningForm({onAdd,onCancel}:{onAdd:(opening:Registrati
  function add(event:React.FormEvent<HTMLFormElement>) {
   event.preventDefault();
   const form=new FormData(event.currentTarget);
-  const opening=normalizeRegistrationOpening({id:crypto.randomUUID(),floor:form.get('floor'),room,otherRoom:form.get('otherRoom'),structuralType:structure,openingType:form.get('movement'),width:Number(form.get('width')),height:Number(form.get('height'))});
+  const opening=normalizeRegistrationOpening({id:crypto.randomUUID(),floor:form.get('floor'),room,otherRoom:form.get('otherRoom'),structuralType:structure,openingType:form.get('movement'),hasArch:['Window','Door'].includes(structure)?form.get('hasArch')==='true':false,width:Number(form.get('width')),height:Number(form.get('height'))});
   if(!opening){setError('Complete the floor, room, dimensions and opening types.');return;}
   onAdd(opening);
  }
@@ -28,6 +28,7 @@ export function QuotationOpeningForm({onAdd,onCancel}:{onAdd:(opening:Registrati
   <div className="grid gap-4 sm:grid-cols-2">
    <label className="text-sm">{term("Structural type")}<select aria-label={term("Structural type")} required value={structure} onChange={e=>setStructure(e.target.value)} className={field}><option value="">{term("Choose structural type")}</option>{registrationStructureTypes.filter(s=>s!=='Skylight').map(s=><option key={s} value={s}>{term(s)}</option>)}</select></label>
    {['Window','Door'].includes(structure)?<label className="text-sm">{term("Opening type")}<select aria-label={term("Opening type")} required name="movement" className={field} defaultValue=""><option value="">{term("Choose opening type")}</option><option value="Sliding">{term("Sliding")}</option><option value="Hinged">{term("Hinged")}</option></select></label>:structure==='Louver'?<p className="self-end pb-3 text-sm text-slate-600">{term("Louver opening type: Hinged")}</p>:null}
+   {['Window','Door'].includes(structure)&&<label className="text-sm">{term('Opening arch')}<select required name="hasArch" key={structure} defaultValue="" className={field}><option value="">{term('Choose arch option')}</option><option value="true">{term('Arch')}</option><option value="false">{term('No arch')}</option></select></label>}
    <label className="text-sm">{term("Width (cm)")}<input name="width" required type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" className={field}/></label>
    <label className="text-sm">{term("Height (cm)")}<input name="height" required type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" className={field}/></label>
   </div>

@@ -790,6 +790,18 @@ textarea {
 .document-opening tbody tr+tr { border-top:1px solid #edf1f4; }
 .document-charge-kind { display:block; font-size:9px; color:#697d8a; }
 .document-opening tfoot { border-top:1px solid #dbe3e8; font-weight:600; }
+.document-schedule-scroll { overflow-x:auto; margin-bottom:18px; }
+.document-schedule-scroll:focus-visible { outline:2px solid #2563eb; outline-offset:3px; }
+.document-opening-table { width:100%; min-width:780px; border-collapse:collapse; table-layout:fixed; font-size:11px; line-height:1.4; }
+.document-opening-table th,.document-opening-table td { border:1px solid #dbe3e8; padding:5px 6px; text-align:start; vertical-align:top; overflow-wrap:anywhere; }
+.document-opening-table thead th { background:#edf3f6; color:#194b65; font-weight:650; font-size:10px; vertical-align:middle; }
+.document-opening-table .document-table-number { text-align:end; font-variant-numeric:tabular-nums; }
+.document-opening-table .document-opening-index { text-align:center; color:#194b65; font-weight:650; }
+.document-opening-group:nth-of-type(even) { background:#f8fafb; }
+.document-opening-group + .document-opening-group { border-top:2px solid #becdd6; }
+.document-opening-table strong { font-weight:600; }
+.document-table-detail { display:block; margin-top:3px; color:#526574; }
+.document-opening-total { font-weight:650; color:#194b65; }
 .document-total { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:20px; background:#194b65; color:white; border-radius:4px; }
 .document-total span { font-size:11px; letter-spacing:.08em; }
 .document-total p { font-size:10px; opacity:.8; }
@@ -823,6 +835,13 @@ textarea {
 @media print {
  .commercial-document { border:0; border-radius:0; box-shadow:none; padding:0; font-size:11px; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
  .document-header,.document-parties,.document-total,.document-footer,.document-company-signature { break-inside:avoid; }
+ .document-schedule-scroll { overflow:visible; margin-bottom:14px; }
+ .document-opening-table { min-width:0; font-size:10.5px; line-height:1.35; }
+ .document-opening-table th,.document-opening-table td { padding:4px; }
+ .document-opening-table thead { display:table-header-group; }
+ .document-opening-table thead th { font-size:9.5px; }
+ .document-opening-table .document-charge-kind { font-size:8.5px; }
+ .document-opening-group,.document-opening-table tr { break-inside:avoid; page-break-inside:avoid; }
  .document-opening { overflow:visible; }
  .document-opening-heading,.document-section-heading,.document-terms h4 { break-after:avoid; }
  .document-opening tr,.document-terms p { break-inside:avoid; }

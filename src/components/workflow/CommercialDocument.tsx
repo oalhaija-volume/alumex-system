@@ -21,12 +21,33 @@ function ChargeRows({items,labels}:{items:Charge[];labels?:string[]}) {
 }
 export function OpeningSchedule({quote}:{quote:QuoteSnapshot}) {
  const {term,locale,formatMoney,formatNumber}=useI18n();
- const columns=<tr><th>{term('Specification')}</th><th>{term('Basis')}</th><th>{term('Rate · IQD')}</th><th>{term('Amount · IQD')}</th></tr>;
  return <section className="document-schedule">{!!quote.lines.length&&<div className="document-section-heading"><h3>{term('Opening schedule')}{locale==='en'&&<span lang="ar">جدول الفتحات</span>}</h3><p>{term('{count} openings · {area} m² measured',{count:formatNumber(quote.lines.reduce((sum,line)=>sum+(line.opening.quantity??1),0)),area:formatNumber(quote.lines.reduce((sum,line)=>sum+line.area,0),2)})}</p></div>}
- {quote.lines.map((line,index)=><section className="document-opening" key={line.opening.id}>
-  <div className="document-opening-heading"><div className="document-opening-number">{formatNumber(index+1)}</div><div><h4>{term(line.opening.opening_type)} {line.opening.opening_direction?term(line.opening.opening_direction):''}</h4><p>{term('Floor')} {term(line.opening.floor)} · {term(line.opening.room)}</p></div><div className="document-dimensions"><strong><bdi dir="ltr">{formatNumber(line.opening.width)} × {formatNumber(line.opening.height)}</bdi> {term('cm')}</strong><p>{term("Quantity")}: {formatNumber(line.opening.quantity??1)}</p><p>{formatNumber(line.area,2)} {term('m²')}</p></div></div>
-  <table><caption className="sr-only">{term('Prices for opening {number}',{number:formatNumber(index+1)})}</caption><thead>{columns}</thead><tbody><ChargeRows items={[line.system,...(line.glass?[line.glass]:[]),...line.extras]} labels={['Aluminum / system',...(line.glass?['Glass']:[]),...line.extras.map(()=>'Add-on')]}/></tbody><tfoot><tr><th colSpan={3}>{term('Opening {number} total',{number:formatNumber(index+1)})}</th><td>{formatMoney(line.total)}</td></tr></tfoot></table>
- </section>)}
+ {!!quote.lines.length&&<div className="document-schedule-scroll" role="region" aria-label={term('Opening schedule')} tabIndex={0}>
+  <table className="document-opening-table">
+   <caption className="sr-only">{term('Opening schedule')}</caption>
+   <colgroup>{[4,12,16,5,21,10,10,11,11].map((width,index)=><col key={index} style={{width:`${width}%`}}/>)}</colgroup>
+   <thead><tr>{['No.','Floor / room','Opening / dimensions','Qty','Specification','Basis','Rate · IQD','Amount · IQD','Opening total · IQD'].map(label=><th key={label} scope="col">{term(label)}</th>)}</tr></thead>
+   {quote.lines.map((line,index)=>{
+    const charges=[line.system,...(line.glass?[line.glass]:[]),...line.extras];
+    const labels=['Aluminum / system',...(line.glass?['Glass']:[]),...line.extras.map(()=>'Add-on')];
+    return <tbody key={line.opening.id} className="document-opening-group">
+     {charges.map((charge,chargeIndex)=><tr key={`${charge.id}-${chargeIndex}`}>
+      {chargeIndex===0&&<>
+       <th scope="rowgroup" rowSpan={charges.length} className="document-opening-index">{formatNumber(index+1)}</th>
+       <td rowSpan={charges.length}><strong dir="auto">{term(line.opening.floor)}</strong><span className="document-table-detail" dir="auto">{term(line.opening.room)}</span></td>
+       <td rowSpan={charges.length}><strong>{term(line.opening.opening_type)} {line.opening.opening_direction?term(line.opening.opening_direction):''}</strong><span className="document-table-detail"><bdi dir="ltr">{formatNumber(line.opening.width)} × {formatNumber(line.opening.height)}</bdi> {term('cm')}</span><span className="document-table-detail">{formatNumber(line.area,2)} {term('m²')}</span></td>
+       <td rowSpan={charges.length} className="document-table-number">{formatNumber(line.opening.quantity??1)}</td>
+      </>}
+      <td><span className="document-charge-kind">{term(labels[chargeIndex])}</span><span dir="auto">{term(charge.name)}</span></td>
+      <td className="document-table-number">{formatNumber(charge.quantity)} {term(charge.unit==='sqm'?'m²':charge.unit==='meter'?'m':charge.unit)}</td>
+      <td className="document-table-number">{formatNumber(charge.rate)}</td>
+      <td className="document-table-number">{formatNumber(charge.total)}</td>
+      {chargeIndex===0&&<td rowSpan={charges.length} className="document-table-number document-opening-total">{formatNumber(line.total)}</td>}
+     </tr>)}
+    </tbody>;
+   })}
+  </table>
+ </div>}
  {!!quote.additionalItems?.length&&<div className="document-section-heading"><h3>{term('Standalone products & facade services')}{locale==='en'&&<span lang="ar">منتجات مستقلة وخدمات واجهات</span>}</h3></div>}
  {quote.additionalItems?.map(item=><section key={item.id} className="document-opening">
   <div className="document-opening-heading"><h4>{term(item.name)}</h4></div>

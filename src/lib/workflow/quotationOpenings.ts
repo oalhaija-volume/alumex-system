@@ -11,7 +11,7 @@ export function quotationOpenings(existing:MeasuredOpening[], input:unknown):Mea
   if(!o)throw new Error('Complete the floor, room, dimensions and types for each new opening.');
   if(ids.has(o.id))throw new Error('Each opening must be registered separately. Reload and try again.');
   ids.add(o.id);
-  return {id:o.id,floor:o.floor,room:o.room==='Other'?o.otherRoom:o.room,width:o.width,height:o.height,opening_type:o.structuralType,opening_direction:o.openingType};
+  return {id:o.id,floor:o.floor,room:o.room==='Other'?o.otherRoom:o.room,width:o.width,height:o.height,quantity:o.quantity??1,opening_type:o.structuralType,opening_direction:o.openingType};
  });
  return [...existing,...additions];
 }

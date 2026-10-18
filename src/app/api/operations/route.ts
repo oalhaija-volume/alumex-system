@@ -15,7 +15,7 @@ export async function GET(){
  if(!ids.length)return NextResponse.json({projects:[],canAccept:['Admin','CEO','Company Owner','Operations Manager'].includes(auth.role)});
  const [projects,openings]=await Promise.all([
   admin.from('projects').select('id,project_number,project_name,address,location_latitude,location_longitude,client_id').in('id',ids),
-  admin.from('openings').select('id,project_id,floor,room,width,height,opening_type,opening_direction').in('project_id',ids)
+  admin.from('openings').select('id,project_id,floor,room,width,height,quantity,opening_type,opening_direction').in('project_id',ids)
  ]);
  if(projects.error||openings.error)return NextResponse.json({error:'Unable to load operations projects.'},{status:500});
  const clients=await admin.from('clients').select('id,name:client_name,mobile').in('id',[...new Set(projects.data.map(p=>p.client_id))]);

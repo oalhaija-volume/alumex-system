@@ -22,9 +22,9 @@ async function access(context: Context) {
 export async function GET(_request: Request, context: Context) {
   const result = await access(context);
   if (result.response) return result.response;
-  const {data,error} = await result.admin.from("openings").select("id, width, height, floor, room, opening_type, opening_direction").eq("project_id",result.project.id).order("created_at");
+  const {data,error} = await result.admin.from("openings").select("id, width, height, quantity, floor, room, opening_type, opening_direction").eq("project_id",result.project.id).order("created_at");
   if (error) return NextResponse.json({error:"Unable to load openings."},{status:500});
-  return NextResponse.json({project:result.project,canCancelProject:canCancelProject(result.project,{id:result.auth.user.id,role:result.auth.role}),canDelayMeasurements:canDelayMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),canResumeMeasurements:canResumeMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),openings:(data ?? []).map(row=>({id:row.id,floor:row.floor ?? "",room:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? row.room : "Other",otherRoom:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? "" : row.room ?? "",width:Number(row.width),height:Number(row.height),structuralType:row.opening_type,openingType:row.opening_direction}))});
+  return NextResponse.json({project:result.project,canCancelProject:canCancelProject(result.project,{id:result.auth.user.id,role:result.auth.role}),canDelayMeasurements:canDelayMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),canResumeMeasurements:canResumeMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),openings:(data ?? []).map(row=>({id:row.id,floor:row.floor ?? "",room:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? row.room : "Other",otherRoom:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? "" : row.room ?? "",width:Number(row.width),height:Number(row.height),quantity:row.quantity,structuralType:row.opening_type,openingType:row.opening_direction}))});
 }
 export async function POST(request: Request, context: Context) {
   const result = await access(context);
@@ -34,11 +34,11 @@ export async function POST(request: Request, context: Context) {
   const opening = normalizeRegistrationOpening(await request.json().catch(()=>null));
   if (!opening) return NextResponse.json({error:"Enter floor, room, valid dimensions, structural type, and opening type."},{status:400});
   // Existing storage calls the structural category opening_type. The movement
-  // is stored separately in opening_direction; each row always represents one opening.
+  // is stored separately in opening_direction; each row records the quantity of identical openings.
   const {error} = await result.admin.from("openings").insert({
     floor:opening.floor, room:opening.room === "Other" ? opening.otherRoom : opening.room,
     id:opening.id, project_id:result.project.id, opening_code:`OP-${opening.id}`, width:opening.width,height:opening.height,
-    opening_type:opening.structuralType,opening_direction:opening.openingType,quantity:1,site_readiness:"ready",created_by:result.auth.user.id,
+    opening_type:opening.structuralType,opening_direction:opening.openingType,quantity:opening.quantity??1,site_readiness:"ready",created_by:result.auth.user.id,
   });
   if (error) {
     if (error.code === "23505") {
@@ -74,8 +74,8 @@ export async function PATCH(request: Request, context: Context) {
     if (error) return NextResponse.json({error:"Unable to check saved measurements."},{status:500});
     if (!openings?.length || openings.some(row=>{
       const opening = normalizeRegistrationOpening({id:row.id,floor:row.floor,room:"Other",otherRoom:row.room,
-        width:Number(row.width),height:Number(row.height),structuralType:row.opening_type,openingType:row.opening_direction});
-      return !opening || Number(row.quantity) !== 1 || opening.openingType !== row.opening_direction;
+        width:Number(row.width),height:Number(row.height),quantity:row.quantity,structuralType:row.opening_type,openingType:row.opening_direction});
+      return !opening || opening.openingType !== row.opening_direction;
     })) return NextResponse.json({error:"Save at least one opening and complete the floor, room, dimensions and types for every opening."},{status:400});
   }
   const ready = body.action === "finish";

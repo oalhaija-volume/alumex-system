@@ -12,7 +12,7 @@ export async function GET(request:Request,context:Context){
  const {admin,project}=access;
  const [flow,openings,catalog,client,history]=await Promise.all([
   admin.from('sales_workflows').select('*').eq('project_id',projectId).maybeSingle(),
-  admin.from('openings').select('id,floor,room,width,height,opening_type,opening_direction').eq('project_id',projectId).order('created_at'),
+  admin.from('openings').select('id,floor,room,width,height,quantity,opening_type,opening_direction').eq('project_id',projectId).order('created_at'),
   admin.from('product_price_settings').select('id,name:product_name,category,unit,unit_price,is_active').eq('is_active',true).order('product_name'),
   admin.from('clients').select('name:client_name,mobile,client_type').eq('id',project.client_id).single(),
   admin.from('quotation_revisions').select('version,quotation,contract,previous_stage,superseded_at').eq('project_id',projectId).order('version',{ascending:false})
@@ -49,7 +49,7 @@ export async function POST(request:Request,context:Context){
   if(action==='save'){
    if(flow && (flow.signed_at || !['quotation','approved','contract'].includes(flow.stage)))throw new Error('Signed contracts cannot be changed.');
    if(flow?.stage==='contract' && body.replaceUnsignedContract!==true)throw new Error('Confirm that this revision replaces the unsigned contract and requires new client approval.');
-   const [openings,catalog]=await Promise.all([admin.from('openings').select('id,floor,room,width,height,opening_type,opening_direction').eq('project_id',projectId).order('created_at'),admin.from('product_price_settings').select('id,name:product_name,category,unit,unit_price,is_active').eq('is_active',true)]);
+   const [openings,catalog]=await Promise.all([admin.from('openings').select('id,floor,room,width,height,quantity,opening_type,opening_direction').eq('project_id',projectId).order('created_at'),admin.from('product_price_settings').select('id,name:product_name,category,unit,unit_price,is_active').eq('is_active',true)]);
    if(openings.error||catalog.error)throw new Error('Unable to load pricing.');
    if(!Array.isArray(body.choices))throw new Error('Select a system for every opening.');
    const measured=quotationOpenings(openings.data??[],body.newOpenings??[]);

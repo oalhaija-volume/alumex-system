@@ -23,6 +23,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   const [room,setRoom] = useState("");
   const [otherRoom,setOtherRoom] = useState("");
   const [width,setWidth] = useState("");
+  const [quantity,setQuantity] = useState("1");
   const [height,setHeight] = useState("");
   const [structuralType,setStructuralType] = useState<RegistrationStructure|"">("");
   const [openingType,setOpeningType] = useState("");
@@ -59,14 +60,14 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   async function save(event:React.FormEvent) {
     event.preventDefault();
     if (saving) return;
-    const opening = normalizeRegistrationOpening({id:draftId,width:Number(width),height:Number(height),structuralType,openingType,floor,room,otherRoom});
+    const opening = normalizeRegistrationOpening({id:draftId,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor,room,otherRoom});
     if (!opening) {setError(t("initialStep.invalid"));return;}
     setSaving(true);setError("");setNotice("");
     try {
       const response=await fieldFetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(opening)});
       const data=await response.json();if(!response.ok) throw new Error(data.error);
       setOpenings(current=>current.some(row=>row.id===opening.id)?current:[...current,opening]);
-      setFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setDraftId(crypto.randomUUID());
+      setQuantity("1");setFloor("");setRoom("");setOtherRoom("");setWidth("");setHeight("");setStructuralType("");setOpeningType("");setDraftId(crypto.randomUUID());
       setNotice(t("initialStep.saved"));
     } catch(cause) {setError(cause instanceof Error?cause.message:t("initialStep.failed"));}
     finally {setSaving(false);}
@@ -94,7 +95,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     finally{setSaving(false);}
   }
   const cancelled = project?.sales_status === 'cancelled';
-  const dirty = Boolean(width || height || structuralType || floor || room || otherRoom);
+  const dirty = Boolean(quantity !== "1" || width || height || structuralType || floor || room || otherRoom);
   return <section className="mx-auto w-full max-w-[760px] px-5 py-8 sm:px-8 sm:py-10">
     <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{t("initialStep.title")}</h1>
     <p className="mt-2 text-sm leading-6 text-slate-500">{project ? `${project.project_name} · ${term(project.project_number)}` : t("initialStep.description")}</p>
@@ -149,6 +150,8 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
             <label className="block text-sm font-medium text-slate-800">{t("initialStep.width")}<input required type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" className={field} value={width} onChange={event=>setWidth(event.target.value)} /></label>
             <label className="block text-sm font-medium text-slate-800">{t("initialStep.height")}<input required type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" className={field} value={height} onChange={event=>setHeight(event.target.value)} /></label>
           </div>
+          <label className="block text-sm font-medium text-slate-800">{term('Number of identical openings')}<input required type="number" inputMode="numeric" min="1" max="10000" step="1" className={field} value={quantity} onChange={event=>setQuantity(event.target.value)} aria-describedby="opening-quantity-help"/></label>
+          <p id="opening-quantity-help" className="text-xs leading-5 text-slate-500">{term('Use one entry for openings with the same dimensions, type, floor and room. Record different openings separately.')}</p>
           <button type="submit" className="min-h-12 w-full rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{saving?t("common.loading"):t("initialStep.add")}</button>
         </fieldset>
       </form>
@@ -156,6 +159,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     </> : null}
     {openings.length ? <div className="mt-7">
       <h2 id="saved-openings-heading" className="text-base font-semibold text-slate-900">{t("initialStep.list",{count:formatNumber(openings.length)})}</h2>
+      <p className="mt-2 text-sm text-slate-600">{term("Total openings")}: {formatNumber(openings.reduce((sum,opening)=>sum+(opening.quantity??1),0))}</p>
       <p id="saved-openings-scroll-hint" className="mt-2 text-xs text-slate-500 sm:hidden">{t("initialStep.tableScrollHint")}</p>
       <div role="region" aria-labelledby="saved-openings-heading" tabIndex={0} className="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
         <table className="w-full min-w-[640px] border-collapse text-start text-sm">
@@ -163,7 +167,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           <thead className="bg-slate-100 text-xs font-semibold text-slate-700">
             <tr>
               <th scope="col" className="sticky start-0 z-10 border-e border-slate-200 bg-slate-100 px-3 py-3 text-start">{t("initialStep.number")}</th>
-              {["floor","room","structure","movement","width","height"].map(column=><th key={column} scope="col" className="whitespace-nowrap px-3 py-3 text-start">{t(`initialStep.${column}`)}</th>)}
+              {["floor","room","structure","movement","width","height","quantity"].map(column=><th key={column} scope="col" className="whitespace-nowrap px-3 py-3 text-start">{t(`initialStep.${column}`)}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
@@ -175,6 +179,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
               <td className="px-3 py-3 text-slate-700">{opening.openingType ? t(`initialStep.${opening.openingType}`) : "—"}</td>
               <td className="whitespace-nowrap px-3 py-3 font-medium tabular-nums text-slate-900"><bdi>{formatNumber(opening.width)}</bdi></td>
               <td className="whitespace-nowrap px-3 py-3 font-medium tabular-nums text-slate-900"><bdi>{formatNumber(opening.height)}</bdi></td>
+              <td className="whitespace-nowrap px-3 py-3 font-semibold tabular-nums text-slate-900">{formatNumber(opening.quantity??1)}</td>
             </tr>)}
           </tbody>
         </table>

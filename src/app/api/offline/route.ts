@@ -30,7 +30,7 @@ export async function GET(request:Request){
  const peopleIds=[...new Set(projects.data.flatMap(p=>[p.created_by,p.assigned_outdoor_sales_id,p.follow_up_owner_id,p.measurement_delayed_by,p.client_cancelled_by]).filter((id):id is string=>!!id))];
  const [people,openings,clients]=await Promise.all([
   peopleIds.length?admin.from('profiles').select('id,full_name,username').in('id',peopleIds):{data:[],error:null},
-  ids.length?admin.from('openings').select('id,project_id,floor,room,width,height,opening_type,opening_direction').in('project_id',ids):{data:[],error:null},
+  ids.length?admin.from('openings').select('id,project_id,floor,room,width,height,quantity,opening_type,opening_direction').in('project_id',ids):{data:[],error:null},
   clientIds.length?admin.from('clients').select('id,mobile').in('id',clientIds):{data:[],error:null}
  ]);
  if(directory.error||people.error)return NextResponse.json({error:'Unable to load employee assignments.'},{status:500});
@@ -40,7 +40,7 @@ export async function GET(request:Request){
  const employees=new Map((people.data??[]).map(p=>[p.id,p]));
  const contacts=new Map(clients.data.map(c=>[c.id,c.mobile]));
  const name=(id:string|null)=>id?(employees.get(id)?.full_name??employees.get(id)?.username):null;
- return NextResponse.json({actor,outdoorSales,indoorSales,queue:[],syncedAt:null,projects:projects.data.map(p=>({...p,clientCancelledBy:name(p.client_cancelled_by)??null,measurementDelayedBy:name(p.measurement_delayed_by)??null,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)??null,registeredBy:name(p.created_by)??'Employee',assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===actor.id,serverUpdatedAt:p.updated_at})),openings:openings.data.map(o=>({id:o.id,projectId:o.project_id,floor:o.floor??'',room:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?o.room:'Other',otherRoom:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?'':o.room??'',width:Number(o.width),height:Number(o.height),structuralType:o.opening_type,openingType:o.opening_direction}))},{headers:{'Cache-Control':'private, no-store'}});
+ return NextResponse.json({actor,outdoorSales,indoorSales,queue:[],syncedAt:null,projects:projects.data.map(p=>({...p,clientCancelledBy:name(p.client_cancelled_by)??null,measurementDelayedBy:name(p.measurement_delayed_by)??null,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)??null,registeredBy:name(p.created_by)??'Employee',assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===actor.id,serverUpdatedAt:p.updated_at})),openings:openings.data.map(o=>({id:o.id,projectId:o.project_id,floor:o.floor??'',room:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?o.room:'Other',otherRoom:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?'':o.room??'',width:Number(o.width),height:Number(o.height),quantity:o.quantity,structuralType:o.opening_type,openingType:o.opening_direction}))},{headers:{'Cache-Control':'private, no-store'}});
 }
 export async function POST(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});

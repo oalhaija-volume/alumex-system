@@ -158,6 +158,7 @@ test('new quotation openings require complete individual measurements and preser
  const input={id:'11111111-1111-4111-8111-111111111111',floor:'2',room:'Other',otherRoom:'Atrium',width:150,height:100,structuralType:'Skylight',openingType:'Sliding'};
  const combined=quotationOpenings.quotationOpenings([opening],[input]);
  assert.equal(combined.length,2);assert.equal(combined[1].opening_direction,null);assert.equal(combined[1].room,'Atrium');
+ assert.equal(quotationOpenings.quotationOpenings([],[{...input,quantity:8}])[0].quantity,8);
  assert.throws(()=>quotationOpenings.quotationOpenings([opening],[{...input,otherRoom:''}]));
  assert.throws(()=>quotationOpenings.quotationOpenings([opening],[input,input]));
  assert.throws(()=>quotationOpenings.quotationOpenings([combined[1]],[input]));
@@ -310,4 +311,16 @@ for(const branch of ['Karkh','Rasafa',undefined]) test(`Outdoor employee creatio
  const route=employeeRoute({from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null}),upsert:async(value)=>{profileInput=value;return {error:null};}};},auth:{admin:{createUser:async()=>({data:{user:{id:'new-user'}},error:null})}}});
  const result=await route.POST({json:async()=>({fullName:'Outdoor employee',role:'Outdoor Sales',branch,username:'outdoor.employee',password:'test-only-password'})});
  assert.equal(result.status,201);assert.equal(profileInput.branch,null);assert.equal(result.body.user.branch,null);
+});
+
+test('repeated openings multiply system, glass and each per-opening add-on once',()=>{
+ const q=pricing.priceQuotation([{...opening,quantity:8}],[choice],catalog,'actor');
+ assert.equal(q.total,551000*8);assert.equal(q.lines[0].area,14.4);
+ assert.equal(q.lines[0].opening.quantity,8);assert.equal(q.lines[0].extras[0].quantity,16);
+ const itemCatalog=catalog.map(p=>p.id==='alumex'?{...p,unit:'item'}:p);
+ const byItem=pricing.priceQuotation([{...opening,quantity:8}],[choice],itemCatalog,'actor');
+ assert.equal(byItem.lines[0].system.quantity,8);
+ for(const quantity of [0,-1,1.5,10001,null,NaN,Infinity,'8'])assert.throws(()=>pricing.priceQuotation([{...opening,quantity}],[choice],catalog,'actor'));
+ assert.throws(()=>pricing.priceQuotation([{...opening,quantity:2}],[{...choice,extras:[{id:'closer',quantity:0.5}]}],catalog,'actor'));
+ assert.throws(()=>pricing.priceQuotation([{...opening,quantity:2}],[{...choice,extras:[{id:'closer',quantity:'2'}]}],catalog,'actor'));
 });

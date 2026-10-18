@@ -1,6 +1,6 @@
 import { catalogKind, compatibleAddon, compatibleGlass, isAvailable, isCurtainWall, isLouver, isRollerShutter, isShutterBox, normalizeCatalogItem } from './catalogRules';
 export type CatalogItem = {id:string;name:string;category:string|null;unit:string;unit_price:number;is_active:boolean};
-export type MeasuredOpening = {id:string;floor:string|null;room:string|null;width:number;height:number;opening_type:string|null;opening_direction:string|null};
+export type MeasuredOpening = {id:string;floor:string|null;room:string|null;width:number;height:number;quantity?:number;opening_type:string|null;opening_direction:string|null};
 export type ExtraChoice = {id:string;quantity:number};
 export type OpeningChoice = {openingId:string;systemId:string;glassId?:string;extras:ExtraChoice[]};
 export type SurfaceMeasurement = {label:string;width:number;height:number;quantity:number};
@@ -49,7 +49,7 @@ export function measuredFacadeArea(measurements:SurfaceMeasurement[]) {
  if(area>1000000)throw new Error('Facade area exceeds the supported limit.');
  return Math.round(area*1000000)/1000000;
 }
-function priceExtras(extras:ExtraChoice[],allowed:CatalogItem[],catalog:CatalogItem[],area:number,excludedIds:string[]=[]){
+function priceExtras(extras:ExtraChoice[],allowed:CatalogItem[],catalog:CatalogItem[],area:number,excludedIds:string[]=[],openingQuantity=1){
  if(!Array.isArray(extras)||extras.length>30||extras.some(e=>!e||typeof e.id!=='string')||new Set(extras.map(e=>e.id)).size!==extras.length)throw new Error('Each add-on can be selected once per opening or facade service.');
  const products=extras.map(extra=>{
   const product=allowed.find(p=>p.id===extra.id);
@@ -58,23 +58,28 @@ function priceExtras(extras:ExtraChoice[],allowed:CatalogItem[],catalog:CatalogI
  });
  if(products.some(isShutterBox)&&!products.some(isRollerShutter))throw new Error('A shutter box requires roller shutters on the same opening.');
  if(products.filter(isRollerShutter).length>1)throw new Error('Choose one roller shutter type per opening.');
- return extras.map((extra,index)=>catalogCharge(extra.id,products[index].unit==='sqm'?area:extra.quantity,catalog));
+ return extras.map((extra,index)=>{
+  if(products[index].unit!=='sqm'&&(!Number.isFinite(extra.quantity)||extra.quantity<=0||(products[index].unit==='item'&&!Number.isInteger(extra.quantity))))throw new Error('Enter a valid quantity, area or length. Use whole numbers for items.');
+  return catalogCharge(extra.id,products[index].unit==='sqm'?area:extra.quantity*openingQuantity,catalog);
+ });
 }
 export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[],rawCatalog:CatalogItem[],actor:string,additionalItems:AdditionalChoice[]=[]):QuoteSnapshot {
  const catalog=rawCatalog.map(normalizeCatalogItem);
  const measured=quotableOpenings(openings);
  if(!Array.isArray(choices)||choices.some(c=>!c)||choices.length!==measured.length||new Set(choices.map(c=>c.openingId)).size!==measured.length)throw new Error('Choose a system for every opening. Skylights are priced in the calculator.');
  const lines=measured.map(opening=>{
+  const quantity=opening.quantity===undefined?1:opening.quantity;
+  if(!Number.isInteger(quantity)||quantity<1||quantity>10000)throw new Error("Enter a whole-number opening quantity between 1 and 10,000.");
   if(!opening.floor || !opening.room || !Number.isFinite(Number(opening.width)) || !Number.isFinite(Number(opening.height)) || opening.width<=0 || opening.height<=0)throw new Error('Complete all opening measurements first.');
   const choice=choices.find(c=>c.openingId===opening.id);
   if(!choice || !Array.isArray(choice.extras))throw new Error('Invalid opening selections.');
-  const area=Number(opening.width)*Number(opening.height)/10000;
-  const charge=(id:string)=>catalogCharge(id,catalog.find(p=>p.id===id)?.unit==='sqm'?area:1,catalog);
+  const area=Number(opening.width)*Number(opening.height)*quantity/10000;
+  const charge=(id:string)=>catalogCharge(id,catalog.find(p=>p.id===id)?.unit==='sqm'?area:quantity,catalog);
   if(!systemOptions(opening,catalog).some(p=>p.id===choice.systemId))throw new Error('Choose a compatible system for this structural type.');
   const system=charge(choice.systemId);
   if(choice.glassId&&!glassOptions(opening,catalog,choice.systemId).some(p=>p.id===choice.glassId))throw new Error('Choose a compatible glass option.');
   const glass=choice.glassId?charge(choice.glassId):null;
-  const extras=priceExtras(choice.extras,addonOptions(opening,catalog,choice.systemId),catalog,area,[choice.systemId,choice.glassId??'']);
+  const extras=priceExtras(choice.extras,addonOptions(opening,catalog,choice.systemId),catalog,area,[choice.systemId,choice.glassId??''],quantity);
   return {opening,area,system,glass,extras,total:system.total+(glass?.total??0)+extras.reduce((s,p)=>s+p.total,0)};
  });
  if(!Array.isArray(additionalItems)||additionalItems.length>100||additionalItems.some(item=>!item)||new Set(additionalItems.map(item=>item.id)).size!==additionalItems.length)throw new Error('Select each standalone product or service once and enter its measurements or quantity.');

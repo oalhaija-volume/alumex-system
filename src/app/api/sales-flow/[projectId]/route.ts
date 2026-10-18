@@ -31,6 +31,7 @@ export async function GET(request:Request,context:Context){
 export async function POST(request:Request,context:Context){
  const {projectId}=await context.params;const access=await salesProject(projectId,'commercial');if(access.response)return access.response;
  const {admin,auth,project}=access;
+ if(['cancelled','lost','closed'].includes(project.sales_status))return NextResponse.json({error:'This project is closed. Its quotation and contract history is read-only.'},{status:409});
  const saved=await admin.from('sales_workflows').select('*').eq('project_id',projectId).maybeSingle();
  if(saved.error)return NextResponse.json({error:unavailable},{status:503});
  const flow=saved.data as unknown as SalesFlow|null;

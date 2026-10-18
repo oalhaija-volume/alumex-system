@@ -1,4 +1,4 @@
-export type ProjectProgress={measurement_delayed?:boolean;structure_readiness:string;sales_status:string;status?:string|null};
+export type ProjectProgress={client_cancelled_at?:string|null;measurement_delayed?:boolean;structure_readiness:string;sales_status:string;status?:string|null};
 export const projectStages=[
  {id:'site',label:'Awaiting site readiness',action:'Follow up on site readiness'},
  {id:'measurement-delayed',label:'Delayed by client',action:'Arrange another measurement visit'},
@@ -9,10 +9,12 @@ export const projectStages=[
  {id:'contract-signature',label:'Contract awaiting signature',action:'Follow up on the signature'},
  {id:'handoff',label:'Signed · Operations handoff',action:'Await Operations acceptance'},
  {id:'operations',label:'Operations started',action:'Project is with Operations'},
+ {id:'client-cancelled',label:'Cancelled by client',action:'Review the project record'},
  {id:'closed',label:'Closed',action:'Review the project record'},
 ] as const;
 export type ProjectStage=typeof projectStages[number]['id'];
 export function projectStage(p:ProjectProgress):ProjectStage{
+ if(p.sales_status==='cancelled'&&p.client_cancelled_at)return 'client-cancelled';
  if(['cancelled','lost','closed'].includes(p.sales_status))return 'closed';
  if(p.sales_status==='transferred_to_operations'&&p.status==='Production')return 'operations';
  if(['contract_signed','transferred_to_operations'].includes(p.sales_status))return 'handoff';
@@ -24,9 +26,11 @@ export function projectStage(p:ProjectProgress):ProjectStage{
  return p.structure_readiness==='ready'?'measurements':'site';
 }
 export function stageDetails(p:ProjectProgress){return projectStages.find(s=>s.id===projectStage(p))!;}
-export function needsSalesFollowUp(p:ProjectProgress){return !['handoff','operations','closed'].includes(projectStage(p));}
+export function needsSalesFollowUp(p:ProjectProgress){return !['handoff','operations','closed','client-cancelled'].includes(projectStage(p));}
 export function projectLink(p:ProjectProgress&{id:string},canUseCRM=true){
  const stage=projectStage(p);
+ if(stage==='measurement-delayed')return canUseCRM?`/mini-crm#project-${p.id}`:`/initial-measurements/${p.id}`;
+ if(stage==='client-cancelled')return canUseCRM?`/projects#project-${p.id}`:`/initial-measurements/${p.id}`;
  if(stage==='site')return canUseCRM?`/mini-crm#project-${p.id}`:`/projects#project-${p.id}`;
  if(!canUseCRM||['measurements','measurement-delayed'].includes(stage))return `/initial-measurements/${p.id}`;
  if(['contract-signature','handoff','operations'].includes(stage))return `/contract/${p.id}`;

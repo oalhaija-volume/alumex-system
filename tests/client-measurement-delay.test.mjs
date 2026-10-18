@@ -40,6 +40,17 @@ for(const note of [undefined,' ',42,'x'.repeat(2001)])test(`delay rejects invali
 for(const action of ['finish','reopen'])test(`online ${action} cannot bypass a delayed visit`,async()=>{
  const {api,calls}=route({delayed:true});assert.equal((await api.PATCH(request({action}),context)).status,409);assert.equal(calls.length,0);
 });
-for(const role of ['Outdoor Sales','Indoor Sales','Admin'])test(`${role} can resume the visit through the guarded RPC`,async()=>{
+for(const role of ['Indoor Sales','Admin'])test(`${role} can resume the visit through the guarded RPC`,async()=>{
  const {api,calls}=route({role,delayed:true});assert.equal((await api.PATCH(request({action:'resume-measurements'}),context)).status,200);assert.equal(calls[0].args.p_action,'resume-measurements');
+});
+
+test('Outdoor Sales cannot resume a visit returned to CRM',async()=>{
+ const {api,calls}=route({delayed:true});assert.equal((await api.PATCH(request({action:'resume-measurements'}),context)).status,403);assert.equal(calls.length,0);
+});
+for(const patch of [{note:undefined},{note:' '},{note:44},{note:'x'.repeat(2001)},{confirmed:false}])test(`cancellation needs a reason and confirmation: ${Object.keys(patch)}`,async()=>{
+ const {api,calls}=route();assert.equal((await api.PATCH(request({action:'cancel-project',note:'Client no longer needs it',confirmed:true,...patch}),context)).status,400);assert.equal(calls.length,0);
+});
+test('assigned Outdoor employee can report a confirmed cancellation',async()=>{
+ const {api,calls}=route();assert.equal((await api.PATCH(request({action:'cancel-project',note:' Client cancelled ',confirmed:true}),context)).status,200);
+ assert.deepEqual(calls[0].args.p_payload,{note:'Client cancelled',confirmed:true});assert.equal(calls[0].args.p_actor,'employee');
 });

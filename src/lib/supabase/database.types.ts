@@ -291,6 +291,9 @@ export type Database = {
           estimated_value: number | null;
           project_notes: string | null;
           readiness_note: string | null;
+          client_cancellation_note: string | null;
+          client_cancelled_at: string | null;
+          client_cancelled_by: string | null;
           measurement_delayed: boolean;
           measurement_delay_note: string | null;
           measurement_delayed_at: string | null;
@@ -347,6 +350,9 @@ export type Database = {
           estimated_value?: number | null;
           project_notes?: string | null;
           readiness_note?: string | null;
+          client_cancellation_note?: string | null;
+          client_cancelled_at?: string | null;
+          client_cancelled_by?: string | null;
           measurement_delayed?: boolean;
           measurement_delay_note?: string | null;
           measurement_delayed_at?: string | null;

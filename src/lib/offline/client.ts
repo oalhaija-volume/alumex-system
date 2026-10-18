@@ -1,4 +1,4 @@
-import { canDelayMeasurements, canResumeMeasurements, normalizeMeasurementDelayNote } from '@/lib/measurements/measurementDelay';
+import { canCancelProject, normalizeClientCancellation, canDelayMeasurements, canResumeMeasurements, normalizeMeasurementDelayNote } from '@/lib/measurements/measurementDelay';
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
 import { canAccessCRM } from '@/lib/auth/permissions';
 import { normalizeFollowUp,type FollowUpInput } from '@/lib/workflow/followUps';
@@ -82,13 +82,18 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if(!p)throw new Error('Open this project online once before working on it offline.');
    if(['opening','finish','reopen'].includes(action)&&p.measurement_delayed)throw new Error('Resume measurements before recording or completing them.');
    if(['opening','finish','reopen'].includes(action)&&!['new_lead','ready_for_quotation'].includes(p.sales_status))throw new Error('Measurements are locked after quotation creation.');
+   if(action==='cancel-project'){
+    if(!canCancelProject(p,s.actor))throw new Error('This project cannot be cancelled by this employee at its current stage.');
+    const cancellation=normalizeClientCancellation(payload);change.payload=cancellation;
+    p={...p,sales_status:'cancelled',measurement_delayed:false,client_cancellation_note:cancellation.note,client_cancelled_at:change.recordedAt,client_cancelled_by:s.actor.id,clientCancelledBy:s.actor.name,next_follow_up_at:null};
+   }
    if(action==='delay-measurements'||action==='resume-measurements'){
     if(!(action==='delay-measurements'?canDelayMeasurements(p,s.actor):canResumeMeasurements(p,s.actor)))throw new Error('Only the assigned Outdoor Sales employee can report a client delay.');
     if(p.structure_readiness!=='ready'||p.sales_status!=='new_lead')throw new Error('Client delays can only be recorded before measurements are completed.');
     if(action==='delay-measurements'){
      if(p.measurement_delayed)throw new Error('This project is already delayed by the client.');
      const note=normalizeMeasurementDelayNote(payload.note);change.payload={note};
-     p={...p,measurement_delayed:true,measurement_delay_note:note,measurement_delayed_at:change.recordedAt,measurement_delayed_by:s.actor.id,measurementDelayedBy:s.actor.name};
+     p={...p,next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,measurement_delayed:true,measurement_delay_note:note,measurement_delayed_at:change.recordedAt,measurement_delayed_by:s.actor.id,measurementDelayedBy:s.actor.name};
     }else{
      if(!p.measurement_delayed)throw new Error('This project is not delayed by the client.');
      p={...p,measurement_delayed:false};
@@ -107,7 +112,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
     const id=payload.assignedOutdoorSalesId??p.assigned_outdoor_sales_id;const employee=s.outdoorSales?.find(e=>e.id===id)??(p.original_creator_role==='Indoor Sales'&&id===p.created_by?s.indoorSales?.find(e=>e.id===id):undefined);
     if(!employee)throw new Error('Choose an eligible employee for measurements.');
     change.payload={...payload,assignedOutdoorSalesId:employee.id};
-    p={...p,assigned_outdoor_sales_id:employee.id,assignedOutdoorSales:employee.name,assignedToYou:employee.id===s.actor.id,measurement_assignment_id:change.id};
+    p={...p,measurement_delayed:false,assigned_outdoor_sales_id:employee.id,assignedOutdoorSales:employee.name,assignedToYou:employee.id===s.actor.id,measurement_assignment_id:change.id};
    }
    if(action==='ready'){if(p.structure_readiness!=='not_ready'||p.sales_status!=='new_lead')throw new Error('This project has already moved beyond site readiness.');p={...p,structure_readiness:'ready',sales_status:'new_lead',next_follow_up_at:null,follow_up_owner_id:p.follow_up_owner_id??(s.actor.role==='Indoor Sales'?s.actor.id:null),followUpOwner:p.followUpOwner??(s.actor.role==='Indoor Sales'?s.actor.name:null)};}
    if(action==='follow-up'&&!needsSalesFollowUp(p))throw new Error('Sales follow-up is complete for this project.');
@@ -153,7 +158,7 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
   if(!s)return Response.json({error:'Open this workspace online once before working offline.'},{status:503});
   if(url==='/api/workspace')return Response.json({actor:s.actor,outdoorSales:s.outdoorSales??[],indoorSales:s.indoorSales??[],projects:s.projects});
   const p=s.projects.find(p=>p.id===id);
-  return p?Response.json({project:p,canDelayMeasurements:canDelayMeasurements(p,s.actor),canResumeMeasurements:canResumeMeasurements(p,s.actor),openings:s.openings.filter(o=>o.projectId===id)}):Response.json({error:'This project is not downloaded on this device.'},{status:404});
+  return p?Response.json({project:p,canCancelProject:canCancelProject(p,s.actor),canDelayMeasurements:canDelayMeasurements(p,s.actor),canResumeMeasurements:canResumeMeasurements(p,s.actor),openings:s.openings.filter(o=>o.projectId===id)}):Response.json({error:'This project is not downloaded on this device.'},{status:404});
  }
  try{
   const body=JSON.parse(String(init?.body??'{}')) as Record<string,unknown>;

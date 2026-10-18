@@ -22,14 +22,15 @@ export const dashboardTones = {
 };
 export const dashboardStageTone: Record<ProjectStage, keyof typeof dashboardTones> = {
   site: 'slate', measurements: 'blue', 'measurement-delayed': 'amber', 'quotation-preparation': 'amber', 'quotation-response': 'amber',
-  'contract-preparation': 'violet', 'contract-signature': 'violet', handoff: 'teal', operations: 'emerald', closed: 'slate',
+  'contract-preparation': 'violet', 'contract-signature': 'violet', handoff: 'teal', operations: 'emerald', closed: 'slate', 'client-cancelled': 'rose',
 };
 type Scope = 'all' | 'sales' | 'overdue' | 'operations' | 'unscheduled';
 
 function actionFor(project: FieldProject, leadership: boolean) {
   const stage = projectStage(project);
   if (stage === 'site') return { href: `/mini-crm#project-${project.id}`, label: 'Follow up on site readiness' };
-  if (stage === 'measurement-delayed') return { href: projectLink(project), label: 'Review delayed visit' };
+  if (stage === 'measurement-delayed') return { href: projectLink(project), label: 'Open CRM' };
+  if (stage === 'client-cancelled') return { href: projectLink(project), label: 'Review the project record' };
   if (stage === 'measurements') return { href: projectLink(project), label: 'Review measurements' };
   if (stage === 'quotation-preparation') return { href: projectLink(project), label: 'Prepare the quotation' };
   if (stage === 'quotation-response') return { href: projectLink(project), label: 'Open quotation' };

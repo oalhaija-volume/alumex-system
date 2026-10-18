@@ -75,7 +75,7 @@ begin
  perform set_config('request.jwt.claims','{}',true);
 
  select updated_at into stamp from projects where id=site;
- result:=public.sync_field_change(gen_random_uuid(),outdoor,site,'resume-measurements','{}',now(),stamp);
+ result:=public.sync_field_change(gen_random_uuid(),indoor,site,'resume-measurements','{}',now(),stamp);
  assert not (result->>'measurement_delayed')::boolean;
  assert result->>'measurement_delay_note'='Client asked us to return next week', 'Last visit report must remain recorded';
  perform public.sync_field_change(gen_random_uuid(),outdoor,site,'finish','{}',now(),null);

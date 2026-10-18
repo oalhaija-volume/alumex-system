@@ -1,4 +1,6 @@
 "use client";
+import { ClientCancellation } from '@/components/measurements/ClientCancellation';
+import { canCancelProject } from '@/lib/measurements/measurementDelay';
 import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDelayNotice';
 
 import Link from 'next/link';
@@ -62,8 +64,8 @@ export function MiniCRM({ data, loading, error, notice, busy, now, canDelete, on
   const [queue, setQueue] = useState<QueueFilter>('all');
   const active = (data?.projects ?? []).filter(needsSalesFollowUp);
   const search = query.trim().toLocaleLowerCase();
-  const projects = active.filter(project =>
-    (stage === 'all' || projectStage(project) === stage) && matchesQueue(project, queue, now) &&
+  const projects = (stage === 'client-cancelled' ? (data?.projects ?? []).filter(p=>projectStage(p)==='client-cancelled') : active).filter(project =>
+    (stage === 'all' || projectStage(project) === stage) && (stage === 'client-cancelled' || matchesQueue(project, queue, now)) &&
     (!search || [project.project_name, project.project_number, project.address, project.phone, project.followUpOwner, project.assignedOutdoorSales].some(value => value?.toLocaleLowerCase().includes(search)))
   ).sort((a, b) => (dueTime(a) ?? Infinity) - (dueTime(b) ?? Infinity) || a.project_number.localeCompare(b.project_number));
   const filters: { id: QueueFilter; label: string; hint: string; icon: 'queue' | 'clock' | 'calendar'; tone: string }[] = [
@@ -125,10 +127,11 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
   const overdue = due !== null && now > due;
   const today = due !== null && now > 0 && baghdadDay.format(due) === baghdadDay.format(now);
   const stage = stageDetails(project);
+  const cancelled = stage.id === 'client-cancelled';
   const canAssign = project.sales_status === 'new_lead' && ['site', 'measurements', 'measurement-delayed'].includes(stage.id);
   const indoorCreator = project.original_creator_role === 'Indoor Sales' ? data?.indoorSales?.find(employee => employee.id === project.created_by) : undefined;
   const measurementEmployees = [...(indoorCreator ? [indoorCreator] : []), ...(data?.outdoorSales ?? [])];
-  const stageTone = stage.id === 'measurement-delayed' ? 'bg-amber-50 text-amber-900' : ['contract-signature', 'contract-preparation'].includes(stage.id) ? 'bg-indigo-50 text-indigo-800' : stage.id === 'site' ? 'bg-slate-100 text-slate-700' : 'bg-blue-50 text-blue-800';
+  const stageTone = cancelled ? 'bg-red-50 text-red-900' : stage.id === 'measurement-delayed' ? 'bg-amber-50 text-amber-900' : ['contract-signature', 'contract-preparation'].includes(stage.id) ? 'bg-indigo-50 text-indigo-800' : stage.id === 'site' ? 'bg-slate-100 text-slate-700' : 'bg-blue-50 text-blue-800';
   return <article id={`project-${project.id}`} aria-labelledby={`project-name-${project.id}`} className="scroll-mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm target:ring-2 target:ring-blue-500">
     <div aria-hidden="true" className={`hidden ${projectColumns} border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-600 lg:grid`}>
       <span>{term('Client / project')}</span><span>{term('Project stage')}</span><span>{term('Next follow-up')}</span><span>{term('Action')}</span>
@@ -152,14 +155,16 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
       <div className="min-w-0">
         <p className={mobileLabel}>{term('Action')}</p>
         <div className="flex flex-col gap-2">
-          {canAssign&&<button type="button" aria-expanded={expanded} aria-controls={`follow-up-editor-${project.id}`} onClick={()=>{setExpanded(true);setHasOpened(true);}} className={`${focus} min-h-11 rounded-lg bg-blue-600 px-3 py-2 text-sm! font-semibold! text-white transition-colors hover:bg-blue-700`}>{term('Assign measurements')}</button>}
-          <button type="button" aria-expanded={expanded} aria-controls={`follow-up-editor-${project.id}`} onClick={() => { setExpanded(!expanded); setHasOpened(true); }} className={`${focus} flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm! font-semibold! whitespace-nowrap transition-colors ${expanded ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700'}`}><span>{term(expanded ? 'Close' : 'Follow up')}</span><Icon kind="chevron" className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} /></button>
+          {canAssign&&<button type="button" aria-expanded={expanded} aria-controls={`follow-up-editor-${project.id}`} onClick={()=>{setExpanded(true);setHasOpened(true);}} className={`${focus} min-h-11 rounded-lg bg-blue-600 px-3 py-2 text-sm! font-semibold! text-white transition-colors hover:bg-blue-700`}>{term(project.measurement_delayed?'Reassign measurements':'Assign measurements')}</button>}
+          {!cancelled && <button type="button" aria-expanded={expanded} aria-controls={`follow-up-editor-${project.id}`} onClick={() => { setExpanded(!expanded); setHasOpened(true); }} className={`${focus} flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm! font-semibold! whitespace-nowrap transition-colors ${expanded ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700'}`}><span>{term(expanded ? 'Close' : 'Follow up')}</span><Icon kind="chevron" className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} /></button>}
+          {data && canCancelProject(project,data.actor) && <ClientCancellation busy={!!busy} onSubmit={form=>void onUpdate(project,'cancel-project',form)}/>}
+          {cancelled && <Link href={`/projects#project-${project.id}`} className="min-h-11 py-2 text-sm font-semibold text-blue-700">{term('Review the project record')}</Link>}
         </div>
       </div>
     </div>
 
-    <div id={`follow-up-editor-${project.id}`} hidden={!expanded} className="border-t border-slate-200 bg-slate-50 p-4 sm:p-6">
-      {hasOpened && <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_15rem]">
+    <div id={`follow-up-editor-${project.id}`} hidden={cancelled||!expanded} className="border-t border-slate-200 bg-slate-50 p-4 sm:p-6">
+      {hasOpened && !cancelled && <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_15rem]">
         {canAssign&&<form aria-label={term('Assign measurements')} className="rounded-lg border border-blue-200 bg-white p-4 xl:col-span-2" onSubmit={event=>{event.preventDefault();void onUpdate(project,stage.id==='site'?'ready':'assign-measurements',event.currentTarget);}}>
           <fieldset disabled={!!busy} className="min-w-0">
             <legend className="font-semibold text-slate-900">{term('Assign measurements')}</legend>

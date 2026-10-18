@@ -192,7 +192,7 @@ test('cancelling an online read does not mark the device disconnected or return 
 
 const delayProject={id:projectId,project_number:'PRJ-DELAY',project_name:'Delayed visit',created_by:'creator',assigned_outdoor_sales_id:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-10-18T00:00:00Z'};
 const delayOpening={id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',projectId,floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'};
-test('offline client delay, reopen, and completion preserve measurements and synchronize in order',async()=>{
+test('offline client delay returns to CRM and preserves measurements',async()=>{
  const outdoor={...actor,role:'Outdoor Sales'};
  const x=setup({actor:outdoor,projects:[delayProject],openings:[delayOpening]});
  for(const note of [undefined,'  ',5,'x'.repeat(2001)])await assert.rejects(x.client.saveFieldChange('delay-measurements',projectId,{note}));
@@ -202,11 +202,9 @@ test('offline client delay, reopen, and completion preserve measurements and syn
  assert.equal(x.state.projects[0].measurement_delayed_by,actor.id);assert.equal(x.state.projects[0].assigned_outdoor_sales_id,actor.id);
  for(const action of ['opening','finish','reopen'])await assert.rejects(x.client.saveFieldChange(action,projectId,delayOpening),/Resume measurements/);
  const view=await (await x.client.fieldFetch('/api/initial-measurements/'+projectId)).json();
- assert.equal(view.canDelayMeasurements,true);assert.equal(view.canResumeMeasurements,true);assert.equal(view.openings.length,1);
- await x.client.saveFieldChange('resume-measurements',projectId,{});
- assert.equal(x.state.projects[0].measurement_delayed,false);assert.equal(x.state.projects[0].measurement_delay_note,'Client asked for next week');
- await x.client.saveFieldChange('finish',projectId,{});
- assert.deepEqual(x.state.queue.map(c=>c.action),['delay-measurements','resume-measurements','finish']);
+ assert.equal(view.canDelayMeasurements,true);assert.equal(view.canResumeMeasurements,false);assert.equal(view.openings.length,1);
+ await assert.rejects(x.client.saveFieldChange('resume-measurements',projectId,{}));
+ assert.deepEqual(x.state.queue.map(c=>c.action),['delay-measurements']);
  assert.equal(x.state.openings.length,1);
 });
 test('client delay is restricted to the assigned Outdoor employee and the measurement stage',async()=>{
@@ -215,11 +213,27 @@ test('client delay is restricted to the assigned Outdoor employee and the measur
   await assert.rejects(x.client.saveFieldChange('delay-measurements',projectId,{note:'Visit later'}));assert.equal(x.state.queue.length,0);
  }
 });
-test('delayed visits remain visible tasks and follow-ups, never completed measurements',()=>{
+test('delayed visits leave Outdoor tasks and link back to CRM',()=>{
  const stages=load('../src/lib/workflow/stages.ts');
  const tasks=load('../src/lib/workflow/salesTasks.ts',{'./stages':stages});
  const project={...delayProject,measurement_delayed:true};
  assert.equal(stages.projectStage(project),'measurement-delayed');assert.equal(stages.needsSalesFollowUp(project),true);
- assert.equal(tasks.measurementTasks([project],{...actor,role:'Outdoor Sales'}).length,1);
- assert.equal(stages.projectLink(project,true),'/initial-measurements/'+projectId);
+ assert.equal(tasks.measurementTasks([project],{...actor,role:'Outdoor Sales'}).length,0);
+ assert.equal(stages.projectLink(project,true),'/mini-crm#project-'+projectId);
+});
+
+test('CRM reassignment releases the delayed visit and retains the delay report',async()=>{
+ const x=setup({projects:[{...delayProject,measurement_delayed:true,measurement_delay_note:'Client unavailable'}]});
+ await x.client.saveFieldChange('assign-measurements',projectId,{assignedOutdoorSalesId:payload.project.assignedOutdoorSalesId});
+ assert.equal(x.state.projects[0].measurement_delayed,false);assert.equal(x.state.projects[0].measurement_delay_note,'Client unavailable');
+ assert.equal(x.state.projects[0].measurement_assignment_id,x.state.queue[0].id);
+});
+test('offline cancellation closes active work without removing project or measurements',async()=>{
+ const x=setup({actor:{...actor,role:'Outdoor Sales'},projects:[delayProject],openings:[delayOpening]});
+ await assert.rejects(x.client.saveFieldChange('cancel-project',projectId,{note:'Client cancelled'}));
+ await x.client.saveFieldChange('cancel-project',projectId,{note:'Client no longer needs this project',confirmed:true});
+ assert.equal(x.state.projects.length,1);assert.equal(x.state.projects[0].sales_status,'cancelled');assert.equal(x.state.openings.length,1);
+ assert.equal(x.state.projects[0].client_cancelled_by,actor.id);assert.equal(x.state.projects[0].next_follow_up_at,null);
+ for(const action of ['opening','finish','reopen','delay-measurements','resume-measurements'])await assert.rejects(x.client.saveFieldChange(action,projectId,delayOpening));
+ const stages=load('../src/lib/workflow/stages.ts');assert.equal(stages.projectStage(x.state.projects[0]),'client-cancelled');assert.equal(stages.needsSalesFollowUp(x.state.projects[0]),false);
 });

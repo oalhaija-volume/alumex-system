@@ -1,5 +1,5 @@
 /* Only the public shell and static assets enter Cache Storage. Account data stays in IndexedDB. */
-const CACHE = 'alumex-field-shell-v19';
+const CACHE = 'alumex-field-shell-v20';
 let refreshing = null;
 let refreshedAt = 0;
 

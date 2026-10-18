@@ -2537,7 +2537,13 @@
     "Use the same number for openings on the same facade. Use another number for a different facade.": "Use the same number for openings on the same facade. Use another number for a different facade.",
     "Choose Facade or Internal works.": "Choose Facade or Internal works.",
     "Facade and Internal works are only available for commercial buildings.": "Facade and Internal works are only available for commercial buildings.",
-    "Choose a facade number between 1 and 1,000.": "Choose a facade number between 1 and 1,000."
+    "Choose a facade number between 1 and 1,000.": "Choose a facade number between 1 and 1,000.",
+    "Roller shutter": "Roller shutter",
+    "Roller shutter requested for this window": "Roller shutter requested for this window",
+    "Roller shutter type": "Roller shutter type",
+    "Choose roller shutter type": "Choose roller shutter type",
+    "This window requires roller shutters. Choose a roller shutter add-on.": "This window requires roller shutters. Choose a roller shutter add-on.",
+    "Roller shutters can only be requested for a window.": "Roller shutters can only be requested for a window."
   },
   "registration": {
     "title": "New client & project",

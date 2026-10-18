@@ -1,0 +1,50 @@
+import {expect,test} from '@playwright/test';
+import {savedFieldState} from './helpers/fieldState';
+import type {FieldChange,FieldState} from '../../src/lib/offline/types';
+test.use({serviceWorkers:'block'});
+for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}: window shutter request saves and edits ${online?'online':'offline'}`,async({page})=>{
+ const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Outdoor employee',role:'Outdoor Sales'},id='11111111-1111-4111-8111-111111111111';
+ const state:FieldState={actor,projects:[{id,project_name:'Window shutter test',project_number:'PRJ-SHUTTER',building_type:'villa_house',created_by:actor.id,registeredBy:actor.name,address:'Baghdad',phone:null,created_at:'2026-10-18T08:00:00Z',updated_at:'2026-10-18T08:00:00Z',structure_readiness:'ready',sales_status:'new_lead',next_follow_up_at:null,project_notes:null}],openings:[],queue:[],syncedAt:null,outdoorSales:[],indoorSales:[]};
+ const posts:FieldChange[]=[],label=(en:string,ar:string)=>locale==='en'?en:ar;
+ await page.addInitScript(locale=>localStorage.setItem('alumex_locale',locale),locale);
+ await page.route('**/api/**',async route=>{
+  if(route.request().method()!=='POST')return route.fulfill({json:state});
+  posts.push(route.request().postDataJSON());const local=await savedFieldState(page);state.projects=local.projects;state.openings=local.openings;
+  return route.fulfill({json:{project:state.projects[0]}});
+ });
+ await page.goto('/offline?path=/initial-measurements/'+id);
+ const structure=page.getByRole('combobox',{name:label('Structural type','النوع الإنشائي'),exact:true});
+ const shutter=page.getByRole('checkbox',{name:label('Roller shutter','اباجور'),exact:true});
+ await expect(structure).toBeVisible();await expect(shutter).toHaveCount(0);
+ if(!online){await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});window.dispatchEvent(new Event('offline'));});await page.addInitScript(()=>Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false}));}
+ await page.getByLabel(label('Floor','الطابق'),{exact:true}).selectOption('GF');
+ await page.getByRole('combobox',{name:label('Room','الغرفة'),exact:true}).selectOption('Bedroom');
+ await structure.selectOption('Window');await expect(shutter).not.toBeChecked();await shutter.check();
+ await page.getByRole('radio',{name:label('No arch','بدون قوس'),exact:true}).check();
+ await page.getByRole('radio',{name:label('Sliding','سلايد'),exact:true}).check();
+ await page.getByLabel(label('Width (cm)','العرض (سم)'),{exact:true}).fill('120');
+ await page.getByLabel(label('Height (cm)','الارتفاع (سم)'),{exact:true}).fill('150');
+ await page.getByLabel(label('Number of identical openings','عدد الفتحات المتطابقة'),{exact:true}).fill('3');
+ await page.screenshot({path:test.info().outputPath('window-checkbox.png'),fullPage:true});
+ await page.getByRole('button',{name:label('Save & add opening','حفظ وإضافة فتحة'),exact:true}).click();
+ await expect.poll(async()=>(await savedFieldState(page)).openings[0]?.hasRollerShutter).toBe(true);
+ await page.reload();
+ await expect(page.getByRole('table')).toContainText(label('Roller shutter','اباجور'));
+ const edit=page.getByRole('button',{name:label('Edit opening 1','تعديل الفتحة ١'),exact:true});
+ const saveEdit=page.getByRole('button',{name:label('Save measurement changes','حفظ تعديلات القياسات'),exact:true});
+ await edit.click();await expect(shutter).toBeChecked();await shutter.uncheck();await saveEdit.click();
+ await expect.poll(async()=>(await savedFieldState(page)).openings[0].hasRollerShutter).toBe(false);
+ await edit.click();await structure.selectOption('Door');await expect(shutter).toHaveCount(0);
+ await structure.selectOption('Curtain Wall');await expect(shutter).toHaveCount(0);
+ await structure.selectOption('Window');await expect(shutter).not.toBeChecked();await shutter.check();
+ await page.getByRole('radio',{name:label('No arch','بدون قوس'),exact:true}).check();
+ await page.getByRole('radio',{name:label('Sliding','سلايد'),exact:true}).check();
+ await saveEdit.click();await expect.poll(async()=>(await savedFieldState(page)).openings[0].hasRollerShutter).toBe(true);
+ await page.getByRole('button',{name:label('Finish measurements — ready for quotation','إنهاء القياسات — جاهز لعرض السعر'),exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:label('Submit measurements','إرسال القياسات'),exact:true}).click();
+ await expect.poll(async()=>(await savedFieldState(page)).projects[0].sales_status).toBe('ready_for_quotation');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ if(!online){expect(posts).toHaveLength(0);await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});window.dispatchEvent(new Event('online'));});}
+ await expect.poll(()=>posts.length).toBe(4);await expect.poll(async()=>(await savedFieldState(page)).queue.length).toBe(0);
+ expect(posts[0].payload.hasRollerShutter).toBe(true);expect(posts[1].payload.opening).toMatchObject({hasRollerShutter:false});expect(posts[2].payload.opening).toMatchObject({hasRollerShutter:true,quantity:3});
+});

@@ -24,9 +24,9 @@ async function access(context: Context) {
 export async function GET(_request: Request, context: Context) {
   const result = await access(context);
   if (result.response) return result.response;
-  const {data,error} = await result.admin.from("openings").select("id, width, height, quantity,work_area,facade_number,has_curtain_wall_capture,has_skylight_capture, floor, room, has_arch,opening_type, opening_direction").eq("project_id",result.project.id).order("created_at");
+  const {data,error} = await result.admin.from("openings").select("id, width, height, quantity,work_area,facade_number,has_curtain_wall_capture,has_skylight_capture, floor, room, has_arch,has_roller_shutter,opening_type, opening_direction").eq("project_id",result.project.id).order("created_at");
   if (error) return NextResponse.json({error:"Unable to load openings."},{status:500});
-  return NextResponse.json({project:result.project,canCancelProject:canCancelProject(result.project,{id:result.auth.user.id,role:result.auth.role}),canDelayMeasurements:canDelayMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),canResumeMeasurements:canResumeMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),openings:(data ?? []).map(row=>({id:row.id,floor:row.floor ?? "",room:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? row.room : "Other",otherRoom:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? "" : row.room ?? "",width:Number(row.width),height:Number(row.height),quantity:row.quantity,hasArch:row.has_arch,...( row.work_area?{workArea:row.work_area,...(row.work_area==='facade'?{facadeNumber:row.facade_number}:{})}:{}),hasCurtainWallCapture:row.has_curtain_wall_capture,hasSkylightCapture:row.has_skylight_capture,structuralType:row.opening_type,openingType:row.opening_direction}))});
+  return NextResponse.json({project:result.project,canCancelProject:canCancelProject(result.project,{id:result.auth.user.id,role:result.auth.role}),canDelayMeasurements:canDelayMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),canResumeMeasurements:canResumeMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),openings:(data ?? []).map(row=>({id:row.id,floor:row.floor ?? "",room:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? row.room : "Other",otherRoom:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? "" : row.room ?? "",width:Number(row.width),height:Number(row.height),quantity:row.quantity,hasArch:row.has_arch,hasRollerShutter:row.has_roller_shutter,...( row.work_area?{workArea:row.work_area,...(row.work_area==='facade'?{facadeNumber:row.facade_number}:{})}:{}),hasCurtainWallCapture:row.has_curtain_wall_capture,hasSkylightCapture:row.has_skylight_capture,structuralType:row.opening_type,openingType:row.opening_direction}))});
 }
 export async function POST(request: Request, context: Context) {
   const result = await access(context);
@@ -42,7 +42,7 @@ export async function POST(request: Request, context: Context) {
   const {error} = await result.admin.from("openings").insert({
     work_area:opening.workArea??null, facade_number:opening.facadeNumber??null, curtain_wall_capture:opening.curtainWall??null, skylight_capture:opening.skylight??null, floor:opening.floor, room:opening.room === "Other" ? opening.otherRoom : opening.room,
     id:opening.id, project_id:result.project.id, opening_code:`OP-${opening.id}`, width:opening.width,height:opening.height,
-    has_arch:opening.hasArch??false,opening_type:opening.structuralType,opening_direction:opening.openingType,quantity:opening.quantity??1,site_readiness:"ready",created_by:result.auth.user.id,
+    has_arch:opening.hasArch??false,has_roller_shutter:opening.hasRollerShutter??false,opening_type:opening.structuralType,opening_direction:opening.openingType,quantity:opening.quantity??1,site_readiness:"ready",created_by:result.auth.user.id,
   });
   if (error) {
     if (error.code === "23505") {
@@ -94,11 +94,11 @@ export async function PATCH(request: Request, context: Context) {
   if (body?.action !== "finish" && body?.action !== "reopen") return NextResponse.json({error:"Invalid measurement action."},{status:400});
   if (body.action === "finish") {
     const {data:openings,error} = await result.admin.from("openings")
-      .select("id, floor, room, width, height, quantity, has_arch,opening_type, opening_direction").eq("project_id",result.project.id);
+      .select("id, floor, room, width, height, quantity, has_arch,has_roller_shutter,opening_type, opening_direction").eq("project_id",result.project.id);
     if (error) return NextResponse.json({error:"Unable to check saved measurements."},{status:500});
     if (!openings?.length || openings.some(row=>{
       const opening = normalizeRegistrationOpening({id:row.id,floor:row.floor,room:"Other",otherRoom:row.room,
-        width:Number(row.width),height:Number(row.height),quantity:row.quantity,hasArch:row.has_arch,structuralType:row.opening_type,openingType:row.opening_direction});
+        width:Number(row.width),height:Number(row.height),quantity:row.quantity,hasArch:row.has_arch,hasRollerShutter:row.has_roller_shutter,structuralType:row.opening_type,openingType:row.opening_direction});
       return !opening || opening.openingType !== row.opening_direction;
     })) return NextResponse.json({error:"Save at least one opening and complete the floor, room, dimensions and types for every opening."},{status:400});
   }

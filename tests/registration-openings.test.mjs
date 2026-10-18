@@ -79,3 +79,13 @@ test('arches only apply to windows and doors, and legacy false remains compatibl
  assert.equal(rules.sameOpeningMeasurements(opening,{...opening,hasArch:true}),false);
  assert.equal(rules.sameOpeningMeasurements({...opening,hasArch:true},{...opening,hasArch:false}),false);
 });
+
+test('roller shutter requests are optional booleans on windows only and participate in edit conflicts',()=>{
+ const opening={...base,structuralType:'Window',openingType:'Sliding'};
+ for(const hasRollerShutter of [true,false])assert.equal(rules.normalizeRegistrationOpening({...opening,hasRollerShutter}).hasRollerShutter,hasRollerShutter);
+ for(const hasRollerShutter of [null,'true',1,''])assert.equal(rules.normalizeRegistrationOpening({...opening,hasRollerShutter}),null);
+ for(const structuralType of ['Door','Skylight','Curtain Wall','Louver'])assert.equal(rules.normalizeRegistrationOpening({...opening,structuralType,hasRollerShutter:true}),null);
+ assert.ok(rules.sameOpeningMeasurements(opening,{...opening,hasRollerShutter:false}));
+ assert.ok(rules.sameOpeningMeasurements({...opening,hasRollerShutter:false},opening));
+ assert.equal(rules.sameOpeningMeasurements(opening,{...opening,hasRollerShutter:true}),false);
+});

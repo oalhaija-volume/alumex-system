@@ -324,3 +324,15 @@ test('repeated openings multiply system, glass and each per-opening add-on once'
  assert.throws(()=>pricing.priceQuotation([{...opening,quantity:2}],[{...choice,extras:[{id:'closer',quantity:0.5}]}],catalog,'actor'));
  assert.throws(()=>pricing.priceQuotation([{...opening,quantity:2}],[{...choice,extras:[{id:'closer',quantity:'2'}]}],catalog,'actor'));
 });
+
+test('a requested roller shutter must be priced using the measured area and repeated opening quantity',()=>{
+ const shutter={id:'shutter',name:'Roller Shutter - Foam',unit:'sqm',category:'addon',unit_price:90000,is_active:true};
+ const measured={...opening,quantity:3,has_roller_shutter:true};
+ assert.throws(()=>pricing.priceQuotation([measured],[choice],[...catalog,shutter],'actor'),/requires roller shutters/);
+ const quote=pricing.priceQuotation([measured],[{...choice,extras:[{id:'shutter',quantity:1}]}],[...catalog,shutter],'actor');
+ assert.equal(quote.lines[0].opening.has_roller_shutter,true);
+ assert.equal(quote.lines[0].extras[0].quantity,5.4);assert.equal(quote.lines[0].extras[0].total,486000);
+ assert.throws(()=>pricing.priceQuotation([measured],[{...choice,extras:[{id:'shutter',quantity:1}]}],[...catalog,{...shutter,is_active:false}],'actor'));
+ // Unticked legacy windows remain quotable without a shutter.
+ assert.ok(pricing.priceQuotation([opening],[choice],catalog,'actor'));
+});

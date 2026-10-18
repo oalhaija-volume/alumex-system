@@ -425,3 +425,15 @@ test('residential projects reject commercial work-area metadata offline',async()
   assert.equal(x.state.queue.length,0);
  }
 });
+
+test('roller shutter checkboxes can be changed offline and stale edits cannot remove a new request',async()=>{
+ const previous={...delayOpening,structuralType:'Window',openingType:'Sliding',hasRollerShutter:true};
+ const x=setup({actor:{...actor,role:'Outdoor Sales'},projects:[delayProject],openings:[previous]});
+ await x.client.saveFieldChange('edit-opening',projectId,{previous,opening:{...previous,hasRollerShutter:false}});
+ assert.equal(x.state.openings[0].hasRollerShutter,false);assert.equal(x.state.queue[0].payload.opening.hasRollerShutter,false);
+ await assert.rejects(x.client.saveFieldChange('edit-opening',projectId,{previous,opening:{...previous,width:200}}),/changed on another device/);
+ const latest=x.state.openings[0];
+ await x.client.saveFieldChange('edit-opening',projectId,{previous:latest,opening:{...latest,hasRollerShutter:true}});
+ assert.equal(x.state.openings[0].hasRollerShutter,true);
+ await assert.rejects(x.client.saveFieldChange('edit-opening',projectId,{previous:x.state.openings[0],opening:{...latest,structuralType:'Door',hasRollerShutter:true}}),/Complete the opening/);
+});

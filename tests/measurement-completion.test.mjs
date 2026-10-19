@@ -45,7 +45,7 @@ for(const invalid of [false,true])test(`direct completion API validates and atom
 
 test('offline API preserves legacy finish payloads for receipts already saved by older clients',async()=>{
  let payload;const api=load('src/app/api/offline/route.ts',{
-  '@/lib/measurements/completion':rules,'@/lib/intake/buildingType':{},'@/lib/measurements/measurementDelay':{},'@/lib/intake/readinessNote':{},'@/lib/measurements/registrationOpening':{},'@/lib/location/coordinates':{},'@/lib/workflow/followUps':{},'@/lib/workflow/access':{salesRoles:[]},'@/lib/auth/permissions':{},
+  '@/lib/measurements/completion':rules,'@/lib/intake/projectBranch':{},'@/lib/intake/buildingType':{},'@/lib/measurements/measurementDelay':{},'@/lib/intake/readinessNote':{},'@/lib/measurements/registrationOpening':{},'@/lib/location/coordinates':{},'@/lib/workflow/followUps':{},'@/lib/workflow/access':{salesRoles:[]},'@/lib/auth/permissions':{},
   'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200})}},
   '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,user:{id:'actor'},role:'Outdoor Sales'})},
   '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{payload=args.p_payload;return {data:{},error:null};}})},

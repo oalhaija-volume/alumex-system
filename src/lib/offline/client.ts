@@ -1,3 +1,4 @@
+import { normalizeProjectBranch } from '@/lib/intake/projectBranch';
 import {normalizeMeasurementCompletion,retainMeasurementReport} from '@/lib/measurements/completion';
 import { parseProjectLocation } from '@/lib/location/coordinates';
 import { isOfflineDevice } from './device';
@@ -103,6 +104,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
   const measurementReports=[...(s.measurementReports??[])];let projects=[...s.projects];const openings=[...s.openings];let p=projects.find(p=>p.id===projectId);
   if(action==='register'){
    const client=payload.client as Record<string,unknown>,project=payload.project as Record<string,unknown>;
+   const branch=s.actor.role==='Outdoor Sales'?normalizeProjectBranch(project.branch):s.actor.branch??null;
    const buildingType=normalizeBuildingType(project.buildingType,s.actor.role==='Outdoor Sales');
    const readinessNote=normalizeReadinessNote(s.actor.role,project.structureReadiness,project.readinessNote);
    const assigned=typeof project.assignedOutdoorSalesId==='string'?project.assignedOutdoorSalesId:'';
@@ -111,7 +113,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if((s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')&&!assigned)throw new Error('Choose yourself or an Outdoor Sales employee to collect the initial measurements.');
    if(assigned&&!selfAssigned&&!s.outdoorSales?.some(e=>e.id===assigned))throw new Error('Choose an Outdoor Sales employee from the list. Connect online to refresh employees.');
    const location=parseProjectLocation(project.locationLatitude,project.locationLongitude);
-   p={location_latitude:location.latitude,location_longitude:location.longitude,building_type:buildingType,branch:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.branch:null,assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.id:null,followUpOwner:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
+   p={location_latitude:location.latitude,location_longitude:location.longitude,building_type:buildingType,branch:(s.actor.role === 'Outdoor Sales'||s.actor.role === 'Indoor Sales'||s.actor.role === 'Sales Manager')?branch:null,assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.id:null,followUpOwner:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
   }else{
    if(!p)throw new Error('Open this project online once before working on it offline.');
    if(p.additional_openings_state && ['opening','edit-opening','finish','reopen'].includes(action)){

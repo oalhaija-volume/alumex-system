@@ -1,3 +1,4 @@
+import { normalizeProjectBranch } from '@/lib/intake/projectBranch';
 import {normalizeMeasurementCompletion} from '@/lib/measurements/completion';
 import { normalizeBuildingType } from '@/lib/intake/buildingType';
 import { normalizeClientCancellation, normalizeMeasurementDelayNote } from '@/lib/measurements/measurementDelay';
@@ -64,10 +65,13 @@ export async function POST(request:Request){
   // Older installed clients can still deliver previously queued registrations without this field.
   let buildingType;
   try{buildingType=normalizeBuildingType(p.buildingType,auth.role==='Outdoor Sales'&&p.buildingType!==undefined);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+  // Retain compatibility with registrations already saved by older installed clients.
+  let branch;
+  if(auth.role==='Outdoor Sales'&&p.branch!==undefined){try{branch=normalizeProjectBranch(p.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}}
   const assignee=p?.assignedOutdoorSalesId;
   if(assignee && (typeof assignee!=='string'||!uuid.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
   if((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager')&&!assignee)return NextResponse.json({error:'Choose yourself or an Outdoor Sales employee to collect the initial measurements.'},{status:400});
-  payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(p.buildingType===undefined?{}:{buildingType}),...(assignee?{assignedOutdoorSalesId:assignee}:{}),address:address.slice(0,2000)||`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
+  payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(branch?{branch}:{}),...(p.buildingType===undefined?{}:{buildingType}),...(assignee?{assignedOutdoorSalesId:assignee}:{}),address:address.slice(0,2000)||`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
  }else if(body.action==='finish'){
   try{payload=body.payload.note===undefined&&body.payload.photo===undefined?{}:normalizeMeasurementCompletion(body.payload);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  }else if(body.action==='opening'){

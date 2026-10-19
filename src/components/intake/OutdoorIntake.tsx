@@ -1,6 +1,7 @@
 "use client";
 import { isOfflineDevice } from "@/lib/offline/device";
 
+import { projectBranches, normalizeProjectBranch, type ProjectBranch } from '@/lib/intake/projectBranch';
 import { buildingTypes,buildingTypeLabels,normalizeBuildingType,type BuildingType } from '@/lib/intake/buildingType';
 import { useMobileOutdoor } from "@/components/workflow/MobileOutdoorContext";
 import { fieldFetch,isFieldOnline,isDeviceWorkspace,prepareOffline } from "@/lib/offline/client";
@@ -20,6 +21,7 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
   const mobileOutdoor = useMobileOutdoor();
   const { t, term,errorMessage,formatDateTime } = useI18n();
 
+  const [projectBranch,setProjectBranch] = useState<ProjectBranch|''>('');
   const [buildingType,setBuildingType] = useState<BuildingType|''>('');
   const [clientType, setClientType] = useState<"individual" | "company">("individual");
   const [name, setName] = useState("");
@@ -61,6 +63,7 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
       setError('Employee workspace is still loading. Please try again.');
       return;
     }
+    if(employeeState.actor.role==='Outdoor Sales'){try{normalizeProjectBranch(projectBranch);}catch(cause){setError((cause as Error).message);return;}}
     try{normalizeBuildingType(buildingType,employeeState.actor.role==='Outdoor Sales');}catch(cause){setError((cause as Error).message);return;}
     if (!name.trim() || !phone.trim() || !readiness || (!addressOnly && (location.latitude === null || location.longitude === null))) {
       setError(t("mobileIntake.required"));
@@ -82,7 +85,7 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
           client: { clientType, clientName: name.trim(), mobile: phone.trim() },
           project: {
             projectName: name.trim(),
-            ...(employeeState.actor.role==='Outdoor Sales'?{buildingType}:{}),
+            ...(employeeState.actor.role==='Outdoor Sales'?{buildingType,branch:projectBranch}:{}),
             assignedOutdoorSalesId: outdoorAssignee||null,
             address: siteAddress.trim(),
             locationLatitude: location.latitude,
@@ -115,7 +118,7 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
       <p className="text-sm text-slate-600">{term('Created by')} <bdi>{saved.registeredBy==='Employee'?term('Employee'):saved.registeredBy}</bdi>{saved.createdAt&&<time dateTime={saved.createdAt} dir="ltr" className="mt-1 block w-fit max-w-full">{formatDateTime(saved.createdAt)}</time>}</p>
       {saved.pending && <p className="text-sm text-amber-800">{term('Saved on device · Pending sync')}</p>}
       <Link href={!canAccessCRM(employeeState?.actor.role) ? (saved.pending || offline ? "/offline?path=/dashboard" : "/dashboard") : saved.pending || offline ? '/offline?path=/mini-crm' : `/mini-crm#project-${saved.projectId}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700">{term(canAccessCRM(employeeState?.actor.role)?'Open follow-ups':mobileOutdoor?'Measurement assignments':'Dashboard')}</Link>
-      <button type="button" onClick={() => { setBuildingType(''); setClientType("individual"); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setOfflineAddressStarted(false); setReadiness(""); setReadinessNote(''); setAssignedOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
+      <button type="button" onClick={() => { setProjectBranch(''); setBuildingType(''); setClientType("individual"); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setOfflineAddressStarted(false); setReadiness(""); setReadinessNote(''); setAssignedOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
     </section>
   );
 
@@ -126,6 +129,13 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
         <p className="mt-2 text-sm leading-6 text-slate-500">{t("registration.description")}</p>
       </header>
       <fieldset disabled={saving} className="min-w-0 space-y-6 rounded-lg bg-white sm:border sm:border-slate-200 sm:p-7">
+        {employeeState?.actor.role==='Outdoor Sales'&&<fieldset>
+          <legend className="mb-3 text-sm font-semibold text-slate-900">{term('Project branch')} {term('(required)')}</legend>
+          <div className="grid grid-cols-2 gap-3">{projectBranches.map(branch=><label key={branch} className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-md border p-4 text-sm ${projectBranch===branch?'border-blue-600 bg-blue-50/60 text-slate-900':'border-slate-300 bg-white text-slate-700'}`}>
+            <input required type="radio" name="projectBranch" value={branch} checked={projectBranch===branch} onChange={()=>{setProjectBranch(branch);setError('');}} className="h-4 w-4 shrink-0 accent-blue-600"/>
+            <span>{term(branch)}</span>
+          </label>)}</div>
+        </fieldset>}
         {employeeState?.actor.role==='Outdoor Sales'&&<fieldset>
           <legend className="mb-3 text-sm font-semibold text-slate-900">{term('Building type')} {term('(required)')}</legend>
           <div className="grid gap-3 sm:grid-cols-3">{buildingTypes.map(type=><label key={type} className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-md border p-4 text-sm ${buildingType===type?'border-blue-600 bg-blue-50/60 text-slate-900':'border-slate-300 bg-white text-slate-700'}`}>

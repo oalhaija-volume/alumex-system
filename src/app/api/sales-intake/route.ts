@@ -1,3 +1,4 @@
+import { normalizeProjectBranch } from '@/lib/intake/projectBranch';
 import { normalizeBuildingType } from '@/lib/intake/buildingType';
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
 import { NextResponse } from "next/server";
@@ -28,6 +29,8 @@ export async function POST(request: Request) {
   try{readinessNote=normalizeReadinessNote(auth.role,readiness,body?.project?.readinessNote);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   let buildingType;
   try{buildingType=normalizeBuildingType(body?.project?.buildingType,auth.role==='Outdoor Sales');}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+  let branch;
+  if(auth.role==='Outdoor Sales'){try{branch=normalizeProjectBranch(body?.project?.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}}
   const assignee=body?.project?.assignedOutdoorSalesId;
   if(assignee&&(typeof assignee!=='string'||!/^[0-9a-f-]{36}$/i.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
   if((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager')&&!assignee)return NextResponse.json({error:'Choose yourself or an Outdoor Sales employee to collect the initial measurements.'},{status:400});
@@ -53,6 +56,7 @@ export async function POST(request: Request) {
           ? body.project.address.trim().slice(0, 2000) : `${location.latitude}, ${location.longitude}`,
         locationLatitude: location.latitude, locationLongitude: location.longitude,
         buildingType, readinessNote, structureReadiness: readiness,
+        ...(branch ? {branch} : {}),
       },
     },
   });

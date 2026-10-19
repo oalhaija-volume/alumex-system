@@ -2596,7 +2596,9 @@
     "These projects were deleted by an Admin. Their saved work is kept on this device and will no longer retry syncing.": "حذف مسؤول النظام هذه المشاريع. العمل المحفوظ لها باقٍ على هذا الجهاز، ولن تتكرر محاولة مزامنته.",
     "This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.": "حذف مسؤول النظام هذا المشروع. لا يمكن مزامنة العمل المحفوظ، وسيبقى محفوظاً على هذا الجهاز.",
     "Project is not available to this employee": "هذا المشروع لم يعد متاحاً لهذا الموظف. ربما تم حذفه أو تغيير الموظف المكلّف به. عملك المحفوظ باقٍ على هذا الجهاز.",
-    "cancel-project": "إلغاء المشروع بطلب العميل"
+    "cancel-project": "إلغاء المشروع بطلب العميل",
+    "Project branch": "فرع المشروع",
+    "Choose the project branch: Karkh or Rasafa.": "اختر فرع المشروع: الكرخ أو الرصافة."
   },
   "registration": {
     "title": "عميل ومشروع جديد",

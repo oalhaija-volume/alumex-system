@@ -70,6 +70,7 @@ for (const role of ['Indoor Sales', 'Sales Manager']) test(`${role} registration
     '@/lib/supabase/config': { hasSupabaseServiceRoleKey: () => true },
     '@/lib/location/coordinates': load('../src/lib/location/coordinates.ts'),
     '@/lib/projects/numbering': load('../src/lib/projects/numbering.ts'),
+    '@/lib/intake/projectBranch': load('../src/lib/intake/projectBranch.ts'),
     '@/lib/intake/buildingType': load('../src/lib/intake/buildingType.ts'),
     '@/lib/intake/readinessNote': load('../src/lib/intake/readinessNote.ts'),
   });

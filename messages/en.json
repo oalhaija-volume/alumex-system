@@ -2596,7 +2596,9 @@
     "These projects were deleted by an Admin. Their saved work is kept on this device and will no longer retry syncing.": "These projects were deleted by an Admin. Their saved work is kept on this device and will no longer retry syncing.",
     "This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.": "This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.",
     "Project is not available to this employee": "Project is not available to this employee",
-    "cancel-project": "Client cancellation"
+    "cancel-project": "Client cancellation",
+    "Project branch": "Project branch",
+    "Choose the project branch: Karkh or Rasafa.": "Choose the project branch: Karkh or Rasafa."
   },
   "registration": {
     "title": "New client & project",

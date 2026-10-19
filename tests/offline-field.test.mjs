@@ -450,3 +450,29 @@ test('roller shutter checkboxes can be changed offline and stale edits cannot re
  assert.equal(x.state.openings[0].hasRollerShutter,true);
  await assert.rejects(x.client.saveFieldChange('edit-opening',projectId,{previous:x.state.openings[0],opening:{...latest,structuralType:'Door',hasRollerShutter:true}}),/Complete the opening/);
 });
+
+test('online phone registration returns after durable save while synchronization is slow',async()=>{
+ const x=setup();navigator.onLine=true;window.location={pathname:'/intake'};
+ let release;
+ const session=new Promise(resolve=>{release=resolve;});
+ globalThis.fetch=async(url,init)=>!init?.method?session:Response.json({project:{id:x.state.projects[0].id,project_number:'PRJ-SYNCED',updated_at:new Date().toISOString()}});
+ try{
+  const response=await Promise.race([
+   x.client.fieldFetch('/api/sales-intake',{method:'POST',body:JSON.stringify({...payload,registrationActorId:actor.id})}),
+   new Promise((_,reject)=>setTimeout(()=>reject(Error('Registration waited for network sync')),500)),
+  ]);
+  assert.equal(response.status,201);
+  const result=await response.json();
+  assert.equal(result.pending,true);assert.equal(x.state.queue.length,1);
+  assert.equal(x.state.projects[0].id,result.projectId);
+  release(Response.json({actor}));await x.client.syncFieldChanges();
+  assert.equal(x.state.queue.length,0);assert.equal(x.state.projects[0].project_number,'PRJ-SYNCED');
+ }finally{release(Response.json({actor}));await x.client.syncFieldChanges();}
+});
+
+test('registration never writes into a different employee snapshot',async()=>{
+ const x=setup();
+ const response=await x.client.fieldFetch('/api/sales-intake',{method:'POST',body:JSON.stringify({...payload,registrationActorId:'another-account'})});
+ assert.equal(response.status,400);assert.match((await response.json()).error,/employee who opened/);
+ assert.equal(x.state.projects.length,0);assert.equal(x.state.queue.length,0);
+});

@@ -36,7 +36,12 @@ export async function prepareOffline():Promise<FieldState>{
  })();
  try{return await initializing;}finally{initializing=null;}
 }
-async function stateForWrite(){let state=await readFieldState();if(!state)state=await prepareOffline();return state;}
+async function stateForWrite(expectedActorId?:string){
+ let state=await readFieldState();
+ if(!state || (expectedActorId && state.actor.id!==expectedActorId))state=await prepareOffline();
+ if(expectedActorId && state.actor.id!==expectedActorId)throw new Error('Sign in with the employee who opened this registration form.');
+ return state;
+}
 export async function syncFieldChanges(){
  if(!navigator.onLine)return;
  if(syncing)return syncing;
@@ -72,8 +77,8 @@ export async function syncFieldChanges(){
  };
  syncing=Promise.resolve('locks' in navigator?navigator.locks.request('alumex-field-sync',run):run()).then(()=>undefined).finally(()=>{syncing=null;});return syncing;
 }
-export async function saveFieldChange(action:FieldChange['action'],projectId:string,payload:Record<string,unknown>){
- const state=await stateForWrite();if(['follow-up','ready','assign-measurements','request-openings'].includes(action)&&!canAccessCRM(state.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');if(action==='follow-up')payload=normalizeFollowUp(payload);if(action==='finish')payload=normalizeMeasurementCompletion(payload);const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
+export async function saveFieldChange(action:FieldChange['action'],projectId:string,payload:Record<string,unknown>,expectedActorId?:string){
+ const state=await stateForWrite(expectedActorId);if(['follow-up','ready','assign-measurements','request-openings'].includes(action)&&!canAccessCRM(state.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');if(action==='follow-up')payload=normalizeFollowUp(payload);if(action==='finish')payload=normalizeMeasurementCompletion(payload);const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
  await updateFieldState(state.actor.id,s=>{
   if(!s)throw new Error('Offline account unavailable.');
   const measurementReports=[...(s.measurementReports??[])];let projects=[...s.projects];const openings=[...s.openings];let p=projects.find(p=>p.id===projectId);
@@ -208,7 +213,13 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
  }
  try{
   const body=JSON.parse(String(init?.body??'{}')) as Record<string,unknown>;
-  if(url==='/api/sales-intake'){const projectId=crypto.randomUUID();await saveFieldChange('register',projectId,body);if(isFieldOnline()&&!isDeviceWorkspace())await syncFieldChanges();const pending=(await readFieldState())?.queue.some(c=>c.projectId===projectId)??true;return Response.json({projectId,pending},{status:201});}
+  if(url==='/api/sales-intake'){
+   const projectId=crypto.randomUUID();
+   const result=await saveFieldChange('register',projectId,body,typeof body.registrationActorId==='string'?body.registrationActorId:undefined);
+   // The durable queue already starts background synchronization. Continue in the
+   // device workspace without making the employee wait for the network round trip.
+   return Response.json(result,{status:201});
+  }
   const projectId=url==='/api/workspace'?String(body.projectId):url.split('/').pop()!;
   const action=method==='POST'?'opening':String(body.action) as FieldChange['action'];
   await saveFieldChange(action,projectId,body);

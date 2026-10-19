@@ -1,9 +1,9 @@
 import { OutdoorIntake } from "@/components/intake/OutdoorIntake";
-import { requireRole } from "@/lib/auth/adminServer";
+import { getIntakeAccess, getIntakeEmployeeState } from "@/lib/intake/server";
 import { redirect } from "next/navigation";
 
 export default async function IntakePage() {
-  const auth = await requireRole(["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager", "Outdoor Sales"]);
+  const auth = await getIntakeAccess();
   if (!auth.ok) redirect("/unauthorized");
-  return <OutdoorIntake />;
+  return <OutdoorIntake initialEmployeeState={await getIntakeEmployeeState(auth)} />;
 }

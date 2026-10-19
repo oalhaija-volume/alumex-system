@@ -55,7 +55,7 @@ for (const role of ['Indoor Sales', 'Sales Manager']) test(`${role} registration
   let insertedProject;
   const input = { client: { clientName: 'Example', mobile: '07700000000', clientType: 'individual' },
     project: { address: 'Baghdad', locationLatitude: 33.3, locationLongitude: 44.4, structureReadiness: 'ready', assignedOutdoorSalesId: actor } };
-  const admin = { from: table => ({
+  const admin = { rpc: async (name,args) => { assert.equal(name,'register_sales_project'); assert.equal(args.p_actor,actor); insertedProject=args.p_payload.project; return {data:{projectId:'project',clientId:'client',projectNumber:'PRJ-TEST'}}; }, from: table => ({
     select() { return this; }, eq() { return this; },
     like: async () => ({ data: [] }),
     insert(value) { if (table === 'projects') insertedProject = value; return this; },
@@ -80,6 +80,5 @@ for (const role of ['Indoor Sales', 'Sales Manager']) test(`${role} registration
   assert.equal(insertedProject, undefined);
   branch = 'Karkh';
   assert.equal((await submit(input)).status, 201);
-  assert.equal(insertedProject.original_creator_role, role);
-  assert.equal(insertedProject.assigned_outdoor_sales_id, actor);
+  assert.equal(insertedProject.assignedOutdoorSalesId, actor);
 });

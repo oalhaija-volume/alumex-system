@@ -14,7 +14,9 @@ import Link from "next/link";
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
 
 
-export function OutdoorIntake() {
+type IntakeEmployeeState = Pick<FieldState, 'actor' | 'outdoorSales'>;
+
+export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployeeState?: IntakeEmployeeState | null }) {
   const mobileOutdoor = useMobileOutdoor();
   const { t, term,errorMessage,formatDateTime } = useI18n();
 
@@ -31,7 +33,7 @@ export function OutdoorIntake() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState<{projectId:string;pending:boolean;registeredBy:string;createdAt?:string}|null>(null);
   const [offline,setOffline]=useState(false);
-  const [employeeState,setEmployeeState]=useState<FieldState|null>(null);
+  const [employeeState,setEmployeeState]=useState<IntakeEmployeeState|null>(initialEmployeeState);
   const [assignedOutdoorSalesId,setAssignedOutdoorSalesId]=useState('');
   const addressOnly = employeeState?.actor.role === 'Outdoor Sales' && (offline || offlineAddressStarted);
   const needsReadinessNote = employeeState?.actor.role === 'Outdoor Sales' && readiness === 'not_ready';
@@ -40,7 +42,16 @@ export function OutdoorIntake() {
   const selfAssigned = (employeeState?.actor.role === 'Indoor Sales' || employeeState?.actor.role === 'Sales Manager') && outdoorAssignee === employeeState.actor.id;
   const assignedEmployee = selfAssigned ? employeeState.actor : employeeState?.outdoorSales?.find(employee => employee.id === outdoorAssignee);
   const collectsMeasurements = employeeState?.actor.role === 'Outdoor Sales' || selfAssigned;
-  useEffect(()=>{let live=true;const refresh=async()=>{const state=await readFieldState().catch(()=>null);if(live)setEmployeeState(state);};if(isDeviceWorkspace())void refresh();else void prepareOffline().then(refresh).catch(()=>{void refresh();});window.addEventListener('field-change',refresh);return()=>{live=false;window.removeEventListener('field-change',refresh);};},[]);
+  useEffect(()=>{
+    // Online registration already has verified employee data from the page.
+    // Device-only workspaces continue to load the account's offline snapshot.
+    if (initialEmployeeState) return;
+    let live=true;
+    const refresh=async()=>{const state=await readFieldState().catch(()=>null);if(live)setEmployeeState(state);};
+    if(isDeviceWorkspace())void refresh();else void prepareOffline().then(refresh).catch(()=>{void refresh();});
+    window.addEventListener('field-change',refresh);
+    return()=>{live=false;window.removeEventListener('field-change',refresh);};
+  },[initialEmployeeState]);
 
   useEffect(()=>{const update=()=>setOffline(isOfflineDevice()&&!isFieldOnline());const timer=setTimeout(update,0);window.addEventListener('field-connection',update);window.addEventListener('online',update);window.addEventListener('offline',update);return()=>{clearTimeout(timer);window.removeEventListener('field-connection',update);window.removeEventListener('online',update);window.removeEventListener('offline',update);};},[]);
 
@@ -66,6 +77,7 @@ export function OutdoorIntake() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          registrationActorId: employeeState.actor.id,
           registrationMode: "simple",
           client: { clientType, clientName: name.trim(), mobile: phone.trim() },
           project: {

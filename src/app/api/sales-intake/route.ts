@@ -5,7 +5,6 @@ import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseServiceRoleKey, supabaseServiceRoleError } from "@/lib/supabase/config";
 import { parseProjectLocation } from "@/lib/location/coordinates";
-import { generateNextProjectNumber } from "@/lib/projects/numbering";
 
 // Registration retains the creator and validates measurement assignment.
 export async function POST(request: Request) {
@@ -40,33 +39,25 @@ export async function POST(request: Request) {
   }
   if(assignee && !((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager') && assignee===auth.user.id)){const employee=await admin.from('profiles').select('id').eq('id',assignee).eq('role','Outdoor Sales').eq('is_active',true).eq('status','Active').maybeSingle();if(employee.error||!employee.data)return NextResponse.json({error:'Choose an active Outdoor Sales employee.'},{status:400});}
 
-  const date = new Date();
-  const prefix = `PRJ-${date.getFullYear()}${String(date.getMonth()+1).padStart(2,"0")}-`;
-  const {data:numbers,error:numberError} = await admin.from("projects").select("project_number").like("project_number",`${prefix}%`);
-  if (numberError) return NextResponse.json({error:"Unable to prepare registration. Please try again."}, {status:500});
-  const projectNumber = generateNextProjectNumber({projectNumbers:(numbers ?? []).map(row => row.project_number),date});
-  const {data:client,error:clientError} = await admin.from("clients").insert({
-    client_name:name, mobile:phone, client_type:clientType, created_by:auth.user.id,
-    company_name:clientType === "company" ? name : null,
-    location_latitude:clientType === "company" ? companyLocation.latitude : null,
-    location_longitude:clientType === "company" ? companyLocation.longitude : null,
-  }).select("id").single();
-  if (clientError) return NextResponse.json({error:"Unable to save the client. Please check the details and try again."}, {status:500});
-  const {data:project,error:projectError} = await admin.from("projects").insert({
-    project_number:projectNumber, project_name:name, client_id:client.id, assigned_outdoor_sales_id:assignee||null,
-    address:typeof body?.project?.address === "string" && body.project.address.trim()
-      ? body.project.address.trim().slice(0, 2000)
-      : `${location.latitude}, ${location.longitude}`,
-    location_latitude:location.latitude, location_longitude:location.longitude,
-    building_type:buildingType, readiness_note:readinessNote, structure_readiness:readiness, status:"Draft", sales_status:"new_lead",
-    original_source:auth.role === "Outdoor Sales" ? "outdoor_sales" : "showroom_walk_in",
-    original_creator_id:auth.user.id, original_creator_role:auth.role,
-    created_by:auth.user.id, owner_id:auth.user.id, sales_engineer_id:auth.user.id,
-  }).select("id").single();
-  if (projectError) {
-    // Roll back only the client just created by this failed request.
-    await admin.from("clients").delete().eq("id",client.id);
-    return NextResponse.json({error:projectError.code === '22023' ? projectError.message : "Unable to save the project registration. Please try again."}, {status:projectError.code === '22023' ? 400 : 500});
+  const { data, error } = await admin.rpc('register_sales_project', {
+    p_actor: auth.user.id,
+    p_payload: {
+      client: {
+        clientName: name, mobile: phone, clientType,
+        locationLatitude: clientType === 'company' ? companyLocation.latitude : null,
+        locationLongitude: clientType === 'company' ? companyLocation.longitude : null,
+      },
+      project: {
+        assignedOutdoorSalesId: assignee || null,
+        address: typeof body.project.address === 'string' && body.project.address.trim()
+          ? body.project.address.trim().slice(0, 2000) : `${location.latitude}, ${location.longitude}`,
+        locationLatitude: location.latitude, locationLongitude: location.longitude,
+        buildingType, readinessNote, structureReadiness: readiness,
+      },
+    },
+  });
+  if (error) {
+    return NextResponse.json({error:error.code === '22023' ? error.message : "Unable to save the project registration. Please try again."}, {status:error.code === '22023' ? 400 : 500});
   }
-  return NextResponse.json({projectId:project.id,clientId:client.id,projectNumber}, {status:201});
+  return NextResponse.json(data, {status:201});
 }

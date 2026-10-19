@@ -9,7 +9,7 @@ export async function GET() {
   // The employee overview contains status only. Contacts and commercial details
   // stay in the sales workspace behind its own role and project checks.
   let query = createAdminClient().from('projects')
-    .select('id,project_name,project_number,structure_readiness,sales_status,status,updated_at')
+    .select('id,project_name,project_number,structure_readiness,sales_status,status,updated_at,measurement_delayed,client_cancelled_at')
     .is('archived_at', null).order('updated_at', { ascending: false });
   if (auth.role === 'Outdoor Sales') {
     query = query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);

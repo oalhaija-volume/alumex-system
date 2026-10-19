@@ -2,11 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
+function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='./device')return deps[n]??{isOfflineDevice:()=>true};if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
 const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Employee',role:'Indoor Sales',branch:'Karkh'};
 const projectId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const payload={client:{clientType:'individual',clientName:'Client',mobile:'07000000000'},project:{buildingType:'villa_house',assignedOutdoorSalesId:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',address:'Site',locationLatitude:33.3,locationLongitude:44.4,structureReadiness:'ready'}};
 function setup(overrides={}){globalThis.window={dispatchEvent:()=>{}};let active=actor.id;let state={actor,indoorSales:[{id:actor.id,name:actor.name}],outdoorSales:[{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',name:'Outdoor employee'}],projects:[],openings:[],queue:[],syncedAt:null,...overrides};Object.defineProperty(globalThis,'navigator',{value:{onLine:false},configurable:true});const store={activeFieldUser:()=>active,setFieldUser:id=>{active=id;},readFieldState:async()=>structuredClone(state),updateFieldState:async(id,fn)=>{assert.equal(id,actor.id);state=fn(structuredClone(state));return structuredClone(state);}};const client=load('../src/lib/offline/client.ts',{'./store':store,'@/lib/workflow/followUps':load('../src/lib/workflow/followUps.ts'),'@/lib/workflow/stages':load('../src/lib/workflow/stages.ts'),'@/lib/measurements/registrationOpening':load('../src/lib/measurements/registrationOpening.ts')});return {client,get state(){return state;},get active(){return active;}};}
+test('desktop field requests go directly to the server without queueing',async()=>{
+ const requests=[];
+ const client=load('../src/lib/offline/client.ts',{
+  './device':{isOfflineDevice:()=>false},
+  './store':{readFieldState:async()=>{throw Error('Desktop should not read the offline queue');}},
+  '@/lib/workflow/followUps':load('../src/lib/workflow/followUps.ts'),
+  '@/lib/workflow/stages':load('../src/lib/workflow/stages.ts'),
+  '@/lib/measurements/registrationOpening':load('../src/lib/measurements/registrationOpening.ts'),
+ });
+ globalThis.fetch=async(url,init)=>{requests.push({url,init});return Response.json({ok:true});};
+ for(const method of ['GET','PATCH','POST'])await client.fieldFetch('/api/workspace',{method});
+ assert.deepEqual(requests.map(request=>request.init.method),['GET','PATCH','POST']);
+});
 test('offline registration, individual opening and completion are stored in order',async()=>{
  const x=setup();await x.client.saveFieldChange('register',projectId,payload);await x.client.saveFieldChange('opening',projectId,{id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'});await x.client.saveFieldChange('finish',projectId,{});
  assert.deepEqual(x.state.queue.map(c=>c.action),['register','opening','finish']);assert.equal(x.state.projects[0].sales_status,'ready_for_quotation');assert.equal(x.state.openings.length,1);assert.equal(new Set(x.state.queue.map(c=>c.id)).size,3);

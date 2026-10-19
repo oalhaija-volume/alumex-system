@@ -16,8 +16,14 @@ import { ProjectWorkspace } from '@/components/workflow/ProjectWorkspace';
 import { SyncConflicts } from "./SyncConflicts";
 import { OfflineStatus } from './OfflineStatus';
 import { readFieldState } from '@/lib/offline/store';
+import { isOfflineDevice } from '@/lib/offline/device';
 import type { FieldState } from '@/lib/offline/types';
 export function OfflineWorkspace(){
+ const [allowed,setAllowed]=useState(false);
+ useEffect(()=>{if(!isOfflineDevice()){window.location.replace('/dashboard');return;}const timer=setTimeout(()=>setAllowed(true),0);return()=>clearTimeout(timer);},[]);
+ return allowed?<DeviceWorkspace/>:null;
+}
+function DeviceWorkspace(){
  const { term } = useI18n();
  const [state,setState]=useState<FieldState|null>(null);const [loaded,setLoaded]=useState(false);const [requestedPath,setPath]=useState('/intake');const [message,setMessage]=useState('');
  useEffect(()=>{let live=true;async function refresh(){const saved=await readFieldState().catch(()=>null);if(live){setState(saved);setLoaded(true);}}const params=new URLSearchParams(location.search);const timer=setTimeout(()=>{setPath((params.get('path')??(params.get('project')?'/initial-measurements/'+params.get('project'):'/intake')).split('#')[0]);void refresh();},0);window.addEventListener('field-change',refresh);return()=>{live=false;clearTimeout(timer);window.removeEventListener('field-change',refresh);};},[]);

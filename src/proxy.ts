@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { supportsOfflineWorkspace } from '@/lib/offline/device';
 import { isActiveSystemRoute } from "@/lib/systemScope";
 import { usesMobileWorkspace, isMobileWorkspaceRoute } from "@/lib/auth/mobileAccess";
 import {
@@ -52,6 +53,7 @@ export async function proxy(request: NextRequest) {
     response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
     return response;
   }
+  if (pathname === "/offline" && !supportsOfflineWorkspace(request.headers)) return NextResponse.redirect(new URL('/dashboard', request.url));
   if (pathname === "/offline" || pathname === "/sw.js") return NextResponse.next();
   // Retired pages cannot expose the old UI, even through saved URLs.
   if (!isActiveSystemRoute(pathname) && !["/login", "/auth/callback", "/auth/logout", "/mobile-required"].includes(pathname)) {

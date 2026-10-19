@@ -11,7 +11,7 @@ function load(path, dependencies = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', source)(name => {if(name==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});
+  new Function('require', 'exports', source)(name => {if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});
     if(name==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts',{});
     if(name==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts',{});
     if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');

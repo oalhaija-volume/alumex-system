@@ -1490,6 +1490,7 @@ export type Database = {
       };
     };
     Functions: {
+      reactivate_client_project: { Args: { p_project: string; p_actor: string; p_note: string; p_expected_updated_at: string }; Returns: Json };
       save_catalog_prices: { Args: { p_changes: Json }; Returns: { id: string; price: number }[] };
       update_employee_profile_with_branch: {
         Args: { p_actor: string; p_employee: string; p_expected_updated_at: string; p_full_name: string; p_username: string; p_role: string; p_is_active: boolean; p_branch: string | null };

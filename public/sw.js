@@ -1,5 +1,6 @@
 /* Only the public shell and static assets enter Cache Storage. Account data stays in IndexedDB. */
-const CACHE = 'alumex-field-shell-v22';
+const CACHE = 'alumex-field-shell-v23';
+const mobileDevice = /Android|iPhone|iPad|iPod|Tablet|Silk|Windows Phone/i.test(self.navigator.userAgent);
 let refreshing = null;
 let refreshedAt = 0;
 
@@ -28,10 +29,10 @@ function refreshShell() {
  return refreshing;
 }
 
-self.addEventListener('install', event => event.waitUntil(refreshShell().then(() => self.skipWaiting())));
+self.addEventListener('install', event => event.waitUntil((mobileDevice ? refreshShell() : Promise.resolve()).then(() => self.skipWaiting())));
 self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
 self.addEventListener('message', event => {
- if (event.data?.type === 'REFRESH_OFFLINE_SHELL') event.waitUntil(refreshShell().catch(() => {}));
+ if (mobileDevice && event.data?.type === 'REFRESH_OFFLINE_SHELL') event.waitUntil(refreshShell().catch(() => {}));
 });
 self.addEventListener('fetch', event => {
  const request = event.request, url = new URL(request.url);
@@ -47,6 +48,11 @@ self.addEventListener('fetch', event => {
   return;
  }
  if (request.mode !== 'navigate') return;
+ // Existing desktop installations must no longer open the saved device shell.
+ if (!mobileDevice) {
+  if (url.pathname === '/offline') event.respondWith(Promise.resolve(Response.redirect(new URL('/dashboard', self.location.origin), 302)));
+  return;
+ }
  if (url.pathname === '/offline') {
   // The public device shell opens immediately, even on a slow connection.
   // Refresh it without reloading a form the employee might be filling out.

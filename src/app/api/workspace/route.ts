@@ -1,4 +1,5 @@
 import { normalizeClientCancellation } from '@/lib/measurements/measurementDelay';
+import { normalizeReactivation } from '@/lib/workflow/reactivation';
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth/adminServer';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -28,6 +29,14 @@ export async function GET(){
 export async function PATCH(request:Request){
  const body=await request.json().catch(()=>null);if(typeof body?.projectId!=='string')return NextResponse.json({error:'Project is required.'},{status:400});
  const access=await salesProject(body.projectId,true);if(access.response)return access.response;
+ if(body.action==='reactivate-project'){
+  if(!['Indoor Sales','Admin'].includes(access.auth.role))return NextResponse.json({error:'Only Indoor Sales or Admin can reactivate client-cancelled projects.'},{status:403});
+  let input;
+  try{input=normalizeReactivation(body);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+  const result=await access.admin.rpc('reactivate_client_project',{p_project:body.projectId,p_actor:access.auth.user.id,p_note:input.note,p_expected_updated_at:input.expectedUpdatedAt});
+  if(result.error?.code==='PGRST202')return NextResponse.json({error:'Project reactivation is not available yet. Please contact Admin.'},{status:503});
+  return result.error?NextResponse.json({error:result.error.message},{status:409}):NextResponse.json({ok:true,project:result.data});
+ }
  if(!['ready','assign-measurements','request-openings','follow-up','cancel-project'].includes(body.action))return NextResponse.json({error:'Invalid action.'},{status:400});
  let payload={};
  try{if(body.action==='cancel-project')payload=normalizeClientCancellation(body);else if(body.action==='follow-up')payload=normalizeFollowUp(body);else if(body.action==='request-openings'||body.action==='assign-measurements'||body.assignedOutdoorSalesId!==undefined)payload=normalizeMeasurementAssignment(body);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}

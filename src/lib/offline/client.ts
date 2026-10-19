@@ -1,4 +1,5 @@
 import {normalizeMeasurementCompletion,retainMeasurementReport} from '@/lib/measurements/completion';
+import { isOfflineDevice } from './device';
 import { normalizeBuildingType } from '@/lib/intake/buildingType';
 import { canCancelProject, normalizeClientCancellation, canDelayMeasurements, canResumeMeasurements, normalizeMeasurementDelayNote } from '@/lib/measurements/measurementDelay';
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
@@ -15,7 +16,7 @@ export function retainSkylightCapture<T extends RegistrationOpening & {projectId
 }
 export function isDeviceWorkspace(){return typeof window!=='undefined'&&window.location?.pathname==='/offline';}
 let connectionAvailable=true;
-export function isFieldOnline(){return typeof navigator!=="undefined" && navigator.onLine && connectionAvailable;}
+export function isFieldOnline(){return typeof navigator!=="undefined" && navigator.onLine && (!isOfflineDevice() || connectionAvailable);}
 function connection(available:boolean){if(connectionAvailable!==available){connectionAvailable=available;window.dispatchEvent(new Event('field-connection'));}}
 let initializing:Promise<FieldState>|null=null;
 let syncing:Promise<void>|null=null;
@@ -164,7 +165,18 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
  return {projectId,pending:true};
 }
 export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>{
+ // Desktop uses the live application and never creates new queued field edits.
+ if(!isOfflineDevice())return fetch(url,init);
  const method=init?.method??'GET';
+ if(method==='PATCH' && url==='/api/workspace' && JSON.parse(String(init?.body??'{}')).action==='reactivate-project'){
+  if(!isFieldOnline())return Response.json({error:'Connect to the internet before reactivating a project.'},{status:409});
+  const body=JSON.parse(String(init?.body??'{}'));
+  const state=await readFieldState();
+  if(state?.queue.some(change=>change.projectId===body.projectId))return Response.json({error:'Sync this project’s saved changes before reactivating it.'},{status:409});
+  const response=await fetch(url,init);
+  if(response.ok)await prepareOffline();
+  return response;
+ }
  if(method==='GET'){
   const s=await readFieldState();const id=url.split('/').pop();
   const pending=s?.queue.some(c=>url==='/api/workspace'||c.projectId===id);

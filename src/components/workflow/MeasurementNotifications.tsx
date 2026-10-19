@@ -1,4 +1,5 @@
 'use client';
+import { isOfflineDevice } from '@/lib/offline/device';
 import Link from 'next/link';
 import { useSyncExternalStore } from 'react';
 import { useI18n } from '@/components/i18n/I18nProvider';
@@ -40,7 +41,7 @@ export function MeasurementNotifications({ state }: { state: FieldState }) {
         <button type="button" onClick={markRead} className="min-h-11 text-sm font-semibold text-blue-800 underline">{term('Mark as read')}</button>
       </div>
       <ul className="mt-2 divide-y divide-blue-200">{unread.map(project => <li key={project.id}>
-        <Link href={`/initial-measurements/${project.id}`} onClick={event=>{if(!isFieldOnline()){event.preventDefault();window.location.assign(`/offline?project=${project.id}`);}}} className="flex min-h-12 flex-wrap items-center justify-between gap-2 py-3 text-sm text-blue-950">
+        <Link href={`/initial-measurements/${project.id}`} onClick={event=>{if(isOfflineDevice()&&!isFieldOnline()){event.preventDefault();window.location.assign(`/offline?project=${project.id}`);}}} className="flex min-h-12 flex-wrap items-center justify-between gap-2 py-3 text-sm text-blue-950">
           <span><span className="font-semibold">{project.project_name}</span> · {project.project_number}</span><span className="font-semibold underline">{term('Record measurements')}</span>
         </Link>
       </li>)}</ul>

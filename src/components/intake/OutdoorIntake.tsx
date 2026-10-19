@@ -1,4 +1,5 @@
 "use client";
+import { isOfflineDevice } from "@/lib/offline/device";
 
 import { buildingTypes,buildingTypeLabels,normalizeBuildingType,type BuildingType } from '@/lib/intake/buildingType';
 import { useMobileOutdoor } from "@/components/workflow/MobileOutdoorContext";
@@ -41,7 +42,7 @@ export function OutdoorIntake() {
   const collectsMeasurements = employeeState?.actor.role === 'Outdoor Sales' || selfAssigned;
   useEffect(()=>{let live=true;const refresh=async()=>{const state=await readFieldState().catch(()=>null);if(live)setEmployeeState(state);};if(isDeviceWorkspace())void refresh();else void prepareOffline().then(refresh).catch(()=>{void refresh();});window.addEventListener('field-change',refresh);return()=>{live=false;window.removeEventListener('field-change',refresh);};},[]);
 
-  useEffect(()=>{const update=()=>setOffline(!isFieldOnline());const timer=setTimeout(update,0);window.addEventListener('field-connection',update);window.addEventListener('online',update);window.addEventListener('offline',update);return()=>{clearTimeout(timer);window.removeEventListener('field-connection',update);window.removeEventListener('online',update);window.removeEventListener('offline',update);};},[]);
+  useEffect(()=>{const update=()=>setOffline(isOfflineDevice()&&!isFieldOnline());const timer=setTimeout(update,0);window.addEventListener('field-connection',update);window.addEventListener('online',update);window.addEventListener('offline',update);return()=>{clearTimeout(timer);window.removeEventListener('field-connection',update);window.removeEventListener('online',update);window.removeEventListener('offline',update);};},[]);
 
   async function submit() {
     if (saving) return;

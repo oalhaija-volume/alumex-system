@@ -20,6 +20,8 @@ export type RoleCheck =
       role: AppRole;
       mobileOutdoor: boolean;
       profile: {
+        full_name: string | null;
+        username: string | null;
         role: AppRole | "Sales User" | null;
         is_active: boolean | null;
         status?: string | null;
@@ -56,7 +58,7 @@ export async function requireRole(
     : supabase;
   const { data: profile, error: profileError } = await profileClient
     .from("profiles")
-    .select("role, is_active, status")
+    .select("full_name, username, role, is_active, status")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -66,6 +68,8 @@ export async function requireRole(
   }
 
   const profileData = profile as {
+    full_name: string | null;
+    username: string | null;
     role: AppRole | "Sales User" | null;
     is_active: boolean | null;
     status?: string | null;

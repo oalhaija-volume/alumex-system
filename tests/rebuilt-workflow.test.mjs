@@ -4,7 +4,7 @@ import test from 'node:test';
 import ts from 'typescript';
 function load(path,dependencies={}){
  const source=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
- const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(name in dependencies))throw Error(name);return dependencies[name];},exports);return exports;
+ const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(name in dependencies))throw Error(name);return dependencies[name];},exports);return exports;
 }
 const termsData=JSON.parse(readFileSync(new URL('../src/lib/contracts/uploadedTerms.json',import.meta.url),'utf8'));
 const uploadedTerms=load('../src/lib/contracts/uploadedTerms.ts',{'./uploadedTerms.json':{default:termsData}});

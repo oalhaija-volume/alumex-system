@@ -1,10 +1,13 @@
 "use client";
 import { useI18n } from '@/components/i18n/I18nProvider';
-import { useEffect,useState } from 'react';
+import { useEffect,useState,useSyncExternalStore } from 'react';
+import { isOfflineDevice } from '@/lib/offline/device';
 import { prepareOffline,syncFieldChanges,isFieldOnline } from '@/lib/offline/client';
 import { activeFieldUser,readFieldState } from '@/lib/offline/store';
 
+const subscribeDevice = () => () => {};
 export function OfflineStatus({quiet=false}:{quiet?:boolean}){
+ const showOffline = useSyncExternalStore(subscribeDevice, isOfflineDevice, () => false);
  const { term,errorMessage,formatNumber,formatDateTime } = useI18n();
  const [online,setOnline]=useState(true);
  const [count,setCount]=useState(0);
@@ -46,7 +49,8 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
    await refresh();
   }
   void refresh();
-  void prepareShell().catch(()=>{if(mounted)setShellError('Offline reopening is unavailable in this browser.');});
+  if(isOfflineDevice())void prepareShell().catch(()=>{if(mounted)setShellError('Offline reopening is unavailable in this browser.');});
+  else if('serviceWorker' in navigator)void navigator.serviceWorker.getRegistration().then(registration=>registration?.update()).catch(()=>{});
   void setup();
   window.addEventListener('field-change',refresh);window.addEventListener('field-connection',refresh);
   window.addEventListener('online',connect);window.addEventListener('offline',refresh);window.addEventListener('focus',connect);
@@ -54,6 +58,7 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
   return()=>{mounted=false;clearInterval(timer);window.removeEventListener('field-change',refresh);window.removeEventListener('field-connection',refresh);window.removeEventListener('online',connect);window.removeEventListener('offline',refresh);window.removeEventListener('focus',connect);};
  },[]);
  const issue=error||setupError||shellError;
+ if(!showOffline)return null;
  const status=!ready?term('Preparing offline storage…'):count?term(count===1?'{count} change saved on this device · {status}':'{count} changes saved on this device · {status}',{count:formatNumber(count),status:term(online?'Sync pending':'Offline')}):!shellReady?term('Saved data ready · Preparing offline reopening…'):online?term('Synced · Offline saving ready'):term('Offline · Saved work is available on this device');
  // Outdoor staff need an alert only when saved work needs attention. Synchronization
  // and shell preparation keep running even when the routine status is not rendered.

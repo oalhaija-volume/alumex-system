@@ -1,6 +1,8 @@
 "use client";
 import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDelayNotice';
 
+import { DashboardProjectFilters } from './DashboardProjectFilters';
+import { matchesProjectSearch } from '@/lib/dashboard/projectSearch';
 import Link from 'next/link';
 import { useState } from 'react';
 import { isLeadershipRole } from '@/lib/auth/permissions';
@@ -61,7 +63,7 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
     const matchesScope = scope === 'all' || (scope === 'sales' && needsSalesFollowUp(project)) || (scope === 'overdue' && overdue(project))
       || (scope === 'operations' && inOperations(project)) || (scope === 'unscheduled' && needsSalesFollowUp(project) && !project.next_follow_up_at);
     return matchesScope && (stage === 'all' || projectStage(project) === stage)
-      && `${project.project_name} ${project.project_number} ${term(project.project_number)} ${project.phone ?? ''}`.toLowerCase().includes(search.trim().toLowerCase());
+      && matchesProjectSearch(project, search);
   });
   function reset() { setStage('all'); setScope('all'); setSearch(''); }
 
@@ -72,8 +74,13 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
     </header>
     <Notice error={error}/>
     {notice && <p role="status" className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-900">{term(notice)}</p>}
+    <DashboardProjectFilters search={search} onSearch={setSearch} filter={stage} onFilter={value => setStage(value as ProjectStage | 'all')} onClear={reset} count={selected.length} total={data.projects.length}>
+          <label className="text-sm font-medium text-slate-700">{term('Project priority')}<select value={scope} onChange={event => setScope(event.target.value as Scope)} className={field}>
+            <option value="all">{term('All projects in this stage')}</option><option value="sales">{term('Awaiting sales action')}</option><option value="overdue">{term('Overdue follow-ups')}</option><option value="unscheduled">{term('Needs a follow-up date')}</option><option value="operations">{term('Signed / Operations')}</option>
+          </select></label>
+    </DashboardProjectFilters>
     <section aria-label={term('Project overview')} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {summary.map(item => <button key={item.scope} type="button" aria-pressed={scope === item.scope && stage === 'all'} onClick={() => { setScope(item.scope); setStage('all'); setSearch(''); }}
+      {summary.map(item => <button key={item.scope} type="button" aria-pressed={scope === item.scope && stage === 'all'} onClick={() => { setScope(item.scope); setStage('all'); }}
         className={`rounded-xl border border-t-4 bg-white p-4 text-start transition hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${dashboardTones[item.tone].edge} ${scope === item.scope && stage === 'all' ? 'border-slate-400 ring-1 ring-slate-400' : 'border-slate-200'}`}>
         <span className="block text-sm font-medium text-slate-600">{term(item.label)}</span>
         <span className={`mt-3 inline-flex min-w-12 items-center justify-center rounded-lg px-3 py-1 text-3xl font-semibold tabular-nums ${dashboardTones[item.tone].surface}`}>{formatNumber(item.count)}</span>
@@ -95,14 +102,6 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
     </section>
 
     <section aria-label={term('Projects')} className="mt-8">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-        <div className="grid gap-4 sm:grid-cols-[1fr_240px]">
-          <label className="text-sm font-medium text-slate-700">{term('Find a project')}<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder={term('Client name, project number or phone')} className={field}/></label>
-          <label className="text-sm font-medium text-slate-700">{term('Project priority')}<select value={scope} onChange={event => setScope(event.target.value as Scope)} className={field}>
-            <option value="all">{term('All projects in this stage')}</option><option value="sales">{term('Awaiting sales action')}</option><option value="overdue">{term('Overdue follow-ups')}</option><option value="unscheduled">{term('Needs a follow-up date')}</option><option value="operations">{term('Signed / Operations')}</option>
-          </select></label>
-        </div>
-      </div>
       <div className="my-5 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold text-slate-950">{term(stage === 'all' ? 'All projects' : projectStages.find(item => item.id === stage)?.label)} <span className="font-normal text-slate-500">· {formatNumber(selected.length)}</span></h2>{(stage !== 'all' || scope !== 'all' || search) && <button type="button" onClick={reset} className="min-h-11 text-sm font-semibold text-blue-700">{term('Clear filters')}</button>}</div>
       {!selected.length ? <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center"><p className="text-sm text-slate-600">{term('No projects match this view.')}</p><button type="button" onClick={reset} className="mt-3 min-h-11 text-sm font-semibold text-blue-700">{term('Show all projects')}</button></div> : <div className="grid items-start gap-5 lg:grid-cols-2">
         {selected.map(project => {

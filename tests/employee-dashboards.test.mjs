@@ -27,7 +27,7 @@ for (const role of roles.appRoles) test(`${role} lands on an authorized dashboar
       assert.equal(table, 'projects');
       return {
         select(columns) {
-          assert.deepEqual(columns.split(',').sort(), ['id', 'project_name', 'project_number', 'structure_readiness', 'sales_status', 'status', 'updated_at'].sort());
+          assert.deepEqual(columns.split(',').sort(), ['id', 'project_name', 'project_number', 'structure_readiness', 'sales_status', 'status', 'updated_at', 'measurement_delayed', 'client_cancelled_at'].sort());
           return this;
         },
         is(column, value) { assert.equal(column, 'archived_at'); assert.equal(value, null); return this; },

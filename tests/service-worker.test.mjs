@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 
-function worker(){
+function worker(userAgent='iPhone'){
  const listeners={},saved=new Map(),requests=[];
  let version=1,failAsset=false,network=false,now=100000;
  const key=value=>new URL(typeof value==='string'?value:value.url,'https://example.test').pathname;
  const cache={match:async value=>saved.get(key(value))?.clone(),put:async(value,response)=>saved.set(key(value),response.clone())};
- const self={location:{origin:'https://example.test'},clients:{claim:async()=>{}},skipWaiting:async()=>{},addEventListener:(type,fn)=>{listeners[type]=fn;}};
+ const self={navigator:{userAgent},location:{origin:'https://example.test'},clients:{claim:async()=>{}},skipWaiting:async()=>{},addEventListener:(type,fn)=>{listeners[type]=fn;}};
  const fetch=async value=>{
   const path=key(value);requests.push(path);
   if(network)throw Error('No network');
@@ -46,4 +46,12 @@ test('a failed release download keeps the complete old shell; a later refresh pu
 test('a device launch uses cached HTML even while the network is available',async()=>{
  const w=worker();await w.install();const before=w.requests.length;
  assert.match(await (await w.navigate('/offline')).text(),/app-1/);assert.equal(w.requests.length,before);
+});
+
+test('desktop installations never open the cached device workspace or redirect offline',async()=>{
+ const w=worker('Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
+ await w.install();assert.equal(w.requests.length,0);
+ const response=await w.navigate('/offline?path=/projects');
+ assert.equal(response.status,302);assert.equal(response.headers.get('location'),'https://example.test/dashboard');
+ assert.equal(w.navigate('/dashboard'),undefined);assert.equal(w.navigate('/projects'),undefined);
 });

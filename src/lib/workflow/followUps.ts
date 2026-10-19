@@ -20,7 +20,7 @@ export function normalizeFollowUp(input:Record<string,unknown>):FollowUpInput {
  return {nextFollowUp:next.toISOString(),note,followUpType:input.followUpType as FollowUpType,followUpDetail:input.followUpType==='other'?detail:'',followUpOwnerId:input.followUpOwnerId};
 }
 export function followUpTypeLabel(type?:string|null){return followUpTypes.find(t=>t.value===type)?.label??'Type not recorded';}
-export type FollowUpEntry={assignedOutdoorSales?:string|null;id:string;action:'follow-up'|'ready'|'assign-measurements'|'snapshot';note:string;nextFollowUp:string|null;recordedAt:string|null;recordedBy:string;followUpType?:string|null;followUpDetail?:string|null;followUpOwner?:string|null;pending?:boolean};
+export type FollowUpEntry={assignedOutdoorSales?:string|null;id:string;action:'follow-up'|'ready'|'assign-measurements'|'cancel-project'|'reactivate-project'|'snapshot';note:string;nextFollowUp:string|null;recordedAt:string|null;recordedBy:string;followUpType?:string|null;followUpDetail?:string|null;followUpOwner?:string|null;pending?:boolean};
 export type FollowUpHistory={project:{id:string;project_name:string;project_number:string;structure_readiness:string;next_follow_up_at:string|null};entries:FollowUpEntry[]};
 
 export function normalizeMeasurementAssignment(input:Record<string,unknown>) {

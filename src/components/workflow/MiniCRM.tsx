@@ -1,5 +1,7 @@
 "use client";
 import { ClientCancellation } from '@/components/measurements/ClientCancellation';
+import { ReactivateProject } from './ReactivateProject';
+import { canReactivateProject } from '@/lib/workflow/reactivation';
 import { canCancelProject } from '@/lib/measurements/measurementDelay';
 import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDelayNotice';
 
@@ -161,6 +163,7 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
           {!cancelled && <button type="button" aria-expanded={expanded} aria-controls={`follow-up-editor-${project.id}`} onClick={() => { setExpanded(!expanded); setHasOpened(true); }} className={`${focus} flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm! font-semibold! whitespace-nowrap transition-colors ${expanded ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700'}`}><span>{term(expanded ? 'Close' : 'Follow up')}</span><Icon kind="chevron" className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} /></button>}
           {data && canCancelProject(project,data.actor) && <ClientCancellation busy={!!busy} onSubmit={form=>void onUpdate(project,'cancel-project',form)}/>}
           {cancelled && <Link href={`/projects#project-${project.id}`} className="min-h-11 py-2 text-sm font-semibold text-blue-700">{term('Review the project record')}</Link>}
+          {canReactivateProject(project,data?.actor.role)&&<ReactivateProject busy={!!busy||!!project.pending} onSubmit={form=>void onUpdate(project,'reactivate-project',form)}/>}
         </div>
       </div>
     </div>

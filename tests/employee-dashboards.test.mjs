@@ -27,7 +27,7 @@ for (const role of roles.appRoles) test(`${role} lands on an authorized dashboar
       assert.equal(table, 'projects');
       return {
         select(columns) {
-          assert.deepEqual(columns.split(',').sort(), ['id', 'project_name', 'project_number', 'structure_readiness', 'sales_status', 'status', 'updated_at', 'measurement_delayed', 'client_cancelled_at'].sort());
+          assert.deepEqual(columns.split(',').sort(), ['id', 'project_name', 'project_number', 'structure_readiness', 'sales_status', 'status', 'created_at', 'created_by', 'updated_at', 'measurement_delayed', 'client_cancelled_at'].sort());
           return this;
         },
         is(column, value) { assert.equal(column, 'archived_at'); assert.equal(value, null); return this; },
@@ -60,4 +60,22 @@ test('leadership can open every active workspace; Outdoor Sales cannot open CRM 
     }
   }
   for (const path of ['/mini-crm', '/hr', '/catalog', '/operations']) assert.equal(permissions.canAccessRoute(path, 'Outdoor Sales'), false);
+});
+
+test('employee dashboard returns creator names only for the visible project creators', async () => {
+  const projects = [{ id: 'site', created_by: 'creator', created_at: '2026-10-01T00:00:00Z' }];
+  const route = load('../src/app/api/dashboard/route.ts', {
+    'next/server': response, '@/lib/auth/roles': roles,
+    '@/lib/auth/adminServer': { requireRole: async () => ({ ok: true, role: 'HR', user: { id: 'hr' } }) },
+    '@/lib/supabase/admin': { createAdminClient: () => ({ from: table => table === 'projects' ? {
+      select() { return this; }, is() { return this; }, order: async () => ({ data: projects, error: null }),
+    } : {
+      select(columns) { assert.equal(columns, 'id,full_name,username'); return this; },
+      in: async (column, ids) => { assert.equal(column, 'id'); assert.deepEqual(ids, ['creator']); return { data: [{ id: 'creator', full_name: 'Project creator', username: 'creator' }], error: null }; },
+    } }) },
+  });
+  const result = await route.GET();
+  assert.equal(result.status, 200);
+  assert.equal(result.body.projects[0].registeredBy, 'Project creator');
+  assert.equal(result.body.projects[0].created_at, projects[0].created_at);
 });

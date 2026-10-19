@@ -1,4 +1,5 @@
 "use client";
+import { useProjectRegistrationFilters } from './useProjectRegistrationFilters';
 import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDelayNotice';
 
 import { DashboardProjectFilters } from './DashboardProjectFilters';
@@ -119,21 +120,23 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
   const [stage, setStage] = useState<ProjectStage | 'all'>('all');
   const [scope, setScope] = useState<Scope>('all');
   const [search, setSearch] = useState('');
+  const registration = useProjectRegistrationFilters(data.projects);
+  const projects = registration.filteredProjects;
   const overdue = (project: FieldProject) => needsSalesFollowUp(project) && !!project.next_follow_up_at && Date.parse(project.next_follow_up_at) < now;
   const inOperations = (project: FieldProject) => ['handoff', 'operations'].includes(projectStage(project));
   const summary: { scope: Scope; label: string; count: number; tone: keyof typeof dashboardTones }[] = [
-    { scope: 'all', label: 'Total projects', count: data.projects.length, tone: 'slate' },
-    { scope: 'sales', label: 'Awaiting sales action', count: data.projects.filter(needsSalesFollowUp).length, tone: 'blue' },
-    { scope: 'overdue', label: 'Overdue follow-ups', count: data.projects.filter(overdue).length, tone: 'rose' },
-    { scope: 'operations', label: 'Signed / Operations', count: data.projects.filter(inOperations).length, tone: 'emerald' },
+    { scope: 'all', label: 'Total projects', count: projects.length, tone: 'slate' },
+    { scope: 'sales', label: 'Awaiting sales action', count: projects.filter(needsSalesFollowUp).length, tone: 'blue' },
+    { scope: 'overdue', label: 'Overdue follow-ups', count: projects.filter(overdue).length, tone: 'rose' },
+    { scope: 'operations', label: 'Signed / Operations', count: projects.filter(inOperations).length, tone: 'emerald' },
   ];
-  const selected = data.projects.filter(project => {
+  const selected = projects.filter(project => {
     const matchesScope = scope === 'all' || (scope === 'sales' && needsSalesFollowUp(project)) || (scope === 'overdue' && overdue(project))
       || (scope === 'operations' && inOperations(project)) || (scope === 'unscheduled' && needsSalesFollowUp(project) && !project.next_follow_up_at);
     return matchesScope && (stage === 'all' || projectStage(project) === stage)
       && matchesProjectSearch(project, search);
   });
-  function reset() { setStage('all'); setScope('all'); setSearch(''); }
+  function reset() { setStage('all'); setScope('all'); setSearch(''); registration.reset(); }
 
   return <section className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-10">
     <header className="mb-7 flex flex-wrap items-start justify-between gap-5">
@@ -142,7 +145,7 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
     </header>
     <Notice error={error}/>
     {notice && <p role="status" className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-900">{term(notice)}</p>}
-    <DashboardProjectFilters search={search} onSearch={setSearch} filter={stage} onFilter={value => setStage(value as ProjectStage | 'all')} onClear={reset} count={selected.length} total={data.projects.length}>
+    <DashboardProjectFilters registration={registration} search={search} onSearch={setSearch} filter={stage} onFilter={value => setStage(value as ProjectStage | 'all')} onClear={reset} count={selected.length} total={data.projects.length}>
           <label className="text-sm font-medium text-slate-700">{term('Project priority')}<select value={scope} onChange={event => setScope(event.target.value as Scope)} className={field}>
             <option value="all">{term('All projects in this stage')}</option><option value="sales">{term('Awaiting sales action')}</option><option value="overdue">{term('Overdue follow-ups')}</option><option value="unscheduled">{term('Needs a follow-up date')}</option><option value="operations">{term('Signed / Operations')}</option>
           </select></label>
@@ -158,23 +161,23 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
     <section aria-label={term('Filter by project stage')} className="mt-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-semibold text-slate-950">{term('Project stages')}</h2><p className="mt-1 text-xs text-slate-600">{term('Select a stage to see its projects. Colors match the project cards below.')}</p></div><button type="button" onClick={reset} className="min-h-11 px-2 text-sm font-semibold text-blue-700">{term('Show all projects')}</button></div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {projectStages.filter(item => item.id !== 'closed' || data.projects.some(project => projectStage(project) === 'closed')).map(item => {
+        {projectStages.filter(item => item.id !== 'closed' || projects.some(project => projectStage(project) === 'closed')).map(item => {
           const tone = dashboardTones[dashboardStageTone[item.id]];
           return <button key={item.id} type="button" aria-pressed={stage === item.id} onClick={() => { setStage(stage === item.id ? 'all' : item.id); setScope('all'); }}
             className={`flex min-h-20 items-center justify-between gap-3 rounded-lg border p-4 text-start transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${tone.surface} ${stage === item.id ? 'ring-2 ring-slate-800 ring-offset-2' : 'hover:shadow-sm'}`}>
             <span className="flex items-start gap-2 text-sm font-semibold"><span aria-hidden="true" className={`mt-1 h-2 w-2 shrink-0 rounded-full ${tone.dot}`}/>{term(item.label)}</span>
-            <span className="shrink-0 text-2xl font-semibold tabular-nums">{formatNumber(data.projects.filter(project => projectStage(project) === item.id).length)}</span>
+            <span className="shrink-0 text-2xl font-semibold tabular-nums">{formatNumber(projects.filter(project => projectStage(project) === item.id).length)}</span>
           </button>;
         })}
       </div>
     </section>
 
     <section aria-label={term('Projects')} className="mt-8">
-      <div className="my-5 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold text-slate-950">{term(stage === 'all' ? 'All projects' : projectStages.find(item => item.id === stage)?.label)} <span className="font-normal text-slate-500">· {formatNumber(selected.length)}</span></h2>{(stage !== 'all' || scope !== 'all' || search) && <button type="button" onClick={reset} className="min-h-11 text-sm font-semibold text-blue-700">{term('Clear filters')}</button>}</div>
+      <div className="my-5 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold text-slate-950">{term(stage === 'all' ? 'All projects' : projectStages.find(item => item.id === stage)?.label)} <span className="font-normal text-slate-500">· {formatNumber(selected.length)}</span></h2>{(stage !== 'all' || scope !== 'all' || search || registration.month || registration.creator) && <button type="button" onClick={reset} className="min-h-11 text-sm font-semibold text-blue-700">{term('Clear filters')}</button>}</div>
       {!selected.length ? <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center"><p className="text-sm text-slate-600">{term('No projects match this view.')}</p><button type="button" onClick={reset} className="mt-3 min-h-11 text-sm font-semibold text-blue-700">{term('Show all projects')}</button></div> : <div className="grid grid-cols-1 gap-3">
         {selected.map(project => <ProjectRow key={project.id} project={project} data={data} leadership={leadership} overdue={overdue(project)} busy={busy} onDelete={onDelete}/>)}
       </div>}
     </section>
-    <details className="mt-8 rounded-xl border border-slate-200 bg-white p-5"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-800">{term('Measurement tasks and follow-up reminders')}</summary><div className="pt-4"><SalesTaskPanel data={data} now={now}/></div></details>
+    <details className="mt-8 rounded-xl border border-slate-200 bg-white p-5"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-800">{term('Measurement tasks and follow-up reminders')}</summary><div className="pt-4"><SalesTaskPanel data={{...data, projects}} now={now}/></div></details>
   </section>;
 }

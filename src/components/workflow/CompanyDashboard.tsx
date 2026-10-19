@@ -1,4 +1,5 @@
 'use client';
+import { useProjectRegistrationFilters } from './useProjectRegistrationFilters';
 import Link from 'next/link';
 import { useState } from 'react';
 import { DashboardProjectFilters } from './DashboardProjectFilters';
@@ -14,7 +15,8 @@ export function CompanyDashboard({ role }: { role: AppRole }) {
   const { data, error, loading } = useResource<EmployeeDashboardData>('/api/dashboard');
   const [stage, setStage] = useState('all');
   const [search, setSearch] = useState('');
-  const projects = data?.projects ?? [];
+  const registration = useProjectRegistrationFilters(data?.projects ?? []);
+  const projects = registration.filteredProjects;
   const selected = projects.filter(project => (stage === 'all' || projectStage(project) === stage)
     && matchesProjectSearch(project, search));
   return <Workspace title={term('Dashboard')} description={term('Company project progress, from site readiness to Operations.')}>
@@ -24,7 +26,7 @@ export function CompanyDashboard({ role }: { role: AppRole }) {
       {canAccessRoute('/hr', role) && <Link href="/hr" className={button}>{term('Employees')}</Link>}
     </div>
     {loading ? <p role="status">{term('Loading project stages…')}</p> : <>
-      <DashboardProjectFilters search={search} onSearch={setSearch} filter={stage} onFilter={setStage} onClear={() => { setStage('all'); setSearch(''); }} count={selected.length} total={projects.length} contactSearch={false} />
+      <DashboardProjectFilters registration={registration} search={search} onSearch={setSearch} filter={stage} onFilter={setStage} onClear={() => { setStage('all'); setSearch(''); registration.reset(); }} count={selected.length} total={data?.projects.length??0} contactSearch={false} />
       <section aria-label={term('Project stages')} className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         {projectStages.map(item => <button key={item.id} type="button" aria-pressed={stage === item.id}
           onClick={() => setStage(stage === item.id ? 'all' : item.id)}

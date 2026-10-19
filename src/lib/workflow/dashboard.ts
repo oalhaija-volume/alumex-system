@@ -5,5 +5,8 @@ export type DashboardProject = ProjectProgress & {
   project_name: string;
   project_number: string;
   updated_at: string;
+  created_at: string;
+  created_by: string | null;
+  registeredBy: string;
 };
 export type EmployeeDashboardData = { projects: DashboardProject[] };

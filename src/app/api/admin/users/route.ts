@@ -105,7 +105,7 @@ export async function POST(request: Request) {
   const password = typeof body?.password === "string" ? body.password : "";
   const role = isAppRole(body?.role) ? body.role : null;
 
-  if (!fullName || fullName.length > 150 || !username || password.length < 8 || !role || !["Admin","HR","Sales Director","CEO","Company Owner","Indoor Sales","Outdoor Sales","Operations Manager","Project Manager"].includes(role)) {
+  if (!fullName || fullName.length > 150 || !username || password.length < 8 || !role || !["Admin","HR","Sales Director","CEO","Company Owner","Sales Manager","Indoor Sales","Outdoor Sales","Operations Manager","Project Manager"].includes(role)) {
     return NextResponse.json(
       { error: "Enter employee name, username, role, and a password of at least 8 characters." },
       { status: 400 },
@@ -120,7 +120,7 @@ export async function POST(request: Request) {
   if (branch !== null && roleCheck.role !== "Admin") {
     return NextResponse.json({ error: "Only Admin can assign employee branches." }, { status: 403 });
   }
-  if (role === "Indoor Sales" && roleCheck.role === "Admin" && branch === null) {
+  if ((role === 'Indoor Sales' || role === 'Sales Manager') && roleCheck.role === "Admin" && branch === null) {
     return NextResponse.json({ error: "Choose a branch for the Indoor Sales employee." }, { status: 400 });
   }
 

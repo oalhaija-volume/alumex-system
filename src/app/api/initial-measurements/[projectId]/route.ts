@@ -9,7 +9,7 @@ import { normalizeOpeningEdit, normalizeRegistrationOpening, registrationRoomTyp
 
 type Context = { params: Promise<{projectId: string}> };
 async function access(context: Context) {
-  const auth = await requireRole(["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Outdoor Sales"]);
+  const auth = await requireRole(["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager", "Outdoor Sales"]);
   if (!auth.ok) return {response:NextResponse.json({error:auth.error},{status:auth.status})};
   if (!hasSupabaseServiceRoleKey()) return {response:NextResponse.json({error:"Measurements are unavailable."},{status:503})};
   const {projectId} = await context.params;
@@ -17,7 +17,7 @@ async function access(context: Context) {
   const admin = createAdminClient();
   const {data:project,error} = await admin.from("projects").select("id, additional_openings_state,additional_openings_original_ids,building_type, project_name, project_number, created_by, assigned_outdoor_sales_id, follow_up_owner_id, structure_readiness, sales_status, updated_at, measurement_delayed, measurement_delay_note, measurement_delayed_at, measurement_delayed_by, client_cancellation_note, client_cancelled_at, client_cancelled_by").eq("id",projectId).maybeSingle();
   if (error) return {response:NextResponse.json({error:"Unable to load project."},{status:500})};
-  if (!project || (!["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales"].includes(auth.role) && project.created_by !== auth.user.id && !(auth.role === "Outdoor Sales" && project.assigned_outdoor_sales_id === auth.user.id) && !(auth.role === "Indoor Sales" && project.follow_up_owner_id === auth.user.id))) return {response:NextResponse.json({error:"Project not found."},{status:404})};
+  if (!project || (!["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager"].includes(auth.role) && project.created_by !== auth.user.id && !(auth.role === "Outdoor Sales" && project.assigned_outdoor_sales_id === auth.user.id) && !((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager') && project.follow_up_owner_id === auth.user.id))) return {response:NextResponse.json({error:"Project not found."},{status:404})};
   if (project.structure_readiness !== "ready") return {response:NextResponse.json({error:"The site must be ready before measurements can be recorded."},{status:409})};
   return {admin,project,auth};
 }

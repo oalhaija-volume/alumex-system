@@ -12,14 +12,15 @@ export type DiscountPolicy = {
 export const defaultDiscountPolicies: DiscountPolicy[] = [
   { role: "Indoor Sales", max_discount_percent: 2 },
   { role: "Sales Rep", max_discount_percent: 2 },
-  { role: "Sales Manager", max_discount_percent: 4 },
+  { role: "Sales Manager", max_discount_percent: 2 },
   { role: "Branch Manager", max_discount_percent: 6 },
   { role: "Admin", max_discount_percent: 100 },
 ];
 
 export function defaultDiscountLimitForRole(role: AppRole | null) {
+  const policyRole = role === "Sales Manager" ? "Indoor Sales" : role;
   return (
-    defaultDiscountPolicies.find((policy) => policy.role === role)
+    defaultDiscountPolicies.find((policy) => policy.role === policyRole)
       ?.max_discount_percent ?? 100
   );
 }
@@ -28,8 +29,9 @@ export function discountLimitFromPolicies(
   role: AppRole | null,
   policies: DiscountPolicy[],
 ) {
+  const policyRole = role === "Sales Manager" ? "Indoor Sales" : role;
   return (
-    policies.find((policy) => policy.role === role)?.max_discount_percent ??
+    policies.find((policy) => policy.role === policyRole)?.max_discount_percent ??
     defaultDiscountLimitForRole(role)
   );
 }

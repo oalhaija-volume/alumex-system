@@ -10,8 +10,8 @@ const permissions=load('../src/lib/auth/permissions.ts');
 const stages=load('../src/lib/workflow/stages.ts');
 const json={NextResponse:{json:(body,options)=>({body,status:options?.status??200})}};
 const id='11111111-1111-4111-8111-111111111111';
-for(const role of ['Outdoor Sales','Indoor Sales','Admin','Sales Director','CEO','Company Owner','HR',null])test(`${role}: quotation access follows job role, not measurement ownership`,async()=>{
- const allowed=['Indoor Sales','Admin','Sales Director','CEO','Company Owner'].includes(role);
+for(const role of ['Outdoor Sales','Indoor Sales','Sales Manager','Admin','Sales Director','CEO','Company Owner','HR',null])test(`${role}: quotation access follows job role, not measurement ownership`,async()=>{
+ const allowed=['Indoor Sales','Sales Manager','Admin','Sales Director','CEO','Company Owner'].includes(role);
  assert.equal(permissions.canPrepareQuotation(role),allowed);
  for(const route of [`/quotation/${id}`,`/contract/${id}`])assert.equal(permissions.canAccessRouteWithOverrides(route,role,[{route_path:route,can_access:true}]),allowed);
 });
@@ -30,7 +30,7 @@ for(const owner of ['creator','assigned'])test(`Outdoor Sales ${owner} cannot ca
  }
  assert.equal(reads,0);
 });
-for(const role of ['Indoor Sales','Admin','Sales Director','CEO','Company Owner'])test(`${role} can prepare a quotation for an Outdoor Sales project`,async()=>{
+for(const role of ['Indoor Sales','Sales Manager','Admin','Sales Director','CEO','Company Owner'])test(`${role} can prepare a quotation for an Outdoor Sales project`,async()=>{
  const project={id,created_by:'outdoor',assigned_outdoor_sales_id:'outdoor',sales_status:'ready_for_quotation'};
  const access=load('../src/lib/workflow/access.ts',{
   'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,user:{id:'indoor'}})},

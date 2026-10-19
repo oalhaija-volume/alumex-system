@@ -36,6 +36,6 @@ export function salesDashboardKind(
 ): SalesDashboardKind | null {
   if (!role || !salesDashboardRoles.has(role)) return null;
   if (role === "Outdoor Sales") return "outdoor";
-  if (["Admin", "Sales Director", "CEO", "Sales Manager"].includes(role)) return "manager";
+  if (["Admin", "Sales Director", "CEO"].includes(role)) return "manager";
   return "indoor";
 }

@@ -1,5 +1,5 @@
 export function canReactivateProject(project: { sales_status: string; client_cancelled_at?: string | null }, role?: string | null) {
-  return (role === 'Indoor Sales' || role === 'Admin') && project.sales_status === 'cancelled' && !!project.client_cancelled_at;
+  return ((role === 'Indoor Sales' || role === 'Sales Manager') || role === 'Admin') && project.sales_status === 'cancelled' && !!project.client_cancelled_at;
 }
 
 export function normalizeReactivation(input: Record<string, unknown>) {

@@ -82,11 +82,11 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    const buildingType=normalizeBuildingType(project.buildingType,s.actor.role==='Outdoor Sales');
    const readinessNote=normalizeReadinessNote(s.actor.role,project.structureReadiness,project.readinessNote);
    const assigned=typeof project.assignedOutdoorSalesId==='string'?project.assignedOutdoorSalesId:'';
-   if(s.actor.role==='Indoor Sales'&&!s.actor.branch)throw new Error('Ask Admin to assign your Karkh or Rasafa branch before creating a project.');
-   const selfAssigned=s.actor.role==='Indoor Sales'&&assigned===s.actor.id;
-   if(s.actor.role==='Indoor Sales'&&!assigned)throw new Error('Choose yourself or an Outdoor Sales employee to collect the initial measurements.');
+   if((s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')&&!s.actor.branch)throw new Error('Ask Admin to assign your Karkh or Rasafa branch before creating a project.');
+   const selfAssigned=(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')&&assigned===s.actor.id;
+   if((s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')&&!assigned)throw new Error('Choose yourself or an Outdoor Sales employee to collect the initial measurements.');
    if(assigned&&!selfAssigned&&!s.outdoorSales?.some(e=>e.id===assigned))throw new Error('Choose an Outdoor Sales employee from the list. Connect online to refresh employees.');
-   p={building_type:buildingType,branch:s.actor.role==='Indoor Sales'?s.actor.branch:null,assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:s.actor.role==='Indoor Sales'?s.actor.id:null,followUpOwner:s.actor.role==='Indoor Sales'?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
+   p={building_type:buildingType,branch:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.branch:null,assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.id:null,followUpOwner:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
   }else{
    if(!p)throw new Error('Open this project online once before working on it offline.');
    if(p.additional_openings_state && ['opening','edit-opening','finish','reopen'].includes(action)){
@@ -144,12 +144,12 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if(action==='reopen')p={...p,sales_status:'new_lead'};
    if(action==='ready'||action==='assign-measurements'){
     if(p.sales_status!=='new_lead'||(action==='assign-measurements'&&p.structure_readiness!=='ready'))throw new Error('Measurement assignment is only available before measurements are completed.');
-    const id=payload.assignedOutdoorSalesId??p.assigned_outdoor_sales_id;const employee=s.outdoorSales?.find(e=>e.id===id)??(p.original_creator_role==='Indoor Sales'&&id===p.created_by?s.indoorSales?.find(e=>e.id===id):undefined);
+    const id=payload.assignedOutdoorSalesId??p.assigned_outdoor_sales_id;const employee=s.outdoorSales?.find(e=>e.id===id)??((p.original_creator_role === 'Indoor Sales' || p.original_creator_role === 'Sales Manager')&&id===p.created_by?s.indoorSales?.find(e=>e.id===id):undefined);
     if(!employee)throw new Error('Choose an eligible employee for measurements.');
     change.payload={...payload,assignedOutdoorSalesId:employee.id};
     p={...p,measurement_delayed:false,assigned_outdoor_sales_id:employee.id,assignedOutdoorSales:employee.name,assignedToYou:employee.id===s.actor.id,measurement_assignment_id:change.id};
    }
-   if(action==='ready'){if(p.structure_readiness!=='not_ready'||p.sales_status!=='new_lead')throw new Error('This project has already moved beyond site readiness.');p={...p,structure_readiness:'ready',sales_status:'new_lead',next_follow_up_at:null,follow_up_owner_id:p.follow_up_owner_id??(s.actor.role==='Indoor Sales'?s.actor.id:null),followUpOwner:p.followUpOwner??(s.actor.role==='Indoor Sales'?s.actor.name:null)};}
+   if(action==='ready'){if(p.structure_readiness!=='not_ready'||p.sales_status!=='new_lead')throw new Error('This project has already moved beyond site readiness.');p={...p,structure_readiness:'ready',sales_status:'new_lead',next_follow_up_at:null,follow_up_owner_id:p.follow_up_owner_id??((s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.id:null),followUpOwner:p.followUpOwner??((s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.name:null)};}
    if(action==='follow-up'&&!needsSalesFollowUp(p))throw new Error('Sales follow-up is complete for this project.');
    if(action==='follow-up'){
     const owner=s.indoorSales?.find(e=>e.id===payload.followUpOwnerId);

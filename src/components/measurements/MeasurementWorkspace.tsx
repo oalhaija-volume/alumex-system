@@ -129,8 +129,7 @@ export function MeasurementWorkspace({ initialProjectId = "" }: { initialProject
   );
   const canRequest =
     payload?.role === "Admin" ||
-    payload?.role === "Sales Manager" ||
-    payload?.role === "Indoor Sales";
+    (payload?.role === 'Indoor Sales' || payload?.role === 'Sales Manager');
   const canReview = canRequest;
   const fieldQueue = payload?.queue.filter((item) =>
     fieldStatuses.has(item.status),

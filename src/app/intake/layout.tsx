@@ -3,7 +3,7 @@ import { requireRole } from "@/lib/auth/adminServer";
 import { redirect } from "next/navigation";
 
 export default async function IntakeLayout({ children }: { children: React.ReactNode }) {
-  const auth = await requireRole(["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Outdoor Sales"]);
+  const auth = await requireRole(["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager", "Outdoor Sales"]);
   if (!auth.ok) redirect("/unauthorized");
   return <RegistrationShell role={auth.role} mobileOutdoor={auth.mobileOutdoor}>{children}</RegistrationShell>;
 }

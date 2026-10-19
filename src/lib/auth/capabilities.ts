@@ -16,7 +16,7 @@ export type AppCapability =
   | "workflow:configure";
 
 const capabilityRoles: Record<AppCapability, readonly AppRole[]> = {
-  "clients:create": ["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Outdoor Sales"],
+  "clients:create": ["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager", "Outdoor Sales"],
   "clients:update": [
     "Admin",
     "Sales Director",
@@ -45,7 +45,7 @@ const capabilityRoles: Record<AppCapability, readonly AppRole[]> = {
     "Indoor Sales",
     "Branch Manager",
   ],
-  "projects:reassign": ["Admin", "Sales Director", "CEO", "Company Owner", "Sales Manager"],
+  "projects:reassign": ["Admin", "Sales Director", "CEO", "Company Owner"],
   "measurements:request": ["Admin", "Sales Director", "CEO", "Company Owner", "Sales Manager", "Indoor Sales"],
   "measurements:record": [
     "Admin",
@@ -74,8 +74,8 @@ const capabilityRoles: Record<AppCapability, readonly AppRole[]> = {
     "Sales Rep",
     "Branch Manager",
   ],
-  "follow-ups:perform": ["Admin", "CEO", "Company Owner", "Indoor Sales", "Sales Director"],
-  "audit:view": ["Admin", "Sales Director", "CEO", "Company Owner", "Sales Manager"],
+  "follow-ups:perform": ["Admin", "CEO", "Company Owner", "Indoor Sales", "Sales Manager", "Sales Director"],
+  "audit:view": ["Admin", "Sales Director", "CEO", "Company Owner"],
   "workflow:configure": ["Admin"],
 };
 

@@ -8,7 +8,7 @@ import { field } from './ui';
 export function FollowUpFields({project,actor,indoorSales,values}:{project:FieldProject;actor?:FieldActor;indoorSales:{id:string;name:string}[];values?:Record<string,unknown>}){
  const {term}=useI18n();
  const [type,setType]=useState(String(values?.followUpType??project.follow_up_type??''));
- const owner=String(values?.followUpOwnerId??project.follow_up_owner_id??(actor?.role==='Indoor Sales'?actor.id:''));
+ const owner=String(values?.followUpOwnerId??project.follow_up_owner_id??((actor?.role === 'Indoor Sales' || actor?.role === 'Sales Manager')?actor.id:''));
  const date=String(values?.nextFollowUp??project.next_follow_up_at??'');
  const localDate=date&&Number.isFinite(Date.parse(date))?new Date(Date.parse(date)-new Date(date).getTimezoneOffset()*60000).toISOString().slice(0,16):'';
  return <div className="grid gap-4 sm:grid-cols-2">

@@ -346,8 +346,8 @@ test("completed field measurements can move directly to quotation", () => {
 });
 
 test("mini CRM follow-ups belong to Indoor Sales and company leadership", () => {
-  for (const role of ["Sales Manager", "Branch Manager", "Outdoor Sales"]) assert.equal(roleHasCapability(role, "follow-ups:perform"), false);
-  for (const role of ["Indoor Sales", "Sales Director", "CEO", "Company Owner", "Admin"]) assert.equal(roleHasCapability(role, "follow-ups:perform"), true);
+  for (const role of ["Branch Manager", "Outdoor Sales"]) assert.equal(roleHasCapability(role, "follow-ups:perform"), false);
+  for (const role of ["Indoor Sales", "Sales Manager", "Sales Director", "CEO", "Company Owner", "Admin"]) assert.equal(roleHasCapability(role, "follow-ups:perform"), true);
 });
 
 test("quotation versions preserve approval as the contract boundary", () => {
@@ -497,7 +497,7 @@ test("opening add-on catalog excludes migrated items from project services", () 
 
 test("sales roles receive the correct owner-first dashboard", () => {
   assert.equal(salesDashboardKind("Admin"), "manager");
-  assert.equal(salesDashboardKind("Sales Manager"), "manager");
+  assert.equal(salesDashboardKind("Sales Manager"), "indoor");
   assert.equal(salesDashboardKind("Indoor Sales"), "indoor");
   assert.equal(salesDashboardKind("Sales Rep"), "indoor");
   assert.equal(salesDashboardKind("Branch Manager"), "indoor");
@@ -553,7 +553,7 @@ test("missing Supabase RPC functions are recognized as unapplied migrations", ()
 
 
 test("client registration supports Indoor and Outdoor Sales with an Admin override", () => {
-  for (const role of ["Sales Manager", "Sales Rep", "Branch Manager", null]) {
+  for (const role of ["Sales Rep", "Branch Manager", null]) {
     assert.equal(roleHasCapability(role, "clients:create"), false, String(role));
   }
   assert.equal(roleHasCapability("Outdoor Sales", "clients:create"), true);

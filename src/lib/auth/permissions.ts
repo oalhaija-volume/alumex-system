@@ -1,18 +1,18 @@
 import type { AppRole } from "@/lib/auth/roles";
 import type { EmployeePageAccess } from "@/lib/auth/pageAccess";
 export type { AppRole };
-const registrationRoles: readonly AppRole[] = ["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Outdoor Sales"];
+const registrationRoles: readonly AppRole[] = ["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager", "Outdoor Sales"];
 export const leadershipRoles = ['Admin', 'CEO', 'Sales Director', 'Company Owner'] as const;
 export function isLeadershipRole(role: string | null | undefined) {
  return leadershipRoles.some(value => value === role);
 }
-export const quotationRoles = [...leadershipRoles, 'Indoor Sales'] as const;
+export const quotationRoles = [...leadershipRoles, 'Indoor Sales', 'Sales Manager'] as const;
 export function canPrepareQuotation(role: string | null | undefined) {
  return quotationRoles.some(value => value === role);
 }
-export const crmRoles = [...leadershipRoles, 'Indoor Sales'] as const;
+export const crmRoles = [...leadershipRoles, 'Indoor Sales', 'Sales Manager'] as const;
 export function canAccessCRM(role: string | null | undefined) {
- return role === 'Indoor Sales' || isLeadershipRole(role);
+ return (role === 'Indoor Sales' || role === 'Sales Manager') || isLeadershipRole(role);
 }
 export function isCRMRoute(pathname: string) {
  return pathname === '/mini-crm' || /^\/projects\/[0-9a-f-]{36}\/follow-ups$/i.test(pathname);

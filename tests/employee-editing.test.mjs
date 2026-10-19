@@ -27,8 +27,11 @@ function route({ role = 'Admin', authenticated = true, databaseError = null, res
     '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
     '@/lib/supabase/admin':{createAdminClient:()=>({
       rpc:async(name,args)=>{calls.push({name,args});return {data:{id,username:args.p_username,role:args.p_role},error:databaseError};},
-      from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:employee})}),
-      auth:{admin:{updateUserById:async(user,attributes)=>{calls.push({user,attributes});return {error:resetError};}}},
+      from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:employee}),
+        upsert:async(profile)=>{calls.push({profile});return {error:null};}}),
+      auth:{admin:{
+        createUser:async(attributes)=>{calls.push({createUser:attributes});return {data:{user:{id}},error:null};},
+        updateUserById:async(user,attributes)=>{calls.push({user,attributes});return {error:resetError};}}},
     })},
   }) };
 }
@@ -40,8 +43,33 @@ for (const role of ['Admin','HR']) test(`${role} submits a versioned profile upd
   assert.deepEqual(calls,[{name:'update_employee_profile',args:{p_actor:'actor',p_employee:id,p_expected_updated_at:input.updatedAt,p_full_name:input.fullName,p_username:'updated.user',p_role:'CEO',p_is_active:true}}]);
   assert.equal(JSON.stringify(result).includes('must-not-be-used'),false);
 });
-for (const role of ['CEO','Sales Director','Indoor Sales','Outdoor Sales']) test(`${role} cannot edit employees`, async () => {
+for (const role of ['CEO','Sales Director','Sales Manager','Indoor Sales','Outdoor Sales']) test(`${role} cannot edit employees`, async () => {
   const {api,calls}=route({role});assert.equal((await api.PATCH(request(input))).status,403);assert.equal(calls.length,0);
+});
+for (const role of ['Admin','HR']) {
+  test(`${role} can create a Sales Manager account with the correct stored role`, async () => {
+    const {api,calls}=route({role,employee:null});
+    const result=await api.POST(request({fullName:'Sales Manager Employee',username:'sales.manager',password:'test-password-only',role:'Sales Manager',...(role==='Admin'?{branch:'Karkh'}:{})}));
+    assert.equal(result.status,201);
+    assert.equal(result.body.user.role,'Sales Manager');
+    assert.equal(calls[0].createUser.user_metadata.role,'Sales Manager');
+    assert.equal(calls[1].profile.role,'Sales Manager');
+    assert.equal(calls[1].profile.is_active,true);
+    assert.equal('password' in result.body.user,false);
+  });
+  test(`${role} can assign Sales Manager through a versioned employee edit`, async () => {
+    const {api,calls}=route({role});
+    const result=await api.PATCH(request({...input,role:'Sales Manager'}));
+    assert.equal(result.status,200);
+    assert.equal(calls[0].args.p_role,'Sales Manager');
+    assert.equal(calls[0].args.p_actor,'actor');
+    assert.equal(calls[0].args.p_expected_updated_at,input.updatedAt);
+  });
+}
+test('Sales Manager cannot create employee accounts',async()=>{
+  const {api,calls}=route({role:'Sales Manager',employee:null});
+  const result=await api.POST(request({fullName:'Employee',username:'employee',password:'test-password-only',role:'Sales Manager'}));
+  assert.equal(result.status,403);assert.equal(calls.length,0);
 });
 test('unauthenticated employee editing is rejected', async()=>{
   const {api,calls}=route({authenticated:false});assert.equal((await api.PATCH(request(input))).status,401);assert.equal(calls.length,0);
@@ -86,6 +114,11 @@ test('HR can edit regular employees but does not see Admin editing controls',()=
 });
 test('Admin can open editing for Admin and non-Admin employees',()=>{
   const markup=render('Admin');assert.match(markup,/aria-label="Edit Employee One"/);assert.match(markup,/aria-label="Edit Admin Employee"/);
+});
+for (const role of ['Admin','HR']) test(`${role} can select Sales Manager in both employee forms`,()=>{
+  assert.match(render(role),/<option value="Sales Manager">Sales Manager<\/option>/);
+  const markup=render(role,true);
+  assert.equal([...markup.matchAll(/<option value="Sales Manager">Sales Manager<\/option>/g)].length,2);
 });
 test('editor is prefilled, includes leadership roles and status, and separates password reset',()=>{
   const markup=render('Admin',true);

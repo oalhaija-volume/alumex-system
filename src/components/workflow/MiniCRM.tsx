@@ -133,7 +133,7 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
   const canRequest = ['ready_for_quotation','quotation_in_progress','quotation_approved','contract_generated'].includes(project.sales_status) && project.structure_readiness==='ready';
   const assignmentLabel = canRequest?'Add more openings':'Assign measurements';
   const canAssign = project.sales_status === 'new_lead' && ['site', 'measurements', 'measurement-delayed'].includes(stage.id);
-  const indoorCreator = project.original_creator_role === 'Indoor Sales' ? data?.indoorSales?.find(employee => employee.id === project.created_by) : undefined;
+  const indoorCreator = (project.original_creator_role === 'Indoor Sales' || project.original_creator_role === 'Sales Manager') ? data?.indoorSales?.find(employee => employee.id === project.created_by) : undefined;
   const measurementEmployees = [...(!canRequest && indoorCreator ? [indoorCreator] : []), ...(data?.outdoorSales ?? [])];
   const stageTone = cancelled ? 'bg-red-50 text-red-900' : stage.id === 'measurement-delayed' ? 'bg-amber-50 text-amber-900' : ['contract-signature', 'contract-preparation'].includes(stage.id) ? 'bg-indigo-50 text-indigo-800' : stage.id === 'site' ? 'bg-slate-100 text-slate-700' : 'bg-blue-50 text-blue-800';
   return <article id={`project-${project.id}`} aria-labelledby={`project-name-${project.id}`} className="scroll-mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm target:ring-2 target:ring-blue-500">

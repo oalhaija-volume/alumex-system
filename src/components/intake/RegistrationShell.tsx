@@ -103,7 +103,7 @@ export function RegistrationShell({ children, role, mobileOutdoor = false, userN
             </div>
           </div>
         )}
-        {role && ["Admin","Sales Director","CEO", "Company Owner","Indoor Sales","Outdoor Sales"].includes(role) && <><OfflineStatus quiet={role==='Outdoor Sales'}/><SalesReminders/>{role==='Outdoor Sales'&&<OutdoorWorkspaceNav state={fieldState} path={pathname} onNavigate={path=>window.location.assign(!isOfflineDevice()||isFieldOnline()?path:'/offline?path='+encodeURIComponent(path))}/>} </>}{children}
+        {role && ["Admin","Sales Director","CEO", "Company Owner","Indoor Sales", "Sales Manager","Outdoor Sales"].includes(role) && <><OfflineStatus quiet={role==='Outdoor Sales'}/><SalesReminders/>{role==='Outdoor Sales'&&<OutdoorWorkspaceNav state={fieldState} path={pathname} onNavigate={path=>window.location.assign(!isOfflineDevice()||isFieldOnline()?path:'/offline?path='+encodeURIComponent(path))}/>} </>}{children}
       </main>
     </div></MobileOutdoorProvider>
   );

@@ -36,8 +36,8 @@ export function OutdoorIntake() {
   const addressOnly = employeeState?.actor.role === 'Outdoor Sales' && (offline || offlineAddressStarted);
   const needsReadinessNote = employeeState?.actor.role === 'Outdoor Sales' && readiness === 'not_ready';
   const canAssignMeasurements = canAccessCRM(employeeState?.actor.role);
-  const outdoorAssignee = canAssignMeasurements ? assignedOutdoorSalesId || (employeeState?.actor.role === 'Indoor Sales' && employeeState.outdoorSales?.length === 1 ? employeeState.outdoorSales[0].id : '') : '';
-  const selfAssigned = employeeState?.actor.role === 'Indoor Sales' && outdoorAssignee === employeeState.actor.id;
+  const outdoorAssignee = canAssignMeasurements ? assignedOutdoorSalesId || ((employeeState?.actor.role === 'Indoor Sales' || employeeState?.actor.role === 'Sales Manager') && employeeState.outdoorSales?.length === 1 ? employeeState.outdoorSales[0].id : '') : '';
+  const selfAssigned = (employeeState?.actor.role === 'Indoor Sales' || employeeState?.actor.role === 'Sales Manager') && outdoorAssignee === employeeState.actor.id;
   const assignedEmployee = selfAssigned ? employeeState.actor : employeeState?.outdoorSales?.find(employee => employee.id === outdoorAssignee);
   const collectsMeasurements = employeeState?.actor.role === 'Outdoor Sales' || selfAssigned;
   useEffect(()=>{let live=true;const refresh=async()=>{const state=await readFieldState().catch(()=>null);if(live)setEmployeeState(state);};if(isDeviceWorkspace())void refresh();else void prepareOffline().then(refresh).catch(()=>{void refresh();});window.addEventListener('field-change',refresh);return()=>{live=false;window.removeEventListener('field-change',refresh);};},[]);
@@ -56,8 +56,8 @@ export function OutdoorIntake() {
       return;
     }
     if(addressOnly && !siteAddress.trim()){setError('Enter the project site address.');return;}
-    if(employeeState.actor.role==='Indoor Sales'&&!employeeState.actor.branch){setError('Ask Admin to assign your Karkh or Rasafa branch before creating a project.');return;}
-    if(employeeState.actor.role==='Indoor Sales'&&!outdoorAssignee){setError('Choose yourself or an Outdoor Sales employee to collect the initial measurements.');return;}
+    if((employeeState.actor.role === 'Indoor Sales' || employeeState.actor.role === 'Sales Manager')&&!employeeState.actor.branch){setError('Ask Admin to assign your Karkh or Rasafa branch before creating a project.');return;}
+    if((employeeState.actor.role === 'Indoor Sales' || employeeState.actor.role === 'Sales Manager')&&!outdoorAssignee){setError('Choose yourself or an Outdoor Sales employee to collect the initial measurements.');return;}
     setSaving(true);
     setError("");
     try {
@@ -164,7 +164,7 @@ export function OutdoorIntake() {
             {(["ready", "not_ready"] as const).map(value => (
               <label key={value} className={`flex cursor-pointer items-start gap-3 rounded-md border p-4 transition-colors ${readiness === value ? "border-blue-600 bg-blue-50/60" : "border-slate-200 bg-white hover:border-slate-400"}`}>
                 <input required type="radio" name="readiness" value={value} checked={readiness === value} onChange={() => setReadiness(value)} className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600" />
-                <span><span className="block text-sm font-semibold text-slate-900">{t(`registration.${value}`)}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{value === 'ready' && employeeState?.actor.role === 'Indoor Sales' ? term(selfAssigned ? 'You will enter the initial measurements.' : 'The assigned employee will collect the initial measurements.') : t(`registration.${value}Help`)}</span></span>
+                <span><span className="block text-sm font-semibold text-slate-900">{t(`registration.${value}`)}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{value === 'ready' && (employeeState?.actor.role === 'Indoor Sales' || employeeState?.actor.role === 'Sales Manager') ? term(selfAssigned ? 'You will enter the initial measurements.' : 'The assigned employee will collect the initial measurements.') : t(`registration.${value}Help`)}</span></span>
               </label>
             ))}
           </div>
@@ -174,10 +174,10 @@ export function OutdoorIntake() {
           <p id="readiness-note-help" className="mt-2 text-xs leading-5 text-slate-500">{term('Explain what needs to be completed before measurements can start.')}</p>
           <textarea id="readiness-note" required aria-describedby="readiness-note-help" maxLength={2000} rows={3} dir="auto" value={readinessNote} onChange={event => setReadinessNote(event.target.value)} className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
         </div>}
-        {canAssignMeasurements && <div><label className="block text-sm font-medium text-slate-800" htmlFor="outdoor-assignee">{term("Measurements by")} {employeeState?.actor.role==='Indoor Sales'?term("(required)"):term("(optional)")}</label>
-          <select id="outdoor-assignee" value={outdoorAssignee} onChange={event=>setAssignedOutdoorSalesId(event.target.value)} required={employeeState?.actor.role==='Indoor Sales'} className="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base"><option value="">{employeeState?.actor.role==='Indoor Sales'?term("Choose who will record the initial measurements."):term("Not assigned")}</option>{employeeState?.actor.role==='Indoor Sales'&&<option value={employeeState.actor.id}>{term('Myself — {name}',{name:employeeState.actor.name==='Employee'?term('Employee'):employeeState.actor.name})}</option>}{employeeState?.outdoorSales?.map(employee=><option key={employee.id} value={employee.id}>{employee.name==='Employee'?term('Employee'):employee.name}</option>)}</select>
-          <p className="mt-2 text-xs leading-5 text-slate-500">{employeeState?.actor.role==='Indoor Sales'?term("Choose yourself to enter measurements, or assign an Outdoor Sales employee."):term("Choose an Outdoor Sales employee if someone else will collect the measurements.")}</p>
-          {employeeState&&!employeeState.outdoorSales?.length&&<p className="mt-2 text-xs text-amber-800">{term(employeeState.actor.role==='Indoor Sales'?'No active Outdoor Sales employees available. You can enter the measurements yourself.':'No active Outdoor Sales employees available. Add one in Employees and reconnect to refresh this list.')}</p>}
+        {canAssignMeasurements && <div><label className="block text-sm font-medium text-slate-800" htmlFor="outdoor-assignee">{term("Measurements by")} {(employeeState?.actor.role === 'Indoor Sales' || employeeState?.actor.role === 'Sales Manager')?term("(required)"):term("(optional)")}</label>
+          <select id="outdoor-assignee" value={outdoorAssignee} onChange={event=>setAssignedOutdoorSalesId(event.target.value)} required={(employeeState?.actor.role === 'Indoor Sales' || employeeState?.actor.role === 'Sales Manager')} className="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base"><option value="">{(employeeState?.actor.role === 'Indoor Sales' || employeeState?.actor.role === 'Sales Manager')?term("Choose who will record the initial measurements."):term("Not assigned")}</option>{(employeeState?.actor.role === 'Indoor Sales' || employeeState?.actor.role === 'Sales Manager')&&<option value={employeeState.actor.id}>{term('Myself — {name}',{name:employeeState.actor.name==='Employee'?term('Employee'):employeeState.actor.name})}</option>}{employeeState?.outdoorSales?.map(employee=><option key={employee.id} value={employee.id}>{employee.name==='Employee'?term('Employee'):employee.name}</option>)}</select>
+          <p className="mt-2 text-xs leading-5 text-slate-500">{(employeeState?.actor.role === 'Indoor Sales' || employeeState?.actor.role === 'Sales Manager')?term("Choose yourself to enter measurements, or assign an Outdoor Sales employee."):term("Choose an Outdoor Sales employee if someone else will collect the measurements.")}</p>
+          {employeeState&&!employeeState.outdoorSales?.length&&<p className="mt-2 text-xs text-amber-800">{term((employeeState.actor.role === 'Indoor Sales' || employeeState.actor.role === 'Sales Manager')?'No active Outdoor Sales employees available. You can enter the measurements yourself.':'No active Outdoor Sales employees available. Add one in Employees and reconnect to refresh this list.')}</p>}
         </div>}
         <p className="flex items-start gap-2 text-xs leading-5 text-slate-500"><span aria-hidden="true">ⓘ</span>{t("registration.audit")}</p>
         {error ? <p role="alert" className="rounded-md bg-red-50 p-3 text-sm font-medium text-red-700">{errorMessage(error)}</p> : null}

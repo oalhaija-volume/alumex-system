@@ -38,7 +38,7 @@ export function canRoleTransitionProjectSalesStatus(
     return false;
   }
 
-  if (["Admin", "Sales Director", "CEO", "Company Owner", "Sales Manager"].includes(role)) {
+  if (["Admin", "Sales Director", "CEO", "Company Owner"].includes(role)) {
     return true;
   }
 
@@ -46,5 +46,5 @@ export function canRoleTransitionProjectSalesStatus(
     return outdoorSalesTransitions.has(`${fromStatus}:${toStatus}`);
   }
 
-  return role === "Indoor Sales" || role === "Sales Rep";
+  return (role === 'Indoor Sales' || role === 'Sales Manager') || role === "Sales Rep";
 }

@@ -7,8 +7,8 @@ import { supportsOfflineWorkspace } from '../src/lib/offline/device.ts';
 
 const cancelled = { sales_status: 'cancelled', client_cancelled_at: '2026-10-19T09:00:00Z' };
 test('only Indoor Sales and Admin can reactivate client cancellations', () => {
-  for (const role of ['Indoor Sales','Admin','Outdoor Sales','HR','CEO','Sales Director','Company Owner',null]) {
-    assert.equal(canReactivateProject(cancelled,role), role === 'Indoor Sales' || role === 'Admin');
+  for (const role of ['Indoor Sales','Sales Manager','Admin','Outdoor Sales','HR','CEO','Sales Director','Company Owner',null]) {
+    assert.equal(canReactivateProject(cancelled,role), role === 'Indoor Sales' || role === 'Sales Manager' || role === 'Admin');
     assert.equal(canReactivateProject({...cancelled,sales_status:'new_lead'},role),false);
     assert.equal(canReactivateProject({...cancelled,client_cancelled_at:null},role),false);
   }
@@ -36,10 +36,10 @@ function route(role) {
   const api={};new Function('require','exports',js)(name=>{assert.ok(name in deps,name);return deps[name];},api);
   return {api,calls};
 }
-for (const role of ['Indoor Sales','Admin','Outdoor Sales','CEO','HR']) test(`reactivation endpoint checks ${role} and ignores a forged actor`,async()=>{
+for (const role of ['Indoor Sales','Sales Manager','Admin','Outdoor Sales','CEO','HR']) test(`reactivation endpoint checks ${role} and ignores a forged actor`,async()=>{
   const {api,calls}=route(role);
   const result=await api.PATCH({json:async()=>({...input,projectId:'project',action:'reactivate-project',actor:'forged'})});
-  const allowed=['Indoor Sales','Admin'].includes(role);
+  const allowed=['Indoor Sales','Sales Manager','Admin'].includes(role);
   assert.equal(result.status,allowed?200:403);
   assert.equal(calls.length,allowed?1:0);
   if(allowed){assert.equal(calls[0].args.p_actor,'verified-user');assert.equal(calls[0].args.p_expected_updated_at,input.expectedUpdatedAt);}

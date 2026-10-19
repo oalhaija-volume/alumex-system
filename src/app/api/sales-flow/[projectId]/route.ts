@@ -61,7 +61,7 @@ export async function POST(request:Request,context:Context){
    const kind=body.template;
    if(kind!=='residential'&&kind!=='commercial')throw new Error('Choose the residential or commercial contract template.');
    let branch=project.branch;
-   if(auth.role==='Indoor Sales'){
+   if((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager')){
     const creator=await admin.from('profiles').select('branch').eq('id',auth.user.id).single();
     if(creator.error)throw new Error('Unable to load your employee branch.');
     if(creator.data.branch!=='Karkh'&&creator.data.branch!=='Rasafa')throw new Error('Ask Admin to assign your Karkh or Rasafa branch before generating a contract.');

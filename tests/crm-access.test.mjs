@@ -19,10 +19,10 @@ const permissions = load('../src/lib/auth/permissions.ts');
 const stages = load('../src/lib/workflow/stages.ts');
 const json = { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } };
 const id = '11111111-1111-4111-8111-111111111111';
-const roles = ['Indoor Sales', 'Sales Director', 'Outdoor Sales', 'Admin', 'CEO', 'Company Owner', 'HR'];
+const roles = ['Indoor Sales','Sales Manager', 'Sales Director', 'Outdoor Sales', 'Admin', 'CEO', 'Company Owner', 'HR'];
 
 for (const role of roles) test(`${role} has consistent CRM page, history and mutation access`, async () => {
- const allowed = ['Indoor Sales', 'Sales Director', 'Admin', 'CEO', 'Company Owner'].includes(role);
+ const allowed = ['Indoor Sales','Sales Manager', 'Sales Director', 'Admin', 'CEO', 'Company Owner'].includes(role);
  for (const path of ['/mini-crm', `/projects/${id}/follow-ups`]) {
   assert.equal(permissions.canAccessRoute(path, role), allowed);
   assert.equal(permissions.canAccessRouteWithOverrides(path, role, [{ route_path: path, can_access: true }]), allowed);
@@ -39,11 +39,11 @@ for (const role of roles) test(`${role} has consistent CRM page, history and mut
  if (!allowed) { assert.equal(result.response.status, 403); assert.equal(reads, 0); }
 });
 
-test('Indoor Sales can open and follow up projects across the company', async () => {
+for (const role of ['Indoor Sales', 'Sales Manager']) test(`${role} can open and follow up projects across the company`, async () => {
  let project = { id, created_by: 'ehab', follow_up_owner_id: null, sales_status: 'new_lead' };
  const access = load('../src/lib/workflow/access.ts', {
   'next/server': json,
-  '@/lib/auth/adminServer': { requireRole: async () => ({ ok: true, role: 'Indoor Sales', user: { id: 'fatma' } }) },
+  '@/lib/auth/adminServer': { requireRole: async () => ({ ok: true, role, user: { id: 'fatma' } }) },
   '@/lib/supabase/config': { hasSupabaseServiceRoleKey: () => true },
   '@/lib/supabase/admin': { createAdminClient: () => ({ from: () => ({ select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: project }) }) }) },
  });

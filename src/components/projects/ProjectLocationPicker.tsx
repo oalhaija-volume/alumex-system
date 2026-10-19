@@ -171,8 +171,11 @@ export function ProjectLocationPicker({
       }
     }
 
-    return nextTiles;
-  }, [centerWorldX, centerWorldY, tileCount]);
+    // Load the streets around the pin before tiles at the edges of the map.
+    return readOnly ? nextTiles.sort((a, b) =>
+      Math.hypot(a.left + tileSize / 2, a.top + tileSize / 2) - Math.hypot(b.left + tileSize / 2, b.top + tileSize / 2),
+    ) : nextTiles;
+  }, [centerWorldX, centerWorldY, tileCount, readOnly]);
 
   function setPin(nextLatitude: number, nextLongitude: number) {
     const nextLocation = {
@@ -451,13 +454,15 @@ export function ProjectLocationPicker({
         className={`relative mt-3 w-full overflow-hidden rounded-md border border-border bg-surface text-left ${compact ? "h-40 sm:h-44" : "h-64 sm:h-80"}`}
         aria-label={term(mapAriaLabel)}
       >
-        {tiles.map((tile) => (
+        {tiles.map((tile, index) => (
           // OpenStreetMap tiles are externally served map fragments; next/image optimization is not useful here.
           // eslint-disable-next-line @next/next/no-img-element
           <img
             key={`${zoom}-${tile.x}-${tile.y}`}
             src={`https://tile.openstreetmap.org/${zoom}/${tile.x}/${tile.y}.png`}
             alt=""
+            loading={readOnly ? 'lazy' : undefined}
+            fetchPriority={readOnly && index === 0 ? 'high' : undefined}
             className="pointer-events-none absolute h-64 w-64 select-none"
             style={{
               left: `calc(50% + ${tile.left}px)`,

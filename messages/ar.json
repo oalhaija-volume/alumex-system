@@ -2591,7 +2591,12 @@
     "Recorded facade dimensions": "أبعاد الواجهات المسجلة",
     "Choose a facade service below to price the recorded areas.": "اختر خدمة واجهات أدناه لتسعير المساحات المسجلة.",
     "Use recorded facade dimensions": "استخدام أبعاد الواجهات المسجلة",
-    "Facade dimensions changed. Reload the quotation.": "تغيرت أبعاد الواجهات. أعد تحميل عرض السعر."
+    "Facade dimensions changed. Reload the quotation.": "تغيرت أبعاد الواجهات. أعد تحميل عرض السعر.",
+    "Saved work for deleted projects": "العمل المحفوظ للمشاريع المحذوفة",
+    "These projects were deleted by an Admin. Their saved work is kept on this device and will no longer retry syncing.": "حذف مسؤول النظام هذه المشاريع. العمل المحفوظ لها باقٍ على هذا الجهاز، ولن تتكرر محاولة مزامنته.",
+    "This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.": "حذف مسؤول النظام هذا المشروع. لا يمكن مزامنة العمل المحفوظ، وسيبقى محفوظاً على هذا الجهاز.",
+    "Project is not available to this employee": "هذا المشروع لم يعد متاحاً لهذا الموظف. ربما تم حذفه أو تغيير الموظف المكلّف به. عملك المحفوظ باقٍ على هذا الجهاز.",
+    "cancel-project": "إلغاء المشروع بطلب العميل"
   },
   "registration": {
     "title": "عميل ومشروع جديد",

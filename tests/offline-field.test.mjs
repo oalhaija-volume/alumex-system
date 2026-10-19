@@ -477,3 +477,41 @@ test('registration never writes into a different employee snapshot',async()=>{
  assert.equal(response.status,400);assert.match((await response.json()).error,/employee who opened/);
  assert.equal(x.state.projects.length,0);assert.equal(x.state.queue.length,0);
 });
+
+test('confirmed server deletion archives all saved project work and stops retries without affecting other projects',async()=>{
+ const other='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+ const opening={id:'capture',projectId,skylight:{photo:'saved-photo'}};
+ const report={id:'report',project_id:projectId,note:'Saved report',photo:'saved-photo'};
+ const x=setup({projects:[{id:projectId,project_name:'Deleted project',sales_status:'cancelled'},{id:other,project_name:'Active project'}],openings:[opening],measurementReports:[report],queue:[
+  {id:'cancel',projectId,action:'cancel-project',payload:{note:'Client cancelled',confirmed:true},userId:actor.id},
+  {id:'later',projectId,action:'opening',payload:{note:'Saved opening'},userId:actor.id},
+  {id:'unrelated',projectId:other,action:'follow-up',payload:{note:'Unrelated saved note'},userId:actor.id},
+ ]});
+ navigator.onLine=true;const posts=[];
+ globalThis.fetch=async(url,init)=>{
+  if(!init?.method)return Response.json({actor});
+  const change=JSON.parse(init.body);posts.push(change.id);
+  return change.projectId===projectId?Response.json({code:'project_deleted',error:'Deleted by Admin'},{status:410}):Response.json({error:'Other conflict'},{status:409});
+ };
+ await x.client.syncFieldChanges();
+ assert.deepEqual(posts,['cancel','unrelated']);
+ assert.deepEqual(x.state.queue.map(c=>c.id),['unrelated']);
+ assert.deepEqual(x.state.projects.map(p=>p.id),[other]);
+ const archive=x.state.archivedProjects[0];
+ assert.equal(archive.project.project_name,'Deleted project');
+ assert.deepEqual(archive.changes.map(c=>c.payload.note),['Client cancelled','Saved opening']);
+ assert.deepEqual(archive.openings,[opening]);assert.deepEqual(archive.measurementReports,[report]);
+ await x.client.syncFieldChanges();assert.deepEqual(posts,['cancel','unrelated','unrelated']);
+ // Normal snapshot refresh must retain the archived device-only work.
+ globalThis.fetch=async()=>Response.json({actor,projects:[],openings:[],queue:[]});
+ await x.client.prepareOffline();assert.deepEqual(x.state.archivedProjects,[archive]);
+});
+
+test('unconfirmed missing-project errors never archive or discard saved work',async()=>{
+ for(const response of [{status:410,error:'Not found'},{status:409,code:'project_deleted',error:'Conflict'},{status:409,error:'Project is not available to this employee'}]){
+  const x=setup();await x.client.saveFieldChange('register',projectId,payload);
+  navigator.onLine=true;
+  globalThis.fetch=async(url,init)=>!init?.method?Response.json({actor}):Response.json(response,{status:response.status});
+  await x.client.syncFieldChanges();assert.equal(x.state.queue.length,1);assert.equal(x.state.projects.length,1);assert.equal(x.state.archivedProjects,undefined);
+ }
+});

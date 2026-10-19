@@ -222,3 +222,24 @@ for(const scenario of ['valid','invalid','conflict'])test(`offline opening edit 
  if(scenario==='invalid')assert.equal(writes.length,0);
  else{assert.equal(writes.length,1);assert.equal(writes[0].p_action,'edit-opening');assert.equal(writes[0].p_actor,id);assert.equal(writes[0].p_payload.opening.width,180);assert.equal(writes[0].p_payload.previous.width,120);}
 });
+
+for(const role of ['Outdoor Sales','Indoor Sales','Sales Manager'])for(const deleted of [true,false])test(`offline deletion recovery checks prior access: ${role}, deleted=${deleted}`,async()=>{
+ const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',filters=[];
+ const route=loadModule('../src/app/api/offline/route.ts',{
+  'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,user:{id}})},
+  '@/lib/supabase/admin':{createAdminClient:()=>({
+   rpc:async()=>({data:null,error:{message:'Project is not available to this employee'}}),
+   from(table){assert.equal(table,'audit_events');return {select(value){assert.equal(value,'id');return this;},eq(key,value){filters.push([key,value]);return this;},or(value){filters.push(['or',value]);return this;},limit(){return this;},maybeSingle:async()=>({data:deleted?{id:'audit'}:null,error:null})};},
+  })},
+  '@/lib/auth/permissions':loadModule('../src/lib/auth/permissions.ts',{}),
+  '@/lib/workflow/followUps':{},'@/lib/workflow/access':{salesRoles:[role]},
+  '@/lib/measurements/registrationOpening':{},'@/lib/location/coordinates':{},
+ });
+ const response=await route.POST({json:async()=>({id,userId:id,projectId:id,recordedAt:new Date().toISOString(),action:'cancel-project',payload:{note:'Client cancelled',confirmed:true}})});
+ assert.equal(response.status,deleted?410:409);assert.equal(response.body.code,deleted?'project_deleted':undefined);
+ assert.ok(filters.some(([key,value])=>key==='entity_id'&&value===id));
+ assert.ok(filters.some(([key,value])=>key==='action'&&value==='project_deleted'));
+ assert.equal(filters.some(([key])=>key==='or'),role==='Outdoor Sales');
+ if(role==='Outdoor Sales')assert.equal(filters.find(([key])=>key==='or')[1],`previous_value->>created_by.eq.${id},previous_value->>assigned_outdoor_sales_id.eq.${id}`);
+});

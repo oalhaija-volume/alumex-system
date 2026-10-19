@@ -83,6 +83,15 @@ export async function POST(request:Request){
  }else if(body.action==='delay-measurements'){
   try{payload={note:normalizeMeasurementDelayNote(body.payload.note)};}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  }else if(!['finish','reopen','ready','resume-measurements'].includes(body.action))return NextResponse.json({error:'Unknown offline action.'},{status:400});
- const result=await createAdminClient().rpc('sync_field_change',{p_operation:body.id,p_actor:auth.user.id,p_project:body.projectId,p_action:body.action,p_payload:payload,p_recorded_at:body.recordedAt,p_expected_updated_at:typeof body.expectedUpdatedAt==='string'?body.expectedUpdatedAt:null});
+ const admin=createAdminClient();
+ const result=await admin.rpc('sync_field_change',{p_operation:body.id,p_actor:auth.user.id,p_project:body.projectId,p_action:body.action,p_payload:payload,p_recorded_at:body.recordedAt,p_expected_updated_at:typeof body.expectedUpdatedAt==='string'?body.expectedUpdatedAt:null});
+ if(result.error&&['Project is not available to this employee','This project was deleted. Its saved offline work cannot be synced.'].includes(result.error.message)){
+  // A missing project may have been deleted while the employee was offline.
+  // Confirm deletion and the employee's former access before disclosing it.
+  let deletion=admin.from('audit_events').select('id').eq('action','project_deleted').eq('entity_type','project').eq('entity_id',body.projectId);
+  if(!canAccessCRM(auth.role))deletion=deletion.or(`previous_value->>created_by.eq.${auth.user.id},previous_value->>assigned_outdoor_sales_id.eq.${auth.user.id}`);
+  const archived=await deletion.limit(1).maybeSingle();
+  if(!archived.error&&archived.data)return NextResponse.json({code:'project_deleted',error:'This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.'},{status:410,headers:{'Cache-Control':'no-store'}});
+ }
  return result.error?NextResponse.json({error:result.error.message},{status:409}):NextResponse.json({project:result.data},{headers:{'Cache-Control':'no-store'}});
 }

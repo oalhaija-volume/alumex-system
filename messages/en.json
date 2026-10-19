@@ -2591,7 +2591,12 @@
     "Recorded facade dimensions": "Recorded facade dimensions",
     "Choose a facade service below to price the recorded areas.": "Choose a facade service below to price the recorded areas.",
     "Use recorded facade dimensions": "Use recorded facade dimensions",
-    "Facade dimensions changed. Reload the quotation.": "Facade dimensions changed. Reload the quotation."
+    "Facade dimensions changed. Reload the quotation.": "Facade dimensions changed. Reload the quotation.",
+    "Saved work for deleted projects": "Saved work for deleted projects",
+    "These projects were deleted by an Admin. Their saved work is kept on this device and will no longer retry syncing.": "These projects were deleted by an Admin. Their saved work is kept on this device and will no longer retry syncing.",
+    "This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.": "This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.",
+    "Project is not available to this employee": "Project is not available to this employee",
+    "cancel-project": "Client cancellation"
   },
   "registration": {
     "title": "New client & project",

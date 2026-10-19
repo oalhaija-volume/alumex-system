@@ -31,7 +31,7 @@ export async function prepareOffline():Promise<FieldState>{
   const remote=await response.json() as FieldState;
   const state=await updateFieldState(remote.actor.id,old=>{
    const pending=new Set(old?.queue.map(c=>c.projectId)??[]);
-   return {...remote,measurementReports:[...(remote.measurementReports??[]).filter(r=>!pending.has(r.project_id)).map(r=>retainMeasurementReport(r,old?.measurementReports??[])),...(old?.measurementReports??[]).filter(r=>pending.has(r.project_id))],followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remote.projects.some(p=>p.id===id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id))??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)).map(o=>retainSkylightCapture(o,old?.openings??[])),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
+   return {...remote,archivedProjects:old?.archivedProjects??[],measurementReports:[...(remote.measurementReports??[]).filter(r=>!pending.has(r.project_id)).map(r=>retainMeasurementReport(r,old?.measurementReports??[])),...(old?.measurementReports??[]).filter(r=>pending.has(r.project_id))],followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remote.projects.some(p=>p.id===id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id))??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)).map(o=>retainSkylightCapture(o,old?.openings??[])),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
   },'snapshot');
   setFieldUser(remote.actor.id);return state;
  })();
@@ -66,6 +66,24 @@ export async function syncFieldChanges(){
    try{response=await fetch('/api/offline',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(20000),body:JSON.stringify({...change,expectedUpdatedAt:project?.serverUpdatedAt??project?.updated_at})});}catch{connection(false);return;}
    const result=await response.json().catch(()=>null);
    if(!response.ok){
+    if(response.status===410&&result?.code==='project_deleted'){
+     // Preserve the complete local record, including notes and captured media.
+     // Only server-confirmed deletions leave the retry queue; other conflicts stay.
+     await updateFieldState(id,s=>{
+      if(!s)throw new Error('Offline account unavailable.');
+      const previous=s.archivedProjects?.find(p=>p.projectId===change.projectId);
+      const changes=s.queue.filter(c=>c.projectId===change.projectId);
+      const archived={projectId:change.projectId,project:s.projects.find(p=>p.id===change.projectId)??previous?.project,
+       changes:[...(previous?.changes??[]),...changes.filter(c=>!previous?.changes.some(old=>old.id===c.id))],
+       openings:[...new Map([...(previous?.openings??[]),...s.openings.filter(o=>o.projectId===change.projectId)].map(o=>[o.id,o])).values()],
+       measurementReports:[...new Map([...(previous?.measurementReports??[]),...(s.measurementReports??[]).filter(r=>r.project_id===change.projectId)].map(r=>[r.id,r])).values()],
+       followUpHistory:s.followUpHistories?.[change.projectId]??previous?.followUpHistory,archivedAt:new Date().toISOString()};
+      return {...s,archivedProjects:[...(s.archivedProjects??[]).filter(p=>p.projectId!==change.projectId),archived],
+       queue:s.queue.filter(c=>c.projectId!==change.projectId),projects:s.projects.filter(p=>p.id!==change.projectId),
+       openings:s.openings.filter(o=>o.projectId!==change.projectId),measurementReports:(s.measurementReports??[]).filter(r=>r.project_id!==change.projectId)};
+     });
+     failed.add(change.projectId);continue;
+    }
     if([401,403].includes(response.status)){setFieldUser(null);return;}
     await updateFieldState(id,s=>({...s!,queue:s!.queue.map(c=>c.id===change.id?{...c,error:result?.error??'Unable to sync. Your work is still saved on this device.'}:c)}));
     failed.add(change.projectId);continue;

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import { ProjectRecord } from './ProjectRecord';
-import { FollowUpHistoryTable } from './ProjectFollowUps';
+import { FollowUpHistoryTable, FollowUpPrintButton } from './ProjectFollowUps';
 import { useFollowUpHistory } from './useFollowUpHistory';
 import { card, Notice, Workspace } from './ui';
 
@@ -10,7 +10,7 @@ export function FollowUpWorkspace({ projectId }: { projectId: string }) {
   const { term, formatDateTime } = useI18n();
   const { data, error, loading, cached } = useFollowUpHistory(projectId);
   return <Workspace title={term('Project follow-ups')} description={term('The history of follow-up notes and site readiness updates for this project.')}>
-    <div className="mb-6 flex flex-wrap gap-5 text-sm font-semibold text-blue-600"><Link href="/mini-crm">{term('← Follow-ups')}</Link><Link href="/projects">{term('All projects')}</Link></div>
+    <div className="mb-6 flex flex-wrap items-center gap-5 text-sm font-semibold text-blue-600"><Link href="/mini-crm">{term('← Follow-ups')}</Link><Link href="/projects">{term('All projects')}</Link><span className="ms-auto"><FollowUpPrintButton history={data} cached={cached} disabled={loading || !!error}/></span></div>
     <ProjectRecord projectId={projectId}/><Notice error={error}/>
     {loading ? <p>{term('Loading follow-ups…')}</p> : data && <>
       <section className={`${card} mb-6`}><p className="text-xs font-semibold text-blue-600">{term(data.project.project_number)}</p><h2 className="mt-2 text-xl font-semibold">{data.project.project_name}</h2><p className="mt-3 text-sm text-slate-600">{data.project.next_follow_up_at ? term('Next follow-up: {date}', { date: formatDateTime(data.project.next_follow_up_at) }) : term('No follow-up scheduled yet.')}</p></section>

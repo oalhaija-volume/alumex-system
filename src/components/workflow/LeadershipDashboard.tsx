@@ -42,11 +42,79 @@ function actionFor(project: FieldProject, leadership: boolean) {
   return { href: `/projects/${project.id}/follow-ups`, label: 'Review the project record' };
 }
 
+function ProjectRow({ project, data, leadership, overdue, busy, onDelete }: {
+  project: FieldProject;
+  data: SalesWorkspaceData;
+  leadership: boolean;
+  overdue: boolean;
+  busy: string;
+  onDelete?: (project: FieldProject) => Promise<void>;
+}) {
+  const { term, formatDateTime } = useI18n();
+  const [expanded, setExpanded] = useState<'details' | 'history' | null>(null);
+  const currentStage = projectStage(project);
+  const details = stageDetails(project);
+  const tone = dashboardTones[dashboardStageTone[currentStage]];
+  const action = actionFor(project, leadership);
+  const outdoor = project.assignedOutdoorSales ?? (!project.assigned_outdoor_sales_id && (project.original_creator_role === 'Outdoor Sales' || data.outdoorSales?.some(employee => employee.id === project.created_by)) ? project.registeredBy : null);
+  const panelId = `project-panel-${project.id}`;
+  const compactControl = 'inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 text-xs! font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 sm:min-h-9';
+
+  return <article aria-labelledby={`project-name-${project.id}`} className={`min-w-0 rounded-lg border border-t-2 border-slate-200 bg-white ${tone.edge}`}>
+    <div className="px-3 py-2.5 sm:px-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-1 basis-full flex-wrap items-center gap-x-3 gap-y-1 lg:basis-0">
+          <h3 id={`project-name-${project.id}`} className="min-w-0 break-words text-sm font-semibold leading-6 text-slate-950 [overflow-wrap:anywhere]">
+            <Link href={action.href} className="rounded-sm hover:text-blue-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">{project.project_name}</Link>
+          </h3>
+          <span className="text-xs font-medium text-slate-500"><bdi>{term(project.project_number)}</bdi>{project.branch && <span> · {term(project.branch === 'Karkh' ? 'From Karkh' : 'From Rasafa')}</span>}</span>
+          {project.pending && <span className="text-xs text-slate-500">{term('Saved on device')}</span>}
+        </div>
+        <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold ${tone.surface}`}><span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone.dot}`}/>{term(details.label)}</span>
+        <Link href={action.href} title={`${term('Next step')}: ${term(details.action)}`} className={`${compactControl} ms-auto bg-blue-600 px-3 font-semibold text-white hover:bg-blue-700 lg:ms-0`}>{term(action.label)}</Link>
+        {data.actor.role === 'Admin' && onDelete && <button type="button" aria-label={term(busy === project.id ? 'Please wait…' : 'Delete project')} title={term(busy === project.id ? 'Please wait…' : 'Delete project')} disabled={!!busy || project.pending} onClick={() => void onDelete(project)} className={`${compactControl} min-w-11 shrink-0 text-red-700 hover:bg-red-50 disabled:opacity-50 sm:min-w-9`}>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>
+        </button>}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-1.5 lg:border-0 lg:pt-0">
+        <dl className="flex min-w-0 flex-1 basis-full flex-wrap gap-x-5 gap-y-2 text-xs leading-5 lg:basis-0">
+          <div className="min-w-0 break-words"><dt className="inline text-slate-500">{term('Responsible Indoor Sales')}: </dt><dd className="inline font-medium text-slate-800"><bdi>{project.followUpOwner ?? term('Not assigned')}</bdi></dd></div>
+          <div className="min-w-0 break-words"><dt className="inline text-slate-500">{term('Measurements by')}: </dt><dd className="inline font-medium text-slate-800"><bdi>{outdoor ?? term('Not assigned')}</bdi></dd></div>
+          {needsSalesFollowUp(project) && <div className={`min-w-0 break-words ${overdue ? 'rounded bg-rose-50 px-1.5 text-rose-800' : 'text-slate-500'}`}><dt className="inline">{term(overdue ? 'Overdue follow-up' : 'Next follow-up')}: </dt><dd className={`inline font-medium ${overdue ? '' : 'text-slate-700'}`}>{project.next_follow_up_at ? <time dateTime={project.next_follow_up_at}>{formatDateTime(project.next_follow_up_at)}</time> : term('Follow-up date not set')}</dd></div>}
+        </dl>
+        <div className="flex flex-wrap items-center gap-1">
+          {currentStage !== 'site' && currentStage !== 'closed' && needsSalesFollowUp(project) && <Link href={`/mini-crm#project-${project.id}`} className={`${compactControl} text-blue-700 hover:bg-blue-50`}>{term('Follow up')}</Link>}
+          {(['details', 'history'] as const).map(panel => <button key={panel} type="button" aria-expanded={expanded === panel} aria-controls={panelId} onClick={() => setExpanded(expanded === panel ? null : panel)} className={`${compactControl} ${expanded === panel ? 'bg-slate-100 text-slate-950' : 'text-slate-600 hover:bg-slate-50'}`}>
+            {term(panel === 'details' ? 'Project details' : 'Follow-up history')}
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className={expanded === panel ? 'rotate-180' : ''}><path d="m4 6 4 4 4-4"/></svg>
+          </button>)}
+        </div>
+      </div>
+      {data.actor.role === 'Admin' && project.pending && <p className="mt-1 text-xs text-slate-500">{term('Sync saved changes before deleting.')}</p>}
+    </div>
+    <div id={panelId} hidden={!expanded}>
+      {expanded === 'details' && <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
+        <dl className="grid gap-x-6 gap-y-3 text-xs leading-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div><dt className="text-slate-500">{term('Next step')}</dt><dd className="font-medium text-slate-800">{term(details.action)}</dd></div>
+          <div><dt className="text-slate-500">{term('Phone')}</dt><dd>{project.phone ? <a href={`tel:${project.phone}`} className="inline-flex min-h-9 items-center text-blue-700" dir="ltr">{project.phone}</a> : '—'}</dd></div>
+          <div><dt className="text-slate-500">{term('Created by')}</dt><dd><bdi>{project.registeredBy === 'Employee' ? term('Employee') : project.registeredBy}</bdi><time dateTime={project.created_at} className="block text-slate-500">{formatDateTime(project.created_at)}</time></dd></div>
+          <div><dt className="text-slate-500">{term('Last updated')}</dt><dd>{formatDateTime(project.updated_at)}</dd></div>
+          <div className="sm:col-span-2"><dt className="text-slate-500">{term('Address')}</dt><dd className="break-words">{project.address ?? '—'}</dd></div>
+          {project.readiness_note && <div className="sm:col-span-2"><dt className="text-slate-500">{term('Reason not ready for measurement')}</dt><dd dir="auto" className="whitespace-pre-wrap break-words">{project.readiness_note}</dd></div>}
+          {project.project_notes && <div className="sm:col-span-2"><dt className="text-slate-500">{term('Latest follow-up note')}</dt><dd className="whitespace-pre-wrap break-words">{project.project_notes}</dd></div>}
+        </dl>
+        <MeasurementDelayNotice project={project}/>
+      </div>}
+      {expanded === 'history' && <ProjectFollowUps projectId={project.id}/>}
+    </div>
+  </article>;
+}
+
 export function LeadershipDashboard({ data, error, now, notice = '', busy = '', onDelete }: {
   data: SalesWorkspaceData; error: string; now: number; notice?: string; busy?: string;
   onDelete?: (project: FieldProject) => Promise<void>;
 }) {
-  const { term, formatNumber, formatDateTime } = useI18n();
+  const { term, formatNumber } = useI18n();
   const leadership = isLeadershipRole(data.actor.role);
   const [stage, setStage] = useState<ProjectStage | 'all'>('all');
   const [scope, setScope] = useState<Scope>('all');
@@ -103,23 +171,8 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
 
     <section aria-label={term('Projects')} className="mt-8">
       <div className="my-5 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold text-slate-950">{term(stage === 'all' ? 'All projects' : projectStages.find(item => item.id === stage)?.label)} <span className="font-normal text-slate-500">· {formatNumber(selected.length)}</span></h2>{(stage !== 'all' || scope !== 'all' || search) && <button type="button" onClick={reset} className="min-h-11 text-sm font-semibold text-blue-700">{term('Clear filters')}</button>}</div>
-      {!selected.length ? <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center"><p className="text-sm text-slate-600">{term('No projects match this view.')}</p><button type="button" onClick={reset} className="mt-3 min-h-11 text-sm font-semibold text-blue-700">{term('Show all projects')}</button></div> : <div className="grid items-start gap-5 lg:grid-cols-2">
-        {selected.map(project => {
-          const currentStage = projectStage(project), details = stageDetails(project), tone = dashboardTones[dashboardStageTone[currentStage]], action = actionFor(project, leadership);
-          const outdoor = project.assignedOutdoorSales ?? (!project.assigned_outdoor_sales_id && (project.original_creator_role === 'Outdoor Sales' || data.outdoorSales?.some(employee => employee.id === project.created_by)) ? project.registeredBy : null);
-          return <article key={project.id} className={`min-w-0 overflow-hidden rounded-xl border border-t-4 border-slate-200 bg-white ${tone.edge}`}>
-            <div className="p-5">
-              <div className="flex flex-wrap items-center justify-between gap-2"><span className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-semibold ${tone.surface}`}><span aria-hidden="true" className={`h-2 w-2 rounded-full ${tone.dot}`}/>{term(details.label)}</span>{project.pending && <span className="text-xs text-slate-500">{term('Saved on device')}</span>}</div>
-              <h3 className="mt-4 break-words text-xl font-semibold text-slate-950">{project.project_name}</h3><p className="mt-1 text-xs font-medium text-slate-500">{term(project.project_number)}{project.branch && <span> · {term(project.branch === 'Karkh' ? 'From Karkh' : 'From Rasafa')}</span>}</p>
-              <div className="mt-4"><p className="text-xs font-medium text-slate-500">{term('Next step')}</p><p className="mt-1 text-sm font-semibold">{term(details.action)}</p></div>
-              <MeasurementDelayNotice project={project}/><dl className="mt-4 grid grid-cols-2 gap-4 text-sm"><div><dt className="text-xs text-slate-500">{term('Responsible Indoor Sales')}</dt><dd className="mt-1 break-words font-medium text-slate-800">{project.followUpOwner ?? term('Not assigned')}</dd></div><div><dt className="text-xs text-slate-500">{term('Measurements by')}</dt><dd className="mt-1 break-words font-medium text-slate-800">{outdoor ?? term('Not assigned')}</dd></div></dl>
-              {needsSalesFollowUp(project) && <div className={`mt-4 rounded-lg border px-3 py-3 text-sm ${overdue(project) ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-slate-200 bg-slate-50 text-slate-600'}`}><p className="text-xs font-semibold">{term(overdue(project) ? 'Overdue follow-up' : 'Next follow-up')}</p><p className="mt-1">{project.next_follow_up_at ? formatDateTime(project.next_follow_up_at) : term('Follow-up date not set')}</p></div>}
-              <details className="mt-3 border-t border-slate-100 pt-1"><summary className="min-h-11 cursor-pointer py-3 text-sm font-medium text-slate-600">{term('Project details')}</summary><dl className="grid gap-3 pb-3 text-sm sm:grid-cols-2"><div><dt className="text-xs text-slate-500">{term('Phone')}</dt><dd className="mt-1">{project.phone ? <a href={`tel:${project.phone}`} className="inline-flex min-h-11 items-center text-blue-700" dir="ltr">{project.phone}</a> : '—'}</dd></div><div><dt className="text-xs text-slate-500">{term('Created by')}</dt><dd className="mt-1"><bdi>{project.registeredBy === 'Employee' ? term('Employee') : project.registeredBy}</bdi><time dateTime={project.created_at} dir="ltr" className="mt-1 block text-xs text-slate-500 w-fit max-w-full">{formatDateTime(project.created_at)}</time></dd></div><div className="sm:col-span-2"><dt className="text-xs text-slate-500">{term('Address')}</dt><dd className="mt-1 break-words">{project.address ?? '—'}</dd></div><div><dt className="text-xs text-slate-500">{term('Last updated')}</dt><dd className="mt-1">{formatDateTime(project.updated_at)}</dd></div>{project.readiness_note&&<div className="sm:col-span-2"><dt className="text-xs text-slate-500">{term('Reason not ready for measurement')}</dt><dd dir="auto" className="mt-1 whitespace-pre-wrap break-words">{project.readiness_note}</dd></div>}{project.project_notes && <div className="sm:col-span-2"><dt className="text-xs text-slate-500">{term('Latest follow-up note')}</dt><dd className="mt-1 whitespace-pre-wrap break-words">{project.project_notes}</dd></div>}</dl></details>
-            </div>
-            <footer className="flex flex-wrap items-center gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4"><Link href={action.href} className={`${button} inline-flex items-center justify-center`}>{term(action.label)}</Link>{currentStage !== 'site' && currentStage !== 'closed' && <Link href={needsSalesFollowUp(project) ? `/mini-crm#project-${project.id}` : `/projects/${project.id}/follow-ups`} className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700">{term(needsSalesFollowUp(project) ? 'Follow up' : 'Follow-up history')}</Link>}{data.actor.role === 'Admin' && onDelete && <button type="button" disabled={!!busy || project.pending} onClick={() => void onDelete(project)} className="ms-auto inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:opacity-50"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>{term(busy === project.id ? 'Please wait…' : 'Delete project')}</button>}{data.actor.role === 'Admin' && project.pending && <p className="w-full text-xs text-slate-500">{term('Sync saved changes before deleting.')}</p>}</footer>
-            <details className="border-t border-slate-200"><summary className="min-h-11 cursor-pointer px-5 py-3 text-sm font-medium text-slate-600">{term('Follow-up history')}</summary><ProjectFollowUps projectId={project.id}/></details>
-          </article>;
-        })}
+      {!selected.length ? <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center"><p className="text-sm text-slate-600">{term('No projects match this view.')}</p><button type="button" onClick={reset} className="mt-3 min-h-11 text-sm font-semibold text-blue-700">{term('Show all projects')}</button></div> : <div className="grid grid-cols-1 gap-3">
+        {selected.map(project => <ProjectRow key={project.id} project={project} data={data} leadership={leadership} overdue={overdue(project)} busy={busy} onDelete={onDelete}/>)}
       </div>}
     </section>
     <details className="mt-8 rounded-xl border border-slate-200 bg-white p-5"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-800">{term('Measurement tasks and follow-up reminders')}</summary><div className="pt-4"><SalesTaskPanel data={data} now={now}/></div></details>

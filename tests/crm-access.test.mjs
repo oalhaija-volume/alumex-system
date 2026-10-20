@@ -6,7 +6,7 @@ import ts from 'typescript';
 function load(path, dependencies = {}) {
  const source = ts.transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
  const result = {};
- new Function('require', 'exports', source)(name => {if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});
+ new Function('require', 'exports', source)(name => {if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});
     if(name==='@/lib/intake/projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(name==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts',{});
     if(name==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts',{});
   if (name === '@/lib/auth/permissions') return load('../src/lib/auth/permissions.ts');
@@ -30,20 +30,20 @@ for (const role of roles) test(`${role} has consistent CRM page, history and mut
  let reads = 0;
  const access = load('../src/lib/workflow/access.ts', {
   'next/server': json,
-  '@/lib/auth/adminServer': { requireRole: async () => ({ ok: true, role, user: { id: 'actor' } }) },
+  '@/lib/auth/adminServer': { requireRole: async () => ({ ok: true, role, profile: { branch: 'Karkh' }, user: { id: 'actor' } }) },
   '@/lib/supabase/config': { hasSupabaseServiceRoleKey: () => true },
-  '@/lib/supabase/admin': { createAdminClient: () => ({ from: () => ({ select() { reads++; return this; }, eq() { return this; }, maybeSingle: async () => ({ data: { id, created_by: 'actor', follow_up_owner_id: 'actor' } }) }) }) },
+  '@/lib/supabase/admin': { createAdminClient: () => ({ from: () => ({ select() { reads++; return this; }, eq() { return this; }, maybeSingle: async () => ({ data: { id, branch: 'Karkh', created_by: 'actor', follow_up_owner_id: 'actor' } }) }) }) },
  });
  const result = await access.salesProject(id, true);
  assert.equal(!result.response, allowed);
  if (!allowed) { assert.equal(result.response.status, 403); assert.equal(reads, 0); }
 });
 
-for (const role of ['Indoor Sales', 'Sales Manager']) test(`${role} can open and follow up projects across the company`, async () => {
- let project = { id, created_by: 'ehab', follow_up_owner_id: null, sales_status: 'new_lead' };
+for (const role of ['Indoor Sales', 'Sales Manager']) test(`${role} can follow up other employees' projects within their permitted branch scope`, async () => {
+ let project = { id, branch: 'Karkh', created_by: 'ehab', follow_up_owner_id: null, sales_status: 'new_lead' };
  const access = load('../src/lib/workflow/access.ts', {
   'next/server': json,
-  '@/lib/auth/adminServer': { requireRole: async () => ({ ok: true, role, user: { id: 'fatma' } }) },
+  '@/lib/auth/adminServer': { requireRole: async () => ({ ok: true, role, profile: { branch: 'Karkh' }, user: { id: 'fatma' } }) },
   '@/lib/supabase/config': { hasSupabaseServiceRoleKey: () => true },
   '@/lib/supabase/admin': { createAdminClient: () => ({ from: () => ({ select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: project }) }) }) },
  });

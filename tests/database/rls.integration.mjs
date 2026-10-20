@@ -61,6 +61,7 @@ test(
         email: indoorEmail,
         full_name: "Phase 8 Indoor",
         role: "Indoor Sales",
+        branch: "Karkh",
         is_active: true,
         status: "Active",
       },
@@ -93,11 +94,23 @@ test(
           created_by: indoorId,
           owner_id: indoorId,
           responsible_user_id: indoorId,
+          branch: "Karkh",
+        },
+        {
+          project_number: `P8-R-${suffix}`,
+          project_name: "Rasafa outdoor project",
+          client_id: clientId,
+          created_by: outdoorId,
+          original_creator_id: outdoorId,
+          owner_id: indoorId,
+          responsible_user_id: indoorId,
+          branch: "Rasafa",
         },
         {
           project_number: `P8-O-${suffix}`,
           project_name: "Outdoor originated",
           client_id: clientId,
+          branch: "Karkh",
           created_by: outdoorId,
           original_creator_id: outdoorId,
           sales_engineer_id: outdoorId,
@@ -137,9 +150,29 @@ test(
       .in("id", projectIds);
     assert.ifError(outdoorProjectError);
     assert.deepEqual(
-      outdoorProjects.map((project) => project.project_name),
-      ["Outdoor originated"],
+      outdoorProjects.map((project) => project.project_name).sort(),
+      ["Outdoor originated", "Rasafa outdoor project"],
     );
+
+    // A branch transfer changes visibility even when ownership stays unchanged.
+    assert.ifError(
+      (await service.from("profiles").update({ branch: "Rasafa" }).eq("id", indoorId)).error,
+    );
+    const { data: rasafaProjects, error: rasafaError } = await indoor
+      .from("projects")
+      .select("project_name")
+      .in("id", projectIds);
+    assert.ifError(rasafaError);
+    assert.deepEqual(rasafaProjects.map((project) => project.project_name), ["Rasafa outdoor project"]);
+    assert.ifError(
+      (await service.from("profiles").update({ branch: null }).eq("id", indoorId)).error,
+    );
+    const { data: unassignedProjects, error: unassignedError } = await indoor
+      .from("projects")
+      .select("id")
+      .in("id", projectIds);
+    assert.ifError(unassignedError);
+    assert.deepEqual(unassignedProjects, []);
 
     const { error: commercialError } = await outdoor.rpc(
       "save_quotation_version_with_items",

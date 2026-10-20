@@ -15,6 +15,9 @@ export async function GET() {
   if (auth.role === 'Outdoor Sales') {
     query = query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);
   }
+  if (auth.role === 'Indoor Sales') {
+    query = query.eq('branch', auth.profile?.branch ?? '');
+  }
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: 'Unable to load project stages.' }, { status: 500 });
   const creatorIds = [...new Set((data ?? []).map(project => project.created_by).filter((id): id is string => !!id))];

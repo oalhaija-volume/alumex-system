@@ -4,7 +4,7 @@ import test from 'node:test';
 import ts from 'typescript';
 function load(path,dependencies={}){
  const source=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
- const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(name in dependencies))throw Error(name);return dependencies[name];},exports);return exports;
+ const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(name in dependencies))throw Error(name);return dependencies[name];},exports);return exports;
 }
 const termsData=JSON.parse(readFileSync(new URL('../src/lib/contracts/uploadedTerms.json',import.meta.url),'utf8'));
 const uploadedTerms=load('../src/lib/contracts/uploadedTerms.ts',{'./uploadedTerms.json':{default:termsData}});
@@ -129,8 +129,8 @@ test('follow-up history uses each saved note rather than the current overwritten
  const result=await route.GET({}, {params:Promise.resolve({projectId:'project'})});assert.equal(result.status,200);assert.deepEqual(result.body.entries.map(e=>e.note),['Latest note','First call']);assert.equal(result.body.entries[1].recordedBy,'Sales employee');assert.equal(result.body.entries[0].followUpType,'other');assert.equal(result.body.entries[0].followUpDetail,'Video call');assert.equal(result.body.entries[0].followUpOwner,'Indoor employee');assert.equal(result.body.entries[1].followUpType,null);
 });
 for(const [role,id,allowed] of [['Outdoor Sales','assigned',true],['Outdoor Sales','other',false],['Indoor Sales','assigned',true],['Indoor Sales','creator',true],['Indoor Sales','followup-owner',true],['Indoor Sales','stranger',true],['Outdoor Sales','followup-owner',false]])test(`${role} ${id} project assignment access`,async()=>{
- const project={id:'project',created_by:'creator',assigned_outdoor_sales_id:'assigned',follow_up_owner_id:'followup-owner'};
- const access=load('../src/lib/workflow/access.ts',{'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,user:{id}})},'@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},'@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:project,error:null})})})}});
+ const project={id:'project',branch:'Karkh',created_by:'creator',assigned_outdoor_sales_id:'assigned',follow_up_owner_id:'followup-owner'};
+ const access=load('../src/lib/workflow/access.ts',{'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,profile:{branch:'Karkh'},user:{id}})},'@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},'@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:project,error:null})})})}});
  const result=await access.salesProject('project');assert.equal(!result.response,allowed);
 });
 const stages=load('../src/lib/workflow/stages.ts');

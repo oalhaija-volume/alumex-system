@@ -19,10 +19,11 @@ for (const role of roles.appRoles) test(`${role} lands on an authorized dashboar
   assert.equal(permissions.defaultRouteForRole(role), '/dashboard');
   assert.equal(permissions.canAccessRoute('/dashboard', role), true);
   let scoped = false;
+  let branchScoped = false;
   const route = load('../src/app/api/dashboard/route.ts', {
     'next/server': response,
     '@/lib/auth/roles': roles,
-    '@/lib/auth/adminServer': { requireRole: async allowed => { assert.ok(allowed.includes(role)); return { ok: true, role, user: { id: 'employee' } }; } },
+    '@/lib/auth/adminServer': { requireRole: async allowed => { assert.ok(allowed.includes(role)); return { ok: true, role, profile: { branch: 'Rasafa' }, user: { id: 'employee' } }; } },
     '@/lib/supabase/admin': { createAdminClient: () => ({ from: table => {
       assert.equal(table, 'projects');
       return {
@@ -32,6 +33,7 @@ for (const role of roles.appRoles) test(`${role} lands on an authorized dashboar
         },
         is(column, value) { assert.equal(column, 'archived_at'); assert.equal(value, null); return this; },
         order() { return this; },
+        eq(column, value) { assert.equal(column, 'branch'); assert.equal(value, 'Rasafa'); branchScoped = true; return this; },
         or(filter) { assert.equal(filter, 'created_by.eq.employee,assigned_outdoor_sales_id.eq.employee'); scoped = true; return this; },
         then(resolve) { resolve({ data: [], error: null }); },
       };
@@ -40,6 +42,7 @@ for (const role of roles.appRoles) test(`${role} lands on an authorized dashboar
   const result = await route.GET();
   assert.equal(result.status, 200);
   assert.equal(scoped, role === 'Outdoor Sales');
+  assert.equal(branchScoped, role === 'Indoor Sales');
 });
 
 test('an unauthenticated or inactive employee cannot read dashboard data', async () => {

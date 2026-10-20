@@ -8,7 +8,7 @@ function loadModule(path, dependencies) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', source)((name) => {
+  new Function('require', 'exports', source)((name) => {if(name==='@/lib/auth/projectBranchAccess')return loadModule('../src/lib/auth/projectBranchAccess.ts',{});
     if(name==='@/lib/measurements/completion')return loadModule('../src/lib/measurements/completion.ts',{});if(name==='@/lib/measurements/measurementDelay')return loadModule('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':loadModule('../src/lib/auth/permissions.ts',{})});
     if(name==='@/lib/intake/projectBranch')return loadModule('../src/lib/intake/projectBranch.ts',{});if(name==='@/lib/intake/buildingType')return loadModule('../src/lib/intake/buildingType.ts',{});
     if(name==='@/lib/intake/readinessNote')return loadModule('../src/lib/intake/readinessNote.ts',{});
@@ -174,7 +174,7 @@ for(const scenario of ['address','omitted','blank','too-long','partial','invalid
  const role=scenario==='indoor'?'Indoor Sales':'Outdoor Sales';
  const route=loadModule('../src/app/api/offline/route.ts',{
   'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,user:{id}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,profile:{branch:'Karkh'},user:{id}})},
   '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{writes.push(args);return {data:{id}};}})},
   '@/lib/workflow/followUps':{},'@/lib/auth/permissions':{},'@/lib/workflow/access':{},
   '@/lib/measurements/registrationOpening':{},'@/lib/location/coordinates':loadModule('../src/lib/location/coordinates.ts',{}),
@@ -227,10 +227,10 @@ for(const role of ['Outdoor Sales','Indoor Sales','Sales Manager'])for(const del
  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',filters=[];
  const route=loadModule('../src/app/api/offline/route.ts',{
   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,user:{id}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,profile:{branch:'Karkh'},user:{id}})},
   '@/lib/supabase/admin':{createAdminClient:()=>({
    rpc:async()=>({data:null,error:{message:'Project is not available to this employee'}}),
-   from(table){assert.equal(table,'audit_events');return {select(value){assert.equal(value,'id');return this;},eq(key,value){filters.push([key,value]);return this;},or(value){filters.push(['or',value]);return this;},limit(){return this;},maybeSingle:async()=>({data:deleted?{id:'audit'}:null,error:null})};},
+   from(table){if(table==='projects')return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null})};assert.equal(table,'audit_events');return {select(value){assert.equal(value,'id');return this;},eq(key,value){filters.push([key,value]);return this;},or(value){filters.push(['or',value]);return this;},limit(){return this;},maybeSingle:async()=>({data:deleted?{id:'audit'}:null,error:null})};},
   })},
   '@/lib/auth/permissions':loadModule('../src/lib/auth/permissions.ts',{}),
   '@/lib/workflow/followUps':{},'@/lib/workflow/access':{salesRoles:[role]},
@@ -241,6 +241,7 @@ for(const role of ['Outdoor Sales','Indoor Sales','Sales Manager'])for(const del
  assert.ok(filters.some(([key,value])=>key==='entity_id'&&value===id));
  assert.ok(filters.some(([key,value])=>key==='action'&&value==='project_deleted'));
  assert.equal(filters.some(([key])=>key==='or'),role==='Outdoor Sales');
+ if(role==='Indoor Sales')assert.ok(filters.some(([key,value])=>key==='previous_value->>branch'&&value==='Karkh'));
  if(role==='Outdoor Sales')assert.equal(filters.find(([key])=>key==='or')[1],`previous_value->>created_by.eq.${id},previous_value->>assigned_outdoor_sales_id.eq.${id}`);
 });
 

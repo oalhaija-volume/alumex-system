@@ -4,7 +4,7 @@ import test from 'node:test';
 import ts from 'typescript';
 function load(path,deps={}){
  const source=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
- const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');assert.ok(name in deps,name);return deps[name];},exports);return exports;
+ const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');assert.ok(name in deps,name);return deps[name];},exports);return exports;
 }
 const permissions=load('../src/lib/auth/permissions.ts');
 const stages=load('../src/lib/workflow/stages.ts');
@@ -31,9 +31,9 @@ for(const owner of ['creator','assigned'])test(`Outdoor Sales ${owner} cannot ca
  assert.equal(reads,0);
 });
 for(const role of ['Indoor Sales','Sales Manager','Admin','Sales Director','CEO','Company Owner'])test(`${role} can prepare a quotation for an Outdoor Sales project`,async()=>{
- const project={id,created_by:'outdoor',assigned_outdoor_sales_id:'outdoor',sales_status:'ready_for_quotation'};
+ const project={id,branch:'Karkh',created_by:'outdoor',assigned_outdoor_sales_id:'outdoor',sales_status:'ready_for_quotation'};
  const access=load('../src/lib/workflow/access.ts',{
-  'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,user:{id:'indoor'}})},
+  'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,profile:{branch:'Karkh'},user:{id:'indoor'}})},
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},'@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:project})})})},
  });
  assert.equal((await access.salesProject(id,'commercial')).response,undefined);

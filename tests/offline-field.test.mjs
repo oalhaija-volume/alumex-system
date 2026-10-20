@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/location/coordinates')return load('../src/lib/location/coordinates.ts');if(n==='./device')return deps[n]??{isOfflineDevice:()=>true};if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
+function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts');if(n==='./projectAccess')return load('../src/lib/offline/projectAccess.ts');if(n==='@/lib/location/coordinates')return load('../src/lib/location/coordinates.ts');if(n==='./device')return deps[n]??{isOfflineDevice:()=>true};if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
 const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Employee',role:'Indoor Sales',branch:'Karkh'};
 const projectId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const payload={client:{clientType:'individual',clientName:'Client',mobile:'07000000000'},project:{branch:'Rasafa',buildingType:'villa_house',assignedOutdoorSalesId:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',address:'Site',locationLatitude:33.3,locationLongitude:44.4,structureReadiness:'ready'}};
-function setup(overrides={}){globalThis.window={dispatchEvent:()=>{}};let active=actor.id;let state={actor,indoorSales:[{id:actor.id,name:actor.name}],outdoorSales:[{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',name:'Outdoor employee'}],projects:[],openings:[],queue:[],syncedAt:null,...overrides};Object.defineProperty(globalThis,'navigator',{value:{onLine:false},configurable:true});const store={activeFieldUser:()=>active,setFieldUser:id=>{active=id;},readFieldState:async()=>structuredClone(state),updateFieldState:async(id,fn)=>{assert.equal(id,actor.id);state=fn(structuredClone(state));return structuredClone(state);}};const client=load('../src/lib/offline/client.ts',{'./store':store,'@/lib/workflow/followUps':load('../src/lib/workflow/followUps.ts'),'@/lib/workflow/stages':load('../src/lib/workflow/stages.ts'),'@/lib/measurements/registrationOpening':load('../src/lib/measurements/registrationOpening.ts')});return {client,get state(){return state;},get active(){return active;}};}
+function setup(overrides={}){globalThis.window={dispatchEvent:()=>{}};let active=actor.id;let state={actor,indoorSales:[{id:actor.id,name:actor.name}],outdoorSales:[{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',name:'Outdoor employee'}],projects:[],openings:[],queue:[],syncedAt:null,...overrides};Object.defineProperty(globalThis,'navigator',{value:{onLine:false},configurable:true});const store={activeFieldUser:()=>active,setFieldUser:id=>{active=id;},readStoredFieldState:async()=>structuredClone(state),readFieldState:async()=>load('../src/lib/offline/projectAccess.ts').visibleFieldState(structuredClone(state)),updateFieldState:async(id,fn)=>{assert.equal(id,actor.id);state=fn(structuredClone(state));return load('../src/lib/offline/projectAccess.ts').visibleFieldState(structuredClone(state));}};const client=load('../src/lib/offline/client.ts',{'./store':store,'@/lib/workflow/followUps':load('../src/lib/workflow/followUps.ts'),'@/lib/workflow/stages':load('../src/lib/workflow/stages.ts'),'@/lib/measurements/registrationOpening':load('../src/lib/measurements/registrationOpening.ts')});return {client,get state(){return state;},get active(){return active;}};}
 test('desktop field requests go directly to the server without queueing',async()=>{
  const requests=[];
  const client=load('../src/lib/offline/client.ts',{
@@ -158,7 +158,7 @@ test('Outdoor Sales cannot save a not-ready project locally without a note; the 
  assert.equal(x.state.projects[0].readiness_note,'Plastering unfinished');
  assert.equal((await (await x.client.fieldFetch('/api/workspace')).json()).projects[0].readiness_note,'Plastering unfinished');
  // Later CRM contact notes must not replace the original site-readiness reason.
- x.state.actor.role='Indoor Sales';
+ x.state.actor.role='Indoor Sales';x.state.actor.branch='Rasafa';
  await x.client.saveFieldChange('follow-up',projectId,{nextFollowUp:'2026-11-08T07:00:00Z',note:'Called client',followUpType:'call',followUpOwnerId:actor.id});
  assert.equal(x.state.projects[0].readiness_note,'Plastering unfinished');
  assert.equal(x.state.projects[0].project_notes,'Called client');
@@ -204,7 +204,7 @@ test('cancelling an online read does not mark the device disconnected or return 
  assert.equal(x.client.isFieldOnline(),true);
 });
 
-const delayProject={id:projectId,project_number:'PRJ-DELAY',project_name:'Delayed visit',created_by:'creator',assigned_outdoor_sales_id:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-10-18T00:00:00Z'};
+const delayProject={id:projectId,branch:'Karkh',project_number:'PRJ-DELAY',project_name:'Delayed visit',created_by:'creator',assigned_outdoor_sales_id:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-10-18T00:00:00Z'};
 const delayOpening={id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',projectId,floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'};
 test('offline client delay returns to CRM and preserves measurements',async()=>{
  const outdoor={...actor,role:'Outdoor Sales'};
@@ -482,7 +482,7 @@ test('confirmed server deletion archives all saved project work and stops retrie
  const other='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
  const opening={id:'capture',projectId,skylight:{photo:'saved-photo'}};
  const report={id:'report',project_id:projectId,note:'Saved report',photo:'saved-photo'};
- const x=setup({projects:[{id:projectId,project_name:'Deleted project',sales_status:'cancelled'},{id:other,project_name:'Active project'}],openings:[opening],measurementReports:[report],queue:[
+ const x=setup({projects:[{id:projectId,branch:'Karkh',project_name:'Deleted project',sales_status:'cancelled'},{id:other,branch:'Karkh',project_name:'Active project'}],openings:[opening],measurementReports:[report],queue:[
   {id:'cancel',projectId,action:'cancel-project',payload:{note:'Client cancelled',confirmed:true},userId:actor.id},
   {id:'later',projectId,action:'opening',payload:{note:'Saved opening'},userId:actor.id},
   {id:'unrelated',projectId:other,action:'follow-up',payload:{note:'Unrelated saved note'},userId:actor.id},

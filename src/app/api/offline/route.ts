@@ -8,6 +8,7 @@ import { requireRole } from '@/lib/auth/adminServer';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeFollowUp,normalizeMeasurementAssignment } from '@/lib/workflow/followUps';
 import { canAccessCRM } from '@/lib/auth/permissions';
+import { canAccessProjectBranch } from '@/lib/auth/projectBranchAccess';
 import { salesRoles } from '@/lib/workflow/access';
 import { normalizeOpeningEdit,normalizeRegistrationOpening,registrationRoomTypes } from '@/lib/measurements/registrationOpening';
 import { parseProjectLocation } from '@/lib/location/coordinates';
@@ -25,10 +26,14 @@ export async function GET(request:Request){
  }
  let query=admin.from('projects').select('id,additional_openings_state,additional_openings_original_ids,building_type,branch,project_number,project_name,address,location_latitude,location_longitude,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,project_notes,readiness_note,measurement_delayed,measurement_delay_note,measurement_delayed_at,measurement_delayed_by,client_cancellation_note,client_cancelled_at,client_cancelled_by,created_at,created_by,updated_at,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role').order('created_at',{ascending:false});
  if(auth.role==='Outdoor Sales')query=query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);
+ if(auth.role==='Indoor Sales')query=query.eq('branch',auth.profile?.branch??'');
  const [profile,projects,directory]=await Promise.all([profileQuery,query,admin.from('profiles').select('id,full_name,username,role').in('role',['Indoor Sales', 'Sales Manager','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name')]);
  if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
  const actor=actorFromProfile(profile.data);
  if(projects.error)return NextResponse.json({error:'Unable to download projects.'},{status:500});
+ // A branch may have changed between authentication and the profile refresh.
+ // Only download projects allowed by both snapshots of the employee profile.
+ projects.data=projects.data.filter(project=>canAccessProjectBranch(actor,project.branch));
  const ids=projects.data.map(p=>p.id);const clientIds=[...new Set(projects.data.map(p=>p.client_id))];
  const peopleIds=[...new Set(projects.data.flatMap(p=>[p.created_by,p.assigned_outdoor_sales_id,p.follow_up_owner_id,p.measurement_delayed_by,p.client_cancelled_by]).filter((id):id is string=>!!id))];
  const [people,openings,clients,reports]=await Promise.all([
@@ -88,12 +93,18 @@ export async function POST(request:Request){
   try{payload={note:normalizeMeasurementDelayNote(body.payload.note)};}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  }else if(!['finish','reopen','ready','resume-measurements'].includes(body.action))return NextResponse.json({error:'Unknown offline action.'},{status:400});
  const admin=createAdminClient();
+ if(auth.role==='Indoor Sales'){
+  const project=await admin.from('projects').select('branch').eq('id',body.projectId).maybeSingle();
+  if(project.error)return NextResponse.json({error:'Unable to verify project access.'},{status:503});
+  if(project.data&&!canAccessProjectBranch({role:auth.role,branch:auth.profile?.branch},project.data.branch))return NextResponse.json({error:'Project not found.'},{status:404});
+ }
  const result=await admin.rpc('sync_field_change',{p_operation:body.id,p_actor:auth.user.id,p_project:body.projectId,p_action:body.action,p_payload:payload,p_recorded_at:body.recordedAt,p_expected_updated_at:typeof body.expectedUpdatedAt==='string'?body.expectedUpdatedAt:null});
  if(result.error&&['Project is not available to this employee','This project was deleted. Its saved offline work cannot be synced.'].includes(result.error.message)){
   // A missing project may have been deleted while the employee was offline.
   // Confirm deletion and the employee's former access before disclosing it.
   let deletion=admin.from('audit_events').select('id').eq('action','project_deleted').eq('entity_type','project').eq('entity_id',body.projectId);
   if(!canAccessCRM(auth.role))deletion=deletion.or(`previous_value->>created_by.eq.${auth.user.id},previous_value->>assigned_outdoor_sales_id.eq.${auth.user.id}`);
+  if(auth.role==='Indoor Sales')deletion=deletion.eq('previous_value->>branch',auth.profile?.branch??'');
   const archived=await deletion.limit(1).maybeSingle();
   if(!archived.error&&archived.data)return NextResponse.json({code:'project_deleted',error:'This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.'},{status:410,headers:{'Cache-Control':'no-store'}});
  }

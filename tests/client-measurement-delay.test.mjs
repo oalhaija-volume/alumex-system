@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 function load(path,deps={}) {
  const code=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
- const exports={};new Function('require','exports',code)(name=>{
+ const exports={};new Function('require','exports',code)(name=>{if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});
   if(name==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');
   if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');
   if(name==='@/lib/measurements/registrationOpening')return load('../src/lib/measurements/registrationOpening.ts');
@@ -15,10 +15,10 @@ const id='11111111-1111-4111-8111-111111111111';
 const context={params:Promise.resolve({projectId:id})};
 function route({role='Outdoor Sales',assigned='employee',delayed=false,createdBy='creator'}={}) {
  const calls=[];
- const project={id,created_by:createdBy,assigned_outdoor_sales_id:assigned,structure_readiness:'ready',sales_status:'new_lead',measurement_delayed:delayed,updated_at:'2026-10-18T08:00:00Z'};
+ const project={id,branch:'Karkh',created_by:createdBy,assigned_outdoor_sales_id:assigned,structure_readiness:'ready',sales_status:'new_lead',measurement_delayed:delayed,updated_at:'2026-10-18T08:00:00Z'};
  return {calls,api:load('../src/app/api/initial-measurements/[projectId]/route.ts',{
   'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,user:{id:'employee'}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,profile:{branch:'Karkh'},user:{id:'employee'}})},
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
   '@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:project})}),rpc:async(name,args)=>{calls.push({name,args});return {data:{...project,measurement_delayed:true}};}})},
  })};

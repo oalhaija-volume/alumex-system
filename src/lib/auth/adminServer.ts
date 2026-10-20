@@ -24,6 +24,7 @@ export type RoleCheck =
         username: string | null;
         role: AppRole | "Sales User" | null;
         is_active: boolean | null;
+        branch: string | null;
         status?: string | null;
       } | null;
     }
@@ -58,7 +59,7 @@ export async function requireRole(
     : supabase;
   const { data: profile, error: profileError } = await profileClient
     .from("profiles")
-    .select("full_name, username, role, is_active, status")
+    .select("full_name, username, role, is_active, status, branch")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -72,6 +73,7 @@ export async function requireRole(
     username: string | null;
     role: AppRole | "Sales User" | null;
     is_active: boolean | null;
+    branch: string | null;
     status?: string | null;
   } | null;
   const role =

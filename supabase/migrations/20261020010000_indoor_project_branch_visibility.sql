@@ -88,6 +88,12 @@ begin
     'can_read_project_documents', 'can_write_project_documents'
   ] loop
     definition := pg_get_functiondef(to_regprocedure(format('public.%I(uuid)', routine)));
+    -- These document helpers were not installed on every legacy database.
+    -- Existing helpers must still be patched; the current project predicates
+    -- are required, and document rows receive restrictive policies below.
+    if definition is null and routine in ('can_read_project_documents', 'can_write_project_documents') then
+      continue;
+    end if;
     patched := regexp_replace(definition, '\mselect[[:space:]]+exists[[:space:]]*\(',
       'select public.can_access_indoor_project_branch(target_project_id) and exists (', 'i');
     if definition is null or patched = definition then
@@ -182,7 +188,13 @@ $children$;
 
 -- This existing view otherwise executes its underlying reads as the view owner.
 alter view public.delivery_vehicles_with_capacity set (security_invoker = true);
-alter view public.project_stage_history_metrics set (security_invoker = true);
+do $optional_view$
+begin
+  if to_regclass('public.project_stage_history_metrics') is not null then
+    alter view public.project_stage_history_metrics set (security_invoker = true);
+  end if;
+end;
+$optional_view$;
 
 -- Notifications and audit rows can contain a complete project snapshot. Resolve
 -- the supported entity references without depending on the caller's table grants.
@@ -261,6 +273,14 @@ begin
     ('sync_field_change', 'p_project', 'p_actor')
   ) as routines(name, project_expression, actor_expression)
   loop
+    -- The old appointment-status RPC is absent on some deployed databases.
+    -- Skip only its absence, never an existing or overloaded function.
+    if routine.name = 'update_sales_appointment_status' and not exists (
+      select 1 from pg_proc p
+      where p.pronamespace = 'public'::regnamespace and p.proname = routine.name
+    ) then
+      continue;
+    end if;
     select pg_get_functiondef(p.oid) into strict definition
       from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = routine.name;
     guard := format('perform public.require_indoor_project_branch(%s, %s);',

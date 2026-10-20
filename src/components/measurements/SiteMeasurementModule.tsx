@@ -714,6 +714,7 @@ export function SiteMeasurementModule() {
           <p className="mt-3 text-xs font-semibold text-muted">
             {draftSavedAt
               ? `Draft saved on this device at ${draftSavedAt.toLocaleTimeString([], {
+                  numberingSystem: "latn",
                   hour: "2-digit",
                   minute: "2-digit",
                 })}`

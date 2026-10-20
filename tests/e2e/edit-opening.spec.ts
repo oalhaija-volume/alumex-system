@@ -16,7 +16,7 @@ for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}
   return route.fulfill({json:{project:state.projects[0]}});
  });
  await page.goto('/offline?path=/initial-measurements/'+id);
- const editButton=page.getByRole('button',{name:locale==='en'?'Edit opening 1':'تعديل الفتحة ١',exact:true});
+ const editButton=page.getByRole('button',{name:locale==='en'?'Edit opening 1':'تعديل الفتحة 1',exact:true});
  await expect(editButton).toBeVisible();
  if(!online){await page.evaluate(()=>Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false}));await page.addInitScript(()=>Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false}));}
  await editButton.click();

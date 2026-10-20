@@ -166,6 +166,7 @@ function packLegalSections(
 
 function formatIqd(value: number, locale: string) {
   const formatted = new Intl.NumberFormat(locale === "ar" ? "ar-IQ" : "en-US", {
+    numberingSystem: "latn",
     maximumFractionDigits: 0,
   }).format(value);
 

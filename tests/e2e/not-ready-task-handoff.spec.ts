@@ -73,6 +73,6 @@ for (const locale of ['en', 'ar']) for (const offline of [false, true]) test(`${
   state.actor = outdoor;
   await page.goto('/offline?path=/dashboard');
   await expect(page.getByRole('heading', { name: 'Waiting for CRM', exact: true })).toBeVisible();
-  await expect(nav.getByRole('status')).toHaveText(locale === 'en' ? '1' : '١');
+  await expect(nav.getByRole('status')).toHaveText('1');
   await page.screenshot({ path: test.info().outputPath('crm-assigned-task.png'), fullPage: true });
 });

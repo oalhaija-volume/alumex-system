@@ -131,6 +131,7 @@ function Field({
 
 function formatIqd(value: number, locale: string) {
   const formatter = new Intl.NumberFormat(locale === "ar" ? "ar-IQ" : "en-US", {
+    numberingSystem: "latn",
     maximumFractionDigits: 0,
   });
   const amount = formatter.format(Math.round(value));

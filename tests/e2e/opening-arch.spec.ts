@@ -40,10 +40,10 @@ for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}
  else expect(posts).toHaveLength(0);
  await page.reload();
  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(1);
- await expect(page.getByRole('table').locator('tbody tr td').last()).toHaveText(locale==='en'?'8':'٨');
+ await expect(page.getByRole('table').locator('tbody tr td').last()).toHaveText('8');
  expect((await savedFieldState(page)).openings[0]).toMatchObject({quantity:8,hasArch:true});
  await expect(page.getByRole('table').locator('tbody tr').first()).toContainText(locale==='en'?'Arch':'قوس');
- await page.getByRole('button',{name:locale==='en'?'Edit opening 1':'تعديل الفتحة ١',exact:true}).click();
+ await page.getByRole('button',{name:locale==='en'?'Edit opening 1':'تعديل الفتحة 1',exact:true}).click();
  await expect(page.getByRole('radio',{name:locale==='en'?'Arch':'قوس',exact:true})).toBeChecked();
  await page.getByRole('combobox',{name:locale==='en'?'Structural type':'النوع الإنشائي',exact:true}).selectOption('Skylight');
  await expect(page.getByRole('radio',{name:locale==='en'?'Arch':'قوس',exact:true})).toHaveCount(0);

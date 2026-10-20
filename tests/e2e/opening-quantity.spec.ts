@@ -38,7 +38,7 @@ for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}
  else expect(posts).toHaveLength(0);
  await page.reload();
  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(1);
- await expect(page.getByRole('table').locator('tbody tr td').last()).toHaveText(locale==='en'?'8':'٨');
+ await expect(page.getByRole('table').locator('tbody tr td').last()).toHaveText('8');
  expect((await savedFieldState(page)).openings[0].quantity).toBe(8);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:test.info().outputPath('repeated-openings.png'),fullPage:true});

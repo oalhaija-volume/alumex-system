@@ -30,7 +30,7 @@ for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}
  await expect.poll(async()=>(await savedFieldState(page)).openings[0]?.hasRollerShutter).toBe(true);
  await page.reload();
  await expect(page.getByRole('table')).toContainText(label('Roller shutter','اباجور'));
- const edit=page.getByRole('button',{name:label('Edit opening 1','تعديل الفتحة ١'),exact:true});
+ const edit=page.getByRole('button',{name:label('Edit opening 1','تعديل الفتحة 1'),exact:true});
  const saveEdit=page.getByRole('button',{name:label('Save measurement changes','حفظ تعديلات القياسات'),exact:true});
  await edit.click();await expect(shutter).toBeChecked();await shutter.uncheck();await saveEdit.click();
  await expect.poll(async()=>(await savedFieldState(page)).openings[0].hasRollerShutter).toBe(false);

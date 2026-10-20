@@ -110,6 +110,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
     function formatCurrency(value: number) {
       const formatted = new Intl.NumberFormat(locale === "ar" ? "ar-IQ" : "en-US", {
+        numberingSystem: "latn",
         maximumFractionDigits: 0,
       }).format(value);
 

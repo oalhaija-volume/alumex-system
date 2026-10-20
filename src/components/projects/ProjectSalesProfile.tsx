@@ -48,7 +48,7 @@ type SalesProfile = {
 };
 
 export function ProjectSalesProfile({ projectId }: { projectId: string }) {
-  const { formatDate, t, term } = useI18n();
+  const { formatDate, formatNumber, t, term } = useI18n();
   const [profile, setProfile] = useState<SalesProfile | null>(null);
   const [error, setError] = useState("");
 
@@ -93,7 +93,7 @@ export function ProjectSalesProfile({ projectId }: { projectId: string }) {
           [t("intake.fields.readiness"), t(`intake.readiness.${project.structure_readiness}`)],
           [t("intake.profile.salesStatus"), term(project.sales_status)],
           [t("intake.fields.priority"), t(`intake.priority.${project.priority}`)],
-          [t("intake.fields.estimatedValue"), project.estimated_value?.toLocaleString() ?? t("common.notAdded")],
+          [t("intake.fields.estimatedValue"), project.estimated_value == null ? t("common.notAdded") : formatNumber(project.estimated_value, 3)],
         ].map(([label, value]) => (
           <div key={label} className="border-b border-slate-200 pb-3">
             <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</dt>

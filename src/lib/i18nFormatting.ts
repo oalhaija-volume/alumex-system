@@ -38,7 +38,7 @@ export function localizedDateTime(locale:Locale,value:Date|string|number) {
  return formatBusinessDateTime(value);
 }
 export function localizedNumber(locale:Locale,value:number,maximumFractionDigits=4) {
- return new Intl.NumberFormat(locale==='ar'?'ar-IQ':'en-GB',{maximumFractionDigits}).format(value);
+ return new Intl.NumberFormat(locale==='ar'?'ar-IQ':'en-GB',{numberingSystem:'latn',maximumFractionDigits}).format(value);
 }
 export function localizedMoney(locale:Locale,value:number) {
  return localizedNumber(locale,value,0)+(locale==='ar'?' د.ع':' IQD');

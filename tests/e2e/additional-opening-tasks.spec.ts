@@ -30,11 +30,11 @@ for (const locale of ['en','ar']) for (const quoted of [false,true]) test(`${loc
  await page.goto('/offline?path=/dashboard');
  await expect(page.getByText(locale==='en'?'Add more openings':'إضافة فتحات جديدة',{exact:true})).toBeVisible();
  const nav=page.getByRole('navigation',{name:locale==='en'?'Outdoor Sales workspace':'مساحة عمل المبيعات الخارجية'});
- await expect(nav.getByRole('status')).toHaveText(locale==='en'?'1':'١');
+ await expect(nav.getByRole('status')).toHaveText('1');
  await page.getByRole('link',{name:locale==='en'?'Record measurements':'تسجيل القياسات',exact:true}).click();
  const finish=page.getByRole('button',{name:locale==='en'?'Finish measurements — ready for quotation':'إنهاء القياسات — جاهز لعرض السعر',exact:true});
  await finish.click();await expect(page.locator('p[role="alert"]')).toContainText(locale==='en'?'Add at least one new opening':'أضف فتحة جديدة واحدة');
- await expect(page.getByRole('button',{name:locale==='en'?'Edit opening 1':'تعديل الفتحة ١',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:locale==='en'?'Edit opening 1':'تعديل الفتحة 1',exact:true})).toHaveCount(0);
  // Save the new group offline, including its repeated quantity, and submit on reconnect.
  await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});window.dispatchEvent(new Event('offline'));});
  await page.getByLabel(locale==='en'?'Floor':'الطابق',{exact:true}).selectOption('F1');

@@ -20,9 +20,28 @@ export async function GET() {
   }
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: 'Unable to load project stages.' }, { status: 500 });
-  const creatorIds = [...new Set((data ?? []).map(project => project.created_by).filter((id): id is string => !!id))];
+  let projects = data ?? [];
+  if (auth.role === 'Operations Manager' && projects.length) {
+    // This service-role query bypasses RLS. Verify an actual current or legacy
+    // contract exists; project status alone can be stale or manually changed.
+    const projectIds = projects.map(project => project.id);
+    const [contracts, workflows] = await Promise.all([
+      admin.from('contracts').select('project_id').in('project_id', projectIds),
+      admin.from('sales_workflows').select('project_id').in('project_id', projectIds)
+        .in('stage', ['contract', 'signed', 'operations']).not('contract', 'is', null).neq('contract', 'null'),
+    ]);
+    if (contracts.error || workflows.error) {
+      return NextResponse.json({ error: 'Unable to verify project contracts.' }, { status: 500 });
+    }
+    const contractedProjectIds = new Set([
+      ...(contracts.data ?? []).map(contract => contract.project_id),
+      ...(workflows.data ?? []).map(workflow => workflow.project_id),
+    ]);
+    projects = projects.filter(project => contractedProjectIds.has(project.id));
+  }
+  const creatorIds = [...new Set(projects.map(project => project.created_by).filter((id): id is string => !!id))];
   const creators = creatorIds.length ? await admin.from('profiles').select('id,full_name,username').in('id', creatorIds) : { data: [], error: null };
   if (creators.error) return NextResponse.json({ error: 'Unable to load employee names.' }, { status: 500 });
   const names = new Map((creators.data ?? []).map(employee => [employee.id, employee.full_name ?? employee.username ?? 'Employee']));
-  return NextResponse.json({ projects: (data ?? []).map(project => ({ ...project, registeredBy: names.get(project.created_by ?? '') ?? 'Employee' })) }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ projects: projects.map(project => ({ ...project, registeredBy: names.get(project.created_by ?? '') ?? 'Employee' })) }, { headers: { 'Cache-Control': 'no-store' } });
 }

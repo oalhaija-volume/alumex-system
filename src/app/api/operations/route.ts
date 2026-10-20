@@ -8,7 +8,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export async function GET(){
  const auth=await requireRole([...leadershipRoles,'Operations Manager','Project Manager']);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const admin=createAdminClient();
- const flows=await admin.from('sales_workflows').select('project_id,stage,revision,signed_at,accepted_at,quotation').in('stage',['signed','operations']).not('signed_at','is',null).order('signed_at',{ascending:false});
+ const flows=await admin.from('sales_workflows').select('project_id,stage,revision,signed_at,accepted_at,quotation').in('stage',['signed','operations']).not('signed_at','is',null).not('contract','is',null).neq('contract','null').order('signed_at',{ascending:false});
  if(flows.error)return NextResponse.json({error:'The operations database update is required.'},{status:503});
  const safeFlows=(flows.data??[]).map(f=>({project_id:f.project_id,stage:f.stage,revision:f.revision,signed_at:f.signed_at,accepted_at:f.accepted_at,specifications:operationalSpecifications(f.quotation as unknown as QuoteSnapshot),additionalItems:operationalAdditionalItems(f.quotation as unknown as QuoteSnapshot)}));
  const ids=safeFlows.map(f=>f.project_id);

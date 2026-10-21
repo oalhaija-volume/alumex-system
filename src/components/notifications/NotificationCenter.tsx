@@ -1,145 +1,48 @@
 "use client";
-import { formatBusinessDateTime } from "@/lib/dates";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useSyncExternalStore, type MouseEvent } from "react";
+import { useI18n } from "@/components/i18n/I18nProvider";
+import { dismissNotificationAlert, getNotifications, getServerNotifications, markNotificationsRead, subscribeNotifications } from "@/lib/notifications/client";
+import { notificationLink, notificationTitle } from "@/lib/notifications/delivery";
 
-type NotificationItem = {
-  id: string;
-  notification_kind: "information" | "action_required" | "overdue";
-  title_key: string;
-  link_path: string | null;
-  read_at: string | null;
-  created_at: string;
-};
-
-function titleForKey(key: string) {
-  if (key.endsWith("measurementAssigned")) return "Initial measurements assigned";
-  if (key.endsWith("followUpAssigned")) return "Follow-up assigned";
-  if (key.endsWith("followUpRescheduled")) return "Follow-up rescheduled";
-  if (key.endsWith("followUpOverdue")) return "Follow-up overdue";
-  return "Alumex notification";
-}
-
-export function NotificationCenter({ compact = false }: { compact?: boolean }) {
-  const [items, setItems] = useState<NotificationItem[]>([]);
-
-  const load = useCallback(async () => {
-    const response = await fetch("/api/notifications", { cache: "no-store" });
-    if (!response.ok) return;
-    const body = (await response.json()) as {
-      notifications?: NotificationItem[];
-    };
-    setItems(body.notifications ?? []);
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
-    const interval = window.setInterval(() => void load(), 30000);
-    return () => {
-      window.clearTimeout(timer);
-      window.clearInterval(interval);
-    };
-  }, [load]);
-
-  const unread = items.filter((item) => !item.read_at);
-
-  async function markRead(notificationId?: string) {
-    const response = await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        notificationId ? { notificationId } : { all: true },
-      ),
-    });
-    if (response.ok) await load();
+export function NotificationCenter({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: (path: string) => void }) {
+  const { term, formatNumber, formatDateTime } = useI18n();
+  const { items, unread, role, alert } = useSyncExternalStore(subscribeNotifications, getNotifications, getServerNotifications);
+  const fallback = role === "Outdoor Sales" ? "/dashboard" : "/mini-crm";
+  function open(event: MouseEvent<HTMLAnchorElement>, item: (typeof items)[number]) {
+    dismissNotificationAlert();
+    if (!item.read_at) void markNotificationsRead(item.id);
+    if (onNavigate) { event.preventDefault(); onNavigate(notificationLink(item, fallback)); }
   }
-
-  return (
+  return <div className="relative shrink-0 print:hidden">
     <details className="relative open:z-[100]">
-      <summary
-        aria-label={`Notifications, ${unread.length} unread`}
-        className={`relative flex h-10 w-10 cursor-pointer list-none items-center justify-center border border-material-outline-variant bg-material-surface-container text-sm font-black text-muted-strong ${
-          compact ? "rounded-full" : "rounded-md"
-        }`}
-      >
-        {compact ? (
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-            <path d="M10 21h4" />
-          </svg>
-        ) : (
-          "N"
-        )}
-        {unread.length ? (
-          <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-700 px-1 text-[10px] font-black text-white">
-            {Math.min(unread.length, 99)}
-          </span>
-        ) : null}
+      <summary aria-label={term('Notifications, {count} unread', { count: formatNumber(unread) })}
+        className={`relative flex h-11 w-11 cursor-pointer list-none items-center justify-center border border-slate-300 bg-white text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 [&::-webkit-details-marker]:hidden ${compact ? "rounded-full" : "rounded-md"}`}>
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+        {unread > 0 && <span aria-hidden="true" className="absolute -end-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-700 px-1 text-[10px] font-bold text-white">{formatNumber(Math.min(unread, 99))}{unread > 99 ? '+' : ''}</span>}
       </summary>
-      <div className="absolute right-0 z-[100] mt-2 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-lg border border-material-outline-variant bg-material-surface-container-low shadow-[var(--md-elevation-3)]">
-        <div className="flex items-center justify-between gap-3 border-b border-material-outline-variant p-3">
-          <div>
-            <p className="text-sm font-bold text-foreground">Notifications</p>
-            <p className="text-xs text-muted">{unread.length} unread</p>
-          </div>
-          {unread.length ? (
-            <button
-              type="button"
-              onClick={() => void markRead()}
-              className="text-xs font-bold text-material-primary"
-            >
-              Mark all read
-            </button>
-          ) : null}
+      <div className="absolute end-0 z-[100] mt-2 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-lg border border-slate-200 bg-white text-start shadow-lg">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2">
+          <p className="text-sm font-semibold text-slate-900">{term('Notifications')}</p>
+          {unread > 0 && <button type="button" onClick={() => void markNotificationsRead()} className="min-h-11 text-xs font-semibold text-blue-700">{term('Mark all read')}</button>}
         </div>
-        <div className="max-h-80 divide-y divide-material-outline-variant overflow-y-auto">
-          {items.length ? (
-            items.slice(0, 10).map((item) => (
-              <div
-                key={item.id}
-                className={
-                  item.read_at
-                    ? "bg-material-surface-container-lowest p-3"
-                    : "bg-material-primary-container p-3"
-                }
-              >
-                <Link
-                  href={item.link_path ?? "/crm"}
-                  onClick={() =>
-                    item.read_at ? undefined : void markRead(item.id)
-                  }
-                  className="block"
-                >
-                  <p className="text-sm font-bold text-foreground">
-                    {titleForKey(item.title_key)}
-                  </p>
-                  <p className="mt-1 text-xs text-muted">
-                    {formatBusinessDateTime(item.created_at)}
-                  </p>
-                </Link>
-              </div>
-            ))
-          ) : (
-            <p className="p-4 text-sm text-muted">No notifications.</p>
-          )}
+        <div className="max-h-80 divide-y divide-slate-200 overflow-y-auto">
+          {items.length ? items.map(item => <Link key={item.id} href={notificationLink(item, fallback)} onClick={event => open(event, item)}
+            className={`block min-h-12 px-4 py-3 focus-visible:outline-2 focus-visible:outline-blue-600 ${item.read_at ? 'bg-white' : 'bg-blue-50'}`}>
+            <p className="text-sm font-semibold text-slate-900">{term(notificationTitle(item.title_key))}</p>
+            {item.payload?.project_name && <p className="mt-1 break-words text-sm text-slate-700">{item.payload.project_name}</p>}
+            <p className="mt-1 text-xs text-slate-500">{formatDateTime(item.created_at)}</p>
+          </Link>) : <p className="p-4 text-sm text-slate-500">{term('No notifications.')}</p>}
         </div>
-        <Link
-          href="/crm"
-          className="block border-t border-material-outline-variant p-3 text-center text-xs font-bold text-material-primary"
-        >
-          Open follow-ups
-        </Link>
       </div>
     </details>
-  );
+    {alert && <div role="status" aria-live="polite" className="fixed inset-x-4 top-4 z-[110] mx-auto flex max-w-sm items-start gap-2 rounded-lg border border-blue-200 bg-white p-3 text-start shadow-lg">
+      <Link href={notificationLink(alert, fallback)} onClick={event => open(event, alert)} className="min-h-11 flex-1 px-1 py-1">
+        <p className="text-sm font-semibold text-slate-900">{term(notificationTitle(alert.title_key))}</p>
+        {alert.payload?.project_name && <p className="mt-1 break-words text-sm text-slate-600">{alert.payload.project_name}</p>}
+      </Link>
+      <button type="button" aria-label={term('Dismiss notification')} onClick={dismissNotificationAlert} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-slate-500 hover:bg-slate-100">×</button>
+    </div>}
+  </div>;
 }

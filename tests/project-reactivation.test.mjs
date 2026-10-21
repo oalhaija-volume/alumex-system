@@ -26,6 +26,7 @@ test('desktop cannot use the device workspace while phones and tablets retain ac
 function route(role) {
   const calls=[];
   const deps={
+    '@/lib/measurements/visitHistory':{},
     '@/lib/measurements/measurementDelay':{},
     '@/lib/workflow/reactivation':{normalizeReactivation},
     'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200})}},

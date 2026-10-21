@@ -11,6 +11,14 @@ export function canAccessFieldProject(state: FieldState, project: FieldProject |
 // Retain unsynced records in storage, but never expose another branch's project
 // through a workspace, conflict, archive, media, or follow-up history read.
 export function visibleFieldState(state: FieldState): FieldState {
+  if (state.actor.role === 'Outdoor Sales') {
+    const referenceOnly = new Set(state.projects.filter(project => project.project_log_only).map(project => project.id));
+    return {
+      ...state,
+      openings: state.openings.filter(opening => !referenceOnly.has(opening.projectId)),
+      measurementReports: state.measurementReports?.filter(report => !referenceOnly.has(report.project_id)),
+    };
+  }
   if (state.actor.role !== 'Indoor Sales') return state;
   const projects = state.projects.filter(project => canAccessFieldProject(state, project));
   const projectIds = new Set(projects.map(project => project.id));

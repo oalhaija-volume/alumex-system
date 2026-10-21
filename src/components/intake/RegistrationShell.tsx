@@ -1,4 +1,5 @@
 "use client";
+import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 import { isOfflineDevice } from "@/lib/offline/device";
 
 import { OutdoorWorkspaceNav } from '@/components/workflow/OutdoorWorkspaceNav';
@@ -48,7 +49,7 @@ export function RegistrationShell({ children, role, mobileOutdoor = false, userN
 
   function navigation() {
     return <nav aria-label={menuLabel} className="space-y-1 px-4 py-5">
-      {(mobileOutdoor ? [["/dashboard", "Measurement assignments", "مهام القياسات"], ["/intake", "New project", "مشروع جديد"]] : links).filter(([href]) => canAccessRoute(href, role)).map(([href, en, ar]) => {
+      {(mobileOutdoor ? [["/dashboard", "Measurement assignments", "مهام القياسات"], ["/intake", "New project", "مشروع جديد"], ["/project-log", "Project log", "سجل المشاريع"]] : links).filter(([href]) => canAccessRoute(href, role)).map(([href, en, ar]) => {
         const active = pathname === href || (href === "/mini-crm" && /^\/projects\/[^/]+\/follow-ups$/.test(pathname)) || (href === "/projects" && /^\/(initial-measurements|quotation|contract)\//.test(pathname));
         return <Link key={href} href={href} onClick={event=>{closeMenu();if(isOfflineDevice()&&!isFieldOnline()){event.preventDefault();window.location.assign("/offline?path="+encodeURIComponent(href));}}} aria-current={active ? "page" : undefined}
           className={`flex min-h-12 items-center rounded-md border-s-4 px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${active ? "border-blue-600 bg-blue-50 text-blue-700" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
@@ -75,12 +76,15 @@ export function RegistrationShell({ children, role, mobileOutdoor = false, userN
 
       <header className="flex h-28 items-center justify-between border-b border-slate-200 bg-white px-5 lg:hidden print:hidden">
         <Brand small />
+        <div className="flex items-center gap-3">
+        {role !== "Outdoor Sales" && ["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager"].includes(role) && <NotificationCenter compact />}
         <button type="button" aria-label={menuLabel} aria-haspopup="dialog" aria-controls="workspace-menu" aria-expanded={menuOpen}
           onClick={() => { drawer.current?.showModal(); setMenuOpen(true); }}
           className="flex min-h-12 items-center gap-3 rounded-md border border-slate-200 px-4 text-sm font-semibold text-slate-700 focus-visible:outline-2 focus-visible:outline-blue-600">
           <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
           {locale === "ar" ? "القائمة" : term("Menu")}
         </button>
+        </div>
       </header>
 
       <dialog ref={drawer} id="workspace-menu" aria-label={menuLabel} onClose={() => setMenuOpen(false)}
@@ -95,6 +99,7 @@ export function RegistrationShell({ children, role, mobileOutdoor = false, userN
       </dialog>
 
       <main className="min-w-0 lg:ps-64 print:ps-0" onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a[href]');const href=link?.getAttribute('href');if(isOfflineDevice()&&!isFieldOnline()&&href?.startsWith('/')&&href!=='/offline'){event.preventDefault();event.stopPropagation();window.location.assign('/offline?path='+encodeURIComponent(href));}}}>
+        {role !== "Outdoor Sales" && ["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager"].includes(role) && <div className="hidden border-b border-slate-200 bg-white lg:block print:hidden"><div className="mx-auto flex max-w-5xl justify-end px-8 py-3"><NotificationCenter compact /></div></div>}
         {userName && (
           <div className="border-b border-slate-200 bg-white print:hidden">
             <div className="mx-auto flex max-w-5xl flex-wrap items-baseline gap-x-2 gap-y-1 px-5 py-4 sm:px-8">

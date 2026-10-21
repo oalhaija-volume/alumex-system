@@ -14,5 +14,5 @@ export function usesMobileWorkspace(role: AppRole | null, requestHeaders: Pick<H
 }
 
 export function isMobileWorkspaceRoute(path: string) {
-  return ["/", "/dashboard", "/intake", "/auth/logout"].includes(path) || /^\/initial-measurements\/[0-9a-f-]{36}\/?$/i.test(path);
+  return ["/", "/dashboard", "/intake", "/project-log", "/auth/logout"].includes(path) || /^\/initial-measurements\/[0-9a-f-]{36}\/?$/i.test(path);
 }

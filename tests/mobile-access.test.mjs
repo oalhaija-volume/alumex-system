@@ -26,6 +26,6 @@ test('mobile client hints support phone requests without affecting other roles',
 });
 
  test('phone workspace keeps assignments and intake while excluding commercial routes', () => {
-   for (const path of ['/dashboard','/intake','/initial-measurements/11111111-1111-4111-8111-111111111111']) assert.equal(isMobileWorkspaceRoute(path), true);
+   for (const path of ['/dashboard','/intake','/project-log','/initial-measurements/11111111-1111-4111-8111-111111111111']) assert.equal(isMobileWorkspaceRoute(path), true);
    for (const path of ['/projects','/mini-crm','/quotation/11111111-1111-4111-8111-111111111111','/contract/11111111-1111-4111-8111-111111111111']) assert.equal(isMobileWorkspaceRoute(path), false);
  });

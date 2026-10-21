@@ -8,7 +8,7 @@ function load(path, dependencies = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', source)(name => {if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});
+  new Function('require', 'exports', source)(name => {if(name==='@/lib/measurements/visitHistory')return load('../src/lib/measurements/visitHistory.ts');if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});
     if(name==='@/lib/intake/projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(name==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts',{});
     if(name==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts',{});
     assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
@@ -36,9 +36,10 @@ for (const endpoint of ['workspace', 'offline']) {
       let fields;
       return {
         select(value) { fields = value; return this; },
-        eq() { return this; }, in() { return this; }, order() { return this; }, single() { return this; },
+        eq() { return this; }, in() { return this; }, order() { return this; }, range() { return this; }, single() { return this; },
         or(value) { filters.push(value); return this; },
         then(resolve) {
+          if (table === 'field_sync_receipts') return Promise.resolve({data:[],error:null}).then(resolve);
           const key = table === 'profiles' ? fields.startsWith('full_name') ? 'actor' : fields.endsWith(',role') ? 'directory' : 'people' : table;
           return new Promise(done => started.set(key, data => done({ data, error: null }))).then(resolve);
         },

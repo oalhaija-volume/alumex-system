@@ -6,7 +6,7 @@ import { canCancelProject } from '@/lib/measurements/measurementDelay';
 import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDelayNotice';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import type { FieldProject, SalesWorkspaceData } from '@/lib/offline/types';
 import { followUpTypeLabel } from '@/lib/workflow/followUps';
@@ -64,6 +64,41 @@ export function MiniCRM({ data, loading, error, notice, busy, now, canDelete, on
   const [query, setQuery] = useState('');
   const [stage, setStage] = useState('all');
   const [queue, setQueue] = useState<QueueFilter>('all');
+  useEffect(() => {
+    // Notification links may arrive before the workspace request finishes, or
+    // point at a project hidden by a previous search on the same CRM page.
+    let observer: MutationObserver | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    function revealProject(hash: string) {
+      if (!/^#project-[0-9a-f-]{36}$/i.test(hash)) return;
+      observer?.disconnect();clearTimeout(timeout);
+      setQuery('');setStage('all');setQueue('all');
+      const id = hash.slice(1);
+      const focusProject = () => {
+        const target = document.getElementById(id);
+        if (!target) return false;
+        target.tabIndex = -1;
+        target.scrollIntoView({ block: 'start' });
+        target.focus({ preventScroll: true });
+        observer?.disconnect();return true;
+      };
+      if (focusProject()) return;
+      observer = new MutationObserver(() => focusProject());
+      observer.observe(document.body, { childList: true, subtree: true });
+      timeout = setTimeout(() => observer?.disconnect(), 15000);
+    }
+    const hashChanged = () => revealProject(window.location.hash);
+    const linkClicked = (event: MouseEvent) => {
+      const href = (event.target as HTMLElement).closest('a[href]')?.getAttribute('href');
+      if (!href) return;
+      const target = new URL(href, window.location.href);
+      if (target.origin === location.origin && target.pathname === location.pathname) revealProject(target.hash);
+    };
+    const initial = setTimeout(hashChanged, 0);
+    window.addEventListener('hashchange', hashChanged);
+    window.addEventListener('click', linkClicked);
+    return () => { clearTimeout(initial);clearTimeout(timeout);observer?.disconnect();window.removeEventListener('hashchange', hashChanged);window.removeEventListener('click', linkClicked); };
+  }, []);
   const active = (data?.projects ?? []).filter(needsSalesFollowUp);
   const search = query.trim().toLocaleLowerCase();
   const projects = (stage === 'client-cancelled' ? (data?.projects ?? []).filter(p=>projectStage(p)==='client-cancelled') : active).filter(project =>

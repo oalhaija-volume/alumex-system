@@ -9,9 +9,9 @@ function files(dir, prefix='') {
 }
 test('only approved rebuilt workflow pages exist', () => {
  assert.deepEqual(files(root).filter(p=>p.endsWith('/page.tsx') || p==='page.tsx').sort(),
-  ['catalog/page.tsx','contract/[projectId]/page.tsx','dashboard/page.tsx','hr/page.tsx','initial-measurements/[projectId]/page.tsx','intake/page.tsx','login/page.tsx','mini-crm/page.tsx','mobile-required/page.tsx','offline/page.tsx','operations/page.tsx','page.tsx','projects/[projectId]/follow-ups/page.tsx','projects/page.tsx','quotation/[projectId]/page.tsx','skylight/page.tsx','unauthorized/page.tsx']);
+  ['catalog/page.tsx','contract/[projectId]/page.tsx','dashboard/page.tsx','hr/page.tsx','initial-measurements/[projectId]/page.tsx','intake/page.tsx','login/page.tsx','mini-crm/page.tsx','mobile-required/page.tsx','offline/page.tsx','operations/page.tsx','page.tsx','project-log/page.tsx','projects/[projectId]/follow-ups/page.tsx','projects/page.tsx','quotation/[projectId]/page.tsx','skylight/page.tsx','unauthorized/page.tsx']);
 });
 test('only the approved rebuilt APIs exist; legacy workflow endpoints stay absent', () => {
  assert.deepEqual(files(new URL('api/',root)).filter(p=>p.endsWith('route.ts')).sort(),
-  ['admin/users/route.ts','auth/bootstrap-profile/route.ts','auth/resolve-login/route.ts','catalog/route.ts','curtain-wall-capture/[projectId]/[openingId]/route.ts','dashboard/route.ts','initial-measurements/[projectId]/route.ts','location-search/route.ts','measurement-reports/[projectId]/route.ts','offline/route.ts','operations/route.ts','projects/[projectId]/follow-ups/route.ts','sales-flow/[projectId]/route.ts','sales-intake/route.ts','skylight-capture/[projectId]/[openingId]/route.ts','workspace/route.ts']);
+  ['admin/users/route.ts','auth/bootstrap-profile/route.ts','auth/resolve-login/route.ts','catalog/route.ts','curtain-wall-capture/[projectId]/[openingId]/route.ts','dashboard/route.ts','initial-measurements/[projectId]/route.ts','location-search/route.ts','measurement-reports/[projectId]/route.ts','notifications/route.ts','offline/route.ts','operations/route.ts','projects/[projectId]/follow-ups/route.ts','sales-flow/[projectId]/route.ts','sales-intake/route.ts','skylight-capture/[projectId]/[openingId]/route.ts','workspace/route.ts']);
 });

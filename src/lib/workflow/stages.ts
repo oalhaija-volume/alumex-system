@@ -1,7 +1,7 @@
 export type ProjectProgress={client_cancelled_at?:string|null;measurement_delayed?:boolean;structure_readiness:string;sales_status:string;status?:string|null};
 export const projectStages=[
  {id:'site',label:'Awaiting site readiness',action:'Follow up on site readiness'},
- {id:'measurement-delayed',label:'Delayed by client',action:'Arrange another measurement visit'},
+ {id:'measurement-delayed',label:'Visit needs rescheduling',action:'Arrange another measurement visit'},
  {id:'measurements',label:'Initial measurements',action:'Complete initial measurements'},
  {id:'quotation-preparation',label:'Ready for quotation',action:'Prepare the quotation'},
  {id:'quotation-response',label:'Quotation awaiting response',action:'Follow up on the quotation'},

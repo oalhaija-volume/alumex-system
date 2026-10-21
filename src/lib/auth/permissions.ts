@@ -23,6 +23,7 @@ export function defaultRouteForRole(role: AppRole | null) {
 export function canAccessRoute(pathname: string, role: AppRole | null) {
  if(!role)return false;
  if(pathname === "/" || pathname === "/dashboard")return true;
+ if(pathname === "/project-log")return role === 'Outdoor Sales';
  if(/^\/(quotation|contract)\/[0-9a-f-]{36}$/i.test(pathname))return canPrepareQuotation(role);
  if(isCRMRoute(pathname))return canAccessCRM(role);
  if(pathname === "/hr")return isLeadershipRole(role) || role === "HR";

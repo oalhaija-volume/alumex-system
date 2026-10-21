@@ -242,6 +242,30 @@ test('CRM reassignment releases the delayed visit and retains the delay report',
  assert.equal(x.state.projects[0].measurement_delayed,false);assert.equal(x.state.projects[0].measurement_delay_note,'Client unavailable');
  assert.equal(x.state.projects[0].measurement_assignment_id,x.state.queue[0].id);
 });
+test('offline unsuccessful visits keep each outcome through CRM rescheduling',async()=>{
+ const outdoor={...actor,role:'Outdoor Sales'};
+ const x=setup({actor:outdoor,projects:[delayProject],openings:[delayOpening],outdoorSales:[{id:actor.id,name:actor.name}]});
+ await x.client.saveFieldChange('delay-measurements',projectId,{reason:'client_no_answer',note:'Site closed; client did not answer.'});
+ const first=x.state.projects[0].measurement_attempts[0];
+ assert.equal(first.reason,'client_no_answer');assert.equal(first.recordedById,actor.id);assert.equal(first.pending,true);
+ x.state.actor={...actor};
+ await x.client.saveFieldChange('assign-measurements',projectId,{assignedOutdoorSalesId:actor.id});
+ x.state.actor=outdoor;
+ await x.client.saveFieldChange('delay-measurements',projectId,{reason:'site_closed',note:'Site still closed at the agreed time.'});
+ const data=await (await x.client.fieldFetch('/api/workspace')).json();
+ assert.deepEqual(data.projects[0].measurement_attempts.map(entry=>entry.action),['delay-measurements','assign-measurements','delay-measurements']);
+ assert.equal(data.projects[0].measurement_attempts[0].id,first.id);
+ assert.equal(data.projects[0].measurement_delay_reason,'site_closed');
+ assert.equal(data.projects[0].measurement_delayed,true);assert.equal(data.openings,undefined);assert.equal(x.state.openings.length,1);
+});
+test('past visitor project log remains readable but cannot expose or change measurements',async()=>{
+ const x=setup({actor:{...actor,role:'Outdoor Sales'},projects:[{...delayProject,assigned_outdoor_sales_id:'another',project_log_only:true}],openings:[delayOpening]});
+ const workspace=await (await x.client.fieldFetch('/api/workspace')).json();
+ assert.equal(workspace.projects.length,1);
+ assert.equal((await x.client.fieldFetch('/api/initial-measurements/'+projectId)).status,403);
+ for(const action of ['opening','edit-opening','finish','delay-measurements','cancel-project'])await assert.rejects(x.client.saveFieldChange(action,projectId,{}),/reference only/);
+ assert.equal(x.state.queue.length,0);assert.equal(x.state.openings.length,1);
+});
 test('offline cancellation closes active work without removing project or measurements',async()=>{
  const x=setup({actor:{...actor,role:'Outdoor Sales'},projects:[delayProject],openings:[delayOpening]});
  await assert.rejects(x.client.saveFieldChange('cancel-project',projectId,{note:'Client cancelled'}));

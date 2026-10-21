@@ -31,6 +31,17 @@ test('online delay uses the verified employee, project version, and trimmed note
  assert.equal(calls[0].args.p_actor,'employee');assert.equal(calls[0].args.p_expected_updated_at,'2026-10-18T08:00:00Z');
  assert.deepEqual(calls[0].args.p_payload,{note:'Return next week'});assert.notEqual(calls[0].args.p_recorded_at,'2000-01-01');
 });
+for(const reason of ['client_no_answer','site_closed','client_delay'])test(`online visit outcome ${reason} is recorded with the site note`,async()=>{
+ const {api,calls}=route();
+ const result=await api.PATCH(request({action:'delay-measurements',reason,note:'  Site was closed  '}),context);
+ assert.equal(result.status,200);
+ assert.deepEqual(calls[0].args.p_payload,{reason,note:'Site was closed'});
+});
+for(const reason of [null,'',42,'completed'])test(`invalid visit outcome is rejected: ${String(reason)}`,async()=>{
+ const {api,calls}=route();
+ assert.equal((await api.PATCH(request({action:'delay-measurements',reason,note:'Site was closed'}),context)).status,400);
+ assert.equal(calls.length,0);
+});
 for(const [role,assigned,status] of [['Indoor Sales','employee',403],['Admin','employee',403],['Outdoor Sales','someone-else',404]])test(`${role} cannot forge an assigned Outdoor visit`,async()=>{
  const {api,calls}=route({role,assigned});assert.equal((await api.PATCH(request({action:'delay-measurements',note:'Later'}),context)).status,status);assert.equal(calls.length,0);
 });

@@ -11,7 +11,7 @@ const projects = ['Karkh', 'Rasafa', null].map((branch, index) => ({
   branch, project_name: `${branch ?? 'Unassigned'} project`, project_number: `PRJ-${index}`,
   client_id: `client-${index}`, created_by: otherId, assigned_outdoor_sales_id: actorId,
   follow_up_owner_id: actorId, structure_readiness: 'ready', sales_status: 'new_lead',
-  archived_at: null, updated_at: '2026-10-20T08:00:00Z',
+  archived_at: null, created_at: '2026-10-20T08:00:00Z', updated_at: '2026-10-20T08:00:00Z',
 }));
 
 // Execute the real TypeScript route and shared access modules; only replace
@@ -43,6 +43,7 @@ function fixture({ role = 'Indoor Sales', branch = 'Karkh', profileBranch = bran
   const reads = [], writes = [], rpcCalls = [];
   const tables = {
     projects: structuredClone(projectRows),
+    field_sync_receipts: [],
     profiles: [
       { id: actorId, full_name: 'Employee', role, branch: profileBranch, is_active: true, status: 'Active' },
       { id: otherId, full_name: 'Creator', role: 'Outdoor Sales', is_active: true, status: 'Active' },
@@ -74,6 +75,7 @@ function fixture({ role = 'Indoor Sales', branch = 'Karkh', profileBranch = bran
           return this;
         },
         order() { return this; },
+        range() { return this; },
         limit(count) { max = count; return this; },
         insert(payload) { mutation = { action: 'insert', payload }; return this; },
         update(payload) { mutation = { action: 'update', payload }; return this; },

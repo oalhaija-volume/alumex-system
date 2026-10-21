@@ -1,5 +1,5 @@
 /* Only the public shell and static assets enter Cache Storage. Account data stays in IndexedDB. */
-const CACHE = 'alumex-field-shell-v27';
+const CACHE = 'alumex-field-shell-v28';
 const mobileDevice = /Android|iPhone|iPad|iPod|Tablet|Silk|Windows Phone/i.test(self.navigator.userAgent);
 let refreshing = null;
 let refreshedAt = 0;
@@ -60,7 +60,7 @@ self.addEventListener('fetch', event => {
   event.respondWith((async () => (await (await caches.open(CACHE)).match('/offline')) || fetch(request))());
   return;
  }
- const fieldRoute = /^\/(?:dashboard|intake|projects|mini-crm|initial-measurements)(?:\/|$)/.test(url.pathname);
+ const fieldRoute = /^\/(?:dashboard|intake|project-log|projects|mini-crm|initial-measurements)(?:\/|$)/.test(url.pathname);
  if (!fieldRoute) return;
  event.respondWith((async () => {
   const controller = new AbortController();

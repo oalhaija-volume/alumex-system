@@ -20,7 +20,7 @@ for(const locale of ['en','ar'])test(`${locale}: simplified Outdoor workspace co
  await page.goto('/offline?path=/intake');
  const nav=page.getByRole('navigation',{name:locale==='en'?'Outdoor Sales workspace':'مساحة عمل المبيعات الخارجية'});
  const badge=nav.getByRole('status');await expect(badge).toHaveText('2');
- await expect(nav.getByRole('button')).toHaveCount(3);
+ await expect(nav.getByRole('button',{name:locale==='en'?'Project log':'سجل المشاريع',exact:true})).toBeVisible();
  await expect(nav.getByRole('button',{name:locale==='en'?'Logout':'تسجيل الخروج',exact:true})).toBeVisible();
  for(const text of ['Alumex · Device workspace','Open online system','Device workspace','Synced · Offline saving ready','Last synced','View measurement tasks','New measurement assignments'])await expect(page.getByText(text,{exact:true})).toHaveCount(0);
  await expect(page.getByRole('complementary')).toHaveCount(0);

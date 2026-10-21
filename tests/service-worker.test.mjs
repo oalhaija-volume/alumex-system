@@ -30,6 +30,7 @@ test('installed public shell and all referenced assets reopen offline; private r
  const w=worker();await w.install();w.offline();
  assert.match(await (await w.navigate('/offline?path=/dashboard')).text(),/app-1/);
  const redirected=await w.navigate('/dashboard');assert.equal(redirected.status,302);assert.equal(redirected.headers.get('location'),'https://example.test/offline?path=%2Fdashboard');
+ const log=await w.navigate('/project-log');assert.equal(log.status,302);assert.equal(log.headers.get('location'),'https://example.test/offline?path=%2Fproject-log');
  assert.equal(await (await w.request('/_next/static/app-1.js')).text(),'network /_next/static/app-1.js');
  for(const path of ['/api/workspace','/api/offline','/api/contracts'])assert.equal(w.request(path),undefined);
  assert.equal(w.request('/api/offline','POST'),undefined);assert.equal(w.navigate('/login'),undefined);assert.equal(w.navigate('/auth/logout'),undefined);

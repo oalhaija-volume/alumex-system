@@ -304,6 +304,7 @@ export type Database = {
           client_cancelled_at: string | null;
           client_cancelled_by: string | null;
           measurement_delayed: boolean;
+          measurement_delay_reason: "client_delay" | "client_no_answer" | "site_closed" | null;
           measurement_delay_note: string | null;
           measurement_delayed_at: string | null;
           measurement_delayed_by: string | null;
@@ -366,6 +367,7 @@ export type Database = {
           client_cancelled_at?: string | null;
           client_cancelled_by?: string | null;
           measurement_delayed?: boolean;
+          measurement_delay_reason?: "client_delay" | "client_no_answer" | "site_closed" | null;
           measurement_delay_note?: string | null;
           measurement_delayed_at?: string | null;
           measurement_delayed_by?: string | null;
@@ -1490,6 +1492,7 @@ export type Database = {
       };
     };
     Functions: {
+      deliver_due_follow_up_notifications: { Args: Record<PropertyKey, never>; Returns: number };
       register_sales_project: { Args: { p_actor: string; p_payload: Json }; Returns: Json };
       reactivate_client_project: { Args: { p_project: string; p_actor: string; p_note: string; p_expected_updated_at: string }; Returns: Json };
       save_catalog_prices: { Args: { p_changes: Json }; Returns: { id: string; price: number }[] };

@@ -11,7 +11,7 @@ for(const locale of ['en','ar'])test(`${locale}: visit outcomes only appear afte
  await page.route('**/api/**',route=>route.fulfill({json:state}));
  await page.goto('/offline?path=/initial-measurements/'+id);
  await expect(page.getByText('PRJ-ASSIGN',{exact:false}).first()).toBeVisible();
- const delay=page.getByText(locale==='en'?'Client asked to visit later':'طلب العميل تأجيل الزيارة',{exact:true});
+ const delay=page.getByText(locale==='en'?'Unable to take measurements':'تعذر أخذ القياسات',{exact:true});
  const cancel=page.getByText(locale==='en'?'Client cancelled project':'ألغى العميل المشروع',{exact:true});
  await expect(delay).toHaveCount(0);await expect(cancel).toHaveCount(0);
  // Simulate receiving an assignment snapshot, including a change while the screen is open.

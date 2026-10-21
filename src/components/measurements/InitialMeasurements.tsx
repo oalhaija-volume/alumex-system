@@ -8,6 +8,7 @@ import { SkylightCaptureEditor } from './SkylightCaptureEditor';
 import { SkylightCapturePreview } from './SkylightCapturePreview';
 import { ClientCancellation } from './ClientCancellation';
 import { MeasurementDelayNotice } from './MeasurementDelayNotice';
+import { visitOutcomeLabel } from '@/lib/workflow/projectLog';
 import type { FieldProject } from '@/lib/offline/types';
 import { canPrepareQuotation } from '@/lib/auth/permissions';
 import { useMobileOutdoor } from "@/components/workflow/MobileOutdoorContext";
@@ -65,6 +66,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   const [canDelay,setCanDelay] = useState(false);
   const [canCancel,setCanCancel] = useState(false);
   const [delayNote,setDelayNote] = useState('');
+  const [delayReason,setDelayReason] = useState<'client_no_answer'|'site_closed'|'client_delay'>('client_no_answer');
   const [finishOpen,setFinishOpen] = useState(false);
   const [finished,setFinished] = useState(false);
   const endpoint = `/api/initial-measurements/${projectId}`;
@@ -130,10 +132,10 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     if(saving||photoBusy)return;
     setSaving(true);setError('');setNotice('');
     try {
-      const response=await fieldFetch(endpoint,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,note,...(action==='cancel-project'?{confirmed:true}:{})})});
+      const response=await fieldFetch(endpoint,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,note:action==='delay-measurements'&&!note.trim()&&delayReason!=='client_delay'?visitOutcomeLabel(delayReason):note,...(action==='cancel-project'?{confirmed:true}:{reason:delayReason})})});
       const result=await response.json();if(!response.ok)throw new Error(result.error);
       const refreshed=await fieldFetch(endpoint);const data=await refreshed.json();if(!refreshed.ok)throw new Error(data.error);
-      setProject(data.project);setCanCancel(data.canCancelProject===true);setFinished(data.project.sales_status!=='new_lead');setDelayNote('');
+      setProject(data.project);setCanDelay(data.canDelayMeasurements===true);setCanCancel(data.canCancelProject===true);setFinished(data.project.sales_status!=='new_lead');setDelayNote('');
     }catch(cause){setError(cause instanceof Error?cause.message:t('initialStep.failed'));}
     finally{setSaving(false);}
   }
@@ -148,16 +150,17 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     <MeasurementReports key={String(finished)} projectId={projectId}/>
     <ProjectRecord projectId={projectId} inactive={project?.measurement_delayed||cancelled}/>
     {project && <MeasurementDelayNotice project={project}/>}
-    {project?.measurement_delayed && <div className="mt-4 space-y-3 text-sm"><p>{term('Returned to CRM. Indoor Sales will arrange and assign the next measurement visit.')}</p><Link href={canQuote?`/mini-crm#project-${projectId}`:'/dashboard'} className="inline-flex min-h-11 items-center font-semibold text-blue-700">{term(canQuote?'Open CRM':'Back to assignments')}</Link></div>}
+    {project?.measurement_delayed && <div className="mt-4 space-y-3 text-sm"><p>{term(project.pending?'Visit saved on this device. It will return to Indoor Sales after sync.':'Returned to CRM. Indoor Sales will arrange and assign the next measurement visit.')}</p><Link href={canQuote?`/mini-crm#project-${projectId}`:'/dashboard'} className="inline-flex min-h-11 items-center font-semibold text-blue-700">{term(canQuote?'Open CRM':'Back to assignments')}</Link>{role==='Outdoor Sales'&&<Link href="/project-log" className="ms-4 inline-flex min-h-11 items-center font-semibold text-blue-700">{term('Open project log')}</Link>}</div>}
     {cancelled && <Link href="/dashboard" className="mt-4 inline-flex min-h-11 items-center font-semibold text-blue-700">{term('Back to dashboard')}</Link>}
     {project && canCancel && <ClientCancellation busy={saving||photoBusy} onSubmit={form=>void updateVisit('cancel-project',String(new FormData(form).get('note')??''))}/>}
     {project && !finished && !project.measurement_delayed && (canDelay && <details className="mt-5 rounded-lg border border-amber-200 bg-white p-4">
-      <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-amber-900">{term('Client asked to visit later')}</summary>
-      <form aria-label={term('Report client delay')} onSubmit={event=>{event.preventDefault();void updateVisit('delay-measurements');}} className="mt-3">
+      <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-amber-900">{term('Unable to take measurements')}</summary>
+      <form aria-label={term('Report visit outcome')} onSubmit={event=>{event.preventDefault();void updateVisit('delay-measurements');}} className="mt-3">
         <fieldset disabled={saving||photoBusy}>
-          <label className="block text-sm font-medium">{term('Client delay note')}<textarea required maxLength={2000} value={delayNote} onChange={event=>setDelayNote(event.target.value)} className="mt-2 min-h-28 w-full rounded-md border border-slate-300 p-3 text-base"/></label>
+          <label className="block text-sm font-medium">{term('Visit outcome')}<select value={delayReason} onChange={event=>setDelayReason(event.target.value as typeof delayReason)} className={field}><option value="client_no_answer">{term('Client did not answer')}</option><option value="site_closed">{term('Site was closed')}</option><option value="client_delay">{term('Client asked to visit later')}</option></select></label>
+          <label className="mt-4 block text-sm font-medium">{term(delayReason==='client_delay'?'Client delay note':'Visit notes (optional)')}<textarea required={delayReason==='client_delay'} maxLength={2000} value={delayNote} onChange={event=>setDelayNote(event.target.value)} className="mt-2 min-h-28 w-full rounded-md border border-slate-300 p-3 text-base"/></label>
           <p className="mt-2 text-xs leading-5 text-slate-600">{term('The project returns to CRM. Indoor Sales will assign the next measurement visit.')}</p>
-          <button className="mt-4 min-h-12 rounded-md bg-amber-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{term('Mark delayed by client')}</button>
+          <button className="mt-4 min-h-12 rounded-md bg-amber-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{term('Return to Indoor Sales')}</button>
         </fieldset>
       </form>
     </details>)}

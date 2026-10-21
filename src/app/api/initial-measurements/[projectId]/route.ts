@@ -1,6 +1,6 @@
 import {normalizeMeasurementCompletion} from '@/lib/measurements/completion';
 import type { Json } from '@/lib/supabase/database.types';
-import { canCancelProject, normalizeClientCancellation, canDelayMeasurements, canResumeMeasurements, normalizeMeasurementDelayNote } from '@/lib/measurements/measurementDelay';
+import { canCancelProject, normalizeClientCancellation, canDelayMeasurements, canResumeMeasurements, normalizeMeasurementDelay } from '@/lib/measurements/measurementDelay';
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -16,7 +16,7 @@ async function access(context: Context) {
   const {projectId} = await context.params;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) return {response:NextResponse.json({error:"Project not found."},{status:404})};
   const admin = createAdminClient();
-  const {data:project,error} = await admin.from("projects").select("id, additional_openings_state,additional_openings_original_ids,building_type,branch, project_name, project_number, created_by, assigned_outdoor_sales_id, follow_up_owner_id, structure_readiness, sales_status, updated_at, measurement_delayed, measurement_delay_note, measurement_delayed_at, measurement_delayed_by, client_cancellation_note, client_cancelled_at, client_cancelled_by").eq("id",projectId).maybeSingle();
+  const {data:project,error} = await admin.from("projects").select("id, additional_openings_state,additional_openings_original_ids,building_type,branch, project_name, project_number, created_by, assigned_outdoor_sales_id, follow_up_owner_id, structure_readiness, sales_status, updated_at, measurement_delayed, measurement_delay_reason, measurement_delay_note, measurement_delayed_at, measurement_delayed_by, client_cancellation_note, client_cancelled_at, client_cancelled_by").eq("id",projectId).maybeSingle();
   if (error) return {response:NextResponse.json({error:"Unable to load project."},{status:500})};
   if (project && !canAccessProjectBranch({role:auth.role,branch:auth.profile?.branch},project.branch)) return {response:NextResponse.json({error:"Project not found."},{status:404})};
   if (!project || (!["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager"].includes(auth.role) && project.created_by !== auth.user.id && !(auth.role === "Outdoor Sales" && project.assigned_outdoor_sales_id === auth.user.id) && !((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager') && project.follow_up_owner_id === auth.user.id))) return {response:NextResponse.json({error:"Project not found."},{status:404})};
@@ -78,7 +78,7 @@ export async function PATCH(request: Request, context: Context) {
     if (!(body.action === 'cancel-project' ? canCancelProject(result.project,actor) : body.action === 'delay-measurements' ? canDelayMeasurements(result.project,actor) : canResumeMeasurements(result.project,actor)))
       return NextResponse.json({error:'Only the assigned Outdoor Sales employee can report a client delay.'},{status:403});
     let payload = {};
-    try { if(body.action === 'cancel-project') payload=normalizeClientCancellation(body);else if(body.action === 'delay-measurements') payload={note:normalizeMeasurementDelayNote(body.note)}; }
+    try { if(body.action === 'cancel-project') payload=normalizeClientCancellation(body);else if(body.action === 'delay-measurements') payload=normalizeMeasurementDelay(body); }
     catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
     const saved=await result.admin.rpc('sync_field_change',{p_operation:crypto.randomUUID(),p_actor:actor.id,p_project:result.project.id,
       p_action:body.action,p_payload:payload,p_recorded_at:new Date().toISOString(),p_expected_updated_at:result.project.updated_at});

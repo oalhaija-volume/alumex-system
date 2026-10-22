@@ -2614,6 +2614,8 @@
     "Choose the project governorate.": "اختر محافظة المشروع.",
     "Choose the project branch: Karkh, Rasafa or Governorates.": "اختر فرع المشروع: الكرخ أو الرصافة أو محافظات.",
     "Choose the project branch: Karkh or Rasafa.": "اختر فرع المشروع: الكرخ أو الرصافة.",
+    "Ask Admin to assign your monthly Outdoor Sales rotation before creating a Karkh or Rasafa project.": "اطلب من المسؤول تحديد تناوبك الشهري للمبيعات الخارجية قبل إنشاء مشروع في الكرخ أو الرصافة.",
+    "You can only create projects for your assigned branch or Governorates during this half of the month.": "يمكنك إنشاء مشاريع للفرع المخصص لك أو للمحافظات فقط خلال هذا النصف من الشهر.",
     "Unable to take measurements": "تعذر أخذ القياسات",
     "Report visit outcome": "تسجيل نتيجة الزيارة",
     "Visit outcome": "نتيجة الزيارة",
@@ -2665,6 +2667,9 @@
   "registration": {
     "title": "عميل ومشروع جديد",
     "description": "ابدأ ببيانات العميل وموقع المشروع.",
+    "branchAssignment": "منطقتك الحالية في بغداد: {branch}. المحافظات متاحة دائماً.",
+    "branchAssignmentMissing": "لم يتم تحديد تناوبك الشهري في بغداد. يمكنك تسجيل مشاريع المحافظات؛ اطلب من المسؤول تحديد تناوبك.",
+    "branchRotation": "تتغير منطقة العمل في بغداد يومي 1 و16 من كل شهر بتوقيت بغداد.",
     "namePlaceholder": "أدخل الاسم الكامل",
     "location": "موقع المشروع",
     "useLocation": "استخدم موقعي",

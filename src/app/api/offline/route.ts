@@ -18,8 +18,8 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}
 export async function GET(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const admin=createAdminClient();
- const profileQuery=admin.from('profiles').select('full_name,username,branch').eq('id',auth.user.id).single();
- const actorFromProfile=(profile:{full_name:string|null;username:string|null;branch:string|null}|null)=>({id:auth.user.id,name:profile?.full_name??profile?.username??'Employee',role:auth.role,branch:auth.role==='Outdoor Sales'?null:profile?.branch??null});
+ const profileQuery=admin.from('profiles').select('full_name,username,branch,outdoor_rotation_start_branch').eq('id',auth.user.id).single();
+ const actorFromProfile=(profile:{full_name:string|null;username:string|null;branch:string|null;outdoor_rotation_start_branch:string|null}|null)=>({id:auth.user.id,name:profile?.full_name??profile?.username??'Employee',role:auth.role,branch:auth.role==='Outdoor Sales'?null:profile?.branch??null,outdoorRotationStartBranch:auth.role==='Outdoor Sales'?profile?.outdoor_rotation_start_branch??null:null});
  if(new URL(request.url).searchParams.has('session')){
   const profile=await profileQuery;
   if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});

@@ -5,10 +5,11 @@ import type {FieldActor,FieldChange,FieldState} from '../../src/lib/offline/type
 // A tablet user agent keeps the device workspace available at both test widths.
 // Business endpoints are fixtures; these tests never register a live project.
 test.use({serviceWorkers:'block',userAgent:'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile Safari/604.1'});
-const actor:FieldActor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Outdoor employee',role:'Outdoor Sales'};
+const actor:FieldActor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Outdoor employee',role:'Outdoor Sales',outdoorRotationStartBranch:'Karkh'};
 const governorates=['البصرة','الرمادي','صلاح الدين','ديالى','الحلة','كربلاء','النجف','الديوانية','الكوت','العمارة','الناصرية','السماوة'];
 
 async function prepare(page:Page,locale:string,employee:FieldActor=actor){
+ await page.clock.setFixedTime(new Date('2026-10-10T09:00:00Z'));
  const state:FieldState={actor:employee,projects:[],openings:[],queue:[],syncedAt:null,outdoorSales:[],indoorSales:[]};
  const posts:FieldChange[]=[];
  const errors:string[]=[];
@@ -31,7 +32,7 @@ async function prepare(page:Page,locale:string,employee:FieldActor=actor){
  });
  await page.goto('/offline?path=/intake');
  await expect(page).toHaveURL(/\/offline\?path=\/intake$/);
- await expect(page).toHaveTitle(/Alumex/i);
+ await expect(page).toHaveTitle(/Alumex|ألومكس/i);
  await expect(page.getByRole('heading',{name:locale==='en'?'New client & project':'عميل ومشروع جديد',exact:true})).toBeVisible();
  await expect(page.locator('input[autocomplete="name"]')).toBeVisible();
  return {state,posts,errors};
@@ -61,8 +62,8 @@ async function fillRegistration(page:Page,locale:string,online:boolean){
 for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}: required governorate survives ${online?'online registration':'offline registration and synchronization'}`,async({page},testInfo)=>{
  const {posts,errors}=await prepare(page,locale);
  const branches=page.locator('input[name="projectBranch"]');
- await expect(branches).toHaveCount(3);
- expect(await branches.evaluateAll(nodes=>nodes.map(node=>(node as HTMLInputElement).value))).toEqual(['Karkh','Rasafa','Governorates']);
+ await expect(branches).toHaveCount(2);
+ expect(await branches.evaluateAll(nodes=>nodes.map(node=>(node as HTMLInputElement).value))).toEqual(['Karkh','Governorates']);
  await expect(page.getByRole('radio',{name:locale==='en'?'Governorates':'محافظات',exact:true})).toBeVisible();
  const governorate=page.locator('#project-governorate');
  await expect(governorate).toHaveCount(0);

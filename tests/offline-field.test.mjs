@@ -2,8 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts');if(n==='./projectAccess')return load('../src/lib/offline/projectAccess.ts');if(n==='@/lib/location/coordinates')return load('../src/lib/location/coordinates.ts');if(n==='./device')return deps[n]??{isOfflineDevice:()=>true};if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
+function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts');if(n==='./projectAccess')return load('../src/lib/offline/projectAccess.ts');if(n==='@/lib/location/coordinates')return load('../src/lib/location/coordinates.ts');if(n==='./device')return deps[n]??{isOfflineDevice:()=>true};if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/projectBranch'||n==='./projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(n==='@/lib/intake/outdoorRotation')return load('../src/lib/intake/outdoorRotation.ts');if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
 const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Employee',role:'Indoor Sales',branch:'Karkh'};
+// Existing registration fixtures request a branch today; seed their monthly rotation accordingly.
+function outdoorActorForCurrentBranch(branch) {
+ const day=Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Baghdad',day:'numeric'}).format(new Date()));
+ return {...actor,role:'Outdoor Sales',branch:null,outdoorRotationStartBranch:day<=15?branch:branch==='Karkh'?'Rasafa':'Karkh'};
+}
 const projectId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const payload={client:{clientType:'individual',clientName:'Client',mobile:'07000000000'},project:{branch:'Rasafa',buildingType:'villa_house',assignedOutdoorSalesId:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',address:'Site',locationLatitude:33.3,locationLongitude:44.4,structureReadiness:'ready'}};
 function setup(overrides={}){globalThis.window={dispatchEvent:()=>{}};let active=actor.id;let state={actor,indoorSales:[{id:actor.id,name:actor.name}],outdoorSales:[{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',name:'Outdoor employee'}],projects:[],openings:[],queue:[],syncedAt:null,...overrides};Object.defineProperty(globalThis,'navigator',{value:{onLine:false},configurable:true});const store={activeFieldUser:()=>active,setFieldUser:id=>{active=id;},readStoredFieldState:async()=>structuredClone(state),readFieldState:async()=>load('../src/lib/offline/projectAccess.ts').visibleFieldState(structuredClone(state)),updateFieldState:async(id,fn)=>{assert.equal(id,actor.id);state=fn(structuredClone(state));return load('../src/lib/offline/projectAccess.ts').visibleFieldState(structuredClone(state));}};const client=load('../src/lib/offline/client.ts',{'./store':store,'@/lib/workflow/followUps':load('../src/lib/workflow/followUps.ts'),'@/lib/workflow/stages':load('../src/lib/workflow/stages.ts'),'@/lib/measurements/registrationOpening':load('../src/lib/measurements/registrationOpening.ts')});return {client,get state(){return state;},get active(){return active;}};}
@@ -78,7 +83,7 @@ test('restricted employees cannot queue CRM updates or readiness changes on a ca
  try {
   for(const role of ['Outdoor Sales','HR']) {
    actor.role=role;
-   const x=setup();
+   const x=setup({actor:role==='Outdoor Sales'?outdoorActorForCurrentBranch('Rasafa'):actor});
    await x.client.saveFieldChange('register',projectId,payload);
    const before=x.state.queue.length;
    for(const action of ['follow-up','ready','assign-measurements'])await assert.rejects(x.client.saveFieldChange(action,projectId,{}),/CRM access is limited/);
@@ -148,7 +153,7 @@ test('an empty synchronization queue makes no session or write requests',async()
 });
 
 test('Outdoor Sales cannot save a not-ready project locally without a note; the saved reason survives follow-up changes',async()=>{
- const x=setup({actor:{...actor,role:'Outdoor Sales'}});
+ const x=setup({actor:outdoorActorForCurrentBranch('Rasafa')});
  const notReady={...payload,project:{...payload.project,structureReadiness:'not_ready'}};
  for(const readinessNote of [undefined,' \n\t ',23,'x'.repeat(2001)]){
   await assert.rejects(x.client.saveFieldChange('register',projectId,{...notReady,project:{...notReady.project,readinessNote}}),/note/);
@@ -303,12 +308,12 @@ test('known internet outage uses cached reads until automatic reconnection succe
 
 test('Outdoor Sales must choose a building type before queueing a new project',async()=>{
  for(const buildingType of [undefined,null,'','wrong',3]){
-  const x=setup({actor:{...actor,role:'Outdoor Sales'}});
+  const x=setup({actor:outdoorActorForCurrentBranch('Rasafa')});
   await assert.rejects(x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,buildingType}}),/building type/);
   assert.equal(x.state.queue.length,0);assert.equal(x.state.projects.length,0);
  }
  for(const buildingType of ['commercial_building','residential_building','villa_house']){
-  const x=setup({actor:{...actor,role:'Outdoor Sales'}});
+  const x=setup({actor:outdoorActorForCurrentBranch('Rasafa')});
   await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,buildingType}});
   assert.equal(x.state.projects[0].building_type,buildingType);assert.equal(x.state.queue[0].payload.project.buildingType,buildingType);
   assert.equal((await (await x.client.fieldFetch('/api/workspace')).json()).projects[0].building_type,buildingType);
@@ -547,7 +552,7 @@ test('Outdoor Sales must choose a project branch and it survives local reads and
   assert.equal(x.state.queue.length,0);assert.equal(x.state.projects.length,0);
  }
  for(const branch of ['Karkh','Rasafa']){
-  const outdoor={...actor,role:'Outdoor Sales',branch:null};const x=setup({actor:outdoor});
+  const outdoor=outdoorActorForCurrentBranch(branch);const x=setup({actor:outdoor});
   await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch}});
   assert.equal(x.state.projects[0].branch,branch);assert.equal(x.state.queue[0].payload.project.branch,branch);
   assert.equal((await (await x.client.fieldFetch('/api/workspace')).json()).projects[0].branch,branch);
@@ -580,4 +585,54 @@ test('shared governorate registrations validate before saving and survive offlin
   return Response.json({project:{...x.state.projects[0],project_number:'PRJ-GOV',updated_at:new Date().toISOString()}});
  };
  await x.client.syncFieldChanges();assert.equal(x.state.queue.length,0);assert.equal(x.state.projects[0].governorate,'البصرة');assert.equal(x.state.actor.branch,null);
+});
+
+test('Outdoor Sales cannot queue the opposite monthly branch and denied registrations leave saved work intact',async()=>{
+ for(const allowed of ['Karkh','Rasafa']){
+  const x=setup({actor:outdoorActorForCurrentBranch(allowed)});
+  await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch:allowed}});
+  const before=structuredClone(x.state);
+  const otherBranch=allowed==='Karkh'?'Rasafa':'Karkh';
+  await assert.rejects(x.client.saveFieldChange('register','eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',{...payload,project:{...payload.project,branch:otherBranch}}),/assigned branch or Governorates/);
+  assert.deepEqual(x.state,before);
+ }
+});
+
+test('an unconfigured Outdoor employee can register Governorates but cannot queue either Baghdad branch',async()=>{
+ const x=setup({actor:{...actor,role:'Outdoor Sales',branch:'Karkh',outdoorRotationStartBranch:null}});
+ for(const branch of ['Karkh','Rasafa']){
+  await assert.rejects(x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch}}),/assign your monthly Outdoor Sales rotation/);
+  assert.equal(x.state.queue.length,0);assert.equal(x.state.projects.length,0);
+ }
+ await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch:'Governorates',governorate:'النجف'}});
+ assert.equal(x.state.projects[0].branch,'Governorates');assert.equal(x.state.projects[0].governorate,'النجف');
+});
+
+test('a server rotation rejection preserves every queued change and retries the same operation after access is restored',async()=>{
+ const outdoor=outdoorActorForCurrentBranch('Karkh');
+ const x=setup({actor:outdoor});
+ await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch:'Karkh'}});
+ const opening={id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'};
+ await x.client.saveFieldChange('opening',projectId,opening);
+ const before=structuredClone(x.state),posted=[];
+ const currentActor={...outdoor,outdoorRotationStartBranch:outdoor.outdoorRotationStartBranch==='Karkh'?'Rasafa':'Karkh'};
+ let reject=true;
+ navigator.onLine=true;
+ globalThis.fetch=async(url,init)=>{
+  if(!init?.method)return Response.json({actor:reject?currentActor:outdoor});
+  const change=JSON.parse(init.body);posted.push(change);
+  if(reject)return Response.json({error:'You can only create projects for your assigned branch or Governorates during this half of the month.'},{status:409});
+  return Response.json({project:{...x.state.projects[0],project_number:'PRJ-SYNCED',updated_at:new Date().toISOString()}});
+ };
+ await x.client.syncFieldChanges();
+ assert.equal(posted.length,1,'A rejected registration holds later changes for the same project');
+ assert.deepEqual(x.state.queue.map(change=>change.id),before.queue.map(change=>change.id));
+ assert.deepEqual(x.state.queue.map(change=>change.payload),before.queue.map(change=>change.payload));
+ assert.deepEqual(x.state.projects,before.projects);assert.deepEqual(x.state.openings,before.openings);
+ assert.match(x.state.queue[0].error,/assigned branch or Governorates/);
+ assert.equal(x.state.actor.outdoorRotationStartBranch,currentActor.outdoorRotationStartBranch);
+ reject=false;
+ await x.client.syncFieldChanges();
+ assert.deepEqual(posted.map(change=>change.id),[before.queue[0].id,before.queue[0].id,before.queue[1].id]);
+ assert.equal(x.state.queue.length,0);assert.equal(x.state.openings[0].width,opening.width);
 });

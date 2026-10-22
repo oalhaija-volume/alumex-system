@@ -8,6 +8,7 @@ declare
   rasafa_id uuid := gen_random_uuid();
   unassigned_id uuid := gen_random_uuid();
   manager_id uuid := gen_random_uuid();
+  legacy_creator uuid;
   shared_id uuid;
   shared_client uuid;
   shared_document uuid := gen_random_uuid();
@@ -30,6 +31,7 @@ declare
 begin
   perform set_config('request.jwt.claim.sub','',true);
   perform set_config('request.jwt.claims','{"role":"service_role"}',true);
+  select id into strict legacy_creator from public.profiles where role='Admin' and is_active=true and status='Active' limit 1;
   insert into auth.users(id,email) values
     (outdoor_id,outdoor_id::text||'@example.invalid'),
     (karkh_id,karkh_id::text||'@example.invalid'),
@@ -79,11 +81,16 @@ begin
     assert (select count(*)=client_count from public.clients), 'Invalid selection must not leave a client row';
   end loop;
 
-  -- Null legacy branches remain unmarked; no backfill guesses a branch or province.
-  result := public.sync_field_change(gen_random_uuid(),outdoor_id,gen_random_uuid(),'register',
-    payload#-'{project,branch}'#-'{project,governorate}',now(),null);
-  assert result->>'branch' is null and result->>'governorate' is null;
+  -- New registrations require a branch; historical unmarked records stay private.
+  begin
+    perform public.sync_field_change(gen_random_uuid(),outdoor_id,gen_random_uuid(),'register',
+      payload#-'{project,branch}'#-'{project,governorate}',now(),null);
+    raise exception using errcode='ZX001',message='New branchless Outdoor registration accepted';
+  exception when sqlstate '22023' then null; end;
   foreach branch_value in array array['Karkh','Rasafa'] loop
+    update public.profiles set outdoor_rotation_start_branch=case
+      when extract(day from statement_timestamp() at time zone 'Asia/Baghdad')<=15 then branch_value
+      when branch_value='Karkh' then 'Rasafa' else 'Karkh' end where id=outdoor_id;
     result := public.sync_field_change(gen_random_uuid(),outdoor_id,gen_random_uuid(),'register',
       jsonb_set(payload#-'{project,governorate}','{project,branch}',to_jsonb(branch_value)),now(),null);
     assert result->>'branch'=branch_value and result->>'governorate' is null;
@@ -110,13 +117,13 @@ begin
     branch_value := case index when 1 then 'Karkh' when 2 then 'Rasafa' else null end;
     insert into public.clients(id,client_name,created_by) values(private_clients[index],'Private branch fixture',outdoor_id);
     insert into public.projects(id,client_id,project_number,project_name,created_by,owner_id,branch,structure_readiness,sales_status)
-      values(private_ids[index],private_clients[index],'VERIFY-GOV-'||private_ids[index],'Private branch fixture',outdoor_id,outdoor_id,branch_value,'ready','new_lead');
+      values(private_ids[index],private_clients[index],'VERIFY-GOV-'||private_ids[index],'Private branch fixture',legacy_creator,legacy_creator,branch_value,'ready','new_lead');
     insert into public.openings(project_id,opening_code,floor,room,width,height,quantity,opening_type,opening_direction,site_readiness,created_by)
       values(private_ids[index],'PRIVATE-GOV-1','Ground','Office',100,100,1,'Window','Sliding','ready',outdoor_id);
   end loop;
   begin
     insert into public.projects(client_id,project_number,project_name,created_by,branch,governorate)
-      values(shared_client,'VERIFY-INVALID-GOV-'||gen_random_uuid(),'Invalid null branch fixture',outdoor_id,null,'البصرة');
+      values(shared_client,'VERIFY-INVALID-GOV-'||gen_random_uuid(),'Invalid null branch fixture',legacy_creator,null,'البصرة');
     raise exception using errcode='ZX001',message='A null branch accepted a governorate through SQL three-valued logic';
   exception when check_violation then null; end;
   assert (select count(*)=3 from public.notifications n where n.entity_id=shared_id

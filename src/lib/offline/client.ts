@@ -1,4 +1,5 @@
-import { normalizeProjectBranch,normalizeProjectGovernorate } from '@/lib/intake/projectBranch';
+import { normalizeProjectGovernorate } from '@/lib/intake/projectBranch';
+import { normalizeOutdoorProjectBranch } from '@/lib/intake/outdoorRotation';
 import {normalizeMeasurementCompletion,retainMeasurementReport} from '@/lib/measurements/completion';
 import { parseProjectLocation } from '@/lib/location/coordinates';
 import { isOfflineDevice } from './device';
@@ -111,7 +112,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
   const measurementReports=[...(s.measurementReports??[])];let projects=[...s.projects];const openings=[...s.openings];let p=projects.find(p=>p.id===projectId);
   if(action==='register'){
    const client=payload.client as Record<string,unknown>,project=payload.project as Record<string,unknown>;
-   const branch=s.actor.role==='Outdoor Sales'?normalizeProjectBranch(project.branch):s.actor.branch??null;
+   const branch=s.actor.role==='Outdoor Sales'?normalizeOutdoorProjectBranch(s.actor,project.branch):s.actor.branch??null;
    const governorate=normalizeProjectGovernorate(branch,project.governorate);
    const buildingType=normalizeBuildingType(project.buildingType,s.actor.role==='Outdoor Sales');
    const readinessNote=normalizeReadinessNote(s.actor.role,project.structureReadiness,project.readinessNote);

@@ -39,13 +39,13 @@ function moduleLoader(dependencies) {
 }
 
 function fixture({ role = 'Indoor Sales', branch = 'Karkh', profileBranch = branch,
-  projectRows = projects, rpcError = null, projectError = null, deletedBranch } = {}) {
+  projectRows = projects, rpcError = null, projectError = null, deletedBranch, outdoorRotationStartBranch } = {}) {
   const reads = [], writes = [], rpcCalls = [];
   const tables = {
     projects: structuredClone(projectRows),
     field_sync_receipts: [],
     profiles: [
-      { id: actorId, full_name: 'Employee', role, branch: profileBranch, is_active: true, status: 'Active' },
+      { id: actorId, full_name: 'Employee', role, branch: profileBranch, outdoor_rotation_start_branch: outdoorRotationStartBranch, is_active: true, status: 'Active' },
       { id: otherId, full_name: 'Creator', role: 'Outdoor Sales', is_active: true, status: 'Active' },
     ],
     clients: projects.map(p => ({ id: p.client_id, mobile: `phone-${p.branch}` })),
@@ -268,4 +268,28 @@ test('a branch transfer during offline refresh cannot return projects from the f
   assert.ok(response.body.projects.every(project => project.branch === 'Rasafa'));
   assert.deepEqual(response.body.openings, []);
   assert.deepEqual(response.body.measurementReports, []);
+});
+
+for(const [path,session] of [['workspace',false],['offline',false],['offline',true]]) {
+  for(const starter of ['Karkh','Rasafa',null,undefined]) {
+    test(`${path}${session?' session':''} carries the current Outdoor monthly rotation seed ${String(starter)}`,async()=>{
+      const x=fixture({role:'Outdoor Sales',branch:'Karkh',outdoorRotationStartBranch:starter});
+      const response=await x.load(`src/app/api/${path}/route`).GET({...request(),url:`http://localhost:3003/api/${path}${session?'?session=1':''}`});
+      assert.equal(response.status,200);
+      assert.equal(response.body.actor.outdoorRotationStartBranch,starter??null);
+      assert.equal(response.body.actor.branch,null,'A legacy fixed branch must not determine the Outdoor rotation');
+      assert.ok(x.reads.some(read=>read.table==='profiles'&&read.fields.includes('outdoor_rotation_start_branch')));
+      if(!session)assert.deepEqual(response.body.projects.map(project=>project.id),projects.map(project=>project.id),'Monthly project creation restrictions preserve access to existing assigned projects');
+    });
+  }
+}
+
+test('Indoor branch snapshots do not apply an unrelated Outdoor rotation field',async()=>{
+  for(const path of ['workspace','offline']){
+    const x=fixture({branch:'Karkh',outdoorRotationStartBranch:'Rasafa'});
+    const response=await x.load(`src/app/api/${path}/route`).GET(request());
+    assert.equal(response.status,200);
+    assert.equal(response.body.actor.branch,'Karkh');
+    assert.equal(response.body.actor.outdoorRotationStartBranch,null);
+  }
 });

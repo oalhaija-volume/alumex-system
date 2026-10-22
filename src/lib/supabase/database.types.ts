@@ -131,6 +131,7 @@ export type Database = {
           username: string | null;
           full_name: string | null;
           branch: "Karkh" | "Rasafa" | null;
+          outdoor_rotation_start_branch: "Karkh" | "Rasafa" | null;
           role: Database["public"]["Enums"]["app_role"];
           is_active: boolean;
           status: string;
@@ -143,6 +144,7 @@ export type Database = {
           username?: string | null;
           full_name?: string | null;
           branch?: "Karkh" | "Rasafa" | null;
+          outdoor_rotation_start_branch?: "Karkh" | "Rasafa" | null;
           role?: Database["public"]["Enums"]["app_role"];
           is_active?: boolean;
           status?: string;

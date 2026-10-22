@@ -16,7 +16,7 @@ export async function GET(){
  const ids=[...new Set([auth.user.id,...(result.data??[]).flatMap(p=>[p.created_by,p.assigned_outdoor_sales_id,p.follow_up_owner_id,p.measurement_delayed_by,p.client_cancelled_by]).filter((id):id is string=>!!id)])];
  const [clients,profiles,attempts]=await Promise.all([
   clientIds.length?admin.from('clients').select('id,mobile').in('id',clientIds):{data:[],error:null},
-  admin.from('profiles').select('id,full_name,username').in('id',ids),
+  admin.from('profiles').select('id,full_name,username,outdoor_rotation_start_branch').in('id',ids),
   loadMeasurementAttempts(admin,(result.data??[]).map(project=>project.id))
  ]);
  if(attempts.error)return NextResponse.json({error:'Unable to load visit history.'},{status:500});
@@ -27,7 +27,7 @@ export async function GET(){
  const contacts=new Map((clients.data??[]).map(c=>[c.id,c.mobile]));
  const name=(id:string|null)=>id?(people.get(id)?.full_name??people.get(id)?.username):null;
  const actorProfile=people.get(auth.user.id);
- return NextResponse.json({actor:{id:auth.user.id,role:auth.role,branch:auth.role==='Outdoor Sales'?null:auth.profile?.branch??null,name:actorProfile?.full_name??actorProfile?.username??'Employee'},outdoorSales:directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'})),indoorSales:directory.data.filter(p=>(p.role === 'Indoor Sales' || p.role === 'Sales Manager')).map(p=>({id:p.id,name:p.full_name??p.username??'Employee'})),projects:(result.data??[]).map(p=>({...p,project_log_only:isHistoricalProject(p,actor),measurement_attempts:attempts.data?.get(p.id)??[],clientCancelledBy:name(p.client_cancelled_by)??null,measurementDelayedBy:name(p.measurement_delayed_by)??null,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)??null,assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===auth.user.id,registeredBy:name(p.created_by)??'Employee'}))},{headers:{'Cache-Control':'no-store'}});
+ return NextResponse.json({actor:{id:auth.user.id,role:auth.role,branch:auth.role==='Outdoor Sales'?null:auth.profile?.branch??null,outdoorRotationStartBranch:auth.role==='Outdoor Sales'?actorProfile?.outdoor_rotation_start_branch??null:null,name:actorProfile?.full_name??actorProfile?.username??'Employee'},outdoorSales:directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'})),indoorSales:directory.data.filter(p=>(p.role === 'Indoor Sales' || p.role === 'Sales Manager')).map(p=>({id:p.id,name:p.full_name??p.username??'Employee'})),projects:(result.data??[]).map(p=>({...p,project_log_only:isHistoricalProject(p,actor),measurement_attempts:attempts.data?.get(p.id)??[],clientCancelledBy:name(p.client_cancelled_by)??null,measurementDelayedBy:name(p.measurement_delayed_by)??null,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)??null,assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===auth.user.id,registeredBy:name(p.created_by)??'Employee'}))},{headers:{'Cache-Control':'no-store'}});
 }
 export async function PATCH(request:Request){
  const body=await request.json().catch(()=>null);if(typeof body?.projectId!=='string')return NextResponse.json({error:'Project is required.'},{status:400});

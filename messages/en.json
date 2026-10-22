@@ -2614,6 +2614,8 @@
     "Choose the project governorate.": "Choose the project governorate.",
     "Choose the project branch: Karkh, Rasafa or Governorates.": "Choose the project branch: Karkh, Rasafa or Governorates.",
     "Choose the project branch: Karkh or Rasafa.": "Choose the project branch: Karkh or Rasafa.",
+    "Ask Admin to assign your monthly Outdoor Sales rotation before creating a Karkh or Rasafa project.": "Ask Admin to assign your monthly Outdoor Sales rotation before creating a Karkh or Rasafa project.",
+    "You can only create projects for your assigned branch or Governorates during this half of the month.": "You can only create projects for your assigned branch or Governorates during this half of the month.",
     "Unable to take measurements": "Unable to take measurements",
     "Report visit outcome": "Report visit outcome",
     "Visit outcome": "Visit outcome",
@@ -2665,6 +2667,9 @@
   "registration": {
     "title": "New client & project",
     "description": "Start with the client and the project location.",
+    "branchAssignment": "Current Baghdad assignment: {branch}. Governorates are always available.",
+    "branchAssignmentMissing": "Your monthly Baghdad assignment is not configured. You can register Governorates projects; ask Admin to set your rotation.",
+    "branchRotation": "The Baghdad assignment changes on the 1st and 16th of each month (Baghdad time).",
     "namePlaceholder": "Enter full name",
     "location": "Project site location",
     "useLocation": "Use my location",

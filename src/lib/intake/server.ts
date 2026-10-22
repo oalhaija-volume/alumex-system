@@ -11,7 +11,7 @@ export const getIntakeAccess = cache(() => requireRole([
 export async function getIntakeEmployeeState(auth: Extract<RoleCheck, { ok: true }>): Promise<Pick<FieldState, 'actor' | 'outdoorSales'> | null> {
   const admin = createAdminClient();
   const [profile, directory] = await Promise.all([
-    admin.from('profiles').select('branch').eq('id', auth.user.id).single(),
+    admin.from('profiles').select('branch,outdoor_rotation_start_branch').eq('id', auth.user.id).single(),
     auth.role === 'Outdoor Sales' ? { data: [], error: null } : admin.from('profiles')
       .select('id,full_name,username').eq('role', 'Outdoor Sales')
       .eq('is_active', true).eq('status', 'Active').order('full_name'),
@@ -23,6 +23,7 @@ export async function getIntakeEmployeeState(auth: Extract<RoleCheck, { ok: true
       name: auth.profile?.full_name ?? auth.profile?.username ?? 'Employee',
       role: auth.role,
       branch: auth.role === 'Outdoor Sales' ? null : profile.data.branch,
+      outdoorRotationStartBranch: auth.role === 'Outdoor Sales' ? profile.data.outdoor_rotation_start_branch : null,
     },
     outdoorSales: directory.data.map(employee => ({ id: employee.id, name: employee.full_name ?? employee.username ?? 'Employee' })),
   };

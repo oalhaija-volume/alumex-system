@@ -15,6 +15,10 @@ begin
  update profiles set role='Outdoor Sales',is_active=true,status='Active' where id=actor;
  payload:='{"client":{"clientName":"Project branch test","clientType":"individual","mobile":"00000000000"},"project":{"buildingType":"villa_house","structureReadiness":"ready","address":"Baghdad","locationLatitude":33.3,"locationLongitude":44.4}}'::jsonb;
  foreach branch_value in array array['Karkh','Rasafa'] loop
+  -- Exercise each branch only when assigned for the current Baghdad half-month.
+  update profiles set outdoor_rotation_start_branch=case
+   when extract(day from statement_timestamp() at time zone 'Asia/Baghdad')<=15 then branch_value
+   when branch_value='Karkh' then 'Rasafa' else 'Karkh' end where id=actor;
   payload:=jsonb_set(payload,'{project,branch}',to_jsonb(branch_value));
   project_id:=gen_random_uuid();operation_id:=gen_random_uuid();
   result:=public.sync_field_change(operation_id,actor,project_id,'register',payload,now());
@@ -35,8 +39,11 @@ begin
   end;
   assert (select count(*) from clients)=clients_before,'Invalid branch must not leave client records';
  end loop;
- result:=public.sync_field_change(gen_random_uuid(),actor,gen_random_uuid(),'register',payload#-'{project,branch}',now());
- assert result->>'branch' is null,'Do not guess the branch of legacy queued registrations';
+ begin
+  perform public.sync_field_change(gen_random_uuid(),actor,gen_random_uuid(),'register',payload#-'{project,branch}',now());
+  raise exception using errcode='ZX001',message='New branchless registration bypassed the rotation';
+ exception when sqlstate '22023' then assert sqlerrm='Choose the project branch: Karkh, Rasafa or Governorates.';
+ end;
  foreach employee_role in array array['Indoor Sales','Sales Manager'] loop
   update profiles set role=employee_role::public.app_role,branch='Karkh' where id=actor;
   payload:=jsonb_set(payload,'{project,assignedOutdoorSalesId}',to_jsonb(actor::text));

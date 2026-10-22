@@ -1,7 +1,8 @@
 "use client";
 import { isOfflineDevice } from "@/lib/offline/device";
 
-import { projectBranches, projectGovernorates, normalizeProjectBranch, normalizeProjectGovernorate, type ProjectBranch, type ProjectGovernorate } from '@/lib/intake/projectBranch';
+import { projectGovernorates, normalizeProjectGovernorate, type ProjectBranch, type ProjectGovernorate } from '@/lib/intake/projectBranch';
+import { outdoorProjectBranches, normalizeOutdoorProjectBranch } from '@/lib/intake/outdoorRotation';
 import { buildingTypes,buildingTypeLabels,normalizeBuildingType,type BuildingType } from '@/lib/intake/buildingType';
 import { useMobileOutdoor } from "@/components/workflow/MobileOutdoorContext";
 import { fieldFetch,isFieldOnline,isDeviceWorkspace,prepareOffline } from "@/lib/offline/client";
@@ -38,6 +39,13 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
   const [offline,setOffline]=useState(false);
   const [employeeState,setEmployeeState]=useState<IntakeEmployeeState|null>(initialEmployeeState);
   const [assignedOutdoorSalesId,setAssignedOutdoorSalesId]=useState('');
+  // Resolve the device date after hydration so server and client clocks cannot
+  // produce different radio options in the initial HTML.
+  const [rotationDate,setRotationDate]=useState<Date|null>(null);
+  const actorRole = employeeState?.actor.role;
+  const rotationStartBranch = employeeState?.actor.outdoorRotationStartBranch;
+  const allowedProjectBranches = employeeState&&rotationDate ? outdoorProjectBranches(employeeState.actor,rotationDate) : [];
+  const assignedBaghdadBranch = allowedProjectBranches.find(branch=>branch!=='Governorates');
   const addressOnly = employeeState?.actor.role === 'Outdoor Sales' && (offline || offlineAddressStarted);
   const needsReadinessNote = employeeState?.actor.role === 'Outdoor Sales' && readiness === 'not_ready';
   const canAssignMeasurements = canAccessCRM(employeeState?.actor.role);
@@ -58,14 +66,47 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
 
   useEffect(()=>{const update=()=>setOffline(isOfflineDevice()&&!isFieldOnline());const timer=setTimeout(update,0);window.addEventListener('field-connection',update);window.addEventListener('online',update);window.addEventListener('offline',update);return()=>{clearTimeout(timer);window.removeEventListener('field-connection',update);window.removeEventListener('online',update);window.removeEventListener('offline',update);};},[]);
 
+  useEffect(()=>{
+    if(actorRole!=='Outdoor Sales')return;
+    const refresh=()=>{
+      const date=new Date();
+      const branches=outdoorProjectBranches({role:actorRole,outdoorRotationStartBranch:rotationStartBranch},date);
+      setRotationDate(date);
+      setProjectBranch(current=>current&&branches.includes(current)?current:'');
+    };
+    const initialRefresh=window.setTimeout(refresh,0);
+    const interval=window.setInterval(refresh,30_000);
+    window.addEventListener('focus',refresh);
+    document.addEventListener('visibilitychange',refresh);
+    return()=>{
+      window.clearTimeout(initialRefresh);
+      window.clearInterval(interval);
+      window.removeEventListener('focus',refresh);
+      document.removeEventListener('visibilitychange',refresh);
+    };
+  },[actorRole,rotationStartBranch]);
+
   async function submit() {
     if (saving) return;
     if (!employeeState) {
       setError('Employee workspace is still loading. Please try again.');
       return;
     }
+    let branch:ProjectBranch|undefined;
     let governorate:ProjectGovernorate|null=null;
-    if(employeeState.actor.role==='Outdoor Sales'){try{normalizeProjectBranch(projectBranch);governorate=normalizeProjectGovernorate(projectBranch,projectGovernorate);}catch(cause){setError((cause as Error).message);return;}}
+    if(employeeState.actor.role==='Outdoor Sales'){
+      try{
+        branch=normalizeOutdoorProjectBranch(employeeState.actor,projectBranch);
+        governorate=normalizeProjectGovernorate(branch,projectGovernorate);
+      }catch(cause){
+        const date=new Date();
+        const branches=outdoorProjectBranches(employeeState.actor,date);
+        setRotationDate(date);
+        setProjectBranch(current=>current&&branches.includes(current)?current:'');
+        setError((cause as Error).message);
+        return;
+      }
+    }
     try{normalizeBuildingType(buildingType,employeeState.actor.role==='Outdoor Sales');}catch(cause){setError((cause as Error).message);return;}
     if (!name.trim() || !phone.trim() || !readiness || (!addressOnly && (location.latitude === null || location.longitude === null))) {
       setError(t("mobileIntake.required"));
@@ -87,7 +128,7 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
           client: { clientType, clientName: name.trim(), mobile: phone.trim() },
           project: {
             projectName: name.trim(),
-            ...(employeeState.actor.role==='Outdoor Sales'?{buildingType,branch:projectBranch,...(projectBranch==='Governorates'?{governorate}:{})}:{}),
+            ...(employeeState.actor.role==='Outdoor Sales'?{buildingType,branch,...(branch==='Governorates'?{governorate}:{})}:{}),
             assignedOutdoorSalesId: outdoorAssignee||null,
             address: siteAddress.trim(),
             locationLatitude: location.latitude,
@@ -131,9 +172,13 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
         <p className="mt-2 text-sm leading-6 text-slate-500">{t("registration.description")}</p>
       </header>
       <fieldset disabled={saving} className="min-w-0 space-y-6 rounded-lg bg-white sm:border sm:border-slate-200 sm:p-7">
-        {employeeState?.actor.role==='Outdoor Sales'&&<fieldset>
+        {employeeState?.actor.role==='Outdoor Sales'&&<fieldset aria-describedby="project-branch-assignment project-branch-rotation">
           <legend className="mb-3 text-sm font-semibold text-slate-900">{term('Project branch')} {term('(required)')}</legend>
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">{projectBranches.map(branch=><label key={branch} className={`flex min-h-16 min-w-0 cursor-pointer flex-col items-start gap-2 rounded-md border p-3 text-sm sm:min-h-14 sm:flex-row sm:items-center sm:gap-3 sm:p-4 ${projectBranch===branch?'border-blue-600 bg-blue-50/60 text-slate-900':'border-slate-300 bg-white text-slate-700'}`}>
+          <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+            <p id="project-branch-assignment">{!rotationDate?t('common.loading'):assignedBaghdadBranch?t('registration.branchAssignment',{branch:term(assignedBaghdadBranch)}):t('registration.branchAssignmentMissing')}</p>
+            <p id="project-branch-rotation" className="mt-1 text-xs leading-5 text-slate-500">{t('registration.branchRotation')}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">{allowedProjectBranches.map(branch=><label key={branch} className={`flex min-h-16 min-w-0 cursor-pointer flex-col items-start gap-2 rounded-md border p-3 text-sm sm:min-h-14 sm:flex-row sm:items-center sm:gap-3 sm:p-4 ${projectBranch===branch?'border-blue-600 bg-blue-50/60 text-slate-900':'border-slate-300 bg-white text-slate-700'}`}>
             <input required type="radio" name="projectBranch" value={branch} checked={projectBranch===branch} onChange={()=>{setProjectBranch(branch);if(branch!=='Governorates')setProjectGovernorate('');setError('');}} className="h-4 w-4 shrink-0 accent-blue-600"/>
             <span className="min-w-0 break-words">{term(branch)}</span>
           </label>)}</div>

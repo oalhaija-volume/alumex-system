@@ -9,7 +9,25 @@ export type AdditionalChoice = {id:string;quantity:number;measurements?:SurfaceM
 export type Charge = {id:string;name:string;unit:string;rate:number;quantity:number;total:number;rateSource?:'quotation'};
 export type StandaloneCharge = Charge & {measurements?:SurfaceMeasurement[];extras?:Charge[]};
 export type QuoteLine = {opening:MeasuredOpening;system:Charge;glass:Charge|null;extras:Charge[];area:number;total:number};
-export type QuoteSnapshot = {facadeMeasurements?:MeasuredOpening[];branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;total:number;currency:"IQD";createdAt:string;preparedBy:string};
+export type QuoteSnapshot = {facadeMeasurements?:MeasuredOpening[];branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;discount?:{percent:5;subtotal:number;amount:number};total:number;currency:"IQD";createdAt:string;preparedBy:string};
+// Keep charge rates intact and deduct the discount once from the whole quotation.
+// Reconstructing the subtotal also makes removal and repeated edits non-stacking.
+export function applyQuotationDiscount(snapshot:QuoteSnapshot,discountPercent:unknown=0):QuoteSnapshot {
+ if(discountPercent!==0&&discountPercent!==5)throw new Error('Choose either no discount or the 5% quotation discount.');
+ const charges=[...snapshot.lines.flatMap(line=>[line.system,...(line.glass?[line.glass]:[]),...line.extras]),...(snapshot.additionalItems??[]).flatMap(item=>[item,...(item.extras??[])])];
+ if(charges.some(charge=>!Number.isSafeInteger(charge.total)||charge.total<=0))throw new Error('Invalid quotation amount.');
+ const subtotal=charges.reduce((sum,charge)=>sum+charge.total,0);
+ if(!Number.isSafeInteger(subtotal)||subtotal<=0)throw new Error('Add a measured opening, facade service or standalone product before quoting.');
+ const quotation=structuredClone(snapshot);
+ delete quotation.discount;
+ quotation.total=subtotal;
+ if(discountPercent===5){
+  const amount=Math.round(subtotal/20);
+  quotation.discount={percent:5,subtotal,amount};
+  quotation.total=subtotal-amount;
+ }
+ return quotation;
+}
 export const money = (n:number) => new Intl.NumberFormat('en-IQ',{maximumFractionDigits:0}).format(n)+' IQD';
 export const QUOTATION_SYSTEM_RATE_MIN = 240_000;
 export const QUOTATION_SYSTEM_RATE_MAX = 300_000;
@@ -142,7 +160,7 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
  if(!Number.isSafeInteger(quotation.total)||quotation.total<=0)throw new Error('Add a measured opening, facade service or standalone product before quoting.');
  quotation.createdAt=new Date().toISOString();
  quotation.preparedBy=actor;
- return quotation;
+ return applyQuotationDiscount(quotation,snapshot.discount?.percent??0);
 }
 
 export function quotationPriceKey(snapshot:QuoteSnapshot) {
@@ -150,6 +168,7 @@ export function quotationPriceKey(snapshot:QuoteSnapshot) {
  return JSON.stringify({
   lines:snapshot.lines.map(line=>({system:charge(line.system),glass:line.glass?charge(line.glass):null,extras:line.extras.map(charge)})),
   additionalItems:(snapshot.additionalItems??[]).map(item=>({...charge(item),extras:(item.extras??[]).map(charge)})),
+  ...(snapshot.discount?{discount:snapshot.discount}:{}),
  });
 }
 
@@ -177,7 +196,7 @@ function priceExtras(extras:ExtraChoice[],allowed:CatalogItem[],catalog:CatalogI
   return catalogCharge(extra.id,products[index].unit==='sqm'?area:extra.quantity*openingQuantity,catalog);
  });
 }
-export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[],rawCatalog:CatalogItem[],actor:string,additionalItems:AdditionalChoice[]=[]):QuoteSnapshot {
+export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[],rawCatalog:CatalogItem[],actor:string,additionalItems:AdditionalChoice[]=[],discountPercent:unknown=0):QuoteSnapshot {
  const catalog=rawCatalog.map(normalizeCatalogItem);
  const measured=quotableOpenings(openings);
  if(!Array.isArray(choices)||choices.some(c=>!c)||choices.length!==measured.length||new Set(choices.map(c=>c.openingId)).size!==measured.length)throw new Error('Choose a system for every opening. Skylights are priced in the calculator.');
@@ -213,5 +232,5 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
  });
  const total=lines.reduce((sum,line)=>sum+line.total,0)+additional.reduce((sum,item)=>sum+item.total+(item.extras?.reduce((s,e)=>s+e.total,0)??0),0);
  if(!Number.isSafeInteger(total)||total<=0)throw new Error('Add a measured opening, facade service or standalone product before quoting.');
- return {lines,additionalItems:additional,...(openings.some(o=>o.opening_type==='Facade')?{facadeMeasurements:openings.filter(o=>o.opening_type==='Facade')}:{ }),...(openings.some(o=>o.opening_type==='Skylight')?{skylightsPricedSeparately:true}:{}),total,currency:'IQD',createdAt:new Date().toISOString(),preparedBy:actor};
+ return applyQuotationDiscount({lines,additionalItems:additional,...(openings.some(o=>o.opening_type==='Facade')?{facadeMeasurements:openings.filter(o=>o.opening_type==='Facade')}:{ }),...(openings.some(o=>o.opening_type==='Skylight')?{skylightsPricedSeparately:true}:{}),total,currency:'IQD',createdAt:new Date().toISOString(),preparedBy:actor},discountPercent);
 }

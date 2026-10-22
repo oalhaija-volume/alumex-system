@@ -167,7 +167,8 @@ test('new quotation openings require complete individual measurements and preser
 });
 function revisionRoute(flow){
  const inputs=[];
- const admin={from(table){return {select(){return this;},eq(){return this;},order(){return this;},maybeSingle:async()=>({data:flow,error:null}),then(resolve){return Promise.resolve({data:table==='openings'?[opening]:catalog,error:null}).then(resolve);}};},rpc:async(name,args)=>{inputs.push(args);return {data:{},error:null};}};
+ const savedFlow={quotation:pricing.priceQuotation([opening],[choice],catalog,'original-author'),...flow};
+ const admin={from(table){return {select(){return this;},eq(){return this;},order(){return this;},maybeSingle:async()=>({data:savedFlow,error:null}),then(resolve){return Promise.resolve({data:table==='openings'?[opening]:catalog,error:null}).then(resolve);}};},rpc:async(name,args)=>{inputs.push(args);return {data:{},error:null};}};
  const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project'}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
  return {inputs,post:body=>route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),{params:Promise.resolve({projectId:'project'})})};
 }

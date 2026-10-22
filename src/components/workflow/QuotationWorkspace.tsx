@@ -3,7 +3,7 @@ import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBran
 import { useI18n } from '@/components/i18n/I18nProvider';
 import Link from 'next/link';
 import { useState } from 'react';
-import { recordedFacadeAreas,defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,isQuotationSystemRateEditable,QUOTATION_SYSTEM_RATE_MIN,quotationSystemRateMax,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice,type QuoteSnapshot } from '@/lib/workflow/pricing';
+import { applyQuotationDiscount,recordedFacadeAreas,defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,isQuotationSystemRateEditable,QUOTATION_SYSTEM_RATE_MIN,quotationSystemRateMax,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice,type QuoteSnapshot } from '@/lib/workflow/pricing';
 import { StandaloneItems } from './StandaloneItems';
 import { isShutterBox, isRollerShutter, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
@@ -34,6 +34,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   return {openingId:o.id,systemId:saved?.system.id??defaultSystem(o,catalog)?.id??'',...(saved?.system.rateSource==='quotation'?{systemRate:saved.system.rate}:{}),glassId:saved?.glass?.id??'',extras:saved?.extras.map(e=>({id:e.id,quantity:e.unit==='sqm'?e.quantity:e.quantity/(saved?.opening.quantity??1)}))??[]};
  }));
  const [additionalItems,setAdditionalItems]=useState<AdditionalChoice[]>(()=>flow?.quotation.additionalItems?.map(item=>({id:item.id,quantity:item.quantity,measurements:item.measurements,extras:item.extras?.map(e=>({id:e.id,quantity:e.quantity}))}))??[]);
+ const [discountPercent,setDiscountPercent]=useState<0|5>(flow?.quotation.discount?.percent??0);
  const [editing,setEditing]=useState(!flow);
  const [addingOpening,setAddingOpening]=useState(false);
  const [busy,setBusy]=useState(false);
@@ -46,7 +47,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const [template,setTemplate]=useState<'residential'|'commercial'>(['company','corporate'].includes(data.client.client_type??'')?'commercial':'residential');
  const waiting=data.project.additional_openings_state==='requested';
  const needsRevision=!!data.project.additional_openings_state;
- const canEdit=!waiting&&(!flow||(!flow.signed_at&&['quotation','approved','contract'].includes(flow.stage)));
+ const canEdit=!waiting&&!['contract_signed','transferred_to_operations','cancelled','lost','closed'].includes(data.project.sales_status)&&(!flow||(!flow.signed_at&&['quotation','approved','contract'].includes(flow.stage)));
  const canUpdatePrices=!!flow&&canEdit&&!needsRevision&&viewVersion==='current'&&!['contract_signed','transferred_to_operations','cancelled','lost','closed'].includes(data.project.sales_status);
  const archived=viewVersion==='current'?undefined:data.history?.find(h=>String(h.version)===viewVersion);
  const shown=archived?.quotation??flow?.quotation;
@@ -54,13 +55,23 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  let draftTotal:number|undefined;
  let draftQuotation:QuoteSnapshot|undefined;
  let pricingError='';
- if(editing){try{draftQuotation=priceQuotation(openings,choices,catalog,'preview',additionalItems);draftTotal=draftQuotation.total;}catch(e){pricingError=(e as Error).message;}}
+ if(editing){try{draftQuotation=priceQuotation(openings,choices,catalog,'preview',additionalItems,discountPercent);draftTotal=draftQuotation.total;}catch(e){pricingError=(e as Error).message;}}
+ const discountChanged=discountPercent!==(flow?.quotation.discount?.percent??0);
+ let discountPreview:QuoteSnapshot|undefined;
+ if(flow&&canUpdatePrices&&!editing){try{discountPreview=applyQuotationDiscount(flow.quotation,discountPercent);}catch{/* Invalid saved amounts cannot be discounted. */}}
+ function discountOption(quotation?:QuoteSnapshot){
+  return <>
+   <label className="flex min-h-11 items-center gap-3 text-sm font-semibold"><input type="checkbox" aria-label={term('Apply 5% discount')} aria-describedby="quotation-discount-help" disabled={busy} checked={discountPercent===5} onChange={event=>{setDiscountPercent(event.target.checked?5:0);setApproved(false);}}/>{term('Apply 5% discount')}</label>
+   <p id="quotation-discount-help" className="text-xs leading-5 text-slate-600">{term('5% applies to the full quotation subtotal.')}</p>
+   {quotation&&<dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3"><div><dt className="text-slate-600">{term('Subtotal')}</dt><dd className="mt-1 font-semibold">{formatMoney(quotation.discount?.subtotal??quotation.total)}</dd></div><div><dt className="text-slate-600">{term('Discount (5%)')}</dt><dd className="mt-1 font-semibold">−{formatMoney(quotation.discount?.amount??0)}</dd></div><div><dt className="text-slate-600">{term('Final total')}</dt><dd className="mt-1 font-semibold text-blue-900">{formatMoney(quotation.total)}</dd></div></dl>}
+  </>;
+ }
  const sellingQuote=editing?draftQuotation:flow?.quotation;
  const sellingSuggestion=flow&&sellingQuote&&!archived&&!needsRevision&&canEdit&&!pricePreview?quotationSellingSuggestion(sellingQuote,catalog):null;
  const targetRates=new Map(sellingSuggestion?.openingRates.map(opening=>[opening.openingId,opening.rate]));
  const suggestedChoices=sellingSuggestion?choices.map(choice=>targetRates.has(choice.openingId)?{...choice,systemRate:targetRates.get(choice.openingId)}:choice):choices;
  let suggestedQuotation:QuoteSnapshot|undefined;
- if(sellingSuggestion){try{suggestedQuotation=priceQuotation(openings,suggestedChoices,catalog,'preview',additionalItems);}catch{/* Incomplete selections remain editable. */}}
+ if(sellingSuggestion){try{suggestedQuotation=priceQuotation(openings,suggestedChoices,catalog,'preview',additionalItems,discountPercent);}catch{/* Incomplete selections remain editable. */}}
  const suggestedPricing=suggestedQuotation?quotationSellingSuggestion(suggestedQuotation,catalog):null;
  function applySuggestedRate(){
   if(!sellingSuggestion||busy||pricePreview)return;
@@ -77,7 +88,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   if(busy||pricePreview)return;
   setBusy(true);setError('');clearActionError();
   try{
-   await api(`/api/sales-flow/${projectId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,choices,additionalItems,newOpenings,revision:flow?.revision??0,confirmed:approved,template,replaceUnsignedContract:replaceContract})});
+   await api(`/api/sales-flow/${projectId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,choices,additionalItems,newOpenings,discountPercent,revision:flow?.revision??0,confirmed:approved,template,replaceUnsignedContract:replaceContract})});
    await reload();
   }catch(e){setError((e as Error).message);}finally{setBusy(false);}
  }
@@ -164,6 +175,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
    </section>}
    <StandaloneItems recordedAreas={recordedFacadeAreas(data.openings)} items={additionalItems} catalog={catalog} onChange={setAdditionalItems}/>
    <div className={card}>
+    <div className="mb-5 border-b border-slate-200 pb-5">{discountOption(draftQuotation)}</div>
     <div className="flex flex-wrap justify-between gap-3"><div><p className="text-sm font-semibold">{flow?term("Revised total"):term("Quotation total")}</p>{flow&&<p className="mt-1 text-xs text-slate-500">{term("Currently saved:")} {formatMoney(flow.quotation.total)}</p>}</div><p className="text-xl font-semibold" aria-label={term("Draft total")}>{draftTotal===undefined?term("Complete selections"):formatMoney(draftTotal)}</p></div>
     {pricingError&&<p role="status" className="mt-3 text-sm text-amber-800">{errorMessage(pricingError)}</p>}
     {flow?.stage==='contract'&&<label className="mt-5 flex items-start gap-3 rounded-md bg-amber-50 p-4 text-sm leading-6 text-amber-900"><input type="checkbox" checked={replaceContract} onChange={e=>setReplaceContract(e.target.checked)} className="mt-1"/>{term("Replace the unsigned contract. The previous document will be kept in history, and the revised quotation must be approved before a new contract can be generated.")}</label>}
@@ -173,9 +185,17 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   </fieldset>:null}
   {flow&&<section className="mt-6">
    {!editing&&<div className="mb-5 flex flex-wrap items-end justify-between gap-3 print:hidden">
-    <label className="min-w-0 text-sm">{term("Quotation version")}<select disabled={busy||!!pricePreview} aria-label={term("Quotation version")} value={viewVersion} onChange={e=>{setViewVersion(e.target.value);setApproved(false);}} className={field}><option value="current">{term('Revision {number} · Current',{number:formatNumber(flow.quotation.version??1)})}</option>{data.history?.map(h=><option key={h.version} value={h.version}>{term('Revision {number} · Superseded',{number:formatNumber(h.version)})}</option>)}</select></label>
-    {canEdit?<div className="flex flex-wrap gap-3"><button disabled={busy||!!pricePreview} className={button} onClick={()=>{clearActionError();setEditing(true);setViewVersion('current');setApproved(false);}}>{term("Edit quotation")}</button>{canUpdatePrices&&<button disabled={busy||!!pricePreview} className={secondary} onClick={()=>void updatePrices()}>{term(previewLoading?'Loading prices…':'Update prices')}</button>}</div>:waiting?null:<p className="text-sm text-slate-600">{term("Signed contract · Quotation locked")}</p>}
+    <label className="min-w-0 text-sm">{term("Quotation version")}<select disabled={busy||!!pricePreview} aria-label={term("Quotation version")} value={viewVersion} onChange={e=>{setViewVersion(e.target.value);setApproved(false);setDiscountPercent(flow.quotation.discount?.percent??0);setReplaceContract(false);}} className={field}><option value="current">{term('Revision {number} · Current',{number:formatNumber(flow.quotation.version??1)})}</option>{data.history?.map(h=><option key={h.version} value={h.version}>{term('Revision {number} · Superseded',{number:formatNumber(h.version)})}</option>)}</select></label>
+    {canEdit?<div className="flex flex-wrap gap-3"><button disabled={busy||!!pricePreview} className={button} onClick={()=>{clearActionError();setEditing(true);setViewVersion('current');setApproved(false);}}>{term("Edit quotation")}</button>{canUpdatePrices&&<button disabled={busy||!!pricePreview||discountChanged} className={secondary} onClick={()=>void updatePrices()}>{term(previewLoading?'Loading prices…':'Update prices')}</button>}</div>:waiting?null:<p className="text-sm text-slate-600">{term("Signed contract · Quotation locked")}</p>}
    </div>}
+   {!editing&&!archived&&canUpdatePrices&&!pricePreview&&<section aria-label={term('Quotation discount')} className={`${card} mb-5 print:hidden`}>
+    <h2 className="mb-2 font-semibold">{term('Quotation discount')}</h2>
+    {discountOption(discountPreview)}
+    <p className="mt-4 text-xs leading-5 text-slate-600">{term('Saving this discount creates a new quotation revision and resets approval.')}</p>
+    {discountChanged&&<p role="status" className="mt-2 text-sm text-amber-800">{term('Saved quotation below. Your draft changes will appear after saving.')}</p>}
+    {flow.stage==='contract'&&<label className="mt-4 flex items-start gap-3 rounded-md bg-amber-50 p-4 text-sm leading-6 text-amber-900"><input type="checkbox" disabled={busy} checked={replaceContract} onChange={event=>setReplaceContract(event.target.checked)} className="mt-1"/>{term('Replace the unsigned contract. The previous document will be kept in history, and the revised quotation must be approved before a new contract can be generated.')}</label>}
+    <button type="button" disabled={busy||!discountPreview||!discountChanged||(flow.stage==='contract'&&!replaceContract)} className={`${button} mt-4`} onClick={()=>void act('set-discount')}>{term(busy?'Saving discount…':'Save discount')}</button>
+   </section>}
    {sellingSuggestion&&suggestedPricing&&<section aria-label={term('Suggested average system rate')} className="mb-5 rounded-lg border border-green-200 bg-green-50 p-4 sm:p-5 print:hidden">
     <h2 className="font-semibold text-slate-900">{term('Suggested average system rate')}</h2>
     <p className="mt-2 text-2xl font-semibold text-green-900">{formatMoney(suggestedPricing.rate)} / {term('m²')}</p>
@@ -205,10 +225,10 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <OpeningSchedule quote={shown} showAreaColors blendSystemRates={!archived&&!flow.signed_at}/><p className="document-note">{term("Prepared from the recorded initial measurements and selected specifications. Contract terms are presented in the separate client contract.")}</p><DocumentFooter reference={reference}/>
    </DocumentPaper>}
    <div className="mt-6 flex flex-wrap gap-3 print:hidden">
-    <button disabled={editing} onClick={()=>window.print()} className={secondary}>{term("Print quotation")}</button>
-    {!editing&&!archived&&!needsRevision&&flow.stage==='quotation'&&<div className="w-full border-t border-slate-200 pt-5"><label className="mb-4 flex items-center gap-3 text-sm"><input type="checkbox" disabled={busy||!!pricePreview} checked={approved} onChange={e=>setApproved(e.target.checked)}/>{term("The client approved this saved quotation.")}</label><button disabled={busy||!!pricePreview||!approved} onClick={()=>void act('approve')} className={button}>{term("Record client approval")}</button></div>}
-    {!editing&&!archived&&!needsRevision&&flow.stage==='approved'&&<div className="w-full space-y-4"><label className="block text-sm">{term("Contract template")}<select disabled={busy||!!pricePreview} aria-label={term("Contract template")} value={template} onChange={e=>setTemplate(e.target.value as 'residential'|'commercial')} className={field}><option value="residential">{term("Residential — uploaded Arabic terms")}</option><option value="commercial">{term("Commercial — uploaded Arabic terms")}</option></select></label><p className="text-sm text-slate-500">{term("Each template has its own payment schedule. Review all terms before signing.")}</p><button disabled={busy||!!pricePreview} onClick={()=>void act('contract')} className={button}>{term("Generate contract")}</button></div>}
-    {!editing&&!busy&&!pricePreview&&flow.contract&&<Link href={`/contract/${projectId}`} className={button}>{term("Open contract →")}</Link>}
+    <button disabled={editing||discountChanged} onClick={()=>window.print()} className={secondary}>{term("Print quotation")}</button>
+    {!editing&&!archived&&!needsRevision&&flow.stage==='quotation'&&<div className="w-full border-t border-slate-200 pt-5"><label className="mb-4 flex items-center gap-3 text-sm"><input type="checkbox" disabled={busy||!!pricePreview||discountChanged} checked={approved} onChange={e=>setApproved(e.target.checked)}/>{term("The client approved this saved quotation.")}</label><button disabled={busy||!!pricePreview||discountChanged||!approved} onClick={()=>void act('approve')} className={button}>{term("Record client approval")}</button></div>}
+    {!editing&&!archived&&!needsRevision&&flow.stage==='approved'&&<div className="w-full space-y-4"><label className="block text-sm">{term("Contract template")}<select disabled={busy||!!pricePreview} aria-label={term("Contract template")} value={template} onChange={e=>setTemplate(e.target.value as 'residential'|'commercial')} className={field}><option value="residential">{term("Residential — uploaded Arabic terms")}</option><option value="commercial">{term("Commercial — uploaded Arabic terms")}</option></select></label><p className="text-sm text-slate-500">{term("Each template has its own payment schedule. Review all terms before signing.")}</p><button disabled={busy||!!pricePreview||discountChanged} onClick={()=>void act('contract')} className={button}>{term("Generate contract")}</button></div>}
+    {!editing&&!busy&&!pricePreview&&!discountChanged&&flow.contract&&<Link href={`/contract/${projectId}`} className={button}>{term("Open contract →")}</Link>}
    </div>
   </section>}
  </>;

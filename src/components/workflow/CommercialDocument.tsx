@@ -32,7 +32,7 @@ export function OpeningSchedule({quote,showAreaColors=false,blendSystemRates=fal
  {clientPricing&&<div className="document-note" data-client-system-rate={clientPricing.rate}>
   <p className="font-semibold">{term('Common Alumex system rate')}: {formatNumber(clientPricing.rate,4)} {term('IQD')} / {term('m²')}</p>
   <p>{term('The same average system rate applies to each billable m². Glass and add-ons are priced separately.')}</p>
-  <p>{term('The displayed average rate is rounded; opening amounts are rounded to whole IQD and reconcile to the quotation total.')}</p>
+  <p>{term(quote.discount?'The displayed average rate is rounded; opening amounts are rounded to whole IQD and reconcile to the quotation subtotal.':'The displayed average rate is rounded; opening amounts are rounded to whole IQD and reconcile to the quotation total.')}</p>
  </div>}
  {!!quote.lines.length&&<div className="document-schedule-scroll" role="region" aria-label={term('Opening schedule')} tabIndex={0}>
   <table className="document-opening-table">
@@ -75,7 +75,13 @@ export function OpeningSchedule({quote,showAreaColors=false,blendSystemRates=fal
   <table><caption className="sr-only">{term('Project products and services')}</caption><thead><tr><th>{term('Product / service')}</th><th>{term('Basis')}</th><th>{term('Rate · IQD')}</th><th>{term('Amount · IQD')}</th></tr></thead><tbody><ChargeRows items={[item,...(item.extras??[])]}/></tbody></table>
  </section>)}
  {quote.skylightsPricedSeparately&&<p className="document-note">{term('Skylights are priced separately in the calculator and are not included in this quotation.')}</p>}
- <div className="document-total"><div><span>{term('TOTAL / الإجمالي')}</span><p>{term('All amounts in Iraqi dinars')}</p></div><strong>{formatMoney(quote.total)}</strong></div></section>;
+ <div className="break-inside-avoid">
+  {quote.discount&&<dl className="mb-4 ms-auto max-w-sm space-y-2 text-sm text-slate-700">
+   <div className="flex items-baseline justify-between gap-4"><dt>{term('Subtotal')}</dt><dd className="font-semibold"><bdi>{formatMoney(quote.discount.subtotal)}</bdi></dd></div>
+   <div className="flex items-baseline justify-between gap-4"><dt>{term('Discount (5%)')}</dt><dd className="font-semibold"><bdi>{formatMoney(-quote.discount.amount)}</bdi></dd></div>
+  </dl>}
+  <div className="document-total"><div><span>{term('TOTAL / الإجمالي')}</span><p>{term('All amounts in Iraqi dinars')}</p></div><strong>{formatMoney(quote.total)}</strong></div>
+ </div></section>;
 }
 export function DocumentFooter({reference}:{reference:string}){const {term}=useI18n();return <footer className="document-footer"><strong>{term('ALUMEX EXPERTS')}</strong><bdi dir="ltr">{reference}</bdi></footer>;}
 export function DocumentPaper({children}:{children:ReactNode}){const {direction,locale}=useI18n();return <article className="commercial-document" dir={direction} lang={locale}>{children}</article>;}

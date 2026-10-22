@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { uploadedContractTerms } from '@/lib/contracts/uploadedTerms';
 import { salesProject } from '@/lib/workflow/access';
-import { priceQuotation, repriceQuotation, quotationPriceKey, type CatalogItem, type OpeningChoice, type AdditionalChoice } from '@/lib/workflow/pricing';
+import { applyQuotationDiscount, priceQuotation, repriceQuotation, quotationPriceKey, type CatalogItem, type OpeningChoice, type AdditionalChoice } from '@/lib/workflow/pricing';
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
 import type { Json } from '@/lib/supabase/database.types';
 import type { SalesFlow } from '@/lib/workflow/types';
@@ -44,9 +44,16 @@ export async function POST(request:Request,context:Context){
  }else{body=await request.json().catch(()=>({}));}
  const action=body.action;const revision=body.revision;
  if(project.additional_openings_state==='requested'||(project.additional_openings_state==='submitted'&&action!=='save'))return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.'},{status:409});
- if(!['save','approve','contract','sign','preview-prices','update-prices'].includes(String(action))||!Number.isInteger(revision)||revision!==(flow?.revision??0))return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
+ if(!['save','approve','contract','sign','preview-prices','update-prices','set-discount'].includes(String(action))||!Number.isInteger(revision)||revision!==(flow?.revision??0))return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
  let payload:Json={};let uploadedPath:string|null=null;
  try{
+  if(action==='set-discount'){
+   if(!flow)throw new Error('Save a quotation before changing its discount.');
+   if(flow.signed_at||!['quotation','approved','contract'].includes(flow.stage)||['contract_signed','transferred_to_operations'].includes(project.sales_status))return NextResponse.json({error:'Signed contracts cannot be changed.'},{status:409});
+   if(flow.stage==='contract'&&body.replaceUnsignedContract!==true)throw new Error('Confirm that this revision replaces the unsigned contract and requires new client approval.');
+   if(!Object.hasOwn(body,'discountPercent'))throw new Error('Choose either no discount or the 5% quotation discount.');
+   payload={...applyQuotationDiscount(flow.quotation,body.discountPercent),createdAt:new Date().toISOString(),preparedBy:auth.user.id} as unknown as Json;
+  }
   if(action==='preview-prices'||action==='update-prices'){
    if(project.additional_openings_state)return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.'},{status:409});
    if(!flow)return NextResponse.json({error:'Save a quotation before updating its prices.'},{status:409});
@@ -68,7 +75,8 @@ export async function POST(request:Request,context:Context){
    if(openings.error||catalog.error)throw new Error('Unable to load pricing.');
    if(!Array.isArray(body.choices))throw new Error('Select a system for every opening.');
    const measured=quotationOpenings(openings.data??[],body.newOpenings??[]);
-   payload={...priceQuotation(measured,body.choices as OpeningChoice[],catalog.data as CatalogItem[],auth.user.id,(body.additionalItems??[]) as AdditionalChoice[]),branch:project.branch,governorate:project.governorate??null} as unknown as Json;
+   const discountPercent=body.discountPercent===undefined?flow?.quotation.discount?.percent??0:body.discountPercent;
+   payload={...priceQuotation(measured,body.choices as OpeningChoice[],catalog.data as CatalogItem[],auth.user.id,(body.additionalItems??[]) as AdditionalChoice[],discountPercent),branch:project.branch,governorate:project.governorate??null} as unknown as Json;
   }
   if(action==='approve' && body.confirmed!==true)throw new Error('Confirm that the client approved this quotation.');
   if(action==='contract'){
@@ -107,7 +115,7 @@ export async function POST(request:Request,context:Context){
     uploadedPath=path;payload={method:'upload',signer,path,fileName:upload.name.slice(0,200)};
    }else throw new Error('Choose digital signing or upload a signed copy.');
   }
-  const result=await admin.rpc('advance_sales_flow',{p_project:projectId,p_action:action==='update-prices'?'save':String(action),p_revision:revision as number,p_payload:payload,p_actor:auth.user.id});
+  const result=await admin.rpc('advance_sales_flow',{p_project:projectId,p_action:action==='update-prices'||action==='set-discount'?'save':String(action),p_revision:revision as number,p_payload:payload,p_actor:auth.user.id});
   if(result.error)throw new Error(result.error.message);
   return NextResponse.json({flow:result.data},{headers:{'Cache-Control':'no-store'}});
  }catch(cause){

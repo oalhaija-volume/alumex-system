@@ -151,6 +151,21 @@ with check (
   )
 );
 
+-- Some installed databases retain an older opening-read policy based on
+-- creator/manager access. Add only shared-project reads for assigned Indoor
+-- employees; private-project reads and every write policy stay unchanged.
+create policy governorate_openings_indoor_read on public.openings
+for select to authenticated
+using (
+  public.is_indoor_sales_user()
+  and (select public.current_indoor_sales_branch()) is not null
+  and public.can_view_sales_project(project_id)
+  and exists (
+    select 1 from public.projects p
+    where p.id = openings.project_id and p.branch = 'Governorates'
+  )
+);
+
 -- Shared unclaimed intake reaches both branch teams. Once claimed, existing
 -- ownership rules still notify only the eligible selected owner.
 create or replace function public.sales_notification_recipients(target_project uuid)

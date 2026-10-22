@@ -109,8 +109,10 @@ begin
   for index in 1..3 loop
     branch_value := case index when 1 then 'Karkh' when 2 then 'Rasafa' else null end;
     insert into public.clients(id,client_name,created_by) values(private_clients[index],'Private branch fixture',outdoor_id);
-    insert into public.projects(id,client_id,project_number,project_name,created_by,owner_id,branch,structure_readiness)
-      values(private_ids[index],private_clients[index],'VERIFY-GOV-'||private_ids[index],'Private branch fixture',outdoor_id,outdoor_id,branch_value,'ready');
+    insert into public.projects(id,client_id,project_number,project_name,created_by,owner_id,branch,structure_readiness,sales_status)
+      values(private_ids[index],private_clients[index],'VERIFY-GOV-'||private_ids[index],'Private branch fixture',outdoor_id,outdoor_id,branch_value,'ready','new_lead');
+    insert into public.openings(project_id,opening_code,floor,room,width,height,quantity,opening_type,opening_direction,site_readiness,created_by)
+      values(private_ids[index],'PRIVATE-GOV-1','Ground','Office',100,100,1,'Window','Sliding','ready',outdoor_id);
   end loop;
   begin
     insert into public.projects(client_id,project_number,project_name,created_by,branch,governorate)
@@ -132,12 +134,18 @@ begin
       assert cardinality(visible_ids)=0, 'Missing employee branch must fail closed for shared projects';
       assert not public.can_access_indoor_project_branch(shared_id);
       assert not exists(select 1 from public.clients c where c.id=shared_client);
+      assert not exists(select 1 from public.openings o where o.project_id=any(array_append(private_ids,shared_id))),
+        'An unassigned Indoor employee cannot read shared or private openings';
     else
       assert cardinality(visible_ids)=2 and shared_id=any(visible_ids),
         'Each Indoor team sees its private branch plus shared Governorates';
       assert (case when test_actor_id=karkh_id then private_ids[1] else private_ids[2] end)=any(visible_ids);
       assert public.can_view_sales_project(shared_id) and public.can_access_indoor_project_branch(shared_id);
-      assert exists(select 1 from public.openings o where o.project_id=shared_id);
+      assert exists(select 1 from public.openings o where o.project_id=shared_id),
+        'Both assigned Indoor teams can read a Governorates opening schedule';
+      assert not exists(select 1 from public.openings o
+        where o.project_id in (case when test_actor_id=karkh_id then private_ids[2] else private_ids[1] end,private_ids[3])),
+        'Shared opening access must not expose the other branch or unmarked projects';
       assert exists(select 1 from public.project_workflow_events e where e.project_id=shared_id);
       assert exists(select 1 from public.clients c where c.id=shared_client);
       assert exists(select 1 from public.documents d where d.id=shared_document);

@@ -12,7 +12,7 @@ import type { QuotationRevision,SalesFlow } from '@/lib/workflow/types';
 import {MeasurementReports} from "@/components/measurements/MeasurementReports";
 import { ProjectRecord } from './ProjectRecord';
 import { QuotationOpeningForm } from './QuotationOpeningForm';
-import { measuredOpeningArea,billableOpeningArea,openingSellingBand,openingMinimumSellingRate,quotationSellingSuggestion } from '@/lib/workflow/pricing';
+import { discountedSystemRate,measuredOpeningArea,billableOpeningArea,openingSellingBand,openingMinimumSellingRate,quotationSellingSuggestion } from '@/lib/workflow/pricing';
 import { OpeningAreaBadge,OpeningSellingLegend } from './OpeningAreaIndicator';
 import { DocumentHeader,DocumentParties,OpeningSchedule,DocumentFooter,DocumentPaper } from './CommercialDocument';
 import { api,button,card,field,Notice,secondary,useResource,Workspace } from './ui';
@@ -66,15 +66,15 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
    {quotation&&<dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3"><div><dt className="text-slate-600">{term('Subtotal')}</dt><dd className="mt-1 font-semibold">{formatMoney(quotation.discount?.subtotal??quotation.total)}</dd></div><div><dt className="text-slate-600">{term('Discount (5%)')}</dt><dd className="mt-1 font-semibold">−{formatMoney(quotation.discount?.amount??0)}</dd></div><div><dt className="text-slate-600">{term('Final total')}</dt><dd className="mt-1 font-semibold text-blue-900">{formatMoney(quotation.total)}</dd></div></dl>}
   </>;
  }
- const sellingQuote=editing?draftQuotation:flow?.quotation;
+ const sellingQuote=editing?draftQuotation:discountPreview??flow?.quotation;
  const sellingSuggestion=flow&&sellingQuote&&!archived&&!needsRevision&&canEdit&&!pricePreview?quotationSellingSuggestion(sellingQuote,catalog):null;
  const targetRates=new Map(sellingSuggestion?.openingRates.map(opening=>[opening.openingId,opening.rate]));
  const suggestedChoices=sellingSuggestion?choices.map(choice=>targetRates.has(choice.openingId)?{...choice,systemRate:targetRates.get(choice.openingId)}:choice):choices;
  let suggestedQuotation:QuoteSnapshot|undefined;
- if(sellingSuggestion){try{suggestedQuotation=priceQuotation(openings,suggestedChoices,catalog,'preview',additionalItems,discountPercent);}catch{/* Incomplete selections remain editable. */}}
- const suggestedPricing=suggestedQuotation?quotationSellingSuggestion(suggestedQuotation,catalog):null;
+ if(sellingSuggestion?.canApply){try{suggestedQuotation=priceQuotation(openings,suggestedChoices,catalog,'preview',additionalItems,discountPercent);}catch{/* Incomplete selections remain editable. */}}
+ const suggestedPricing=suggestedQuotation?quotationSellingSuggestion(suggestedQuotation,catalog):sellingSuggestion?.canApply===false?sellingSuggestion:null;
  function applySuggestedRate(){
-  if(!sellingSuggestion||busy||pricePreview)return;
+  if(!sellingSuggestion?.canApply||busy||pricePreview)return;
   setChoices(suggestedChoices);setEditing(true);setViewVersion('current');setApproved(false);setError('');clearActionError();
  }
  function edit(index:number,patch:Partial<OpeningChoice>){setChoices(c=>c.map((v,i)=>i===index?{...v,...patch}:v));}
@@ -124,7 +124,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <p>{flow?term('Editing revision {current}. Saving creates revision {next} and requires new client approval.',{current:formatNumber(flow.quotation.version??1),next:formatNumber((flow.quotation.version??1)+1)}):term("Alumex is selected by default. Choose the specifications requested by the client.")}</p>
     <p>{term("Catalog rates apply unless you set an Alumex system rate for this quotation. Review the new total before saving.")}</p>
    </div>
-   {!!openings.length&&<OpeningSellingLegend/>}
+   {!!openings.length&&<OpeningSellingLegend discountPercent={discountPercent}/>}
    {openings.map((opening,index)=>{
     const choice=choices[index];
     const system=catalog.find(p=>p.id===choice.systemId);
@@ -134,10 +134,10 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     const invalidRate=editableRate&&choice.systemRate!==undefined&&(!Number.isInteger(systemRate)||systemRate<QUOTATION_SYSTEM_RATE_MIN||systemRate>maximumRate);
     const isNew=newOpenings.some(o=>o.id===opening.id);
     const area=measuredOpeningArea(opening);
-    const band=editableRate?openingSellingBand(area,systemRate,opening):undefined;
+    const band=editableRate?openingSellingBand(area,discountedSystemRate(systemRate,discountPercent),opening):undefined;
     const minimumApplied=billableOpeningArea(opening)>area&&[choice.systemId,choice.glassId,...choice.extras.map(extra=>extra.id)].some(id=>catalog.some(item=>item.id===id&&item.unit==='sqm'));
     return <section key={opening.id} data-area-band={band} className={`${card} quotation-opening${band?` opening-area-${band}`:''}`} aria-label={term('Opening {number}',{number:formatNumber(index+1)})}>
-     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Opening {number}',{number:formatNumber(index+1)})} · {term(opening.opening_type)} {opening.opening_direction?term(opening.opening_direction):''}{opening.has_arch?` · ${term('Arch')}`:''}</h2>{editableRate?<OpeningAreaBadge area={area} rate={systemRate} opening={opening}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}{isNew&&<button type="button" className="min-h-11 px-3 text-sm text-red-700" onClick={()=>{setNewOpenings(rows=>rows.filter(o=>o.id!==opening.id));setChoices(rows=>rows.filter(c=>c.openingId!==opening.id));}}>{term("Remove new opening")}</button>}</div>
+     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Opening {number}',{number:formatNumber(index+1)})} · {term(opening.opening_type)} {opening.opening_direction?term(opening.opening_direction):''}{opening.has_arch?` · ${term('Arch')}`:''}</h2>{editableRate?<OpeningAreaBadge area={area} rate={systemRate} opening={opening} discountPercent={discountPercent}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}{isNew&&<button type="button" className="min-h-11 px-3 text-sm text-red-700" onClick={()=>{setNewOpenings(rows=>rows.filter(o=>o.id!==opening.id));setChoices(rows=>rows.filter(c=>c.openingId!==opening.id));}}>{term("Remove new opening")}</button>}</div>
      <p className="mt-2 text-sm text-slate-500">{term("Floor")} {term(opening.floor)} · {opening.work_area==='internal'?`${term('Internal works')} · ${term(opening.room)}`:term(opening.room)} · {formatNumber(opening.width)} × {formatNumber(opening.height)} {term("cm")} · {term("Quantity")}: {formatNumber(opening.quantity??1)}{isNew?` · ${term('Not saved yet')}`:''}</p>
      {minimumApplied&&<p className="mt-2 text-xs text-slate-600">{term('Minimum billable area: 1 m² per window.')} {term('Billable area: {area} m²',{area:formatNumber(billableOpeningArea(opening)*(opening.quantity??1))})}</p>}
      <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -192,21 +192,22 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <h2 className="mb-2 font-semibold">{term('Quotation discount')}</h2>
     {discountOption(discountPreview)}
     <p className="mt-4 text-xs leading-5 text-slate-600">{term('Saving this discount creates a new quotation revision and resets approval.')}</p>
-    {discountChanged&&<p role="status" className="mt-2 text-sm text-amber-800">{term('Saved quotation below. Your draft changes will appear after saving.')}</p>}
+    {discountChanged&&<p role="status" className="mt-2 text-sm text-amber-800">{term('Discount preview: opening colors reflect the selected discount. Amounts below remain the saved quotation until you save.')}</p>}
     {flow.stage==='contract'&&<label className="mt-4 flex items-start gap-3 rounded-md bg-amber-50 p-4 text-sm leading-6 text-amber-900"><input type="checkbox" disabled={busy} checked={replaceContract} onChange={event=>setReplaceContract(event.target.checked)} className="mt-1"/>{term('Replace the unsigned contract. The previous document will be kept in history, and the revised quotation must be approved before a new contract can be generated.')}</label>}
     <button type="button" disabled={busy||!discountPreview||!discountChanged||(flow.stage==='contract'&&!replaceContract)} className={`${button} mt-4`} onClick={()=>void act('set-discount')}>{term(busy?'Saving discount…':'Save discount')}</button>
    </section>}
    {sellingSuggestion&&suggestedPricing&&<section aria-label={term('Suggested average system rate')} className="mb-5 rounded-lg border border-green-200 bg-green-50 p-4 sm:p-5 print:hidden">
     <h2 className="font-semibold text-slate-900">{term('Suggested average system rate')}</h2>
     <p className="mt-2 text-2xl font-semibold text-green-900">{formatMoney(suggestedPricing.rate)} / {term('m²')}</p>
+    {discountPercent===5&&<p className="mt-1 text-xs text-green-900">{term('Suggested prices before discount')}</p>}
     <p className="mt-1 text-xs text-green-900">{term('Approximate average; each opening keeps its own rate.')}</p>
     <p className="mt-2 text-sm leading-6 text-slate-700">{term('Each opening uses its own target rate. The overall rate is the area-weighted average, including quantities. Glass and add-ons are priced separately.')}</p>
     <p className="mt-1 text-xs leading-5 text-slate-600">{term('Based on {area} m² billable area across {count} Alumex openings.',{area:formatNumber(suggestedPricing.billableArea,4),count:formatNumber(suggestedPricing.openingCount)})}</p>
     <p className="mt-1 text-xs leading-5 text-slate-600">{term('Average system rate = system total ÷ billable area.')}</p>
     {sellingSuggestion.allGreen?<p role="status" className="mt-3 text-sm font-semibold text-green-900">{term('All Alumex openings meet their selling targets.')}</p>:<>
      {suggestedQuotation&&<p className="mt-3 text-sm text-slate-700">{term('Suggested quotation total')}: <strong>{formatMoney(suggestedQuotation.total)}</strong></p>}
-     <p className="mt-2 text-xs leading-5 text-slate-600">{term('Review the suggested opening prices and save a revision to apply them.')}</p>
-     <button type="button" disabled={busy||addingOpening} className={`${button} mt-4`} onClick={applySuggestedRate}>{term('Apply suggested opening prices')}</button>
+     {sellingSuggestion.canApply?<p className="mt-2 text-xs leading-5 text-slate-600">{term('Review the suggested opening prices and save a revision to apply them.')}</p>:<p role="status" className="mt-3 text-sm text-amber-900">{term('Some openings cannot meet their selling targets with this discount within the allowed rate limits.')}</p>}
+     <button type="button" disabled={busy||addingOpening||!sellingSuggestion.canApply} className={`${button} mt-4`} onClick={applySuggestedRate}>{term('Apply suggested opening prices')}</button>
     </>}
    </section>}
    {pricePreview&&!editing&&<section aria-label={term('Update quotation prices')} className="mb-5 rounded-lg border border-blue-200 bg-blue-50 p-4 sm:p-5 print:hidden">
@@ -222,7 +223,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <DocumentHeader kind="Quotation" number={reference} createdAt={shown.createdAt}/>
     {archived&&<p className="my-5 border border-amber-400 bg-amber-50 p-3 font-semibold text-amber-900">{term("SUPERSEDED — For reference only. This quotation cannot be approved or signed.")}{archived.contract?' '+term('Contract {number} was also superseded.',{number:archived.contract.number}):''}</p>}
     <DocumentParties client={data.client} project={{number:data.project.project_number,address:data.project.address,governorate:shown.governorate === undefined ? data.project.governorate : shown.governorate,branch:shown.branch === undefined ? data.project.branch : shown.branch}}/>
-    <OpeningSchedule quote={shown} showAreaColors blendSystemRates={!archived&&!flow.signed_at}/><p className="document-note">{term("Prepared from the recorded initial measurements and selected specifications. Contract terms are presented in the separate client contract.")}</p><DocumentFooter reference={reference}/>
+    <OpeningSchedule quote={shown} showAreaColors blendSystemRates={!archived&&!flow.signed_at} colorDiscountPercent={!archived&&!editing&&canUpdatePrices&&!pricePreview?discountPercent:undefined}/><p className="document-note">{term("Prepared from the recorded initial measurements and selected specifications. Contract terms are presented in the separate client contract.")}</p><DocumentFooter reference={reference}/>
    </DocumentPaper>}
    <div className="mt-6 flex flex-wrap gap-3 print:hidden">
     <button disabled={editing||discountChanged} onClick={()=>window.print()} className={secondary}>{term("Print quotation")}</button>

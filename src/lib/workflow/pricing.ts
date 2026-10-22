@@ -71,24 +71,32 @@ export function openingSellingBand(area:number,rate:number,opening?:OpeningSelli
  const band=openingAreaBand(area);
  return band==='green'?'red':band;
 }
-export function quotationSellingSuggestion(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]):{rate:number;openingCount:number;allGreen:boolean;billableArea:number;systemTotal:number;openingRates:{openingId:string;rate:number}[]}|null {
+export function discountedSystemRate(rate:number,discountPercent:0|5=0) {
+ // Selling targets use the unrounded net rate; whole-IQD rounding happens only
+ // once when calculating the quotation's overall discount amount.
+ return rate*(100-discountPercent)/100;
+}
+export function quotationSellingSuggestion(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]):{rate:number;openingCount:number;allGreen:boolean;canApply:boolean;billableArea:number;systemTotal:number;openingRates:{openingId:string;rate:number}[]}|null {
  const catalog=rawCatalog.map(normalizeCatalogItem);
- let openingCount=0,billableArea=0,systemTotal=0,allGreen=true;
+ const discountPercent=snapshot.discount?.percent??0;
+ let openingCount=0,billableArea=0,systemTotal=0,allGreen=true,canApply=true;
  const openingRates:{openingId:string;rate:number}[]=[];
  for(const line of snapshot.lines){
   if(!['Window','Door'].includes(line.opening.opening_type??'')||line.system.unit!=='sqm'||!isQuotationSystemRateEditable(catalog.find(product=>product.id===line.system.id)))continue;
   const area=measuredOpeningArea(line.opening);
   const minimum=openingMinimumSellingRate(area,line.opening);
+  const requiredRate=Math.ceil(minimum*100/(100-discountPercent));
   // Saved system quantities include repetitions and the window billing minimum.
   // Average the actual charges, keeping each opening's own target selling rate.
   if(!Number.isFinite(line.system.quantity)||line.system.quantity<=0)return null;
   billableArea+=line.system.quantity;
-  systemTotal+=Math.round(line.system.quantity*minimum);
-  openingRates.push({openingId:line.opening.id,rate:minimum});
+  systemTotal+=Math.round(line.system.quantity*requiredRate);
+  openingRates.push({openingId:line.opening.id,rate:requiredRate});
   openingCount+=line.opening.quantity??1;
-  allGreen=allGreen&&openingSellingBand(area,line.system.rate,line.opening)==='green';
+  allGreen=allGreen&&openingSellingBand(area,discountedSystemRate(line.system.rate,discountPercent),line.opening)==='green';
+  canApply=canApply&&requiredRate<=quotationSystemRateMax(line.opening);
  }
- return openingCount?{rate:systemTotal/billableArea,openingCount,allGreen,billableArea,systemTotal,openingRates}:null;
+ return openingCount?{rate:systemTotal/billableArea,openingCount,allGreen,canApply,billableArea,systemTotal,openingRates}:null;
 }
 export function quotableOpenings(openings:MeasuredOpening[]) { return openings.filter(opening=>opening.opening_type!=='Skylight'&&opening.opening_type!=='Facade'); }
 export function recordedFacadeAreas(openings:MeasuredOpening[]):SurfaceMeasurement[] {

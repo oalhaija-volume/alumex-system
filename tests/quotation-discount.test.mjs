@@ -27,7 +27,7 @@ function moduleLoader(dependencies={}) {
  };
 }
 const load=moduleLoader();
-const {applyQuotationDiscount,priceQuotation,repriceQuotation,quotationPriceKey,quotationSellingSuggestion}=load('src/lib/workflow/pricing');
+const {applyQuotationDiscount,discountedSystemRate,openingSellingBand,priceQuotation,repriceQuotation,quotationPriceKey,quotationSellingSuggestion}=load('src/lib/workflow/pricing');
 const {quotationClientPricing}=load('src/lib/quotations/clientPricing');
 const product=(id,name,category,unit,unit_price)=>({id,name,category,unit,unit_price,is_active:true});
 const catalog=[
@@ -138,14 +138,101 @@ test('price keys distinguish discount preferences while existing gross-only quot
  assert.equal(quotationPriceKey(discounted),quotationPriceKey({...discounted,createdAt:'later',preparedBy:'someone-else'}));
 });
 
-test('discounts leave client weighted rates, opening allocations and internal green targets based on gross charges',()=>{
+test('discounts keep gross client prices intact while selling guidance responds to the discounted rate',()=>{
  const second={...opening,id:'second',width:200,height:100,quantity:1};
  const gross=priceQuotation([opening,second],[{...choice,systemRate:278000},{openingId:'second',systemId:'system',systemRate:260000,extras:[]}],catalog,'author',additional);
  const discounted=applyQuotationDiscount(gross,5);
  assert.deepEqual(quotationClientPricing(discounted),quotationClientPricing(gross));
- assert.deepEqual(quotationSellingSuggestion(discounted,catalog),quotationSellingSuggestion(gross,catalog));
+ const grossSuggestion=quotationSellingSuggestion(gross,catalog);
+ const discountedSuggestion=quotationSellingSuggestion(discounted,catalog);
+ assert.deepEqual(grossSuggestion.openingRates,[{openingId:'opening',rate:278000},{openingId:'second',rate:278000}]);
+ assert.deepEqual(discountedSuggestion.openingRates,[{openingId:'opening',rate:292632},{openingId:'second',rate:292632}]);
+ assert.equal(discountedSuggestion.canApply,true);
  assert.deepEqual(discounted.lines,gross.lines);
  assert.equal(discounted.total,discounted.discount.subtotal-discounted.discount.amount);
+});
+
+test('effective system rates apply five percent mathematically without changing gross stored rates',()=>{
+ for(const [rate,net] of [[240000,228000],[260000,247000],[265000,251750],[278000,264100],[305000,289750]]){
+  assert.equal(discountedSystemRate(rate),rate);
+  assert.equal(discountedSystemRate(rate,0),rate);
+  assert.equal(discountedSystemRate(rate,5),net);
+ }
+});
+
+test('discounted green boundaries require enough whole-IQD gross rate to meet each size or hinged type target',()=>{
+ for(const [area,opening_type,opening_direction,minimum,grossRequired] of [
+  [3,'Window','Sliding',278000,292632],
+  [3.5,'Window','Sliding',265000,278948],
+  [4,'Window','Sliding',250000,263158],
+  [6,'Window','Sliding',240000,252632],
+  [6,'Window','Hinged',260000,273685],
+  [2,'Door','Hinged',305000,321053],
+ ]){
+  const measured={opening_type,opening_direction};
+  assert.equal(openingSellingBand(area,discountedSystemRate(minimum,0),measured),'green');
+  assert.notEqual(openingSellingBand(area,discountedSystemRate(minimum,5),measured),'green');
+  assert.notEqual(openingSellingBand(area,discountedSystemRate(grossRequired-1,5),measured),'green',`${opening_direction} ${opening_type} ${area} sqm below boundary`);
+  assert.equal(openingSellingBand(area,discountedSystemRate(grossRequired,5),measured),'green',`${opening_direction} ${opening_type} ${area} sqm at boundary`);
+ }
+});
+
+test('rounding an effective rate to whole IQD cannot make a below-target opening falsely green',()=>{
+ for(const [area,gross,minimum,opening_direction] of [[3.5,278947,265000,'Sliding'],[6,273684,260000,'Hinged']]){
+  const net=discountedSystemRate(gross,5);
+  assert.ok(net<minimum&&net>minimum-1);
+  assert.equal(Math.round(net),minimum,'Whole-IQD display rounding reaches the threshold');
+  assert.notEqual(openingSellingBand(area,net,{opening_type:'Window',opening_direction}),'green','The color must use the unrounded effective rate');
+ }
+});
+
+test('discount-aware suggestions round each required gross rate upward and become green after applying them',()=>{
+ const definitions=[['small',3,'Sliding',278000],['medium',3.5,'Sliding',265000],['larger',4,'Sliding',250000],['large',6,'Sliding',240000],['hinged',2,'Hinged',260000]];
+ const openings=definitions.map(([id,area,opening_direction])=>({...opening,id,width:area*100,height:100,quantity:1,opening_direction}));
+ const choices=definitions.map(([openingId,,,systemRate])=>({openingId,systemId:'system',systemRate,extras:[]}));
+ const gross=priceQuotation(openings,choices,catalog,'author');
+ const discounted=applyQuotationDiscount(gross,5);
+ const before=structuredClone(discounted);
+ assert.equal(quotationSellingSuggestion(gross,catalog).allGreen,true);
+ const suggestion=quotationSellingSuggestion(discounted,catalog);
+ assert.deepEqual(suggestion,{
+  rate:4970008/18.5,openingCount:5,allGreen:false,canApply:true,billableArea:18.5,systemTotal:4970008,
+  openingRates:[{openingId:'small',rate:292632},{openingId:'medium',rate:278948},{openingId:'larger',rate:263158},{openingId:'large',rate:252632},{openingId:'hinged',rate:273685}],
+ });
+ const adjusted=priceQuotation(openings,suggestion.openingRates.map(({openingId,rate})=>({openingId,systemId:'system',systemRate:rate,extras:[]})),catalog,'author',[],5);
+ assert.equal(quotationSellingSuggestion(adjusted,catalog).allGreen,true);
+ assert.equal(quotationSellingSuggestion(adjusted,catalog).canApply,true);
+ assert.deepEqual(discounted,before);
+});
+
+test('a discounted hinged door reports an unappliable projection without changing its permitted gross rate range',()=>{
+ const measured={...opening,id:'hinged-door',width:200,height:100,quantity:1,opening_type:'Door',opening_direction:'Hinged'};
+ const selected={openingId:measured.id,systemId:'system',systemRate:305000,extras:[]};
+ const saved=priceQuotation([measured],[selected],catalog,'author',[],5);
+ const before=structuredClone(saved);
+ assert.deepEqual(quotationSellingSuggestion(saved,catalog),{
+  rate:321053,openingCount:1,allGreen:false,canApply:false,billableArea:2,systemTotal:642106,
+  openingRates:[{openingId:'hinged-door',rate:321053}],
+ });
+ assert.throws(()=>priceQuotation([measured],[{...selected,systemRate:321053}],catalog,'author',[],5),/305,000/);
+ assert.deepEqual(saved,before);
+});
+
+test('discount-aware colors and guidance keep repeated window sizes and minimum billable quantities unchanged',()=>{
+ const measured={...opening,id:'small-hinged',width:68,height:77,quantity:3,opening_direction:'Hinged'};
+ const selected={openingId:measured.id,systemId:'system',systemRate:260000,extras:[]};
+ const gross=priceQuotation([measured],[selected],catalog,'author');
+ const saved=applyQuotationDiscount(gross,5);
+ assert.equal(saved.lines[0].area,0.5236*3);
+ assert.equal(saved.lines[0].system.quantity,3);
+ assert.equal(saved.lines[0].system.rate,260000);
+ assert.equal(saved.lines[0].system.total,780000);
+ assert.deepEqual(quotationSellingSuggestion(saved,catalog),{
+  rate:273685,openingCount:3,allGreen:false,canApply:true,billableArea:3,systemTotal:821055,
+  openingRates:[{openingId:'small-hinged',rate:273685}],
+ });
+ assert.equal(quotationSellingSuggestion(applyQuotationDiscount(saved,0),catalog).allGreen,true);
+ assert.deepEqual(saved.lines,gross.lines);
 });
 
 function fixture({role='Indoor Sales',branch='Karkh',projectBranch='Karkh',stage='quotation',signedAt=null,status='quotation_in_progress',additionalState=null,missingFlow=false,discountPercent=0}={}) {

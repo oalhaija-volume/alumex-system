@@ -1,6 +1,6 @@
 "use client";
 import { useI18n } from '@/components/i18n/I18nProvider';
-import { openingAreaBand,openingMinimumSellingRate,openingSellingBand } from '@/lib/workflow/pricing';
+import { discountedSystemRate,openingAreaBand,openingMinimumSellingRate,openingSellingBand } from '@/lib/workflow/pricing';
 import type { MeasuredOpening } from '@/lib/workflow/pricing';
 
 const areaBands = [
@@ -28,22 +28,26 @@ const sellingTargets:ReadonlyArray<{area:number;label:string;opening?:SellingOpe
  {area:1,label:'Hinged door · all sizes · {rate} / m²',opening:{opening_type:'Door',opening_direction:'Hinged'}},
 ];
 
-export function OpeningSellingLegend() {
+export function OpeningSellingLegend({discountPercent=0}:{discountPercent?:0|5}={}) {
  const {term,formatMoney}=useI18n();
  return <div className="opening-area-legend mb-4 space-y-2 text-xs" aria-label={term('Selling price targets (per opening)')}>
   <p className="font-medium text-slate-600">{term('Selling price targets (per opening)')}</p>
   <ul className="flex flex-wrap gap-2">{sellingTargets.map(({area,label,opening})=><li key={label} className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">{term(label,{rate:formatMoney(openingMinimumSellingRate(area,opening))})}</li>)}</ul>
   <p className="leading-5 text-slate-600">{term('Green means the system rate meets the opening target for its size or type. Red, orange and yellow mean the rate is below its selling target.')}</p>
+  {discountPercent===5&&<p className="font-medium leading-5 text-slate-700">{term('Selling targets are assessed after the 5% discount.')}</p>}
   <p className="leading-5 text-slate-600">{term('Applies to Alumex systems priced per m². Glass and add-ons are priced separately.')}</p>
  </div>;
 }
 
-export function OpeningAreaBadge({area,rate,opening}:{area:number;rate?:number;opening?:SellingOpening}) {
+export function OpeningAreaBadge({area,rate,opening,discountPercent=0}:{area:number;rate?:number;opening?:SellingOpening;discountPercent?:0|5}) {
  const {term,formatNumber,formatMoney}=useI18n();
- const band=rate===undefined?openingAreaBand(area):openingSellingBand(area,rate,opening);
+ const effectiveRate=rate===undefined?undefined:discountedSystemRate(rate,discountPercent);
+ const afterDiscount=discountPercent===5&&effectiveRate!==undefined?term('After discount: {rate} / m²',{rate:`${formatNumber(effectiveRate,2)} ${term('IQD')}`}):undefined;
+ const band=effectiveRate===undefined?openingAreaBand(area):openingSellingBand(area,effectiveRate,opening);
  const label=rate===undefined?term(areaBands.find(item=>item.band===band)!.label):term(band==='green'?'Green target met':'Below selling target');
- const title=rate===undefined?label:`${label} · ${term('System rate: {rate} / m²',{rate:formatMoney(rate)})} · ${term('Minimum rate for green: {rate} / m²',{rate:formatMoney(openingMinimumSellingRate(area,opening))})}`;
+ const title=rate===undefined?label:`${label} · ${term('System rate: {rate} / m²',{rate:formatMoney(rate)})}${afterDiscount?` · ${afterDiscount}`:''} · ${term('Minimum rate for green: {rate} / m²',{rate:formatMoney(openingMinimumSellingRate(area,opening))})}`;
  return <span className={`opening-area-badge flex-wrap gap-x-1.5 opening-area-${band}`} title={title}>
   <span>{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>{rate===undefined?<span className="sr-only"> · {label}</span>:<span>· {label}</span>}
+  {afterDiscount&&<span>· {afterDiscount}</span>}
  </span>;
 }

@@ -68,7 +68,7 @@ function ProjectRow({ project, data, leadership, overdue, busy, onDelete }: {
           <h3 id={`project-name-${project.id}`} className="min-w-0 break-words text-sm font-semibold leading-6 text-slate-950 [overflow-wrap:anywhere]">
             <Link href={action.href} className="rounded-sm hover:text-blue-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">{project.project_name}</Link>
           </h3>
-          <span className="text-xs font-medium text-slate-500"><bdi>{term(project.project_number)}</bdi>{project.branch && <span> · {term(project.branch === 'Karkh' ? 'From Karkh' : 'From Rasafa')}</span>}</span>
+          <span className="text-xs font-medium text-slate-500"><bdi>{term(project.project_number)}</bdi>{project.branch && <span> · {term(project.branch === 'Governorates' ? 'Governorates' : project.branch === 'Karkh' ? 'From Karkh' : 'From Rasafa')}{project.governorate && <> · <bdi>{project.governorate}</bdi></>}</span>}</span>
           {project.pending && <span className="text-xs text-slate-500">{term('Saved on device')}</span>}
         </div>
         <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold ${tone.surface}`}><span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone.dot}`}/>{term(details.label)}</span>

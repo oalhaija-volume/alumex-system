@@ -1,5 +1,5 @@
 import { isHistoricalProject, loadMeasurementAttempts, loadWorkspaceProjects } from '@/lib/measurements/visitHistory';
-import { normalizeProjectBranch } from '@/lib/intake/projectBranch';
+import { normalizeProjectBranch,normalizeProjectGovernorate } from '@/lib/intake/projectBranch';
 import {normalizeMeasurementCompletion} from '@/lib/measurements/completion';
 import { normalizeBuildingType } from '@/lib/intake/buildingType';
 import { normalizeClientCancellation, normalizeMeasurementDelay } from '@/lib/measurements/measurementDelay';
@@ -73,10 +73,12 @@ export async function POST(request:Request){
   // Retain compatibility with registrations already saved by older installed clients.
   let branch;
   if(auth.role==='Outdoor Sales'&&p.branch!==undefined){try{branch=normalizeProjectBranch(p.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}}
+  let governorate;
+  try{governorate=normalizeProjectGovernorate(branch,p.governorate);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   const assignee=p?.assignedOutdoorSalesId;
   if(assignee && (typeof assignee!=='string'||!uuid.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
   if((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager')&&!assignee)return NextResponse.json({error:'Choose yourself or an Outdoor Sales employee to collect the initial measurements.'},{status:400});
-  payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(branch?{branch}:{}),...(p.buildingType===undefined?{}:{buildingType}),...(assignee?{assignedOutdoorSalesId:assignee}:{}),address:address.slice(0,2000)||`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
+  payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(branch?{branch}:{}),...(governorate?{governorate}:{}),...(p.buildingType===undefined?{}:{buildingType}),...(assignee?{assignedOutdoorSalesId:assignee}:{}),address:address.slice(0,2000)||`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
  }else if(body.action==='finish'){
   try{payload=body.payload.note===undefined&&body.payload.photo===undefined?{}:normalizeMeasurementCompletion(body.payload);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  }else if(body.action==='opening'){
@@ -104,7 +106,7 @@ export async function POST(request:Request){
   // Confirm deletion and the employee's former access before disclosing it.
   let deletion=admin.from('audit_events').select('id').eq('action','project_deleted').eq('entity_type','project').eq('entity_id',body.projectId);
   if(!canAccessCRM(auth.role))deletion=deletion.or(`previous_value->>created_by.eq.${auth.user.id},previous_value->>assigned_outdoor_sales_id.eq.${auth.user.id}`);
-  if(auth.role==='Indoor Sales')deletion=deletion.eq('previous_value->>branch',auth.profile?.branch??'');
+  if(auth.role==='Indoor Sales')deletion=['Karkh','Rasafa'].includes(auth.profile?.branch??'')?deletion.in('previous_value->>branch',[auth.profile!.branch!,'Governorates']):deletion.eq('previous_value->>branch','');
   const archived=await deletion.limit(1).maybeSingle();
   if(!archived.error&&archived.data)return NextResponse.json({code:'project_deleted',error:'This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.'},{status:410,headers:{'Cache-Control':'no-store'}});
  }

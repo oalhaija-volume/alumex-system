@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth/adminServer';
 import { appRoles } from '@/lib/auth/roles';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { indoorProjectBranches } from '@/lib/auth/projectBranchAccess';
 
 export async function GET() {
   const auth = await requireRole(appRoles);
@@ -16,7 +17,7 @@ export async function GET() {
     query = query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);
   }
   if (auth.role === 'Indoor Sales') {
-    query = query.eq('branch', auth.profile?.branch ?? '');
+    query = query.in('branch', indoorProjectBranches(auth.profile?.branch));
   }
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: 'Unable to load project stages.' }, { status: 500 });

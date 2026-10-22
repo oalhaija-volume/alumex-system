@@ -1,4 +1,4 @@
-import { normalizeProjectBranch } from '@/lib/intake/projectBranch';
+import { normalizeProjectBranch,normalizeProjectGovernorate } from '@/lib/intake/projectBranch';
 import {normalizeMeasurementCompletion,retainMeasurementReport} from '@/lib/measurements/completion';
 import { parseProjectLocation } from '@/lib/location/coordinates';
 import { isOfflineDevice } from './device';
@@ -37,7 +37,7 @@ export async function prepareOffline():Promise<FieldState>{
    const remoteProjects=new Map(remote.projects.map(project=>[project.id,project]));
    const registrations=new Set(old?.queue.filter(change=>change.action==='register').map(change=>change.projectId)??[]);
    const unavailableProjectIds=remote.actor.role==='Indoor Sales'?[...pending].filter(id=>!remoteProjects.has(id)&&(!registrations.has(id)||old?.unavailableProjectIds?.includes(id))):[];
-   return {...remote,unavailableProjectIds,archivedProjects:old?.archivedProjects??[],measurementReports:[...(remote.measurementReports??[]).filter(r=>!pending.has(r.project_id)).map(r=>retainMeasurementReport(r,old?.measurementReports??[])),...(old?.measurementReports??[]).filter(r=>pending.has(r.project_id))],followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remoteProjects.has(id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id)).map(p=>remoteProjects.has(p.id)?{...p,branch:remoteProjects.get(p.id)!.branch,project_log_only:remoteProjects.get(p.id)!.project_log_only}:p)??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)).map(o=>retainSkylightCapture(o,old?.openings??[])),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
+   return {...remote,unavailableProjectIds,archivedProjects:old?.archivedProjects??[],measurementReports:[...(remote.measurementReports??[]).filter(r=>!pending.has(r.project_id)).map(r=>retainMeasurementReport(r,old?.measurementReports??[])),...(old?.measurementReports??[]).filter(r=>pending.has(r.project_id))],followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remoteProjects.has(id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id)).map(p=>remoteProjects.has(p.id)?{...p,branch:remoteProjects.get(p.id)!.branch,governorate:remoteProjects.get(p.id)!.governorate,project_log_only:remoteProjects.get(p.id)!.project_log_only}:p)??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)).map(o=>retainSkylightCapture(o,old?.openings??[])),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
   },'snapshot');
   setFieldUser(remote.actor.id);return state;
  })();
@@ -98,7 +98,7 @@ export async function syncFieldChanges(){
    }
    await updateFieldState(id,s=>{
     const queue=s!.queue.filter(c=>c.id!==change.id);const stillPending=queue.some(c=>c.projectId===change.projectId);
-    return {...s!,queue,projects:s!.projects.map(p=>p.id===change.projectId?{...p,...(!stillPending?result.project:{}),...('branch' in result.project?{branch:result.project.branch}:{}),measurement_attempts:(p.measurement_attempts??[]).map(entry=>entry.id===change.id?{...entry,pending:false}:entry),project_number:result.project.project_number,serverUpdatedAt:result.project.updated_at,pending:stillPending}:p),syncedAt:new Date().toISOString()};
+    return {...s!,queue,projects:s!.projects.map(p=>p.id===change.projectId?{...p,...(!stillPending?result.project:{}),...('branch' in result.project?{branch:result.project.branch}:{}),...('governorate' in result.project?{governorate:result.project.governorate}:{}),measurement_attempts:(p.measurement_attempts??[]).map(entry=>entry.id===change.id?{...entry,pending:false}:entry),project_number:result.project.project_number,serverUpdatedAt:result.project.updated_at,pending:stillPending}:p),syncedAt:new Date().toISOString()};
    });
   }
  };
@@ -112,6 +112,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
   if(action==='register'){
    const client=payload.client as Record<string,unknown>,project=payload.project as Record<string,unknown>;
    const branch=s.actor.role==='Outdoor Sales'?normalizeProjectBranch(project.branch):s.actor.branch??null;
+   const governorate=normalizeProjectGovernorate(branch,project.governorate);
    const buildingType=normalizeBuildingType(project.buildingType,s.actor.role==='Outdoor Sales');
    const readinessNote=normalizeReadinessNote(s.actor.role,project.structureReadiness,project.readinessNote);
    const assigned=typeof project.assignedOutdoorSalesId==='string'?project.assignedOutdoorSalesId:'';
@@ -120,7 +121,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if((s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')&&!assigned)throw new Error('Choose yourself or an Outdoor Sales employee to collect the initial measurements.');
    if(assigned&&!selfAssigned&&!s.outdoorSales?.some(e=>e.id===assigned))throw new Error('Choose an Outdoor Sales employee from the list. Connect online to refresh employees.');
    const location=parseProjectLocation(project.locationLatitude,project.locationLongitude);
-   p={location_latitude:location.latitude,location_longitude:location.longitude,building_type:buildingType,branch:(s.actor.role === 'Outdoor Sales'||s.actor.role === 'Indoor Sales'||s.actor.role === 'Sales Manager')?branch:null,assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.id:null,followUpOwner:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
+   p={location_latitude:location.latitude,location_longitude:location.longitude,building_type:buildingType,branch:(s.actor.role === 'Outdoor Sales'||s.actor.role === 'Indoor Sales'||s.actor.role === 'Sales Manager')?branch:null,governorate,assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.id:null,followUpOwner:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
   }else{
    if(!canAccessFieldProject(s,p))throw new Error('Project is not available to this employee.');
    if(!p)throw new Error('Open this project online once before working on it offline.');
@@ -242,13 +243,13 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
       if(!old)throw new Error('Offline account unavailable.');
       const registrations=new Set(old.queue.filter(change=>change.action==='register').map(change=>change.projectId));
       const unavailableProjectIds=workspace.actor.role==='Indoor Sales'?old.projects.filter(project=>!remoteProjects.has(project.id)&&(!registrations.has(project.id)||old.unavailableProjectIds?.includes(project.id))).map(project=>project.id):[];
-      return {...old,actor:workspace.actor,unavailableProjectIds,projects:old.projects.map(project=>remoteProjects.has(project.id)?{...project,branch:remoteProjects.get(project.id)!.branch,project_log_only:remoteProjects.get(project.id)!.project_log_only}:project)};
+      return {...old,actor:workspace.actor,unavailableProjectIds,projects:old.projects.map(project=>remoteProjects.has(project.id)?{...project,branch:remoteProjects.get(project.id)!.branch,governorate:remoteProjects.get(project.id)!.governorate,project_log_only:remoteProjects.get(project.id)!.project_log_only}:project)};
      });
     }
     if(s && url!=='/api/workspace' && data.project && data.openings && activeFieldUser()===s.actor.id)await updateFieldState(s.actor.id,old=>{
      if(!old)throw new Error('Offline account unavailable.');
      const pending=old.queue.some(change=>change.projectId===id);
-     return {...old,unavailableProjectIds:(old.unavailableProjectIds??[]).filter(projectId=>projectId!==id),projects:old.projects.map(project=>project.id===id?{...project,...(pending?{branch:data.project.branch}:data.project)}:project),openings:pending?old.openings:[...old.openings.filter(opening=>opening.projectId!==id),...data.openings.map((opening:RegistrationOpening)=>retainSkylightCapture({...opening,projectId:id!},old.openings))]};
+     return {...old,unavailableProjectIds:(old.unavailableProjectIds??[]).filter(projectId=>projectId!==id),projects:old.projects.map(project=>project.id===id?{...project,...(pending?{branch:data.project.branch,governorate:data.project.governorate}:data.project)}:project),openings:pending?old.openings:[...old.openings.filter(opening=>opening.projectId!==id),...data.openings.map((opening:RegistrationOpening)=>retainSkylightCapture({...opening,projectId:id!},old.openings))]};
     });
     return response;
    }
@@ -289,7 +290,7 @@ export async function reviewServerProject(projectId:string){
  const response=await fetch('/api/offline',{cache:'no-store'});if(!response.ok)throw new Error('Connect and sign in to review the latest version.');
  const data=await response.json() as FieldState;if(data.actor.id!==activeFieldUser())throw new Error('Sign in with the employee who saved this work.');
  const project=data.projects.find(p=>p.id===projectId&&canAccessProjectBranch(data.actor,p.branch));
- await updateFieldState(data.actor.id,s=>{if(!s)throw new Error('Offline account unavailable.');return {...s,actor:data.actor,unavailableProjectIds:project?(s.unavailableProjectIds??[]).filter(id=>id!==projectId):[...new Set([...(s.unavailableProjectIds??[]),projectId])],projects:s.projects.map(p=>p.id===projectId&&project?{...p,branch:project.branch}:p)};});
+ await updateFieldState(data.actor.id,s=>{if(!s)throw new Error('Offline account unavailable.');return {...s,actor:data.actor,unavailableProjectIds:project?(s.unavailableProjectIds??[]).filter(id=>id!==projectId):[...new Set([...(s.unavailableProjectIds??[]),projectId])],projects:s.projects.map(p=>p.id===projectId&&project?{...p,branch:project.branch,governorate:project.governorate}:p)};});
  if(!project)throw new Error('Project no longer available. Your saved work remains on this device.');
  return {project,openings:data.openings.filter(o=>o.projectId===projectId),measurementReports:(data.measurementReports??[]).filter(r=>r.project_id===projectId)};
 }

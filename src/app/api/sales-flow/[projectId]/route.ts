@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { uploadedContractTerms } from '@/lib/contracts/uploadedTerms';
 import { salesProject } from '@/lib/workflow/access';
-import { priceQuotation, type CatalogItem, type OpeningChoice, type AdditionalChoice } from '@/lib/workflow/pricing';
+import { priceQuotation, repriceQuotation, quotationPriceKey, type CatalogItem, type OpeningChoice, type AdditionalChoice } from '@/lib/workflow/pricing';
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
 import type { Json } from '@/lib/supabase/database.types';
 import type { SalesFlow } from '@/lib/workflow/types';
@@ -44,9 +44,23 @@ export async function POST(request:Request,context:Context){
  }else{body=await request.json().catch(()=>({}));}
  const action=body.action;const revision=body.revision;
  if(project.additional_openings_state==='requested'||(project.additional_openings_state==='submitted'&&action!=='save'))return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.'},{status:409});
- if(!['save','approve','contract','sign'].includes(String(action))||!Number.isInteger(revision)||revision!==(flow?.revision??0))return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
+ if(!['save','approve','contract','sign','preview-prices','update-prices'].includes(String(action))||!Number.isInteger(revision)||revision!==(flow?.revision??0))return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
  let payload:Json={};let uploadedPath:string|null=null;
  try{
+  if(action==='preview-prices'||action==='update-prices'){
+   if(project.additional_openings_state)return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.'},{status:409});
+   if(!flow)return NextResponse.json({error:'Save a quotation before updating its prices.'},{status:409});
+   if(flow.signed_at||!['quotation','approved','contract'].includes(flow.stage)||['contract_signed','transferred_to_operations'].includes(project.sales_status))return NextResponse.json({error:'Signed contracts cannot be changed.'},{status:409});
+   if(action==='update-prices'&&body.confirmed!==true)throw new Error('Confirm that you want to update prices for this quotation.');
+   if(action==='update-prices'&&flow.stage==='contract'&&body.replaceUnsignedContract!==true)throw new Error('Confirm that this revision replaces the unsigned contract and requires new client approval.');
+   const catalog=await admin.from('product_price_settings').select('id,name:product_name,category,unit,unit_price,is_active').eq('is_active',true);
+   if(catalog.error)throw new Error('Unable to load pricing.');
+   const quotation=repriceQuotation(flow.quotation,catalog.data as CatalogItem[],auth.user.id);
+   const priceKey=quotationPriceKey(quotation);
+   if(action==='preview-prices')return NextResponse.json({quotation,priceKey,revision:flow.revision},{headers:{'Cache-Control':'private, no-store'}});
+   if(body.priceKey!==priceKey)return NextResponse.json({error:'Catalog prices changed. Preview the updated prices again before saving.'},{status:409});
+   payload=quotation as unknown as Json;
+  }
   if(action==='save'){
    if(flow && (flow.signed_at || !['quotation','approved','contract'].includes(flow.stage)))throw new Error('Signed contracts cannot be changed.');
    if(flow?.stage==='contract' && body.replaceUnsignedContract!==true)throw new Error('Confirm that this revision replaces the unsigned contract and requires new client approval.');
@@ -54,7 +68,7 @@ export async function POST(request:Request,context:Context){
    if(openings.error||catalog.error)throw new Error('Unable to load pricing.');
    if(!Array.isArray(body.choices))throw new Error('Select a system for every opening.');
    const measured=quotationOpenings(openings.data??[],body.newOpenings??[]);
-   payload={...priceQuotation(measured,body.choices as OpeningChoice[],catalog.data as CatalogItem[],auth.user.id,(body.additionalItems??[]) as AdditionalChoice[]),branch:project.branch} as unknown as Json;
+   payload={...priceQuotation(measured,body.choices as OpeningChoice[],catalog.data as CatalogItem[],auth.user.id,(body.additionalItems??[]) as AdditionalChoice[]),branch:project.branch,governorate:project.governorate??null} as unknown as Json;
   }
   if(action==='approve' && body.confirmed!==true)throw new Error('Confirm that the client approved this quotation.');
   if(action==='contract'){
@@ -70,7 +84,7 @@ export async function POST(request:Request,context:Context){
    const client=await admin.from('clients').select('name:client_name,mobile,client_type').eq('id',project.client_id).single();
    if(client.error)throw new Error('Unable to load client information.');
    const sections=uploadedContractTerms(kind);
-   payload={number:`CT-${project.project_number}-${revision}`,createdAt:new Date().toISOString(),createdBy:auth.user.id,branch,client:client.data,project:{branch:project.branch,name:project.project_name,number:project.project_number,address:project.address},terms:sections,template:kind};
+   payload={number:`CT-${project.project_number}-${revision}`,createdAt:new Date().toISOString(),createdBy:auth.user.id,branch,client:client.data,project:{branch:project.branch,governorate:project.governorate??null,name:project.project_name,number:project.project_number,address:project.address},terms:sections,template:kind};
   }
   if(action==='sign'){
    if(flow?.stage!=='contract')throw new Error('Only an unsigned generated contract can be signed.');
@@ -93,7 +107,7 @@ export async function POST(request:Request,context:Context){
     uploadedPath=path;payload={method:'upload',signer,path,fileName:upload.name.slice(0,200)};
    }else throw new Error('Choose digital signing or upload a signed copy.');
   }
-  const result=await admin.rpc('advance_sales_flow',{p_project:projectId,p_action:String(action),p_revision:revision as number,p_payload:payload,p_actor:auth.user.id});
+  const result=await admin.rpc('advance_sales_flow',{p_project:projectId,p_action:action==='update-prices'?'save':String(action),p_revision:revision as number,p_payload:payload,p_actor:auth.user.id});
   if(result.error)throw new Error(result.error.message);
   return NextResponse.json({flow:result.data},{headers:{'Cache-Control':'no-store'}});
  }catch(cause){

@@ -230,7 +230,7 @@ for(const role of ['Outdoor Sales','Indoor Sales','Sales Manager'])for(const del
   '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,profile:{branch:'Karkh'},user:{id}})},
   '@/lib/supabase/admin':{createAdminClient:()=>({
    rpc:async()=>({data:null,error:{message:'Project is not available to this employee'}}),
-   from(table){if(table==='projects')return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null})};assert.equal(table,'audit_events');return {select(value){assert.equal(value,'id');return this;},eq(key,value){filters.push([key,value]);return this;},or(value){filters.push(['or',value]);return this;},limit(){return this;},maybeSingle:async()=>({data:deleted?{id:'audit'}:null,error:null})};},
+   from(table){if(table==='projects')return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null})};assert.equal(table,'audit_events');return {select(value){assert.equal(value,'id');return this;},eq(key,value){filters.push([key,value]);return this;},in(key,value){filters.push([key,value]);return this;},or(value){filters.push(['or',value]);return this;},limit(){return this;},maybeSingle:async()=>({data:deleted?{id:'audit'}:null,error:null})};},
   })},
   '@/lib/auth/permissions':loadModule('../src/lib/auth/permissions.ts',{}),
   '@/lib/workflow/followUps':{},'@/lib/workflow/access':{salesRoles:[role]},
@@ -241,7 +241,7 @@ for(const role of ['Outdoor Sales','Indoor Sales','Sales Manager'])for(const del
  assert.ok(filters.some(([key,value])=>key==='entity_id'&&value===id));
  assert.ok(filters.some(([key,value])=>key==='action'&&value==='project_deleted'));
  assert.equal(filters.some(([key])=>key==='or'),role==='Outdoor Sales');
- if(role==='Indoor Sales')assert.ok(filters.some(([key,value])=>key==='previous_value->>branch'&&value==='Karkh'));
+ if(role==='Indoor Sales')assert.deepEqual(filters.find(([key])=>key==='previous_value->>branch')[1],['Karkh','Governorates']);
  if(role==='Outdoor Sales')assert.equal(filters.find(([key])=>key==='or')[1],`previous_value->>created_by.eq.${id},previous_value->>assigned_outdoor_sales_id.eq.${id}`);
 });
 
@@ -262,4 +262,35 @@ for(const endpoint of ['sales-intake','offline'])for(const branch of [undefined,
  const response=await route.POST({json:async()=>body});assert.equal(response.status,valid?(endpoint==='offline'?undefined:201):400);
  if(valid){const saved=writes.find(w=>w.table==='rpc').value;assert.equal(saved.branch,branch);if(branch===undefined)assert.equal(Object.hasOwn(saved,'branch'),false,'Preserve legacy receipt fingerprints');}
  else{assert.equal(writes.length,0);assert.match(response.body.error,/project branch/);}
+});
+
+for(const endpoint of ['sales-intake','offline'])test(`${endpoint} requires a listed governorate for shared projects and excludes stale governorates elsewhere`,async()=>{
+ const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',writes=[];
+ const route=loadModule(`../src/app/api/${endpoint}/route.ts`,{
+  'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',user:{id}})},
+  '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
+  '@/lib/location/coordinates':loadModule('../src/lib/location/coordinates.ts',{}),
+  '@/lib/auth/permissions':{},'@/lib/workflow/access':{},'@/lib/workflow/followUps':{},'@/lib/measurements/registrationOpening':{},
+  '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{writes.push(args.p_payload.project);return {data:{id}};}})},
+ });
+ const submit=async(branch,governorate)=>{
+  const payload={client:{clientType:'individual',clientName:'Province client',mobile:'07700000000'},project:{branch,governorate,buildingType:'villa_house',structureReadiness:'ready',locationLatitude:33.3,locationLongitude:44.4}};
+  return route.POST({json:async()=>endpoint==='offline'?{id,userId:id,projectId:id,action:'register',recordedAt:new Date().toISOString(),payload}:payload});
+ };
+ const locations=['البصرة','الرمادي','صلاح الدين','ديالى','الحلة','كربلاء','النجف','الديوانية','الكوت','العمارة','الناصرية','السماوة'];
+ for(const governorate of locations){
+  const response=await submit('Governorates',governorate);
+  assert.equal(response.status,endpoint==='offline'?undefined:201);
+  assert.equal(writes.at(-1).branch,'Governorates');assert.equal(writes.at(-1).governorate,governorate);
+ }
+ for(const invalid of [undefined,null,'','بغداد',' Basra ',3,{},['البصرة']]){
+  const response=await submit('Governorates',invalid);
+  assert.equal(response.status,400);assert.match(response.body.error,/governorate/);
+ }
+ assert.equal(writes.length,12,'Invalid governorates must never reach the database');
+ for(const branch of ['Karkh','Rasafa']){
+  const response=await submit(branch,'البصرة');assert.equal(response.status,endpoint==='offline'?undefined:201);
+  assert.equal(writes.at(-1).branch,branch);assert.equal(Object.hasOwn(writes.at(-1),'governorate'),false);
+ }
 });

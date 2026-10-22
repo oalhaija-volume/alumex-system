@@ -1,3 +1,4 @@
+import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBranch';
 import { catalogKind, compatibleAddon, compatibleGlass, isAvailable, isCurtainWall, isLouver, isRollerShutter, isShutterBox, normalizeCatalogItem } from './catalogRules';
 export type CatalogItem = {id:string;name:string;category:string|null;unit:string;unit_price:number;is_active:boolean};
 export type MeasuredOpening = {has_roller_shutter?:boolean;work_area?:"facade"|"internal"|null;facade_number?:number|null;has_arch?:boolean;id:string;floor:string|null;room:string|null;width:number;height:number;quantity?:number;opening_type:string|null;opening_direction:string|null};
@@ -8,8 +9,21 @@ export type AdditionalChoice = {id:string;quantity:number;measurements?:SurfaceM
 export type Charge = {id:string;name:string;unit:string;rate:number;quantity:number;total:number};
 export type StandaloneCharge = Charge & {measurements?:SurfaceMeasurement[];extras?:Charge[]};
 export type QuoteLine = {opening:MeasuredOpening;system:Charge;glass:Charge|null;extras:Charge[];area:number;total:number};
-export type QuoteSnapshot = {facadeMeasurements?:MeasuredOpening[];branch?:"Karkh"|"Rasafa"|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;total:number;currency:"IQD";createdAt:string;preparedBy:string};
+export type QuoteSnapshot = {facadeMeasurements?:MeasuredOpening[];branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;total:number;currency:"IQD";createdAt:string;preparedBy:string};
 export const money = (n:number) => new Intl.NumberFormat('en-IQ',{maximumFractionDigits:0}).format(n)+' IQD';
+export function measuredOpeningArea(opening:Pick<MeasuredOpening,'width'|'height'>) {
+ return Number(opening.width)*Number(opening.height)/10000;
+}
+export function billableOpeningArea(opening:Pick<MeasuredOpening,'width'|'height'|'opening_type'>) {
+ const area=measuredOpeningArea(opening);
+ return opening.opening_type==='Window'?Math.max(area,1):area;
+}
+export function openingAreaBand(area:number):'red'|'orange'|'yellow'|'green' {
+ if(area<=3)return 'red';
+ if(area<4)return 'orange';
+ if(area<6)return 'yellow';
+ return 'green';
+}
 export function quotableOpenings(openings:MeasuredOpening[]) { return openings.filter(opening=>opening.opening_type!=='Skylight'&&opening.opening_type!=='Facade'); }
 export function recordedFacadeAreas(openings:MeasuredOpening[]):SurfaceMeasurement[] {
  return openings.filter(o=>o.opening_type==='Facade').map(o=>({label:`Facade ${o.facade_number}`,width:o.width/100,height:o.height/100,quantity:1}));
@@ -42,6 +56,43 @@ function catalogCharge(id:string,quantity:number,catalog:CatalogItem[]):Charge {
  if(!Number.isSafeInteger(total)||total<=0)throw new Error(`Invalid amount for ${item.name}.`);
  return {id:item.id,name:item.name,unit:item.unit,rate:Number(item.unit_price),quantity,total};
 }
+
+// Price refresh uses the quantities already charged in the saved quotation.
+// Reconstructing choices from openings could multiply repeated accessories a
+// second time or change a facade's recorded area.
+export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[],actor:string):QuoteSnapshot {
+ const catalog=rawCatalog.map(normalizeCatalogItem);
+ const quotation=structuredClone(snapshot);
+ const refresh=<T extends Charge>(charge:T):T=>{
+  const item=catalog.find(item=>item.id===charge.id&&isAvailable(item));
+  if(item&&item.unit!==charge.unit)throw new Error('A catalog unit changed. Use Edit quotation to review the affected items before updating prices.');
+  const current=catalogCharge(charge.id,charge.quantity,catalog);
+  return {...charge,rate:current.rate,total:current.total};
+ };
+ quotation.lines=quotation.lines.map(line=>{
+  const system=refresh(line.system);
+  const glass=line.glass?refresh(line.glass):null;
+  const extras=line.extras.map(refresh);
+  return {...line,system,glass,extras,total:system.total+(glass?.total??0)+extras.reduce((sum,extra)=>sum+extra.total,0)};
+ });
+ if(quotation.additionalItems)quotation.additionalItems=quotation.additionalItems.map(item=>({
+  ...refresh(item),...(item.extras?{extras:item.extras.map(refresh)}:{}),
+ }));
+ quotation.total=quotation.lines.reduce((sum,line)=>sum+line.total,0)+(quotation.additionalItems??[]).reduce((sum,item)=>sum+item.total+(item.extras??[]).reduce((extraSum,extra)=>extraSum+extra.total,0),0);
+ if(!Number.isSafeInteger(quotation.total)||quotation.total<=0)throw new Error('Add a measured opening, facade service or standalone product before quoting.');
+ quotation.createdAt=new Date().toISOString();
+ quotation.preparedBy=actor;
+ return quotation;
+}
+
+export function quotationPriceKey(snapshot:QuoteSnapshot) {
+ const charge=(item:Charge)=>({id:item.id,unit:item.unit,rate:item.rate,quantity:item.quantity});
+ return JSON.stringify({
+  lines:snapshot.lines.map(line=>({system:charge(line.system),glass:line.glass?charge(line.glass):null,extras:line.extras.map(charge)})),
+  additionalItems:(snapshot.additionalItems??[]).map(item=>({...charge(item),extras:(item.extras??[]).map(charge)})),
+ });
+}
+
 export function measuredFacadeArea(measurements:SurfaceMeasurement[]) {
  if(!Array.isArray(measurements)||!measurements.length||measurements.length>100)throw new Error('Enter the measured areas for this facade service.');
  let area=0;
@@ -76,13 +127,16 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   if(!opening.floor || !opening.room || !Number.isFinite(Number(opening.width)) || !Number.isFinite(Number(opening.height)) || opening.width<=0 || opening.height<=0)throw new Error('Complete all opening measurements first.');
   const choice=choices.find(c=>c.openingId===opening.id);
   if(!choice || !Array.isArray(choice.extras))throw new Error('Invalid opening selections.');
-  const area=Number(opening.width)*Number(opening.height)*quantity/10000;
-  const charge=(id:string)=>catalogCharge(id,catalog.find(p=>p.id===id)?.unit==='sqm'?area:quantity,catalog);
+  const area=measuredOpeningArea(opening)*quantity;
+  // Apply the window minimum to each physical opening before repetitions.
+  // Keep measured area in the snapshot for dimensions and operational use.
+  const billableArea=billableOpeningArea(opening)*quantity;
+  const charge=(id:string)=>catalogCharge(id,catalog.find(p=>p.id===id)?.unit==='sqm'?billableArea:quantity,catalog);
   if(!systemOptions(opening,catalog).some(p=>p.id===choice.systemId))throw new Error('Choose a compatible system for this structural type.');
   const system=charge(choice.systemId);
   if(choice.glassId&&!glassOptions(opening,catalog,choice.systemId).some(p=>p.id===choice.glassId))throw new Error('Choose a compatible glass option.');
   const glass=choice.glassId?charge(choice.glassId):null;
-  const extras=priceExtras(choice.extras,addonOptions(opening,catalog,choice.systemId),catalog,area,[choice.systemId,choice.glassId??''],quantity);
+  const extras=priceExtras(choice.extras,addonOptions(opening,catalog,choice.systemId),catalog,billableArea,[choice.systemId,choice.glassId??''],quantity);
   if(opening.has_roller_shutter&&!extras.some(isRollerShutter))throw new Error('This window requires roller shutters. Choose a roller shutter add-on.');
   return {opening,area,system,glass,extras,total:system.total+(glass?.total??0)+extras.reduce((s,p)=>s+p.total,0)};
  });

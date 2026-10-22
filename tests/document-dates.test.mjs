@@ -15,6 +15,7 @@ for (const locale of ['en', 'ar']) for (const kind of ['Quotation', 'Contract'])
   new Function('require', 'exports', source)(name => {
     if (name === 'react/jsx-runtime') return jsx;
     if (name === '@/components/i18n/I18nProvider') return { useI18n: () => ({ locale, term: value => value, formatDate: formatBusinessDate }) };
+    if (name === '@/lib/workflow/pricing' || name === './OpeningAreaIndicator') return {};
     throw Error(name);
   }, exports);
   const html = renderToStaticMarkup(React.createElement(exports.DocumentHeader, { kind, number: 'DATE-TEST', createdAt: '2026-12-31T21:05:00Z' }));

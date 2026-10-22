@@ -1,3 +1,5 @@
+import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBranch';
+
 export type Json =
   | string
   | number
@@ -253,7 +255,8 @@ export type Database = {
           location_longitude: number | null;
           geofence_radius_meters: number | null;
           project_type: string | null;
-          branch: "Rasafa" | "Karkh" | null;
+          branch: ProjectBranch | null;
+          governorate: ProjectGovernorate | null;
           sales_engineer_id: string | null;
           measurement_assignment_id: string | null;
           assigned_outdoor_sales_id: string | null;
@@ -332,7 +335,8 @@ export type Database = {
           location_longitude?: number | null;
           geofence_radius_meters?: number | null;
           project_type?: string | null;
-          branch?: "Rasafa" | "Karkh" | null;
+          branch?: ProjectBranch | null;
+          governorate?: ProjectGovernorate | null;
           sales_engineer_id?: string | null;
           measurement_assignment_id?: string | null;
           assigned_outdoor_sales_id?: string | null;

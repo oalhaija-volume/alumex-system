@@ -165,6 +165,8 @@ for (const branch of ['Karkh','Rasafa',null]) test(`printed document renders the
  const {DocumentParties}=load('../src/components/workflow/CommercialDocument.tsx',{
   'react/jsx-runtime':jsxRuntime,
   '@/components/i18n/I18nProvider':{useI18n:()=>({term:value=>value})},
+  '@/lib/workflow/pricing':{},
+  './OpeningAreaIndicator':{},
  });
  const markup=renderToStaticMarkup(React.createElement(DocumentParties,{client:{name:'Client',mobile:'07700000000'},project:{number:'PRJ-TEST',address:'Baghdad',branch}}));
  if(branch)assert.match(markup,new RegExp('From '+branch));else assert.doesNotMatch(markup,/From Karkh|From Rasafa/);

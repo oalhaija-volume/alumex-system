@@ -31,7 +31,7 @@ begin
   begin
    perform public.sync_field_change(gen_random_uuid(),actor,gen_random_uuid(),'register',jsonb_set(payload,'{project,branch}',coalesce(to_jsonb(branch_value),'null'::jsonb)),now());
    raise exception using errcode='ZX001',message='Invalid branch accepted';
-  exception when sqlstate '22023' then assert sqlerrm='Choose the project branch: Karkh or Rasafa.';
+  exception when sqlstate '22023' then assert sqlerrm='Choose the project branch: Karkh, Rasafa or Governorates.';
   end;
   assert (select count(*) from clients)=clients_before,'Invalid branch must not leave client records';
  end loop;

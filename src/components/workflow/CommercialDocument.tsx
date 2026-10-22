@@ -1,8 +1,11 @@
 "use client";
+import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBranch';
 /* eslint-disable @next/next/no-img-element -- Print documents use the original SVG brand asset. */
 import type { ReactNode } from 'react';
 import type { QuoteSnapshot,Charge } from '@/lib/workflow/pricing';
+import { measuredOpeningArea,openingAreaBand } from '@/lib/workflow/pricing';
 import { useI18n } from '@/components/i18n/I18nProvider';
+import { OpeningAreaBadge,OpeningAreaLegend } from './OpeningAreaIndicator';
 
 export function DocumentHeader({kind,number,createdAt}:{kind:'Quotation'|'Contract';number:string;createdAt:string}) {
  const {term,locale,formatDate}=useI18n();
@@ -11,17 +14,18 @@ export function DocumentHeader({kind,number,createdAt}:{kind:'Quotation'|'Contra
   <div className="document-reference"><p className="document-eyebrow">{term(kind==='Quotation'?'SALES QUOTATION':'SUPPLY & INSTALLATION')}</p><h2>{term(kind)}{locale==='en'&&<span lang="ar">{kind==='Quotation'?'عرض سعر':'عقد'}</span>}</h2><dl><div><dt>{term('Reference')}</dt><dd><bdi dir="ltr">{number}</bdi></dd></div><div><dt>{term('Issued')}</dt><dd><bdi dir="ltr">{formatDate(createdAt)}</bdi></dd></div><div><dt>{term('Currency')}</dt><dd>{term('Iraqi dinar · IQD')}</dd></div></dl></div>
  </header>;
 }
-export function DocumentParties({client,project}:{client:{name:string;mobile:string|null};project:{number:string;address:string|null;branch?:"Karkh"|"Rasafa"|null}}){
+export function DocumentParties({client,project}:{client:{name:string;mobile:string|null};project:{number:string;address:string|null;branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null}}){
  const {term}=useI18n();
- return <div className="document-parties"><section><h3>{term('PREPARED FOR / العميل')}</h3><p className="document-client" dir="auto">{client.name}</p><p><bdi dir="ltr">{client.mobile}</bdi></p></section><section><h3>{term('PROJECT SITE / موقع المشروع')}</h3><p className="document-client"><bdi dir="ltr">{project.number}</bdi></p><p dir="auto">{project.address||'—'}</p>{project.branch && <p className="mt-2 font-semibold">{term(project.branch === 'Karkh' ? 'From Karkh' : 'From Rasafa')}</p>}</section></div>;
+ return <div className="document-parties"><section><h3>{term('PREPARED FOR / العميل')}</h3><p className="document-client" dir="auto">{client.name}</p><p><bdi dir="ltr">{client.mobile}</bdi></p></section><section><h3>{term('PROJECT SITE / موقع المشروع')}</h3><p className="document-client"><bdi dir="ltr">{project.number}</bdi></p><p dir="auto">{project.address||'—'}</p>{project.branch && <p className="mt-2 font-semibold">{term(project.branch === 'Governorates' ? 'Governorates' : project.branch === 'Karkh' ? 'From Karkh' : 'From Rasafa')}</p>}{project.governorate && <p className="mt-1 font-semibold">{project.branch !== 'Governorates' && <>{term('Governorates')} · </>}<bdi>{project.governorate}</bdi></p>}</section></div>;
 }
 function ChargeRows({items,labels}:{items:Charge[];labels?:string[]}) {
  const {term,formatNumber}=useI18n();
  return <>{items.map((item,i)=><tr key={item.id}><td>{labels&&<span className="document-charge-kind">{term(labels[i])}</span>}<span dir="auto">{term(item.name)}</span></td><td>{formatNumber(item.quantity)} {term(item.unit==='sqm'?'m²':item.unit==='meter'?'m':item.unit)}</td><td>{formatNumber(item.rate)}</td><td>{formatNumber(item.total)}</td></tr>)}</>;
 }
-export function OpeningSchedule({quote}:{quote:QuoteSnapshot}) {
+export function OpeningSchedule({quote,showAreaColors=false}:{quote:QuoteSnapshot;showAreaColors?:boolean}) {
  const {term,locale,formatMoney,formatNumber}=useI18n();
  return <section className="document-schedule">{!!quote.lines.length&&<div className="document-section-heading"><h3>{term('Opening schedule')}{locale==='en'&&<span lang="ar">جدول الفتحات</span>}</h3><p>{term('{count} openings · {area} m² measured',{count:formatNumber(quote.lines.reduce((sum,line)=>sum+(line.opening.quantity??1),0)),area:formatNumber(quote.lines.reduce((sum,line)=>sum+line.area,0),2)})}</p></div>}
+ {!!quote.lines.length&&showAreaColors&&<OpeningAreaLegend/>}
  {!!quote.lines.length&&<div className="document-schedule-scroll" role="region" aria-label={term('Opening schedule')} tabIndex={0}>
   <table className="document-opening-table">
    <caption className="sr-only">{term('Opening schedule')}</caption>
@@ -30,12 +34,15 @@ export function OpeningSchedule({quote}:{quote:QuoteSnapshot}) {
    {quote.lines.map((line,index)=>{
     const charges=[line.system,...(line.glass?[line.glass]:[]),...line.extras];
     const labels=['Aluminum / system',...(line.glass?['Glass']:[]),...line.extras.map(()=>'Add-on')];
-    return <tbody key={line.opening.id} className="document-opening-group">
+    const area=measuredOpeningArea(line.opening);
+    const band=openingAreaBand(area);
+    const minimumApplied=line.opening.opening_type==='Window'&&area<1&&charges.some(charge=>charge.unit==='sqm'&&charge.quantity>line.area);
+    return <tbody key={line.opening.id} data-area-band={showAreaColors?band:undefined} className={`document-opening-group${showAreaColors?` opening-area-${band}`:''}`}>
      {charges.map((charge,chargeIndex)=><tr key={`${charge.id}-${chargeIndex}`}>
       {chargeIndex===0&&<>
        <th scope="rowgroup" rowSpan={charges.length} className="document-opening-index">{formatNumber(index+1)}</th>
        <td rowSpan={charges.length}><strong dir="auto">{term(line.opening.floor)}</strong><span className="document-table-detail" dir="auto">{line.opening.work_area==='internal'?`${term('Internal works')} · ${term(line.opening.room)}`:term(line.opening.room)}</span></td>
-       <td rowSpan={charges.length}><strong>{term(line.opening.opening_type)} {line.opening.opening_direction?term(line.opening.opening_direction):''}{line.opening.has_arch?` · ${term('Arch')}`:''}{line.opening.has_roller_shutter?` · ${term('Roller shutter')}`:''}</strong><span className="document-table-detail"><bdi dir="ltr">{formatNumber(line.opening.width)} × {formatNumber(line.opening.height)}</bdi> {term('cm')}</span><span className="document-table-detail">{formatNumber(line.area,2)} {term('m²')}</span></td>
+       <td rowSpan={charges.length}><strong>{term(line.opening.opening_type)} {line.opening.opening_direction?term(line.opening.opening_direction):''}{line.opening.has_arch?` · ${term('Arch')}`:''}{line.opening.has_roller_shutter?` · ${term('Roller shutter')}`:''}</strong><span className="document-table-detail"><bdi dir="ltr">{formatNumber(line.opening.width)} × {formatNumber(line.opening.height)}</bdi> {term('cm')}</span><span className="document-table-detail">{formatNumber(line.area,2)} {term('m²')}</span>{showAreaColors&&<span className="mt-1 block"><OpeningAreaBadge area={area}/></span>}{minimumApplied&&<span className="document-table-detail">{term('Minimum billable area: 1 m² per window.')}</span>}</td>
        <td rowSpan={charges.length} className="document-table-number">{formatNumber(line.opening.quantity??1)}</td>
       </>}
       <td><span className="document-charge-kind">{term(labels[chargeIndex])}</span><span dir="auto">{term(charge.name)}</span></td>

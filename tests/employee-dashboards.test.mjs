@@ -8,7 +8,7 @@ function load(path, dependencies = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', code)(name => { assert.ok(name in dependencies, name); return dependencies[name]; }, exports);
+  new Function('require', 'exports', code)(name => { if (name === '@/lib/auth/projectBranchAccess') return load('../src/lib/auth/projectBranchAccess.ts'); assert.ok(name in dependencies, name); return dependencies[name]; }, exports);
   return exports;
 }
 const roles = load('../src/lib/auth/roles.ts');
@@ -33,7 +33,7 @@ for (const role of roles.appRoles) test(`${role} lands on an authorized dashboar
         },
         is(column, value) { assert.equal(column, 'archived_at'); assert.equal(value, null); return this; },
         order() { return this; },
-        eq(column, value) { assert.equal(column, 'branch'); assert.equal(value, 'Rasafa'); branchScoped = true; return this; },
+        in(column, values) { assert.equal(column, 'branch'); assert.deepEqual(values, ['Rasafa', 'Governorates']); branchScoped = true; return this; },
         or(filter) { assert.equal(filter, 'created_by.eq.employee,assigned_outdoor_sales_id.eq.employee'); scoped = true; return this; },
         then(resolve) { resolve({ data: [], error: null }); },
       };

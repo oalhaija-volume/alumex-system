@@ -103,7 +103,7 @@ export function MiniCRM({ data, loading, error, notice, busy, now, canDelete, on
   const search = query.trim().toLocaleLowerCase();
   const projects = (stage === 'client-cancelled' ? (data?.projects ?? []).filter(p=>projectStage(p)==='client-cancelled') : active).filter(project =>
     (stage === 'all' || projectStage(project) === stage) && (stage === 'client-cancelled' || matchesQueue(project, queue, now)) &&
-    (!search || [project.project_name, project.project_number, project.address, project.phone, project.followUpOwner, project.assignedOutdoorSales].some(value => value?.toLocaleLowerCase().includes(search)))
+    (!search || [project.project_name, project.project_number, project.address, project.governorate, project.phone, project.followUpOwner, project.assignedOutdoorSales].some(value => value?.toLocaleLowerCase().includes(search)))
   ).sort((a, b) => (dueTime(a) ?? Infinity) - (dueTime(b) ?? Infinity) || a.project_number.localeCompare(b.project_number));
   const filters: { id: QueueFilter; label: string; hint: string; icon: 'queue' | 'clock' | 'calendar'; tone: string }[] = [
     { id: 'all', label: 'Active follow-ups', hint: 'Across all sales stages', icon: 'queue', tone: 'text-blue-700 bg-blue-50' },
@@ -181,6 +181,7 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
         <div className="flex flex-wrap items-center gap-2 text-xs"><span className="font-medium text-slate-500">{term(project.project_number)}</span>{project.pending && <span className="rounded bg-amber-50 px-2 py-0.5 text-amber-800">{term('Saved on device')}</span>}{project.assignedToYou && <span className="font-medium text-blue-700">{term('Assigned to you')}</span>}</div>
         <h3 id={`project-name-${project.id}`} dir="auto" className="mt-1.5 break-words text-lg font-semibold leading-7 text-slate-950">{project.project_name}</h3>
         {project.address && <p dir="auto" className="mt-1 break-words text-xs leading-5 text-slate-500">{project.address}</p>}
+        {project.governorate && <p className="mt-1 text-xs font-medium text-slate-700">{term('Governorates')} · <bdi>{project.governorate}</bdi></p>}
    {project.readiness_note&&<p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-700"><span className="font-semibold">{term('Reason not ready for measurement')}: </span><span dir="auto">{project.readiness_note}</span></p>}
         {project.phone && <a dir="ltr" href={`tel:${project.phone}`} className={`${focus} mt-1 inline-flex min-h-8 items-center text-xs font-medium text-blue-700 hover:underline`}>{project.phone}</a>}
       </div>

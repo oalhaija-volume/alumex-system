@@ -560,3 +560,24 @@ test('Outdoor Sales must choose a project branch and it survives local reads and
   await x.client.syncFieldChanges();assert.equal(x.state.queue.length,0);assert.equal(x.state.projects[0].branch,branch);assert.equal(x.state.actor.branch,null);
  }
 });
+
+test('shared governorate registrations validate before saving and survive offline reads and synchronization',async()=>{
+ const outdoor={...actor,role:'Outdoor Sales',branch:null};
+ for(const governorate of [undefined,null,'','بغداد',{},['البصرة']]){
+  const x=setup({actor:outdoor});
+  await assert.rejects(x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch:'Governorates',governorate}}),/governorate/);
+  assert.equal(x.state.queue.length,0);assert.equal(x.state.projects.length,0);
+ }
+ const x=setup({actor:outdoor});
+ await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch:'Governorates',governorate:'البصرة'}});
+ assert.equal(x.state.projects[0].branch,'Governorates');assert.equal(x.state.projects[0].governorate,'البصرة');
+ assert.equal(x.state.queue[0].payload.project.governorate,'البصرة');
+ const local=(await (await x.client.fieldFetch('/api/workspace')).json()).projects[0];assert.equal(local.governorate,'البصرة');
+ navigator.onLine=true;
+ globalThis.fetch=async(url,init)=>{
+  if(!init?.method)return Response.json({actor:outdoor});
+  assert.equal(JSON.parse(init.body).payload.project.governorate,'البصرة');
+  return Response.json({project:{...x.state.projects[0],project_number:'PRJ-GOV',updated_at:new Date().toISOString()}});
+ };
+ await x.client.syncFieldChanges();assert.equal(x.state.queue.length,0);assert.equal(x.state.projects[0].governorate,'البصرة');assert.equal(x.state.actor.branch,null);
+});

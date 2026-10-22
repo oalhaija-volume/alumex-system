@@ -13,8 +13,15 @@ export type QuoteSnapshot = {facadeMeasurements?:MeasuredOpening[];branch?:Proje
 export const money = (n:number) => new Intl.NumberFormat('en-IQ',{maximumFractionDigits:0}).format(n)+' IQD';
 export const QUOTATION_SYSTEM_RATE_MIN = 240_000;
 export const QUOTATION_SYSTEM_RATE_MAX = 300_000;
+type OpeningSellingDetails = Pick<MeasuredOpening,'opening_type'|'opening_direction'>;
+export function quotationSystemRateMax(opening?:OpeningSellingDetails) {
+ return opening?.opening_type==='Door'&&opening.opening_direction==='Hinged'?305_000:QUOTATION_SYSTEM_RATE_MAX;
+}
+export function isAlumexSqmSystem(product:Pick<CatalogItem,'name'|'unit'>|null|undefined) {
+ return !!product&&product.unit==='sqm'&&/^alumex\b/i.test(product.name.trim());
+}
 export function isQuotationSystemRateEditable(product:CatalogItem|null|undefined) {
- return !!product&&isAvailable(product)&&product.unit==='sqm'&&catalogKind(product)==='system'&&/^alumex\b/i.test(product.name.trim());
+ return !!product&&isAvailable(product)&&catalogKind(product)==='system'&&isAlumexSqmSystem(product);
 }
 export function measuredOpeningArea(opening:Pick<MeasuredOpening,'width'|'height'>) {
  return Number(opening.width)*Number(opening.height)/10000;
@@ -28,6 +35,42 @@ export function openingAreaBand(area:number):'red'|'orange'|'yellow'|'green' {
  if(area<4)return 'orange';
  if(area<6)return 'yellow';
  return 'green';
+}
+export function openingMinimumSellingRate(area:number,opening?:OpeningSellingDetails) {
+ if(!Number.isFinite(area)||area<=0)throw new Error('Complete all opening measurements first.');
+ if(opening?.opening_direction==='Hinged'){
+  if(opening.opening_type==='Window')return 260_000;
+  if(opening.opening_type==='Door')return 305_000;
+ }
+ if(area<=3)return 278_000;
+ if(area<4)return 265_000;
+ if(area<6)return 250_000;
+ return 240_000;
+}
+export function openingSellingBand(area:number,rate:number,opening?:OpeningSellingDetails):ReturnType<typeof openingAreaBand> {
+ if(!Number.isFinite(area)||area<=0||!Number.isFinite(rate)||rate<=0)return 'red';
+ if(rate>=openingMinimumSellingRate(area,opening))return 'green';
+ const band=openingAreaBand(area);
+ return band==='green'?'red':band;
+}
+export function quotationSellingSuggestion(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]):{rate:number;openingCount:number;allGreen:boolean;billableArea:number;systemTotal:number;openingRates:{openingId:string;rate:number}[]}|null {
+ const catalog=rawCatalog.map(normalizeCatalogItem);
+ let openingCount=0,billableArea=0,systemTotal=0,allGreen=true;
+ const openingRates:{openingId:string;rate:number}[]=[];
+ for(const line of snapshot.lines){
+  if(!['Window','Door'].includes(line.opening.opening_type??'')||line.system.unit!=='sqm'||!isQuotationSystemRateEditable(catalog.find(product=>product.id===line.system.id)))continue;
+  const area=measuredOpeningArea(line.opening);
+  const minimum=openingMinimumSellingRate(area,line.opening);
+  // Saved system quantities include repetitions and the window billing minimum.
+  // Average the actual charges, keeping each opening's own target selling rate.
+  if(!Number.isFinite(line.system.quantity)||line.system.quantity<=0)return null;
+  billableArea+=line.system.quantity;
+  systemTotal+=Math.round(line.system.quantity*minimum);
+  openingRates.push({openingId:line.opening.id,rate:minimum});
+  openingCount+=line.opening.quantity??1;
+  allGreen=allGreen&&openingSellingBand(area,line.system.rate,line.opening)==='green';
+ }
+ return openingCount?{rate:systemTotal/billableArea,openingCount,allGreen,billableArea,systemTotal,openingRates}:null;
 }
 export function quotableOpenings(openings:MeasuredOpening[]) { return openings.filter(opening=>opening.opening_type!=='Skylight'&&opening.opening_type!=='Facade'); }
 export function recordedFacadeAreas(openings:MeasuredOpening[]):SurfaceMeasurement[] {
@@ -61,9 +104,10 @@ function catalogCharge(id:string,quantity:number,catalog:CatalogItem[]):Charge {
  if(!Number.isSafeInteger(total)||total<=0)throw new Error(`Invalid amount for ${item.name}.`);
  return {id:item.id,name:item.name,unit:item.unit,rate:Number(item.unit_price),quantity,total};
 }
-function quotationSystemCharge(charge:Charge,product:CatalogItem|undefined,rate:unknown):Charge {
+function quotationSystemCharge(charge:Charge,product:CatalogItem|undefined,rate:unknown,opening:MeasuredOpening):Charge {
  if(!isQuotationSystemRateEditable(product))throw new Error('Quotation-specific rates are available only for active Alumex systems priced per m².');
- if(typeof rate!=='number'||!Number.isInteger(rate)||rate<QUOTATION_SYSTEM_RATE_MIN||rate>QUOTATION_SYSTEM_RATE_MAX)throw new Error('Enter an Alumex system rate between 240,000 and 300,000 IQD, using whole IQD.');
+ const maximum=quotationSystemRateMax(opening);
+ if(typeof rate!=='number'||!Number.isInteger(rate)||rate<QUOTATION_SYSTEM_RATE_MIN||rate>maximum)throw new Error(`Enter an Alumex system rate between 240,000 and ${maximum.toLocaleString('en-US')} IQD, using whole IQD.`);
  const total=Math.round(charge.quantity*rate);
  if(!Number.isSafeInteger(total)||total<=0)throw new Error(`Invalid amount for ${charge.name}.`);
  return {...charge,rate,total,rateSource:'quotation'};
@@ -75,18 +119,18 @@ function quotationSystemCharge(charge:Charge,product:CatalogItem|undefined,rate:
 export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[],actor:string):QuoteSnapshot {
  const catalog=rawCatalog.map(normalizeCatalogItem);
  const quotation=structuredClone(snapshot);
- const refresh=<T extends Charge>(charge:T,system=false):T=>{
+ const refresh=<T extends Charge>(charge:T,opening?:MeasuredOpening):T=>{
   const item=catalog.find(item=>item.id===charge.id&&isAvailable(item));
   if(item&&item.unit!==charge.unit)throw new Error('A catalog unit changed. Use Edit quotation to review the affected items before updating prices.');
   let current=catalogCharge(charge.id,charge.quantity,catalog);
   if(charge.rateSource!==undefined){
-   if(!system||charge.rateSource!=='quotation')throw new Error('Quotation-specific rates can only be applied to the opening system.');
-   current=quotationSystemCharge(current,item,charge.rate);
+   if(!opening||charge.rateSource!=='quotation')throw new Error('Quotation-specific rates can only be applied to the opening system.');
+   current=quotationSystemCharge(current,item,charge.rate,opening);
   }
   return {...charge,rate:current.rate,total:current.total};
  };
  quotation.lines=quotation.lines.map(line=>{
-  const system=refresh(line.system,true);
+  const system=refresh(line.system,line.opening);
   const glass=line.glass?refresh(line.glass):null;
   const extras=line.extras.map(extra=>refresh(extra));
   return {...line,system,glass,extras,total:system.total+(glass?.total??0)+extras.reduce((sum,extra)=>sum+extra.total,0)};
@@ -150,7 +194,7 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   const charge=(id:string)=>catalogCharge(id,catalog.find(p=>p.id===id)?.unit==='sqm'?billableArea:quantity,catalog);
   if(!systemOptions(opening,catalog).some(p=>p.id===choice.systemId))throw new Error('Choose a compatible system for this structural type.');
   const catalogSystem=charge(choice.systemId);
-  const system=choice.systemRate===undefined?catalogSystem:quotationSystemCharge(catalogSystem,catalog.find(product=>product.id===choice.systemId),choice.systemRate);
+  const system=choice.systemRate===undefined?catalogSystem:quotationSystemCharge(catalogSystem,catalog.find(product=>product.id===choice.systemId),choice.systemRate,opening);
   if(choice.glassId&&!glassOptions(opening,catalog,choice.systemId).some(p=>p.id===choice.glassId))throw new Error('Choose a compatible glass option.');
   const glass=choice.glassId?charge(choice.glassId):null;
   const extras=priceExtras(choice.extras,addonOptions(opening,catalog,choice.systemId),catalog,billableArea,[choice.systemId,choice.glassId??''],quantity);

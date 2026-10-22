@@ -3,7 +3,7 @@ import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBran
 import { useI18n } from '@/components/i18n/I18nProvider';
 import Link from 'next/link';
 import { useState } from 'react';
-import { recordedFacadeAreas,defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,isQuotationSystemRateEditable,QUOTATION_SYSTEM_RATE_MIN,QUOTATION_SYSTEM_RATE_MAX,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice,type QuoteSnapshot } from '@/lib/workflow/pricing';
+import { recordedFacadeAreas,defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,isQuotationSystemRateEditable,QUOTATION_SYSTEM_RATE_MIN,quotationSystemRateMax,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice,type QuoteSnapshot } from '@/lib/workflow/pricing';
 import { StandaloneItems } from './StandaloneItems';
 import { isShutterBox, isRollerShutter, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
@@ -12,8 +12,8 @@ import type { QuotationRevision,SalesFlow } from '@/lib/workflow/types';
 import {MeasurementReports} from "@/components/measurements/MeasurementReports";
 import { ProjectRecord } from './ProjectRecord';
 import { QuotationOpeningForm } from './QuotationOpeningForm';
-import { measuredOpeningArea,billableOpeningArea,openingAreaBand } from '@/lib/workflow/pricing';
-import { OpeningAreaBadge,OpeningAreaLegend } from './OpeningAreaIndicator';
+import { measuredOpeningArea,billableOpeningArea,openingSellingBand,openingMinimumSellingRate,quotationSellingSuggestion } from '@/lib/workflow/pricing';
+import { OpeningAreaBadge,OpeningSellingLegend } from './OpeningAreaIndicator';
 import { DocumentHeader,DocumentParties,OpeningSchedule,DocumentFooter,DocumentPaper } from './CommercialDocument';
 import { api,button,card,field,Notice,secondary,useResource,Workspace } from './ui';
 
@@ -52,8 +52,20 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const shown=archived?.quotation??flow?.quotation;
  const reference=`QT-${data.project.project_number}-R${archived?.version??shown?.version??1}`;
  let draftTotal:number|undefined;
+ let draftQuotation:QuoteSnapshot|undefined;
  let pricingError='';
- if(editing){try{draftTotal=priceQuotation(openings,choices,catalog,'preview',additionalItems).total;}catch(e){pricingError=(e as Error).message;}}
+ if(editing){try{draftQuotation=priceQuotation(openings,choices,catalog,'preview',additionalItems);draftTotal=draftQuotation.total;}catch(e){pricingError=(e as Error).message;}}
+ const sellingQuote=editing?draftQuotation:flow?.quotation;
+ const sellingSuggestion=flow&&sellingQuote&&!archived&&!needsRevision&&canEdit&&!pricePreview?quotationSellingSuggestion(sellingQuote,catalog):null;
+ const targetRates=new Map(sellingSuggestion?.openingRates.map(opening=>[opening.openingId,opening.rate]));
+ const suggestedChoices=sellingSuggestion?choices.map(choice=>targetRates.has(choice.openingId)?{...choice,systemRate:targetRates.get(choice.openingId)}:choice):choices;
+ let suggestedQuotation:QuoteSnapshot|undefined;
+ if(sellingSuggestion){try{suggestedQuotation=priceQuotation(openings,suggestedChoices,catalog,'preview',additionalItems);}catch{/* Incomplete selections remain editable. */}}
+ const suggestedPricing=suggestedQuotation?quotationSellingSuggestion(suggestedQuotation,catalog):null;
+ function applySuggestedRate(){
+  if(!sellingSuggestion||busy||pricePreview)return;
+  setChoices(suggestedChoices);setEditing(true);setViewVersion('current');setApproved(false);setError('');clearActionError();
+ }
  function edit(index:number,patch:Partial<OpeningChoice>){setChoices(c=>c.map((v,i)=>i===index?{...v,...patch}:v));}
  function addOpening(opening:RegistrationOpening){
   const measured=quotationOpenings([], [opening])[0];
@@ -101,27 +113,29 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <p>{flow?term('Editing revision {current}. Saving creates revision {next} and requires new client approval.',{current:formatNumber(flow.quotation.version??1),next:formatNumber((flow.quotation.version??1)+1)}):term("Alumex is selected by default. Choose the specifications requested by the client.")}</p>
     <p>{term("Catalog rates apply unless you set an Alumex system rate for this quotation. Review the new total before saving.")}</p>
    </div>
-   {!!openings.length&&<OpeningAreaLegend/>}
+   {!!openings.length&&<OpeningSellingLegend/>}
    {openings.map((opening,index)=>{
     const choice=choices[index];
     const system=catalog.find(p=>p.id===choice.systemId);
     const editableRate=!!system&&isQuotationSystemRateEditable(system);
     const systemRate=choice.systemRate??Number(system?.unit_price);
-    const invalidRate=editableRate&&choice.systemRate!==undefined&&(!Number.isInteger(systemRate)||systemRate<QUOTATION_SYSTEM_RATE_MIN||systemRate>QUOTATION_SYSTEM_RATE_MAX);
+    const maximumRate=quotationSystemRateMax(opening);
+    const invalidRate=editableRate&&choice.systemRate!==undefined&&(!Number.isInteger(systemRate)||systemRate<QUOTATION_SYSTEM_RATE_MIN||systemRate>maximumRate);
     const isNew=newOpenings.some(o=>o.id===opening.id);
     const area=measuredOpeningArea(opening);
-    const band=openingAreaBand(area);
+    const band=editableRate?openingSellingBand(area,systemRate,opening):undefined;
     const minimumApplied=billableOpeningArea(opening)>area&&[choice.systemId,choice.glassId,...choice.extras.map(extra=>extra.id)].some(id=>catalog.some(item=>item.id===id&&item.unit==='sqm'));
-    return <section key={opening.id} data-area-band={band} className={`${card} quotation-opening opening-area-${band}`} aria-label={term('Opening {number}',{number:formatNumber(index+1)})}>
-     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Opening {number}',{number:formatNumber(index+1)})} · {term(opening.opening_type)} {opening.opening_direction?term(opening.opening_direction):''}{opening.has_arch?` · ${term('Arch')}`:''}</h2><OpeningAreaBadge area={area}/>{isNew&&<button type="button" className="min-h-11 px-3 text-sm text-red-700" onClick={()=>{setNewOpenings(rows=>rows.filter(o=>o.id!==opening.id));setChoices(rows=>rows.filter(c=>c.openingId!==opening.id));}}>{term("Remove new opening")}</button>}</div>
+    return <section key={opening.id} data-area-band={band} className={`${card} quotation-opening${band?` opening-area-${band}`:''}`} aria-label={term('Opening {number}',{number:formatNumber(index+1)})}>
+     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Opening {number}',{number:formatNumber(index+1)})} · {term(opening.opening_type)} {opening.opening_direction?term(opening.opening_direction):''}{opening.has_arch?` · ${term('Arch')}`:''}</h2>{editableRate?<OpeningAreaBadge area={area} rate={systemRate} opening={opening}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}{isNew&&<button type="button" className="min-h-11 px-3 text-sm text-red-700" onClick={()=>{setNewOpenings(rows=>rows.filter(o=>o.id!==opening.id));setChoices(rows=>rows.filter(c=>c.openingId!==opening.id));}}>{term("Remove new opening")}</button>}</div>
      <p className="mt-2 text-sm text-slate-500">{term("Floor")} {term(opening.floor)} · {opening.work_area==='internal'?`${term('Internal works')} · ${term(opening.room)}`:term(opening.room)} · {formatNumber(opening.width)} × {formatNumber(opening.height)} {term("cm")} · {term("Quantity")}: {formatNumber(opening.quantity??1)}{isNew?` · ${term('Not saved yet')}`:''}</p>
      {minimumApplied&&<p className="mt-2 text-xs text-slate-600">{term('Minimum billable area: 1 m² per window.')} {term('Billable area: {area} m²',{area:formatNumber(billableOpeningArea(opening)*(opening.quantity??1))})}</p>}
      <div className="mt-5 grid gap-4 sm:grid-cols-2">
       <label className="text-sm">{term("System / product")}<select aria-label={term("System / product")} value={choice.systemId} onChange={e=>edit(index,{systemId:e.target.value,systemRate:undefined,glassId:'',extras:[]})} className={field}><option value="">{term("Choose system")}</option>{systemOptions(opening,catalog).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
       <label className="text-sm">{term("Glass")}<select aria-label={term("Glass")} value={choice.glassId} onChange={e=>edit(index,{glassId:e.target.value,extras:choice.extras.filter(x=>x.id!==e.target.value)})} className={field}><option value="">{term("Standard glass included")}</option>{glassOptions(opening,catalog,choice.systemId).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
       {editableRate&&<div className="sm:col-span-2">
-       <label className="block text-sm">{term('Quotation system rate (IQD / m²)')}<input aria-label={term('Quotation system rate (IQD / m²)')} aria-describedby={`system-rate-help-${opening.id}`} aria-invalid={invalidRate} type="number" inputMode="numeric" min={QUOTATION_SYSTEM_RATE_MIN} max={QUOTATION_SYSTEM_RATE_MAX} step={1} value={systemRate||''} onChange={e=>edit(index,{systemRate:Number(e.target.value)})} className={`${field} block sm:max-w-xs`}/></label>
-       <p id={`system-rate-help-${opening.id}`} className="mt-2 text-xs leading-5 text-slate-600">{term('Allowed range: {minimum}–{maximum} IQD per m². Applies to this quotation only.',{minimum:formatNumber(QUOTATION_SYSTEM_RATE_MIN),maximum:formatNumber(QUOTATION_SYSTEM_RATE_MAX)})}</p>
+       <label className="block text-sm">{term('Quotation system rate (IQD / m²)')}<input aria-label={term('Quotation system rate (IQD / m²)')} aria-describedby={`system-rate-help-${opening.id}`} aria-invalid={invalidRate} type="number" inputMode="numeric" min={QUOTATION_SYSTEM_RATE_MIN} max={maximumRate} step={1} value={systemRate||''} onChange={e=>edit(index,{systemRate:Number(e.target.value)})} className={`${field} block sm:max-w-xs`}/></label>
+       <p id={`system-rate-help-${opening.id}`} className="mt-2 text-xs leading-5 text-slate-600">{term('Allowed range: {minimum}–{maximum} IQD per m². Applies to this quotation only.',{minimum:formatNumber(QUOTATION_SYSTEM_RATE_MIN),maximum:formatNumber(maximumRate)})}</p>
+       <p className="mt-1 text-xs font-medium text-slate-700">{term('Minimum rate for green: {rate} / m²',{rate:formatMoney(openingMinimumSellingRate(area,opening))})}</p>
       </div>}
      </div>
      {(opening.quantity??1)>1&&<p className="mt-3 text-xs text-slate-600">{term('Specifications and add-on quantities apply to each identical opening. Area and totals include all openings.')}</p>}
@@ -162,6 +176,19 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <label className="min-w-0 text-sm">{term("Quotation version")}<select disabled={busy||!!pricePreview} aria-label={term("Quotation version")} value={viewVersion} onChange={e=>{setViewVersion(e.target.value);setApproved(false);}} className={field}><option value="current">{term('Revision {number} · Current',{number:formatNumber(flow.quotation.version??1)})}</option>{data.history?.map(h=><option key={h.version} value={h.version}>{term('Revision {number} · Superseded',{number:formatNumber(h.version)})}</option>)}</select></label>
     {canEdit?<div className="flex flex-wrap gap-3"><button disabled={busy||!!pricePreview} className={button} onClick={()=>{clearActionError();setEditing(true);setViewVersion('current');setApproved(false);}}>{term("Edit quotation")}</button>{canUpdatePrices&&<button disabled={busy||!!pricePreview} className={secondary} onClick={()=>void updatePrices()}>{term(previewLoading?'Loading prices…':'Update prices')}</button>}</div>:waiting?null:<p className="text-sm text-slate-600">{term("Signed contract · Quotation locked")}</p>}
    </div>}
+   {sellingSuggestion&&suggestedPricing&&<section aria-label={term('Suggested average system rate')} className="mb-5 rounded-lg border border-green-200 bg-green-50 p-4 sm:p-5 print:hidden">
+    <h2 className="font-semibold text-slate-900">{term('Suggested average system rate')}</h2>
+    <p className="mt-2 text-2xl font-semibold text-green-900">{formatMoney(suggestedPricing.rate)} / {term('m²')}</p>
+    <p className="mt-1 text-xs text-green-900">{term('Approximate average; each opening keeps its own rate.')}</p>
+    <p className="mt-2 text-sm leading-6 text-slate-700">{term('Each opening uses its own target rate. The overall rate is the area-weighted average, including quantities. Glass and add-ons are priced separately.')}</p>
+    <p className="mt-1 text-xs leading-5 text-slate-600">{term('Based on {area} m² billable area across {count} Alumex openings.',{area:formatNumber(suggestedPricing.billableArea,4),count:formatNumber(suggestedPricing.openingCount)})}</p>
+    <p className="mt-1 text-xs leading-5 text-slate-600">{term('Average system rate = system total ÷ billable area.')}</p>
+    {sellingSuggestion.allGreen?<p role="status" className="mt-3 text-sm font-semibold text-green-900">{term('All Alumex openings meet their selling targets.')}</p>:<>
+     {suggestedQuotation&&<p className="mt-3 text-sm text-slate-700">{term('Suggested quotation total')}: <strong>{formatMoney(suggestedQuotation.total)}</strong></p>}
+     <p className="mt-2 text-xs leading-5 text-slate-600">{term('Review the suggested opening prices and save a revision to apply them.')}</p>
+     <button type="button" disabled={busy||addingOpening} className={`${button} mt-4`} onClick={applySuggestedRate}>{term('Apply suggested opening prices')}</button>
+    </>}
+   </section>}
    {pricePreview&&!editing&&<section aria-label={term('Update quotation prices')} className="mb-5 rounded-lg border border-blue-200 bg-blue-50 p-4 sm:p-5 print:hidden">
     <h2 className="text-base font-semibold text-slate-900">{term('Update quotation prices')}</h2>
     <p className="mt-2 text-sm leading-6 text-slate-700">{term('Update prices for this quotation only. Quantities and specifications stay unchanged.')}</p>

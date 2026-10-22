@@ -292,3 +292,39 @@ test('quotation rate overrides preserve revision checks and unsigned contract re
  assert.equal((await x.post({...saveBody(275000),replaceUnsignedContract:true})).status,200);
  assert.equal(x.calls[0].args.p_action,'save');
 });
+
+test('the save and refresh routes persist a 305000-IQD rate for a hinged door',async()=>{
+ const x=quotationRateFixture();
+ Object.assign(x.tables.openings[0],{opening_type:'Door',opening_direction:'Hinged'});
+ const before=structuredClone(x.tables.product_price_settings);
+ assert.equal((await x.post(saveBody(305000))).status,200);
+ const saved=x.calls[0].args.p_payload;
+ assert.equal(saved.lines[0].system.rate,305000);
+ assert.equal(saved.lines[0].system.rateSource,'quotation');
+ assert.equal(saved.lines[0].system.total,305000*4.5);
+ assert.equal(saved.total,305000*4.5+450+600);
+ assert.deepEqual(x.tables.product_price_settings,before);
+ x.stored.quotation=structuredClone(saved);
+ x.calls.length=0;
+ x.tables.product_price_settings.find(item=>item.id==='system').unit_price=260000;
+ const preview=await x.post(previewBody);
+ assert.equal(preview.status,200);
+ assert.equal(preview.body.quotation.lines[0].system.rate,305000);
+ assert.equal(x.calls.length,0);
+ assert.equal((await x.post({action:'update-prices',revision:4,confirmed:true,priceKey:preview.body.priceKey})).status,200);
+ assert.equal(x.calls[0].args.p_payload.lines[0].system.rate,305000);
+ assert.equal(x.calls[0].args.p_payload.lines[0].system.rateSource,'quotation');
+});
+
+for(const [opening_type,opening_direction] of [['Window','Sliding'],['Window','Hinged'],['Door','Sliding']])test(`the save and refresh routes reject a 305000-IQD rate for ${opening_direction} ${opening_type}`,async()=>{
+ const x=quotationRateFixture();
+ Object.assign(x.tables.openings[0],{opening_type,opening_direction});
+ assert.equal((await x.post(saveBody(305000))).status,400);
+ assert.equal(x.calls.length,0);
+ Object.assign(x.stored.quotation.lines[0].opening,{opening_type,opening_direction});
+ Object.assign(x.stored.quotation.lines[0].system,{rate:305000,rateSource:'quotation'});
+ const before=structuredClone(x.tables);
+ assert.equal((await x.post(previewBody)).status,400);
+ assert.equal(x.calls.length,0);
+ assert.deepEqual(x.tables,before);
+});

@@ -298,6 +298,16 @@
     }
   },
   "dashboard": {
+    "outdoorCoverage": {
+      "title": "Outdoor Sales Coverage",
+      "asOf": "As of",
+      "baghdadTime": "Baghdad time",
+      "loading": "Loading Outdoor Sales coverage…",
+      "loadError": "Unable to load Outdoor Sales coverage.",
+      "noAssignedStaff": "No Outdoor Sales staff assigned.",
+      "unconfigured": "Rotation not configured",
+      "governorates": "All Outdoor Sales staff can work in Governorates throughout the month."
+    },
     "preview": {
       "eyebrow": "Admin testing",
       "title": "Preview the system as a sales role",

@@ -19,6 +19,7 @@ const history = {
 async function setup(page: Page, path: string, role = 'Indoor Sales', locale = 'en') {
   let requests = 0;
   const state = { actor: { ...actor, role }, projects, indoorSales: [actor], outdoorSales: [employee], queue: [], openings: [], syncedAt: null };
+  await page.route('**/api/outdoor-sales-coverage', route => route.fulfill({ json: { asOf: '2026-10-22T09:00:00Z', staff: [] } }));
   await page.route('**/api/offline*', route => {
     if (route.request().method() === 'POST') throw new Error('These tests must never write to the server');
     return route.fulfill({ json: state });

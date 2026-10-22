@@ -14,6 +14,7 @@ async function setup(page: Page, role: string, path: string, locale: string) {
   const state: FieldState = { actor: role === creator.role ? creator : { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Fatma', role, branch: 'Karkh' },
     projects: [project], openings: [], queue: [], syncedAt: null, indoorSales: [], outdoorSales: [creator] };
   await page.addInitScript(locale => localStorage.setItem('alumex_locale', locale), locale);
+  await page.route('**/api/outdoor-sales-coverage', route => route.fulfill({ json: { asOf: '2026-10-22T09:00:00Z', staff: [] } }));
   await page.route('**/api/offline*', route => route.fulfill({ json: state }));
   await page.route('**/api/workspace', route => route.fulfill({ json: state }));
   await page.route('**/api/initial-measurements/*', route => route.fulfill({ json: { project, openings: [] } }));

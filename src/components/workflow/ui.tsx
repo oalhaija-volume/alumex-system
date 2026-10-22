@@ -58,7 +58,7 @@ export function useResource<T>(url:string){
    timer=setTimeout(()=>{const force=pendingForce;pendingForce=false;void refresh(force);},150);
   }
   void refresh();
-  const live=url==='/api/workspace'||url==='/api/dashboard';
+  const live=url==='/api/workspace'||url==='/api/dashboard'||url==='/api/outdoor-sales-coverage';
   const interval=live?setInterval(()=>{if(document.visibilityState==='visible')changed();},30000):undefined;
   if(live){window.addEventListener('field-change',changed);window.addEventListener('focus',changed);}
   return()=>{

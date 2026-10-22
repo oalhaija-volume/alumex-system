@@ -23,7 +23,9 @@ for (const role of ['Admin', 'Indoor Sales', 'Sales Manager', 'Outdoor Sales']) 
       localStorage.setItem('alumex_locale', locale);
       Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
     }, locale);
-    await page.route('**/api/**', route => route.fulfill({ status: 503, json: { error: 'Offline fixture' } }));
+    await page.route('**/api/**', route => new URL(route.request().url()).pathname === '/api/outdoor-sales-coverage'
+      ? route.fulfill({ json: { asOf: '2026-10-22T09:00:00Z', staff: [] } })
+      : route.fulfill({ status: 503, json: { error: 'Offline fixture' } }));
     await page.goto('/offline?path=/dashboard');
     await page.evaluate(async state => {
       localStorage.setItem('alumex-field-active', state.actor.id);

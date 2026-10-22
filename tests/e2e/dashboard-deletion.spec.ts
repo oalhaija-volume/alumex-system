@@ -4,7 +4,7 @@ import type { FieldState } from '../../src/lib/offline/types';
 test.use({ serviceWorkers: 'block' });
 const projectId = '11111111-1111-4111-8111-111111111111';
 async function dashboard(page: Page, { role = 'Admin', pending = false, failure = false } = {}) {
-  const actor = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Employee', role };
+  const actor = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Employee', role, ...(role === 'Indoor Sales' ? { branch: 'Karkh' as const } : {}) };
   const state: FieldState = { actor, projects: [{
     id: projectId, project_name: 'Mansour residence', project_number: 'PRJ-DELETE-TEST', branch: 'Karkh',
     structure_readiness: 'ready', sales_status: 'new_lead', address: 'Baghdad', phone: '07700000000',
@@ -12,6 +12,7 @@ async function dashboard(page: Page, { role = 'Admin', pending = false, failure 
     next_follow_up_at: null, project_notes: null, pending,
   }], indoorSales: [], outdoorSales: [], queue: [], openings: [], syncedAt: null };
   const writes: unknown[] = [];
+  await page.route('**/api/outdoor-sales-coverage', route => route.fulfill({ json: { asOf: '2026-10-22T09:00:00Z', staff: [] } }));
   await page.route('**/api/offline*', route => route.fulfill({ json: state }));
   await page.route('**/api/workspace', route => {
     if (route.request().method() !== 'DELETE') return route.fulfill({ json: state });

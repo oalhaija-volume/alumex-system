@@ -12,6 +12,7 @@ import type { FieldProject, SalesWorkspaceData } from '@/lib/offline/types';
 import { needsSalesFollowUp, projectLink, projectStage, projectStages, stageDetails, type ProjectStage } from '@/lib/workflow/stages';
 import { ProjectFollowUps } from './ProjectFollowUps';
 import { SalesTaskPanel } from './SalesTaskPanel';
+import { OutdoorSalesCoverage } from './OutdoorSalesCoverage';
 import { button, field, Notice, secondary } from './ui';
 
 export const dashboardTones = {
@@ -145,6 +146,7 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
     </header>
     <Notice error={error}/>
     {notice && <p role="status" className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-900">{term(notice)}</p>}
+    {leadership&&<OutdoorSalesCoverage/>}
     <DashboardProjectFilters registration={registration} search={search} onSearch={setSearch} filter={stage} onFilter={value => setStage(value as ProjectStage | 'all')} onClear={reset} count={selected.length} total={data.projects.length}>
           <label className="text-sm font-medium text-slate-700">{term('Project priority')}<select value={scope} onChange={event => setScope(event.target.value as Scope)} className={field}>
             <option value="all">{term('All projects in this stage')}</option><option value="sales">{term('Awaiting sales action')}</option><option value="overdue">{term('Overdue follow-ups')}</option><option value="unscheduled">{term('Needs a follow-up date')}</option><option value="operations">{term('Signed / Operations')}</option>

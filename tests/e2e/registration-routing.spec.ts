@@ -314,6 +314,7 @@ test.describe('Leadership dashboard clarity', () => {
         project_notes: 'Client requested a follow-up call.', created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       }));
       const state = { actor, projects, indoorSales: [fatma], outdoorSales: [ehab], queue: [], openings: [], syncedAt: null };
+      await page.route('**/api/outdoor-sales-coverage', route => route.fulfill({ json: { asOf: '2026-10-22T09:00:00Z', staff: [] } }));
       await page.route('**/api/offline*', route => route.fulfill({ json: state }));
       await page.route('**/api/workspace', route => route.fulfill({ json: state }));
       await page.goto('/offline?path=/dashboard');

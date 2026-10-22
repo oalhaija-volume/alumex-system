@@ -15,6 +15,7 @@ for (const locale of ['en', 'ar']) for (const kind of ['Quotation', 'Contract'])
   new Function('require', 'exports', source)(name => {
     if (name === 'react/jsx-runtime') return jsx;
     if (name === '@/components/i18n/I18nProvider') return { useI18n: () => ({ locale, term: value => value, formatDate: formatBusinessDate }) };
+    if (name === '@/lib/quotations/clientPricing') return {};
     if (name === '@/lib/workflow/pricing' || name === './OpeningAreaIndicator') return {};
     throw Error(name);
   }, exports);

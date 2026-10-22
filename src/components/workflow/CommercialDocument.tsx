@@ -4,6 +4,7 @@ import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBran
 import type { ReactNode } from 'react';
 import type { QuoteSnapshot,Charge } from '@/lib/workflow/pricing';
 import { measuredOpeningArea,openingSellingBand,isAlumexSqmSystem } from '@/lib/workflow/pricing';
+import { quotationClientPricing } from '@/lib/quotations/clientPricing';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import { OpeningAreaBadge,OpeningSellingLegend } from './OpeningAreaIndicator';
 
@@ -22,16 +23,24 @@ function ChargeRows({items,labels}:{items:Charge[];labels?:string[]}) {
  const {term,formatNumber}=useI18n();
  return <>{items.map((item,i)=><tr key={item.id}><td>{labels&&<span className="document-charge-kind">{term(labels[i])}</span>}<span dir="auto">{term(item.name)}</span></td><td>{formatNumber(item.quantity)} {term(item.unit==='sqm'?'m²':item.unit==='meter'?'m':item.unit)}</td><td>{formatNumber(item.rate)}</td><td>{formatNumber(item.total)}</td></tr>)}</>;
 }
-export function OpeningSchedule({quote,showAreaColors=false}:{quote:QuoteSnapshot;showAreaColors?:boolean}) {
+export function OpeningSchedule({quote,showAreaColors=false,blendSystemRates=false}:{quote:QuoteSnapshot;showAreaColors?:boolean;blendSystemRates?:boolean}) {
  const {term,locale,formatMoney,formatNumber}=useI18n();
+ const clientPricing=blendSystemRates?quotationClientPricing(quote):null;
+ const clientOpenings=new Map(clientPricing?.openings.map(opening=>[opening.openingId,opening]));
  return <section className="document-schedule">{!!quote.lines.length&&<div className="document-section-heading"><h3>{term('Opening schedule')}{locale==='en'&&<span lang="ar">جدول الفتحات</span>}</h3><p>{term('{count} openings · {area} m² measured',{count:formatNumber(quote.lines.reduce((sum,line)=>sum+(line.opening.quantity??1),0)),area:formatNumber(quote.lines.reduce((sum,line)=>sum+line.area,0),2)})}</p></div>}
  {showAreaColors&&quote.lines.some(line=>isAlumexSqmSystem(line.system))&&<OpeningSellingLegend/>}
+ {clientPricing&&<div className="document-note" data-client-system-rate={clientPricing.rate}>
+  <p className="font-semibold">{term('Common Alumex system rate')}: {formatNumber(clientPricing.rate,4)} {term('IQD')} / {term('m²')}</p>
+  <p>{term('The same average system rate applies to each billable m². Glass and add-ons are priced separately.')}</p>
+  <p>{term('The displayed average rate is rounded; opening amounts are rounded to whole IQD and reconcile to the quotation total.')}</p>
+ </div>}
  {!!quote.lines.length&&<div className="document-schedule-scroll" role="region" aria-label={term('Opening schedule')} tabIndex={0}>
   <table className="document-opening-table">
    <caption className="sr-only">{term('Opening schedule')}</caption>
-   <colgroup>{[4,12,16,5,21,10,10,11,11].map((width,index)=><col key={index} style={{width:`${width}%`}}/>)}</colgroup>
+   <colgroup>{(clientPricing?[4,12,16,5,18,10,13,11,11]:[4,12,16,5,21,10,10,11,11]).map((width,index)=><col key={index} style={{width:`${width}%`}}/>)}</colgroup>
    <thead><tr>{['No.','Floor / room','Opening / dimensions','Qty','Specification','Basis','Rate · IQD','Amount · IQD','Opening total · IQD'].map(label=><th key={label} scope="col">{term(label)}</th>)}</tr></thead>
    {quote.lines.map((line,index)=>{
+    const clientOpening=clientOpenings.get(line.opening.id);
     const charges=[line.system,...(line.glass?[line.glass]:[]),...line.extras];
     const labels=['Aluminum / system',...(line.glass?['Glass']:[]),...line.extras.map(()=>'Add-on')];
     const area=measuredOpeningArea(line.opening);
@@ -47,9 +56,9 @@ export function OpeningSchedule({quote,showAreaColors=false}:{quote:QuoteSnapsho
       </>}
       <td><span className="document-charge-kind">{term(labels[chargeIndex])}</span><span dir="auto">{term(charge.name)}</span></td>
       <td className="document-table-number">{formatNumber(charge.quantity)} {term(charge.unit==='sqm'?'m²':charge.unit==='meter'?'m':charge.unit)}</td>
-      <td className="document-table-number">{formatNumber(charge.rate)}</td>
-      <td className="document-table-number">{formatNumber(charge.total)}</td>
-      {chargeIndex===0&&<td rowSpan={charges.length} className="document-table-number document-opening-total">{formatNumber(line.total)}</td>}
+      <td className={`document-table-number${chargeIndex===0&&clientOpening?' whitespace-nowrap':''}`}>{formatNumber(chargeIndex===0&&clientOpening&&clientPricing?clientPricing.rate:charge.rate,4)}</td>
+      <td className="document-table-number">{formatNumber(chargeIndex===0&&clientOpening?clientOpening.systemAmount:charge.total)}</td>
+      {chargeIndex===0&&<td rowSpan={charges.length} className="document-table-number document-opening-total">{formatNumber(clientOpening?.openingTotal??line.total)}</td>}
      </tr>)}
     </tbody>;
    })}

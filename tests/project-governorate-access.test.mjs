@@ -137,6 +137,7 @@ for (const branch of ['Governorates', 'Karkh']) {
     const { DocumentParties } = load('components/workflow/CommercialDocument.tsx', {
       'react/jsx-runtime': jsxRuntime,
       '@/components/i18n/I18nProvider': { useI18n: () => ({ term: value => value }) },
+      '@/lib/quotations/clientPricing': {},
       '@/lib/workflow/pricing': {}, './OpeningAreaIndicator': {},
     });
     const markup = renderToStaticMarkup(React.createElement(DocumentParties, {

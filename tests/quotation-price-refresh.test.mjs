@@ -106,11 +106,11 @@ function fixture({role='Indoor Sales',branch='Karkh',projectBranch='Karkh',stage
  const project={id:projectId,branch:projectBranch,created_by:'creator',sales_status:status,additional_openings_state:additionalState};
  const stored={project_id:projectId,revision:4,stage,quotation:quotation(),contract:stage==='contract'?{quotation:quotation()}:null,evidence:null,signed_at:signedAt};
  const unrelated={project_id:otherProjectId,revision:6,stage:'approved',quotation:quotation(),contract:null,signed_at:null};
- const tables={projects:[project],sales_workflows:missingFlow?[unrelated]:[stored,unrelated],product_price_settings:structuredClone(catalog)};
+ const tables={projects:[project],sales_workflows:missingFlow?[unrelated]:[stored,unrelated],product_price_settings:structuredClone(catalog),openings:[{...structuredClone(stored.quotation.lines[0].opening),project_id:projectId}]};
  const admin={from(table){
   const predicates=[];
   const result=single=>{const rows=tables[table].filter(row=>predicates.every(predicate=>predicate(row)));reads.push({table,rows});return {data:single?rows[0]??null:rows,error:null};};
-  return {select(){return this;},eq(key,value){predicates.push(row=>row[key]===value);return this;},maybeSingle:async()=>result(true),then(resolve){return Promise.resolve(result(false)).then(resolve);}};
+  return {select(){return this;},eq(key,value){predicates.push(row=>row[key]===value);return this;},order(){return this;},maybeSingle:async()=>result(true),then(resolve){return Promise.resolve(result(false)).then(resolve);}};
  },rpc:async(name,args)=>{calls.push({name,args});return {data:{...stored,revision:5,stage:'quotation',quotation:args.p_payload},error:null};}};
  const load=moduleLoader({
   'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200,headers:options?.headers})}},
@@ -180,5 +180,115 @@ test('confirmation and preview key are required, and an unsigned contract needs 
  assert.equal((await x.post({...update,confirmed:true,replaceUnsignedContract:true,priceKey:'forged'})).status,409);
  assert.equal(x.calls.length,0);
  assert.equal((await x.post({...update,confirmed:true,replaceUnsignedContract:true})).status,200);
+ assert.equal(x.calls[0].args.p_action,'save');
+});
+
+function quotationRateFixture(options={}) {
+ const x=fixture(options);
+ x.tables.product_price_settings.find(item=>item.id==='system').unit_price=240000;
+ return x;
+}
+const saveBody=systemRate=>({action:'save',revision:4,choices:[{openingId:'opening',systemId:'system',glassId:'glass',extras:[],systemRate}],additionalItems:[{id:'door',quantity:2}]});
+
+for(const rate of [240000,275000,300000])test(`Indoor Sales can save a quotation-only system rate of ${rate} IQD`,async()=>{
+ const x=quotationRateFixture();
+ x.unrelated.contract={quotation:quotation()};
+ const before=structuredClone({catalog:x.tables.product_price_settings,stored:x.stored,unrelated:x.unrelated,openings:x.tables.openings});
+ const result=await x.post({...saveBody(rate),total:1,currency:'USD',preparedBy:'forged',quotation:{total:1},lines:[{system:{rate:1,total:1}}]});
+ assert.equal(result.status,200);
+ assert.equal(x.calls.length,1);
+ const {name,args}=x.calls[0];
+ assert.equal(name,'advance_sales_flow');
+ assert.equal(args.p_action,'save');
+ assert.equal(args.p_project,projectId);
+ assert.equal(args.p_revision,4);
+ assert.equal(args.p_actor,actorId);
+ assert.equal(args.p_payload.lines[0].system.rate,rate);
+ assert.equal(args.p_payload.lines[0].system.rateSource,'quotation');
+ assert.equal(args.p_payload.lines[0].system.quantity,4.5);
+ assert.equal(args.p_payload.lines[0].system.total,rate*4.5);
+ assert.equal(args.p_payload.lines[0].glass.rate,100);
+ assert.equal(args.p_payload.additionalItems[0].rate,300);
+ assert.equal(args.p_payload.total,rate*4.5+450+600,'Server calculates all totals from measurements and current catalog rates');
+ assert.equal(args.p_payload.currency,'IQD');
+ assert.equal(args.p_payload.preparedBy,actorId);
+ assert.equal(args.p_payload.branch,'Karkh');
+ assert.deepEqual({catalog:x.tables.product_price_settings,stored:x.stored,unrelated:x.unrelated,openings:x.tables.openings},before,'Saving a quotation must not change catalog prices, measurements or other snapshots');
+});
+
+for(const rate of [239999,300001,275000.5,'275000',null,true,{}])test(`quotation save rejects invalid system rate ${JSON.stringify(rate)} before writing`,async()=>{
+ const x=quotationRateFixture(),before=structuredClone(x.tables);
+ const result=await x.post(saveBody(rate));
+ assert.equal(result.status,400);
+ assert.equal(x.calls.length,0);
+ assert.deepEqual(x.tables,before);
+});
+
+for(const patch of [{name:'Other System'},{unit:'item'},{name:'Lift & Slide',category:'opening_product'},{is_active:false}])test(`quotation save rejects an override on an ineligible catalog product ${JSON.stringify(patch)}`,async()=>{
+ const x=quotationRateFixture();
+ Object.assign(x.tables.product_price_settings.find(item=>item.id==='system'),patch);
+ const before=structuredClone(x.tables);
+ assert.equal((await x.post(saveBody(275000))).status,400);
+ assert.equal(x.calls.length,0);
+ assert.deepEqual(x.tables,before);
+});
+
+test('saving without a quotation rate keeps the catalog rate and does not mark an override',async()=>{
+ const x=quotationRateFixture();
+ const body=saveBody();delete body.choices[0].systemRate;
+ assert.equal((await x.post(body)).status,200);
+ assert.equal(x.calls[0].args.p_payload.lines[0].system.rate,240000);
+ assert.equal(x.calls[0].args.p_payload.lines[0].system.rateSource,undefined);
+});
+
+test('price refresh preserves a saved quotation rate while refreshing catalog-priced charges',async()=>{
+ const x=quotationRateFixture();
+ assert.equal((await x.post(saveBody(275000))).status,200);
+ x.stored.quotation=structuredClone(x.calls[0].args.p_payload);
+ x.calls.length=0;
+ x.tables.product_price_settings.find(item=>item.id==='system').unit_price=260000;
+ x.tables.product_price_settings.find(item=>item.id==='glass').unit_price=150;
+ x.tables.product_price_settings.find(item=>item.id==='door').unit_price=400;
+ const before=structuredClone(x.tables);
+ const preview=await x.post(previewBody);
+ assert.equal(preview.status,200);
+ assert.equal(preview.body.quotation.lines[0].system.rate,275000);
+ assert.equal(preview.body.quotation.lines[0].system.rateSource,'quotation');
+ assert.equal(preview.body.quotation.lines[0].glass.rate,150);
+ assert.equal(preview.body.quotation.additionalItems[0].rate,400);
+ assert.equal(preview.body.quotation.total,275000*4.5+150*4.5+400*2);
+ assert.equal(x.calls.length,0);
+ const result=await x.post({action:'update-prices',revision:4,confirmed:true,priceKey:preview.body.priceKey});
+ assert.equal(result.status,200);
+ assert.equal(x.calls.length,1);
+ assert.equal(x.calls[0].args.p_payload.lines[0].system.rate,275000);
+ assert.equal(x.calls[0].args.p_payload.lines[0].system.rateSource,'quotation');
+ assert.equal(x.calls[0].args.p_payload.total,preview.body.quotation.total);
+ assert.deepEqual(x.tables,before);
+});
+
+for(const role of ['Outdoor Sales','HR','Operations Manager'])test(`${role} cannot save a quotation rate override`,async()=>{
+ const x=quotationRateFixture({role});
+ assert.equal((await x.post(saveBody(275000))).status,403);
+ assert.equal(x.calls.length,0);
+ assert.equal(x.reads.length,0);
+});
+for(const branch of ['Rasafa',null])test(`Indoor Sales branch ${branch} cannot save a quotation rate override in Karkh`,async()=>{
+ const x=quotationRateFixture({branch});
+ assert.equal((await x.post(saveBody(275000))).status,404);
+ assert.equal(x.calls.length,0);
+ assert.ok(!x.reads.some(read=>read.table==='sales_workflows'));
+});
+for(const patch of [{stage:'signed',signedAt:'2026-10-21T08:00:00Z'},{stage:'operations'},{stage:'quotation',signedAt:'2026-10-21T08:00:00Z'}])test(`quotation rate overrides respect locked workflow ${JSON.stringify(patch)}`,async()=>{
+ const x=quotationRateFixture(patch);
+ assert.equal((await x.post(saveBody(275000))).status,400);
+ assert.equal(x.calls.length,0);
+});
+test('quotation rate overrides preserve revision checks and unsigned contract replacement confirmation',async()=>{
+ const x=quotationRateFixture({stage:'contract'});
+ assert.equal((await x.post({...saveBody(275000),revision:3,replaceUnsignedContract:true})).status,409);
+ assert.equal((await x.post(saveBody(275000))).status,400);
+ assert.equal(x.calls.length,0);
+ assert.equal((await x.post({...saveBody(275000),replaceUnsignedContract:true})).status,200);
  assert.equal(x.calls[0].args.p_action,'save');
 });

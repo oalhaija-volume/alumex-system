@@ -3,14 +3,19 @@ import { catalogKind, compatibleAddon, compatibleGlass, isAvailable, isCurtainWa
 export type CatalogItem = {id:string;name:string;category:string|null;unit:string;unit_price:number;is_active:boolean};
 export type MeasuredOpening = {has_roller_shutter?:boolean;work_area?:"facade"|"internal"|null;facade_number?:number|null;has_arch?:boolean;id:string;floor:string|null;room:string|null;width:number;height:number;quantity?:number;opening_type:string|null;opening_direction:string|null};
 export type ExtraChoice = {id:string;quantity:number};
-export type OpeningChoice = {openingId:string;systemId:string;glassId?:string;extras:ExtraChoice[]};
+export type OpeningChoice = {openingId:string;systemId:string;systemRate?:number;glassId?:string;extras:ExtraChoice[]};
 export type SurfaceMeasurement = {label:string;width:number;height:number;quantity:number};
 export type AdditionalChoice = {id:string;quantity:number;measurements?:SurfaceMeasurement[];extras?:ExtraChoice[]};
-export type Charge = {id:string;name:string;unit:string;rate:number;quantity:number;total:number};
+export type Charge = {id:string;name:string;unit:string;rate:number;quantity:number;total:number;rateSource?:'quotation'};
 export type StandaloneCharge = Charge & {measurements?:SurfaceMeasurement[];extras?:Charge[]};
 export type QuoteLine = {opening:MeasuredOpening;system:Charge;glass:Charge|null;extras:Charge[];area:number;total:number};
 export type QuoteSnapshot = {facadeMeasurements?:MeasuredOpening[];branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;total:number;currency:"IQD";createdAt:string;preparedBy:string};
 export const money = (n:number) => new Intl.NumberFormat('en-IQ',{maximumFractionDigits:0}).format(n)+' IQD';
+export const QUOTATION_SYSTEM_RATE_MIN = 240_000;
+export const QUOTATION_SYSTEM_RATE_MAX = 300_000;
+export function isQuotationSystemRateEditable(product:CatalogItem|null|undefined) {
+ return !!product&&isAvailable(product)&&product.unit==='sqm'&&catalogKind(product)==='system'&&/^alumex\b/i.test(product.name.trim());
+}
 export function measuredOpeningArea(opening:Pick<MeasuredOpening,'width'|'height'>) {
  return Number(opening.width)*Number(opening.height)/10000;
 }
@@ -56,6 +61,13 @@ function catalogCharge(id:string,quantity:number,catalog:CatalogItem[]):Charge {
  if(!Number.isSafeInteger(total)||total<=0)throw new Error(`Invalid amount for ${item.name}.`);
  return {id:item.id,name:item.name,unit:item.unit,rate:Number(item.unit_price),quantity,total};
 }
+function quotationSystemCharge(charge:Charge,product:CatalogItem|undefined,rate:unknown):Charge {
+ if(!isQuotationSystemRateEditable(product))throw new Error('Quotation-specific rates are available only for active Alumex systems priced per m².');
+ if(typeof rate!=='number'||!Number.isInteger(rate)||rate<QUOTATION_SYSTEM_RATE_MIN||rate>QUOTATION_SYSTEM_RATE_MAX)throw new Error('Enter an Alumex system rate between 240,000 and 300,000 IQD, using whole IQD.');
+ const total=Math.round(charge.quantity*rate);
+ if(!Number.isSafeInteger(total)||total<=0)throw new Error(`Invalid amount for ${charge.name}.`);
+ return {...charge,rate,total,rateSource:'quotation'};
+}
 
 // Price refresh uses the quantities already charged in the saved quotation.
 // Reconstructing choices from openings could multiply repeated accessories a
@@ -63,20 +75,24 @@ function catalogCharge(id:string,quantity:number,catalog:CatalogItem[]):Charge {
 export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[],actor:string):QuoteSnapshot {
  const catalog=rawCatalog.map(normalizeCatalogItem);
  const quotation=structuredClone(snapshot);
- const refresh=<T extends Charge>(charge:T):T=>{
+ const refresh=<T extends Charge>(charge:T,system=false):T=>{
   const item=catalog.find(item=>item.id===charge.id&&isAvailable(item));
   if(item&&item.unit!==charge.unit)throw new Error('A catalog unit changed. Use Edit quotation to review the affected items before updating prices.');
-  const current=catalogCharge(charge.id,charge.quantity,catalog);
+  let current=catalogCharge(charge.id,charge.quantity,catalog);
+  if(charge.rateSource!==undefined){
+   if(!system||charge.rateSource!=='quotation')throw new Error('Quotation-specific rates can only be applied to the opening system.');
+   current=quotationSystemCharge(current,item,charge.rate);
+  }
   return {...charge,rate:current.rate,total:current.total};
  };
  quotation.lines=quotation.lines.map(line=>{
-  const system=refresh(line.system);
+  const system=refresh(line.system,true);
   const glass=line.glass?refresh(line.glass):null;
-  const extras=line.extras.map(refresh);
+  const extras=line.extras.map(extra=>refresh(extra));
   return {...line,system,glass,extras,total:system.total+(glass?.total??0)+extras.reduce((sum,extra)=>sum+extra.total,0)};
  });
  if(quotation.additionalItems)quotation.additionalItems=quotation.additionalItems.map(item=>({
-  ...refresh(item),...(item.extras?{extras:item.extras.map(refresh)}:{}),
+  ...refresh(item),...(item.extras?{extras:item.extras.map(extra=>refresh(extra))}:{}),
  }));
  quotation.total=quotation.lines.reduce((sum,line)=>sum+line.total,0)+(quotation.additionalItems??[]).reduce((sum,item)=>sum+item.total+(item.extras??[]).reduce((extraSum,extra)=>extraSum+extra.total,0),0);
  if(!Number.isSafeInteger(quotation.total)||quotation.total<=0)throw new Error('Add a measured opening, facade service or standalone product before quoting.');
@@ -86,7 +102,7 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
 }
 
 export function quotationPriceKey(snapshot:QuoteSnapshot) {
- const charge=(item:Charge)=>({id:item.id,unit:item.unit,rate:item.rate,quantity:item.quantity});
+ const charge=(item:Charge)=>({id:item.id,unit:item.unit,rate:item.rate,quantity:item.quantity,...(item.rateSource?{rateSource:item.rateSource}:{})});
  return JSON.stringify({
   lines:snapshot.lines.map(line=>({system:charge(line.system),glass:line.glass?charge(line.glass):null,extras:line.extras.map(charge)})),
   additionalItems:(snapshot.additionalItems??[]).map(item=>({...charge(item),extras:(item.extras??[]).map(charge)})),
@@ -133,7 +149,8 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   const billableArea=billableOpeningArea(opening)*quantity;
   const charge=(id:string)=>catalogCharge(id,catalog.find(p=>p.id===id)?.unit==='sqm'?billableArea:quantity,catalog);
   if(!systemOptions(opening,catalog).some(p=>p.id===choice.systemId))throw new Error('Choose a compatible system for this structural type.');
-  const system=charge(choice.systemId);
+  const catalogSystem=charge(choice.systemId);
+  const system=choice.systemRate===undefined?catalogSystem:quotationSystemCharge(catalogSystem,catalog.find(product=>product.id===choice.systemId),choice.systemRate);
   if(choice.glassId&&!glassOptions(opening,catalog,choice.systemId).some(p=>p.id===choice.glassId))throw new Error('Choose a compatible glass option.');
   const glass=choice.glassId?charge(choice.glassId):null;
   const extras=priceExtras(choice.extras,addonOptions(opening,catalog,choice.systemId),catalog,billableArea,[choice.systemId,choice.glassId??''],quantity);

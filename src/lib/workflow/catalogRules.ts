@@ -30,7 +30,7 @@ export function isAvailable(product: CatalogProduct) { return product.is_active 
 export function normalizeCatalogItem<T extends CatalogProduct>(product: T): T {
   const kind = catalogKind(product);
   const category = ({facade:'facade_service',standalone:'standalone_product',opening:'opening_product',glass:'glass_option',addon:'addon'} as Partial<Record<CatalogKind,string>>)[kind];
-  return {...product, category:category ?? product.category, unit:kind === 'facade' ? 'sqm' : product.unit, is_active:product.is_active && kind !== 'removed'};
+  return {...product, category:category ?? product.category, unit:isRollerShutter(product) ? 'item' : kind === 'facade' ? 'sqm' : product.unit, is_active:product.is_active && kind !== 'removed'};
 }
 export const catalogGroups: {kind:CatalogKind;label:string;description:string}[] = [
   {kind:'system',label:'Window & door systems',description:'Base products selected for measured window and door openings.'},
@@ -44,7 +44,7 @@ export const catalogGroups: {kind:CatalogKind;label:string;description:string}[]
 export function catalogUsage(product: Pick<CatalogProduct,'name'|'category'>) {
   const name=key(product.name);
   if(isShutterBox(product)) return 'Optional with roller shutters when the structure has no concealed shutter recess.';
-  if(isRollerShutter(product)) return 'Window and door openings in all systems. Charged using the opening area.';
+  if(isRollerShutter(product)) return 'Window and door openings in all systems. Charged once per opening, with a separately priced motor.';
   if(isPushout(product)) return 'Curtain wall only. Enter the number of pushouts; each is charged separately.';
   if(['tilt turn','tilt and turn'].includes(name)) return 'Window add-on only.';
   if(name.startsWith('hydraulic door closer')) return 'Door add-on only.';

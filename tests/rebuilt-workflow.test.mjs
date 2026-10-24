@@ -249,7 +249,7 @@ test('window and door accessories enforce compatibility and shutter-box dependen
  assert.ok(pricing.addonOptions(door,correctedCatalog).some(p=>p.id==='hydraulic'));
  const valid=[{id:'roller',quantity:1,motorPrice:10000},{id:'box',quantity:1},{id:'film',quantity:1},{id:'georgian',quantity:2.5}];
  const quote=pricing.priceQuotation([opening],[{...plainChoice,glassId:'sand',extras:valid}],correctedCatalog,'actor');
- assert.deepEqual(quote.lines[0].extras.map(e=>e.total),[18000,10000,10000,18000,25000]);
+ assert.deepEqual(quote.lines[0].extras.map(e=>e.total),[10000,10000,10000,18000,25000]);
  for(const extras of [[{id:'box',quantity:1}],[{id:'cladding',quantity:1}],[{id:'swing',quantity:1}],[{id:'skylight',quantity:1}],[{id:'hydraulic',quantity:1}],[{id:'pushout',quantity:1}],[{id:'roller',quantity:1},{id:'foam',quantity:1}]])assert.throws(()=>pricing.priceQuotation([opening],[{...plainChoice,extras}],correctedCatalog,'actor'));
  assert.throws(()=>pricing.priceQuotation([door],[{...plainChoice,extras:[{id:'tilt',quantity:1}]}],correctedCatalog,'actor'));
  assert.throws(()=>pricing.priceQuotation([opening],[{...plainChoice,extras:[{id:'saint',quantity:1}]}],correctedCatalog,'actor'));
@@ -326,13 +326,15 @@ test('repeated openings multiply system, glass and each per-opening add-on once'
  assert.throws(()=>pricing.priceQuotation([{...opening,quantity:2}],[{...choice,extras:[{id:'closer',quantity:'2'}]}],catalog,'actor'));
 });
 
-test('a requested roller shutter must be priced using the measured area and repeated opening quantity',()=>{
+test('a requested roller shutter and motor are priced once for every repeated opening',()=>{
  const shutter={id:'shutter',name:'Roller Shutter - Foam',unit:'sqm',category:'addon',unit_price:90000,is_active:true};
  const measured={...opening,quantity:3,has_roller_shutter:true};
  assert.throws(()=>pricing.priceQuotation([measured],[choice],[...catalog,shutter],'actor'),/requires roller shutters/);
  const quote=pricing.priceQuotation([measured],[{...choice,extras:[{id:'shutter',quantity:1,motorPrice:10000}]}],[...catalog,shutter],'actor');
  assert.equal(quote.lines[0].opening.has_roller_shutter,true);
- assert.equal(quote.lines[0].extras[0].quantity,5.4);assert.equal(quote.lines[0].extras[0].total,486000);
+ assert.equal(quote.lines[0].extras[0].unit,'item');
+ assert.equal(quote.lines[0].extras[0].quantity,3);assert.equal(quote.lines[0].extras[0].total,270000);
+ assert.equal(quote.lines[0].extras[1].quantity,3);assert.equal(quote.lines[0].extras[1].total,30000);
  assert.throws(()=>pricing.priceQuotation([measured],[{...choice,extras:[{id:'shutter',quantity:1}]}],[...catalog,{...shutter,is_active:false}],'actor'));
  // Unticked legacy windows remain quotable without a shutter.
  assert.ok(pricing.priceQuotation([opening],[choice],catalog,'actor'));

@@ -278,13 +278,14 @@ test('the save API calculates the five-percent discount and ignores forged monet
  assert.deepEqual({tables:x.tables,stored:x.stored,unrelated:x.unrelated},before);
 });
 
-test('the save API creates one manually priced motor for each repeated shutter and ignores forged charges',async()=>{
+test('the save API creates one fixed-price shutter and motor per opening and ignores forged quantities and charges',async()=>{
  const x=fixture();
- const selection={...choice,extras:choice.extras.map(extra=>extra.id==='shutter'?{...extra,motorPrice:125000,total:1,rate:1}:extra)};
+ const selection={...choice,extras:choice.extras.map(extra=>extra.id==='shutter'?{...extra,quantity:99,motorPrice:125000,total:1,rate:1}:extra)};
  const response=await x.post({...saveBody,choices:[selection],discountPercent:5,total:1,lines:[{extras:[{id:'forged-motor',motorFor:'shutter',rate:1,quantity:99,total:1}]}],motorPrice:1});
  assert.equal(response.status,200);
  assert.equal(x.calls.length,1);
  const quotation=x.calls[0].args.p_payload;
+ assert.deepEqual(quotation.lines[0].extras.find(extra=>extra.id==='shutter'),{id:'shutter',name:'Roller Shutter - Foam',unit:'item',rate:30000,quantity:2,total:60000});
  const motor=quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter');
  assert.deepEqual(motor,{id:'roller-shutter-motor:shutter',name:'Roller shutter motor',unit:'item',rate:125000,quantity:2,total:250000,motorFor:'shutter'});
  assert.equal(quotation.lines[0].extras.filter(extra=>extra.motorFor).length,1);
@@ -292,6 +293,40 @@ test('the save API creates one manually priced motor for each repeated shutter a
  assert.deepEqual(quotation.discount,{percent:5,subtotal:1664000,amount:83200});
  assert.equal(quotation.total,1580800);
  assert.equal(quotation.preparedBy,actorId);
+});
+
+test('the save API keeps shutter and motor prices fixed across different opening areas',async()=>{
+ const shutters=[],motors=[];
+ for(const [width,height,lineTotal,subtotal,discountAmount,total] of [[50,100,850000,1664000,83200,1580800],[200,300,3450000,4264000,213200,4050800]]){
+  const x=fixture();
+  Object.assign(x.tables.openings[0],{width,height});
+  const selection={...choice,extras:choice.extras.map(extra=>extra.id==='shutter'?{...extra,quantity:99,motorPrice:125000}:extra)};
+  const response=await x.post({...saveBody,choices:[selection],discountPercent:5});
+  assert.equal(response.status,200);
+  const quotation=x.calls[0].args.p_payload;
+  shutters.push(quotation.lines[0].extras.find(extra=>extra.id==='shutter'));
+  motors.push(quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter'));
+  assert.equal(quotation.lines[0].total,lineTotal);
+  assert.deepEqual(quotation.discount,{percent:5,subtotal,amount:discountAmount});
+  assert.equal(quotation.total,total);
+ }
+ assert.deepEqual(shutters[0],shutters[1],'Shutter price and count depend on physical openings, never their area');
+ assert.deepEqual(motors[0],motors[1],'Motor price and count depend on physical openings, never their area');
+ assert.equal(shutters[0].quantity,2);
+ assert.equal(shutters[0].total,60000);
+ assert.equal(motors[0].quantity,2);
+ assert.equal(motors[0].total,250000);
+});
+
+test('legacy sqm shutter quotations require editing before API price refresh',async()=>{
+ const x=fixture();
+ x.stored.quotation.lines[0].extras.find(extra=>extra.id==='shutter').unit='sqm';
+ const before=structuredClone(x.stored.quotation);
+ const response=await x.post({action:'preview-prices',revision:4});
+ assert.equal(response.status,400);
+ assert.match(response.body.error,/catalog unit changed.*Edit quotation/);
+ assert.equal(x.calls.length,0,'A refresh must not silently reinterpret a saved sqm charge as a per-opening charge');
+ assert.deepEqual(x.stored.quotation,before);
 });
 
 test('the save API requires a positive whole-IQD motor price on every selected shutter',async()=>{
@@ -424,6 +459,7 @@ test('price-preview and refresh preserve the saved five-percent discount and ser
  assert.equal(x.calls.length,0);
  assert.deepEqual(preview.body.quotation.discount,{percent:5,subtotal:3028000,amount:151400});
  assert.equal(preview.body.quotation.total,2876600);
+ assert.deepEqual(preview.body.quotation.lines[0].extras.find(extra=>extra.id==='shutter'),{id:'shutter',name:'Roller Shutter - Foam',unit:'item',rate:60000,quantity:2,total:120000});
  assert.deepEqual(preview.body.quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter'),x.stored.quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter'));
  assert.equal((await x.post({action:'update-prices',revision:4,priceKey:preview.body.priceKey,confirmed:true,discountPercent:0,choices:[{...choice,extras:[{id:'shutter',quantity:1,motorPrice:1}]}],motorPrice:1,total:1})).status,200);
  assert.deepEqual(x.calls[0].args.p_payload.discount,preview.body.quotation.discount);

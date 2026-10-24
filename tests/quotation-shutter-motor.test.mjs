@@ -28,20 +28,48 @@ const choice={openingId:'window',systemId:'system',extras:[{id:'shutter',quantit
 const quote=(selection=choice,measured=opening,products=catalog,discount=0)=>priceQuotation([measured],[selection],products,'indoor-sales',[],discount);
 const motor=quotation=>quotation.lines[0].extras.find(isRollerShutterMotor);
 
-test('each repeated small shutter has one separately priced motor, independent of square metres',()=>{
+test('each physical opening has one fixed-price shutter and one motor, independent of square metres',()=>{
  const inputs={opening,choice,catalog},before=structuredClone(inputs);
  const saved=quote();
  assert.deepEqual(motor(saved),{id:'roller-shutter-motor:shutter',name:'Roller shutter motor',unit:'item',rate:35000,quantity:3,total:105000,motorFor:'shutter'});
  assert.equal(saved.lines[0].area,1.5);
- assert.equal(saved.lines[0].extras[0].quantity,3,'The shutter still uses each window’s billable sqm minimum');
+ assert.equal(saved.lines[0].extras[0].unit,'item');
+ assert.equal(saved.lines[0].extras[0].quantity,3,'The shutter uses the physical opening count');
  assert.equal(saved.total,915000);
  assert.equal(saved.lines[0].total,915000);
  assert.deepEqual(inputs,before,'Manual pricing must not mutate selections, measurements or catalog prices');
  const large=quote(choice,{...opening,width:200,height:200,quantity:2});
- assert.equal(large.lines[0].extras[0].quantity,8);
+ assert.equal(large.lines[0].extras[0].quantity,2);
+ assert.equal(large.lines[0].extras[0].total,60000);
  assert.equal(motor(large).quantity,2);
  assert.equal(motor(large).total,70000);
- assert.equal(large.total,2230000);
+ assert.equal(large.total,2050000);
+});
+
+test('small and large openings with the same count have identical shutter and motor charges',()=>{
+ const small=quote();
+ const large=quote(choice,{...opening,width:300,height:250});
+ assert.equal(small.lines[0].area,1.5);
+ assert.equal(large.lines[0].area,22.5);
+ assert.deepEqual(large.lines[0].extras,small.lines[0].extras);
+ for(const quantity of [undefined,0,-1,2.5,99,NaN,'8']){
+  const saved=quote({...choice,extras:[{id:'shutter',quantity,motorPrice:35000}]});
+  assert.equal(saved.lines[0].extras[0].quantity,3,'A forged shutter add-on quantity cannot change the physical count');
+  assert.equal(motor(saved).quantity,3);
+  assert.equal(saved.total,915000);
+ }
+});
+
+test('catalog normalization uses fixed item pricing for shutters while retaining all other accessory units',()=>{
+ for(const name of ['Roller Shutters','Roller Shutter - Foam','Roller Shutter - Extruded'])for(const unit of ['sqm','meter','project','item']){
+  const product={...catalog[1],name,unit};
+  const before=structuredClone(product);
+  assert.equal(rules.normalizeCatalogItem(product).unit,'item');
+  assert.deepEqual(product,before);
+ }
+ assert.equal(rules.normalizeCatalogItem({...catalog[3],unit:'meter'}).unit,'meter','Shutter boxes keep their own unit');
+ assert.equal(rules.normalizeCatalogItem(catalog[4]).unit,'meter');
+ assert.equal(rules.catalogUsage(catalog[1]),'Window and door openings in all systems. Charged once per opening, with a separately priced motor.');
 });
 
 for(const name of ['Roller Shutters','Roller Shutter - Foam','Roller Shutter - Extruded'])test(`${name} requires a manual motor price even without a measurement request flag`,()=>{
@@ -117,7 +145,7 @@ test('catalog refresh retains the manual motor rate and quantity while updating 
  assert.deepEqual(motor(restored),motor(saved),'Motor linkage and price survive persisted JSON snapshots');
 });
 
-test('legacy saved quotations remain viewable and refresh without inventing an unsupplied motor price',()=>{
+test('legacy saved fixed-price shutters refresh without inventing an unsupplied motor price',()=>{
  const legacy=quote();
  legacy.lines[0].extras=legacy.lines[0].extras.filter(item=>!isRollerShutterMotor(item));
  legacy.lines[0].total=810000;legacy.total=810000;
@@ -127,6 +155,19 @@ test('legacy saved quotations remain viewable and refresh without inventing an u
  assert.equal(refreshed.total,810000);
  assert.deepEqual({legacy,contract},before);
  assert.throws(()=>quote({...choice,extras:[{id:'shutter',quantity:1}]}),/motor price/,'Editing a legacy quote still requires its missing motor price');
+});
+
+test('historical square-metre shutters require explicit editing before price refresh and leave snapshots unchanged',()=>{
+ const legacy=quote();
+ Object.assign(legacy.lines[0].extras[0],{unit:'sqm',quantity:1.5,total:45000});
+ legacy.lines[0].total=870000;legacy.total=870000;
+ const contract={quotation:structuredClone(legacy)},before=structuredClone({legacy,contract});
+ assert.throws(()=>repriceQuotation(legacy,catalog,'refreshing-sales'),/catalog unit changed.*Edit quotation/);
+ assert.deepEqual({legacy,contract},before,'Saved quotations and contracts retain their historical area-based charges');
+ const edited=quote({...choice,extras:[{id:'shutter',quantity:0.5,motorPrice:35000}]});
+ assert.equal(edited.lines[0].extras[0].unit,'item');
+ assert.equal(edited.lines[0].extras[0].quantity,3);
+ assert.equal(edited.total,915000);
 });
 
 test('price preview keys include the manual rate, motor quantity and shutter association',()=>{

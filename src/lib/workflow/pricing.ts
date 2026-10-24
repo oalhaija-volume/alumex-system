@@ -217,10 +217,11 @@ function priceExtras(extras:ExtraChoice[],allowed:CatalogItem[],catalog:CatalogI
  if(products.filter(isRollerShutter).length>1)throw new Error('Choose one roller shutter type per opening.');
  return extras.flatMap((extra,index)=>{
   const product=products[index];
-  if(!isRollerShutter(product)&&extra.motorPrice!==undefined)throw new Error('Motor prices can only be entered for roller shutter add-ons.');
-  if(product.unit!=='sqm'&&(!Number.isFinite(extra.quantity)||extra.quantity<=0||(product.unit==='item'&&!Number.isInteger(extra.quantity))))throw new Error('Enter a valid quantity, area or length. Use whole numbers for items.');
-  const charge=catalogCharge(extra.id,product.unit==='sqm'?area:extra.quantity*openingQuantity,catalog);
-  return isRollerShutter(product)?[charge,rollerShutterMotorCharge(product.id,extra.motorPrice,openingQuantity)]:[charge];
+  const shutter=isRollerShutter(product);
+  if(!shutter&&extra.motorPrice!==undefined)throw new Error('Motor prices can only be entered for roller shutter add-ons.');
+  if(!shutter&&product.unit!=='sqm'&&(!Number.isFinite(extra.quantity)||extra.quantity<=0||(product.unit==='item'&&!Number.isInteger(extra.quantity))))throw new Error('Enter a valid quantity, area or length. Use whole numbers for items.');
+  const charge=catalogCharge(extra.id,shutter?openingQuantity:product.unit==='sqm'?area:extra.quantity*openingQuantity,catalog);
+  return shutter?[charge,rollerShutterMotorCharge(product.id,extra.motorPrice,openingQuantity)]:[charge];
  });
 }
 export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[],rawCatalog:CatalogItem[],actor:string,additionalItems:AdditionalChoice[]=[],discountPercent:unknown=0):QuoteSnapshot {

@@ -29,7 +29,7 @@ const catalog=[
 ];
 const choice={openingId:'window',systemId:'system',glassId:'glass',extras:[{id:'shutter',quantity:99,motorPrice:10000}]};
 
-test('a sub-square-metre window charges one square metre for system, glass and area add-ons while retaining measurements',()=>{
+test('a sub-square-metre window charges one square metre for system and glass with one fixed-price shutter and motor',()=>{
  const before=structuredClone(opening);
  const quote=priceQuotation([opening],[choice],catalog,'sales');
  const line=quote.lines[0];
@@ -39,6 +39,7 @@ test('a sub-square-metre window charges one square metre for system, glass and a
  assert.equal(line.system.quantity,1);
  assert.equal(line.glass.quantity,1);
  assert.equal(line.extras[0].quantity,1);
+ assert.equal(line.extras[0].unit,'item');
  assert.equal(line.total,160000);
  assert.equal(quote.total,160000);
 });
@@ -64,8 +65,8 @@ for(const [width,height,expectedArea] of [[100,100,1],[150,100,1.5]])test(`windo
  assert.equal(quote.lines[0].area,expectedArea*3);
  assert.equal(quote.lines[0].system.quantity,expectedArea*3);
  assert.equal(quote.lines[0].glass.quantity,expectedArea*3);
- assert.equal(quote.lines[0].extras[0].quantity,expectedArea*3);
- assert.equal(quote.total,150000*expectedArea*3+30000);
+ assert.equal(quote.lines[0].extras[0].quantity,3,'Shutters use the physical opening count regardless of billable area');
+ assert.equal(quote.total,120000*expectedArea*3+120000);
 });
 
 test('item systems and item or metre accessories keep their quantities on a small repeated window',()=>{
@@ -89,7 +90,7 @@ for(const [opening_type,systemId,withGlass] of [['Door','system',true],['Curtain
  assert.equal(line.area,1.5);
  assert.equal(line.system.quantity,1.5);
  if(withGlass)assert.equal(line.glass.quantity,1.5);
- if(opening_type==='Door')assert.equal(line.extras[0].quantity,1.5);
+ if(opening_type==='Door')assert.equal(line.extras[0].quantity,3);
 });
 
 test('small facade services and standalone items retain their explicit quantities',()=>{

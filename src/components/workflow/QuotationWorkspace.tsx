@@ -24,7 +24,7 @@ const pricePreviewConflicts=new Set(['Catalog prices changed. Preview the update
 
 function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;projectId:string;reload:(error?:string)=>Promise<void>;clearActionError:()=>void}) {
  const { term,formatMoney,formatNumber,errorMessage } = useI18n();
- const rateLabel=(p:CatalogItem)=>p.unit_price>0?`${formatMoney(p.unit_price)} / ${term(p.unit)}`:term('Price required');
+ const rateLabel=(p:CatalogItem)=>p.unit_price>0?isRollerShutter(p)?term('{price} per opening',{price:formatMoney(p.unit_price)}):`${formatMoney(p.unit_price)} / ${term(p.unit)}`:term('Price required');
  const {flow}=data;
  const catalog=data.catalog.map(normalizeCatalogItem);
  const [newOpenings,setNewOpenings]=useState<RegistrationOpening[]>([]);
@@ -33,7 +33,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   const saved=flow?.quotation.lines.find(l=>l.opening.id===o.id);
   return {openingId:o.id,systemId:saved?.system.id??defaultSystem(o,catalog)?.id??'',...(saved?.system.rateSource==='quotation'?{systemRate:saved.system.rate}:{}),glassId:saved?.glass?.id??'',extras:saved?.extras.filter(e=>!isRollerShutterMotor(e)).map(e=>{
    const motor=saved.extras.find(charge=>isRollerShutterMotor(charge)&&charge.motorFor===e.id);
-   return {id:e.id,quantity:e.unit==='sqm'?e.quantity:e.quantity/(saved.opening.quantity??1),...(motor?{motorPrice:motor.rate}:{})};
+   return {id:e.id,quantity:isRollerShutter(e)?1:e.unit==='sqm'?e.quantity:e.quantity/(saved.opening.quantity??1),...(motor?{motorPrice:motor.rate}:{})};
   })??[]};
  }));
  const [additionalItems,setAdditionalItems]=useState<AdditionalChoice[]>(()=>flow?.quotation.additionalItems?.map(item=>({id:item.id,quantity:item.quantity,measurements:item.measurements,extras:item.extras?.map(e=>({id:e.id,quantity:e.quantity}))}))??[]);
@@ -161,9 +161,9 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
      </div>}
      <div className="mt-5"><label className="text-sm">{term("Add an extra")}<select aria-label={term("Add an extra")} value="" onChange={e=>{if(e.target.value)edit(index,{extras:[...choice.extras,{id:e.target.value,quantity:1}]});}} className={field}><option value="">{term("Choose add-on")}</option>{addonOptions(opening,catalog,choice.systemId).filter(p=>p.id!==choice.systemId&&p.id!==choice.glassId&&!choice.extras.some(e=>e.id===p.id)&&(!isShutterBox(p)||choice.extras.some(e=>catalog.some(c=>c.id===e.id&&isRollerShutter(c))))&&(!isRollerShutter(p)||!choice.extras.some(e=>catalog.some(c=>c.id===e.id&&isRollerShutter(c))))).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
       {choice.extras.map(extra=>{const p=catalog.find(p=>p.id===extra.id);const maximumMotorPrice=Math.floor(Number.MAX_SAFE_INTEGER/(opening.quantity??1));const invalidMotorPrice=p&&isRollerShutter(p)&&(!Number.isSafeInteger(extra.motorPrice)||(extra.motorPrice??0)<1||(extra.motorPrice??0)>maximumMotorPrice);return <div key={extra.id} className="mt-3 flex flex-wrap items-center gap-3 rounded-md bg-slate-50 p-3">
-       <span className="w-full min-w-0 text-sm sm:w-auto sm:flex-1">{term(p?.name??'Unavailable item')}{p?.unit==='sqm'&&<span className="block text-xs text-slate-500">{term(minimumApplied?'Uses this opening’s billable area':'Uses this opening’s area')}</span>}</span>
+       <span className="w-full min-w-0 text-sm sm:w-auto sm:flex-1">{term(p?.name??'Unavailable item')}{p&&isRollerShutter(p)?<span className="block text-xs text-slate-500">{term('Fixed shutter price per opening: {price}',{price:formatMoney(p.unit_price)})}</span>:p?.unit==='sqm'&&<span className="block text-xs text-slate-500">{term(minimumApplied?'Uses this opening’s billable area':'Uses this opening’s area')}</span>}</span>
        {p&&isShutterBox(p)&&<p className="w-full text-xs text-slate-500">{term('Optional with roller shutters when the structure has no concealed shutter recess.')}</p>}
-       {p?.unit!=='sqm'&&<label className="text-xs">{term(quantityLabel(p?.unit))}<input aria-label={term('{name} quantity',{name:term(p?.name)})} type="number" min={p?.unit==='item'?1:0.01} max="1000000" step={p?.unit==='item'?1:0.01} value={extra.quantity||''} className={`${field} max-w-28`} onChange={e=>edit(index,{extras:choice.extras.map(x=>x.id===extra.id?{...x,quantity:Number(e.target.value)}:x)})}/></label>}
+       {p?.unit!=='sqm'&&(!p||!isRollerShutter(p))&&<label className="text-xs">{term(quantityLabel(p?.unit))}<input aria-label={term('{name} quantity',{name:term(p?.name)})} type="number" min={p?.unit==='item'?1:0.01} max="1000000" step={p?.unit==='item'?1:0.01} value={extra.quantity||''} className={`${field} max-w-28`} onChange={e=>edit(index,{extras:choice.extras.map(x=>x.id===extra.id?{...x,quantity:Number(e.target.value)}:x)})}/></label>}
        <button type="button" className="min-h-11 px-3 text-sm text-red-700" onClick={()=>edit(index,{extras:choice.extras.filter(x=>x.id!==extra.id&&!(p&&isRollerShutter(p)&&catalog.some(c=>c.id===x.id&&isShutterBox(c))))})}>{term("Remove")}</button>
        {p&&isRollerShutter(p)&&<div className="w-full border-t border-slate-200 pt-3">
         <label className="block text-sm font-medium">{term('Motor price (IQD per motor)')}<input aria-label={term('Motor price (IQD per motor)')} aria-describedby={`motor-price-help-${opening.id}-${extra.id}`} aria-invalid={invalidMotorPrice} required type="number" inputMode="numeric" min={1} max={maximumMotorPrice} step={1} value={extra.motorPrice??''} onChange={event=>edit(index,{extras:choice.extras.map(item=>item.id===extra.id?{...item,motorPrice:event.target.value===''?undefined:Number(event.target.value)}:item)})} className={`${field} block sm:max-w-xs`}/></label>

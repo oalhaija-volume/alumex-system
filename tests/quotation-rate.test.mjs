@@ -87,6 +87,7 @@ test('quotation rates retain each repeated window minimum and all accessory unit
  assert.equal(line.system.total,1080000);
  assert.equal(line.glass.rate,20000);
  assert.equal(line.glass.total,80000);
+ assert.equal(line.extras[0].unit,'item');
  assert.deepEqual(line.extras.map(item=>({id:item.id,rate:item.rate,quantity:item.quantity,total:item.total})),[
   {id:'shutter',rate:30000,quantity:4,total:120000},
   {id:'roller-shutter-motor:shutter',rate:10000,quantity:4,total:40000},

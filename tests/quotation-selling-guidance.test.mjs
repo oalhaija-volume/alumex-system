@@ -13,7 +13,7 @@ function load(path,dependencies={}) {
  return exports;
 }
 const catalogRules=load('../src/lib/workflow/catalogRules.ts');
-const {openingMinimumSellingRate,openingSellingBand,quotationSystemRateMax,isAlumexSqmSystem,quotationSellingSuggestion,defaultSystem,systemOptions,priceQuotation,repriceQuotation}=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules});
+const {openingMinimumSellingRate,openingSellingBand,isAlumexSqmSystem,quotationSellingSuggestion,defaultSystem,systemOptions,priceQuotation,repriceQuotation}=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules});
 const product=(id,name,category,unit,unit_price)=>({id,name,category,unit,unit_price,is_active:true});
 const catalog=[
  product('system','Alumex System','aluminum_system','sqm',240000),
@@ -57,9 +57,16 @@ for(const [opening_type,minimum] of [['Window',260000],['Door',305000]])test(`hi
  }
 });
 
-test('only hinged doors extend the quotation-specific rate ceiling to 305000 IQD',()=>{
- assert.equal(quotationSystemRateMax(opening('hinged-door',4,1,'Door','Hinged')),305000);
- for(const measured of [opening('sliding-window',4),opening('hinged-window',4,1,'Window','Hinged'),opening('sliding-door',4,1,'Door'),opening('unknown',4,1,'Door',null)])assert.equal(quotationSystemRateMax(measured),300000);
+test('manual window and door system rates can exceed the old ceilings without changing green targets',()=>{
+ for(const opening_type of ['Window','Door'])for(const opening_direction of ['Sliding','Hinged']){
+  const measured=opening('custom',4,1,opening_type,opening_direction);
+  for(const rate of [300001,305001,321053,470000]){
+   const adjusted=quote([measured],[{...choice(measured.id),systemRate:rate}]);
+   assert.equal(adjusted.lines[0].system.rate,rate);
+   assert.equal(adjusted.total,rate*4);
+   assert.equal(quotationSellingSuggestion(adjusted,catalog).allGreen,rate>=openingMinimumSellingRate(4,measured));
+  }
+ }
 });
 
 test('Alumex square-metre identification uses the product name boundary and unit',()=>{
@@ -168,19 +175,38 @@ test('fractional blended averages are display values and do not replace per-open
  assert.throws(()=>quote(openings,openings.map(item=>({...choice(item.id),systemRate:suggestion.rate}))));
 });
 
-test('305000-IQD overrides are accepted only for hinged doors and cannot survive a forged structural type',()=>{
+test('high manual rates survive refresh for every eligible window and door type',()=>{
  const hingedDoor=opening('hinged-door',2,1,'Door','Hinged');
- const adjusted=quote([hingedDoor],[{...choice(hingedDoor.id),systemRate:305000}]);
- assert.equal(adjusted.lines[0].system.rate,305000);
- assert.equal(repriceQuotation(adjusted,catalog,'refresh').lines[0].system.rate,305000);
- for(const [opening_type,opening_direction] of [['Window','Sliding'],['Window','Hinged'],['Door','Sliding']]){
+ for(const [opening_type,opening_direction] of [['Window','Sliding'],['Window','Hinged'],['Door','Sliding'],['Door','Hinged']]){
   const measured={...hingedDoor,opening_type,opening_direction};
-  assert.throws(()=>quote([measured],[{...choice(measured.id),systemRate:305000}]));
-  const forged=structuredClone(adjusted);
-  forged.lines[0].opening=measured;
-  assert.throws(()=>repriceQuotation(forged,catalog,'refresh'));
+  const adjusted=quote([measured],[{...choice(measured.id),systemRate:470000}]);
+  const before=structuredClone(adjusted);
+  assert.equal(adjusted.total,940000);
+  assert.equal(repriceQuotation(adjusted,catalog,'refresh').lines[0].system.rate,470000);
+  assert.deepEqual(adjusted,before);
  }
- for(const rate of [305001,305000.5])assert.throws(()=>quote([hingedDoor],[{...choice(hingedDoor.id),systemRate:rate}]));
+ assert.throws(()=>quote([hingedDoor],[{...choice(hingedDoor.id),systemRate:470000.5}]));
+});
+
+test('discounted hinged-door guidance can apply its exact 321053-IQD target above the former ceiling',()=>{
+ const measured=opening('hinged-door',2,1,'Door','Hinged');
+ const initial=priceQuotation([measured],[{...choice(measured.id),systemRate:305000}],catalog,'indoor-sales',[],5);
+ const before=structuredClone(initial);
+ const suggestion=quotationSellingSuggestion(initial,catalog);
+ assert.equal(suggestion.canApply,true);
+ assert.equal(suggestion.allGreen,false);
+ assert.deepEqual(suggestion.openingRates,[{openingId:'hinged-door',rate:321053}]);
+ const adjusted=priceQuotation([measured],[{...choice(measured.id),systemRate:suggestion.openingRates[0].rate}],catalog,'indoor-sales',[],5);
+ assert.equal(adjusted.discount.subtotal,642106);
+ assert.equal(adjusted.total,610001);
+ assert.equal(quotationSellingSuggestion(adjusted,catalog).allGreen,true);
+ assert.deepEqual(initial,before);
+});
+
+test('guidance rejects unsafe suggested totals without imposing a business ceiling on safe rates',()=>{
+ const initial=quote([opening('large',6)]);
+ initial.lines[0].system.quantity=Number.MAX_SAFE_INTEGER;
+ assert.equal(quotationSellingSuggestion(initial,catalog).canApply,false);
 });
 
 test('the all-green check compares hinged openings with their type target even when their size tier is already green',()=>{

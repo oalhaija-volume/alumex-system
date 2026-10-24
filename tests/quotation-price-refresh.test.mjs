@@ -18,7 +18,7 @@ function moduleLoader(dependencies={}) {
   return exports;
  };
 }
-const {repriceQuotation,quotationPriceKey}=moduleLoader()('src/lib/workflow/pricing');
+const {priceQuotation,repriceQuotation,quotationPriceKey}=moduleLoader()('src/lib/workflow/pricing');
 const projectId='11111111-1111-4111-8111-111111111111';
 const otherProjectId='22222222-2222-4222-8222-222222222222';
 const actorId='33333333-3333-4333-8333-333333333333';
@@ -190,7 +190,7 @@ function quotationRateFixture(options={}) {
 }
 const saveBody=systemRate=>({action:'save',revision:4,choices:[{openingId:'opening',systemId:'system',glassId:'glass',extras:[],systemRate}],additionalItems:[{id:'door',quantity:2}]});
 
-for(const rate of [240000,275000,300000])test(`Indoor Sales can save a quotation-only system rate of ${rate} IQD`,async()=>{
+for(const rate of [240000,275000,300000,300001,305000,470000])test(`Indoor Sales can save a quotation-only system rate of ${rate} IQD`,async()=>{
  const x=quotationRateFixture();
  x.unrelated.contract={quotation:quotation()};
  const before=structuredClone({catalog:x.tables.product_price_settings,stored:x.stored,unrelated:x.unrelated,openings:x.tables.openings});
@@ -206,17 +206,44 @@ for(const rate of [240000,275000,300000])test(`Indoor Sales can save a quotation
  assert.equal(args.p_payload.lines[0].system.rate,rate);
  assert.equal(args.p_payload.lines[0].system.rateSource,'quotation');
  assert.equal(args.p_payload.lines[0].system.quantity,4.5);
- assert.equal(args.p_payload.lines[0].system.total,rate*4.5);
+ assert.equal(args.p_payload.lines[0].system.total,Math.round(rate*4.5));
  assert.equal(args.p_payload.lines[0].glass.rate,100);
  assert.equal(args.p_payload.additionalItems[0].rate,300);
- assert.equal(args.p_payload.total,rate*4.5+450+600,'Server calculates all totals from measurements and current catalog rates');
+ assert.equal(args.p_payload.total,Math.round(rate*4.5)+450+600,'Server calculates whole-IQD totals from measurements and current catalog rates');
  assert.equal(args.p_payload.currency,'IQD');
  assert.equal(args.p_payload.preparedBy,actorId);
  assert.equal(args.p_payload.branch,'Karkh');
  assert.deepEqual({catalog:x.tables.product_price_settings,stored:x.stored,unrelated:x.unrelated,openings:x.tables.openings},before,'Saving a quotation must not change catalog prices, measurements or other snapshots');
 });
 
-for(const rate of [239999,300001,275000.5,'275000',null,true,{}])test(`quotation save rejects invalid system rate ${JSON.stringify(rate)} before writing`,async()=>{
+test('a 470000-IQD rate changes only the selected opening while catalog and saved snapshots stay intact',async()=>{
+ const x=quotationRateFixture();
+ const second={...x.tables.openings[0],id:'second-opening',width:200,height:100,quantity:1};
+ x.tables.openings.push(second);
+ const secondChoice={openingId:second.id,systemId:'system',extras:[]};
+ const body=saveBody(470000);
+ x.stored.quotation=priceQuotation(x.tables.openings,[{...body.choices[0],systemRate:undefined},secondChoice],x.tables.product_price_settings,actorId,body.additionalItems);
+ x.unrelated.contract={quotation:quotation()};
+ const before=structuredClone({catalog:x.tables.product_price_settings,stored:x.stored,unrelated:x.unrelated,openings:x.tables.openings});
+ const result=await x.post({...body,choices:[...body.choices,secondChoice]});
+ assert.equal(result.status,200);
+ const payload=x.calls[0].args.p_payload;
+ assert.equal(payload.lines[0].system.rate,470000);
+ assert.equal(payload.lines[0].system.rateSource,'quotation');
+ assert.equal(payload.lines[0].system.total,2115000);
+ assert.deepEqual(payload.lines[0].glass,x.stored.quotation.lines[0].glass);
+ assert.deepEqual(payload.lines[0].extras,x.stored.quotation.lines[0].extras);
+ assert.deepEqual(payload.lines[1],x.stored.quotation.lines[1],'Another opening sharing the same system keeps its existing catalog rate');
+ assert.equal(payload.lines[1].system.rate,240000);
+ assert.equal(payload.lines[1].system.rateSource,undefined);
+ assert.equal(payload.total,2596050);
+ const refreshed=repriceQuotation(payload,x.tables.product_price_settings,actorId);
+ assert.equal(refreshed.lines[0].system.rate,470000);
+ assert.deepEqual(refreshed.lines[1],payload.lines[1]);
+ assert.deepEqual({catalog:x.tables.product_price_settings,stored:x.stored,unrelated:x.unrelated,openings:x.tables.openings},before,'The mocked save and refresh must not alter existing quotation/contract snapshots or catalog entries');
+});
+
+for(const rate of [239999,275000.5,'275000',null,true,{},Number.MAX_SAFE_INTEGER,Number.MAX_SAFE_INTEGER+1])test(`quotation save rejects invalid system rate ${JSON.stringify(rate)} before writing`,async()=>{
  const x=quotationRateFixture(),before=structuredClone(x.tables);
  const result=await x.post(saveBody(rate));
  assert.equal(result.status,400);
@@ -241,9 +268,9 @@ test('saving without a quotation rate keeps the catalog rate and does not mark a
  assert.equal(x.calls[0].args.p_payload.lines[0].system.rateSource,undefined);
 });
 
-test('price refresh preserves a saved quotation rate while refreshing catalog-priced charges',async()=>{
+test('price refresh preserves a saved 470000-IQD quotation rate while refreshing catalog-priced charges',async()=>{
  const x=quotationRateFixture();
- assert.equal((await x.post(saveBody(275000))).status,200);
+ assert.equal((await x.post(saveBody(470000))).status,200);
  x.stored.quotation=structuredClone(x.calls[0].args.p_payload);
  x.calls.length=0;
  x.tables.product_price_settings.find(item=>item.id==='system').unit_price=260000;
@@ -252,16 +279,16 @@ test('price refresh preserves a saved quotation rate while refreshing catalog-pr
  const before=structuredClone(x.tables);
  const preview=await x.post(previewBody);
  assert.equal(preview.status,200);
- assert.equal(preview.body.quotation.lines[0].system.rate,275000);
+ assert.equal(preview.body.quotation.lines[0].system.rate,470000);
  assert.equal(preview.body.quotation.lines[0].system.rateSource,'quotation');
  assert.equal(preview.body.quotation.lines[0].glass.rate,150);
  assert.equal(preview.body.quotation.additionalItems[0].rate,400);
- assert.equal(preview.body.quotation.total,275000*4.5+150*4.5+400*2);
+ assert.equal(preview.body.quotation.total,470000*4.5+150*4.5+400*2);
  assert.equal(x.calls.length,0);
  const result=await x.post({action:'update-prices',revision:4,confirmed:true,priceKey:preview.body.priceKey});
  assert.equal(result.status,200);
  assert.equal(x.calls.length,1);
- assert.equal(x.calls[0].args.p_payload.lines[0].system.rate,275000);
+ assert.equal(x.calls[0].args.p_payload.lines[0].system.rate,470000);
  assert.equal(x.calls[0].args.p_payload.lines[0].system.rateSource,'quotation');
  assert.equal(x.calls[0].args.p_payload.total,preview.body.quotation.total);
  assert.deepEqual(x.tables,before);
@@ -316,15 +343,17 @@ test('the save and refresh routes persist a 305000-IQD rate for a hinged door',a
  assert.equal(x.calls[0].args.p_payload.lines[0].system.rateSource,'quotation');
 });
 
-for(const [opening_type,opening_direction] of [['Window','Sliding'],['Window','Hinged'],['Door','Sliding']])test(`the save and refresh routes reject a 305000-IQD rate for ${opening_direction} ${opening_type}`,async()=>{
+for(const [opening_type,opening_direction] of [['Window','Sliding'],['Window','Hinged'],['Door','Sliding'],['Door','Hinged']])test(`the save and refresh routes preserve a 470000-IQD rate for ${opening_direction} ${opening_type}`,async()=>{
  const x=quotationRateFixture();
  Object.assign(x.tables.openings[0],{opening_type,opening_direction});
- assert.equal((await x.post(saveBody(305000))).status,400);
- assert.equal(x.calls.length,0);
- Object.assign(x.stored.quotation.lines[0].opening,{opening_type,opening_direction});
- Object.assign(x.stored.quotation.lines[0].system,{rate:305000,rateSource:'quotation'});
+ assert.equal((await x.post(saveBody(470000))).status,200);
+ assert.equal(x.calls[0].args.p_payload.lines[0].system.rate,470000);
+ x.stored.quotation=structuredClone(x.calls[0].args.p_payload);
+ x.calls.length=0;
  const before=structuredClone(x.tables);
- assert.equal((await x.post(previewBody)).status,400);
+ const preview=await x.post(previewBody);
+ assert.equal(preview.status,200);
+ assert.equal(preview.body.quotation.lines[0].system.rate,470000);
  assert.equal(x.calls.length,0);
  assert.deepEqual(x.tables,before);
 });

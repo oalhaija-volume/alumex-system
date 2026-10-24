@@ -3,7 +3,7 @@ import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBran
 import { useI18n } from '@/components/i18n/I18nProvider';
 import Link from 'next/link';
 import { useState } from 'react';
-import { applyQuotationDiscount,recordedFacadeAreas,defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,isQuotationSystemRateEditable,isRollerShutterMotor,QUOTATION_SYSTEM_RATE_MIN,quotationSystemRateMax,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice,type QuoteSnapshot } from '@/lib/workflow/pricing';
+import { applyQuotationDiscount,recordedFacadeAreas,defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,isQuotationSystemRateEditable,isRollerShutterMotor,QUOTATION_SYSTEM_RATE_MIN,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice,type QuoteSnapshot } from '@/lib/workflow/pricing';
 import { StandaloneItems } from './StandaloneItems';
 import { isShutterBox, isRollerShutter, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
@@ -47,6 +47,10 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const [pricePreview,setPricePreview]=useState<PricePreview|null>(null);
  const [previewLoading,setPreviewLoading]=useState(false);
  const [viewVersion,setViewVersion]=useState('current');
+ const suggestionPreferenceKey=`alumex-quotation-hide-suggestion:${projectId}`;
+ const [suggestionHidden,setSuggestionHidden]=useState(()=>{
+  try{return typeof window!=='undefined'&&window.localStorage.getItem(suggestionPreferenceKey)==='1';}catch{return false;}
+ });
  const [template,setTemplate]=useState<'residential'|'commercial'>(['company','corporate'].includes(data.client.client_type??'')?'commercial':'residential');
  const waiting=data.project.additional_openings_state==='requested';
  const needsRevision=!!data.project.additional_openings_state;
@@ -79,6 +83,11 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  function applySuggestedRate(){
   if(!sellingSuggestion?.canApply||busy||pricePreview)return;
   setChoices(suggestedChoices);setEditing(true);setViewVersion('current');setApproved(false);setError('');clearActionError();
+ }
+ function toggleSuggestion(){
+  const hidden=!suggestionHidden;
+  setSuggestionHidden(hidden);
+  try{window.localStorage.setItem(suggestionPreferenceKey,hidden?'1':'0');}catch{/* The toggle still works when browser storage is unavailable. */}
  }
  function edit(index:number,patch:Partial<OpeningChoice>){setChoices(c=>c.map((v,i)=>i===index?{...v,...patch}:v));}
  function addOpening(opening:RegistrationOpening){
@@ -133,8 +142,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     const system=catalog.find(p=>p.id===choice.systemId);
     const editableRate=!!system&&isQuotationSystemRateEditable(system);
     const systemRate=choice.systemRate??Number(system?.unit_price);
-    const maximumRate=quotationSystemRateMax(opening);
-    const invalidRate=editableRate&&choice.systemRate!==undefined&&(!Number.isInteger(systemRate)||systemRate<QUOTATION_SYSTEM_RATE_MIN||systemRate>maximumRate);
+    const invalidRate=editableRate&&choice.systemRate!==undefined&&(!Number.isSafeInteger(systemRate)||systemRate<QUOTATION_SYSTEM_RATE_MIN);
     const isNew=newOpenings.some(o=>o.id===opening.id);
     const area=measuredOpeningArea(opening);
     const band=editableRate?openingSellingBand(area,discountedSystemRate(systemRate,discountPercent),opening):undefined;
@@ -147,8 +155,8 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
       <label className="text-sm">{term("System / product")}<select aria-label={term("System / product")} value={choice.systemId} onChange={e=>edit(index,{systemId:e.target.value,systemRate:undefined,glassId:'',extras:[]})} className={field}><option value="">{term("Choose system")}</option>{systemOptions(opening,catalog).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
       <label className="text-sm">{term("Glass")}<select aria-label={term("Glass")} value={choice.glassId} onChange={e=>edit(index,{glassId:e.target.value,extras:choice.extras.filter(x=>x.id!==e.target.value)})} className={field}><option value="">{term("Standard glass included")}</option>{glassOptions(opening,catalog,choice.systemId).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
       {editableRate&&<div className="sm:col-span-2">
-       <label className="block text-sm">{term('Quotation system rate (IQD / m²)')}<input aria-label={term('Quotation system rate (IQD / m²)')} aria-describedby={`system-rate-help-${opening.id}`} aria-invalid={invalidRate} type="number" inputMode="numeric" min={QUOTATION_SYSTEM_RATE_MIN} max={maximumRate} step={1} value={systemRate||''} onChange={e=>edit(index,{systemRate:Number(e.target.value)})} className={`${field} block sm:max-w-xs`}/></label>
-       <p id={`system-rate-help-${opening.id}`} className="mt-2 text-xs leading-5 text-slate-600">{term('Allowed range: {minimum}–{maximum} IQD per m². Applies to this quotation only.',{minimum:formatNumber(QUOTATION_SYSTEM_RATE_MIN),maximum:formatNumber(maximumRate)})}</p>
+       <label className="block text-sm">{term('Quotation system rate (IQD / m²)')}<input aria-label={term('Quotation system rate (IQD / m²)')} aria-describedby={`system-rate-help-${opening.id}`} aria-invalid={invalidRate} type="number" inputMode="numeric" min={QUOTATION_SYSTEM_RATE_MIN} step={1} value={systemRate||''} onChange={e=>edit(index,{systemRate:Number(e.target.value)})} className={`${field} block sm:max-w-xs`}/></label>
+       <p id={`system-rate-help-${opening.id}`} className="mt-2 text-xs leading-5 text-slate-600">{term('Enter at least {minimum} IQD per m² in whole IQD. Applies to this quotation only.',{minimum:formatNumber(QUOTATION_SYSTEM_RATE_MIN)})}</p>
        <p className="mt-1 text-xs font-medium text-slate-700">{term('Minimum rate for green: {rate} / m²',{rate:formatMoney(openingMinimumSellingRate(area,opening))})}</p>
       </div>}
      </div>
@@ -204,8 +212,12 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     {flow.stage==='contract'&&<label className="mt-4 flex items-start gap-3 rounded-md bg-amber-50 p-4 text-sm leading-6 text-amber-900"><input type="checkbox" disabled={busy} checked={replaceContract} onChange={event=>setReplaceContract(event.target.checked)} className="mt-1"/>{term('Replace the unsigned contract. The previous document will be kept in history, and the revised quotation must be approved before a new contract can be generated.')}</label>}
     <button type="button" disabled={busy||!discountPreview||!discountChanged||(flow.stage==='contract'&&!replaceContract)} className={`${button} mt-4`} onClick={()=>void act('set-discount')}>{term(busy?'Saving discount…':'Save discount')}</button>
    </section>}
-   {sellingSuggestion&&suggestedPricing&&<section aria-label={term('Suggested average system rate')} className="mb-5 rounded-lg border border-green-200 bg-green-50 p-4 sm:p-5 print:hidden">
-    <h2 className="font-semibold text-slate-900">{term('Suggested average system rate')}</h2>
+   {sellingSuggestion&&suggestedPricing&&<div className={suggestionHidden?'mb-5 print:hidden':'mb-5 rounded-lg border border-green-200 bg-green-50 p-4 sm:p-5 print:hidden'}>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+     {!suggestionHidden&&<h2 className="font-semibold text-slate-900">{term('Suggested average system rate')}</h2>}
+     <button type="button" aria-expanded={!suggestionHidden} aria-controls={`quotation-suggestion-${projectId}`} onClick={toggleSuggestion} className={suggestionHidden?secondary:'min-h-11 shrink-0 rounded-md px-3 text-sm font-semibold text-green-900 underline underline-offset-4 hover:bg-green-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700'}>{term(suggestionHidden?'Show suggestion':'Hide suggestion')}</button>
+    </div>
+    <section id={`quotation-suggestion-${projectId}`} aria-label={term('Suggested average system rate')} hidden={suggestionHidden}>
     <p className="mt-2 text-2xl font-semibold text-green-900">{formatMoney(suggestedPricing.rate)} / {term('m²')}</p>
     {discountPercent===5&&<p className="mt-1 text-xs text-green-900">{term('Suggested prices before discount')}</p>}
     <p className="mt-1 text-xs text-green-900">{term('Approximate average; each opening keeps its own rate.')}</p>
@@ -214,10 +226,11 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <p className="mt-1 text-xs leading-5 text-slate-600">{term('Average system rate = system total ÷ billable area.')}</p>
     {sellingSuggestion.allGreen?<p role="status" className="mt-3 text-sm font-semibold text-green-900">{term('All Alumex openings meet their selling targets.')}</p>:<>
      {suggestedQuotation&&<p className="mt-3 text-sm text-slate-700">{term('Suggested quotation total')}: <strong>{formatMoney(suggestedQuotation.total)}</strong></p>}
-     {sellingSuggestion.canApply?<p className="mt-2 text-xs leading-5 text-slate-600">{term('Review the suggested opening prices and save a revision to apply them.')}</p>:<p role="status" className="mt-3 text-sm text-amber-900">{term('Some openings cannot meet their selling targets with this discount within the allowed rate limits.')}</p>}
+     {sellingSuggestion.canApply?<p className="mt-2 text-xs leading-5 text-slate-600">{term('Review the suggested opening prices and save a revision to apply them.')}</p>:<p role="status" className="mt-3 text-sm text-amber-900">{term('Review the opening measurements and prices before applying this suggestion.')}</p>}
      <button type="button" disabled={busy||addingOpening||!sellingSuggestion.canApply} className={`${button} mt-4`} onClick={applySuggestedRate}>{term('Apply suggested opening prices')}</button>
     </>}
-   </section>}
+    </section>
+   </div>}
    {pricePreview&&!editing&&<section aria-label={term('Update quotation prices')} className="mb-5 rounded-lg border border-blue-200 bg-blue-50 p-4 sm:p-5 print:hidden">
     <h2 className="text-base font-semibold text-slate-900">{term('Update quotation prices')}</h2>
     <p className="mt-2 text-sm leading-6 text-slate-700">{term('Update prices for this quotation only. Quantities and specifications stay unchanged.')}</p>
@@ -248,5 +261,5 @@ export function QuotationWorkspace({projectId}:{projectId:string}) {
  const [reset,setReset]=useState(0);
  const [actionError,setActionError]=useState('');
  async function reload(error=''){await resource.reload();setActionError(error);setReset(n=>n+1);}
- return <Workspace title={term("Quotation")} description={term("Prepare and revise the client’s quotation using measured openings and preset catalog prices.")}><ProjectRecord projectId={projectId}/><MeasurementReports projectId={projectId}/><Notice error={resource.error||actionError}/>{resource.loading?<p>{term("Loading quotation…")}</p>:resource.data?<QuoteEditor key={`${resource.data.flow?.revision??0}:${reset}`} data={resource.data} projectId={projectId} reload={reload} clearActionError={()=>setActionError('')}/>:null}</Workspace>;
+ return <Workspace title={term("Quotation")} description={term("Prepare and revise the client’s quotation using measured openings and preset catalog prices.")}><ProjectRecord projectId={projectId}/><MeasurementReports projectId={projectId}/><Notice error={resource.error||actionError}/>{resource.loading?<p>{term("Loading quotation…")}</p>:resource.data?<QuoteEditor key={`${projectId}:${resource.data.flow?.revision??0}:${reset}`} data={resource.data} projectId={projectId} reload={reload} clearActionError={()=>setActionError('')}/>:null}</Workspace>;
 }

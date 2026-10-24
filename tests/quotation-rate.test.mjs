@@ -13,7 +13,7 @@ function load(path,dependencies={}) {
  return exports;
 }
 const rules=load('../src/lib/workflow/catalogRules.ts');
-const {priceQuotation,repriceQuotation,quotationPriceKey,isQuotationSystemRateEditable,QUOTATION_SYSTEM_RATE_MIN,QUOTATION_SYSTEM_RATE_MAX}=load('../src/lib/workflow/pricing.ts',{'./catalogRules':rules});
+const {priceQuotation,repriceQuotation,quotationPriceKey,isQuotationSystemRateEditable,QUOTATION_SYSTEM_RATE_MIN}=load('../src/lib/workflow/pricing.ts',{'./catalogRules':rules});
 const opening={id:'window',floor:'Ground',room:'Office',width:50,height:100,opening_type:'Window',opening_direction:'Sliding'};
 const product=(id,name,category,unit,unit_price)=>({id,name,category,unit,unit_price,is_active:true});
 const catalog=[
@@ -30,14 +30,13 @@ const quote=(systemRate,products=catalog,measured=opening,selection=choice)=>pri
 
 test('only available square-metre Alumex systems expose quotation-specific rates',()=>{
  assert.equal(QUOTATION_SYSTEM_RATE_MIN,240000);
- assert.equal(QUOTATION_SYSTEM_RATE_MAX,300000);
  for(const name of ['Alumex','Alumex System',' Alumex Sliding Window ','ALUMEX Thermal Break','Alumex-System'])assert.equal(isQuotationSystemRateEditable({...catalog[0],name}),true,name);
  for(const patch of [{name:'Another System'},{name:'Alumextra System'},{name:'Premium Alumex System'},{name:'Alumex_System'},{name:'Skylight'},{category:'opening_product'},{category:'standalone_product'},{unit:'item'},{unit:'meter'},{unit:'project'},{is_active:false}])assert.equal(isQuotationSystemRateEditable({...catalog[0],...patch}),false,JSON.stringify(patch));
  assert.equal(isQuotationSystemRateEditable(undefined),false);
  assert.equal(isQuotationSystemRateEditable(null),false);
 });
 
-for(const rate of [240000,240001,270000,299999,300000])test(`an explicit ${rate} IQD quotation rate is applied and marked without changing the catalog`,()=>{
+for(const rate of [240000,240001,270000,299999,300000,300001,305000,305001,470000,1000000,Number.MAX_SAFE_INTEGER])test(`an explicit ${rate} IQD quotation rate is applied and marked without changing the catalog`,()=>{
  const before=structuredClone(catalog);
  const result=quote(rate);
  assert.deepEqual(result.lines[0].system,{id:'system',name:'Alumex System',unit:'sqm',rate,quantity:1,total:rate,rateSource:'quotation'});
@@ -57,8 +56,8 @@ test('omitting a rate preserves catalog pricing and adds no override marker, inc
  assert.equal(priceQuotation([opening],[choice],foreign,'indoor-sales').total,100000);
 });
 
-for(const [label,rate] of [['below minimum',239999],['above maximum',300001],['fractional IQD',240000.5],['NaN',NaN],['positive infinity',Infinity],['negative infinity',-Infinity],['zero',0],['negative',-240000],['numeric string','260000'],['null',null],['boolean',true],['object',{}],['array',[260000]]])test(`rejects ${label} quotation rates instead of coercing them`,()=>{
- assert.throws(()=>quote(rate),/240,000 and 300,000 IQD/);
+for(const [label,rate] of [['below minimum',239999],['unsafe integer',Number.MAX_SAFE_INTEGER+1],['extreme finite rate',1e20],['fractional IQD',470000.5],['NaN',NaN],['positive infinity',Infinity],['negative infinity',-Infinity],['zero',0],['negative',-240000],['numeric string','470000'],['null',null],['boolean',true],['object',{}],['array',[470000]]])test(`rejects ${label} quotation rates instead of coercing them`,()=>{
+ assert.throws(()=>quote(rate),/at least 240,000 IQD, using whole IQD/);
 });
 
 for(const patch of [{name:'Other System'},{name:'Alumextra System'},{category:'opening_product'},{unit:'item'},{unit:'meter'},{unit:'project'},{is_active:false}])test(`a forged rate cannot override an ineligible product ${JSON.stringify(patch)}`,()=>{
@@ -100,25 +99,25 @@ test('quotation rates retain each repeated window minimum and all accessory unit
 });
 
 test('large windows and doors use their measured area with quotation-specific rates',()=>{
- const large=quote(300000,catalog,{...opening,width:150,quantity:3});
+ const large=quote(470000,catalog,{...opening,width:150,quantity:3});
  assert.equal(large.lines[0].system.quantity,4.5);
- assert.equal(large.total,1350000);
- const door=quote(300000,catalog,{...opening,opening_type:'Door',quantity:3});
+ assert.equal(large.total,2115000);
+ const door=quote(470000,catalog,{...opening,opening_type:'Door',quantity:3});
  assert.equal(door.lines[0].system.quantity,1.5);
- assert.equal(door.total,450000);
+ assert.equal(door.total,705000);
 });
 
 test('quotation-specific rates remain local to their selected opening and leave other quotations and contracts unchanged',()=>{
  const second={...opening,id:'second',width:150};
  const saved=priceQuotation([opening,second],[choice,{...choice,openingId:'second'}],catalog,'previous-author');
  const contract={quotation:structuredClone(saved)};
- const inputs={openings:[opening,second],choices:[{...choice,systemRate:270000},{...choice,openingId:'second'}],catalog,saved,contract};
+ const inputs={openings:[opening,second],choices:[{...choice,systemRate:470000},{...choice,openingId:'second'}],catalog,saved,contract};
  const before=structuredClone(inputs);
  const result=priceQuotation(inputs.openings,inputs.choices,catalog,'indoor-sales',[
   {id:'facade',quantity:1,measurements:[{label:'North facade',width:2,height:3,quantity:1}]},
   {id:'standalone',quantity:2},
  ]);
- assert.equal(result.lines[0].system.rate,270000);
+ assert.equal(result.lines[0].system.rate,470000);
  assert.equal(result.lines[1].system.rate,240000);
  assert.equal(Object.hasOwn(result.lines[1].system,'rateSource'),false);
  assert.equal(result.additionalItems[0].rate,100000);
@@ -128,7 +127,7 @@ test('quotation-specific rates remain local to their selected opening and leave 
 
 test('refresh preserves explicit rates while updating catalog-priced systems, glass, add-ons, and additional items',()=>{
  const second={...opening,id:'second',width:150,quantity:2};
- const selected={...choice,systemRate:270000,glassId:'glass',extras:[{id:'handle',quantity:2}]};
+ const selected={...choice,systemRate:470000,glassId:'glass',extras:[{id:'handle',quantity:2}]};
  const saved=priceQuotation([{...opening,quantity:4},second],[selected,{...choice,openingId:'second'}],catalog,'original-author',[
   {id:'facade',quantity:1,measurements:[{label:'North facade',width:2,height:3,quantity:1}]},
   {id:'standalone',quantity:2},
@@ -137,10 +136,10 @@ test('refresh preserves explicit rates while updating catalog-priced systems, gl
  const changed=catalog.map(item=>({...item,unit_price:item.unit_price*2}));
  const catalogBefore=structuredClone(changed);
  const refreshed=repriceQuotation(saved,changed,'refresher');
- assert.equal(refreshed.lines[0].system.rate,270000);
+ assert.equal(refreshed.lines[0].system.rate,470000);
  assert.equal(refreshed.lines[0].system.rateSource,'quotation');
  assert.equal(refreshed.lines[0].system.quantity,4);
- assert.equal(refreshed.lines[0].system.total,1080000);
+ assert.equal(refreshed.lines[0].system.total,1880000);
  assert.equal(refreshed.lines[0].glass.total,160000);
  assert.equal(refreshed.lines[0].extras[0].quantity,8);
  assert.equal(refreshed.lines[0].extras[0].total,80000);
@@ -148,7 +147,7 @@ test('refresh preserves explicit rates while updating catalog-priced systems, gl
  assert.equal(refreshed.lines[1].system.total,1440000);
  assert.equal(refreshed.additionalItems[0].total,1200000);
  assert.equal(refreshed.additionalItems[1].total,400000);
- assert.equal(refreshed.total,4360000);
+ assert.equal(refreshed.total,5160000);
  assert.equal(refreshed.preparedBy,'refresher');
  assert.deepEqual(saved,before);
  assert.deepEqual(changed,catalogBefore);
@@ -165,7 +164,7 @@ test('an explicit catalog-equal quotation rate stays fixed while an identical un
 });
 
 test('refresh rejects malformed saved overrides and leaves the saved quotation unchanged',()=>{
- for(const rate of [239999,300001,240000.5,NaN,Infinity,'270000',null]){
+ for(const rate of [239999,Number.MAX_SAFE_INTEGER+1,470000.5,NaN,Infinity,'470000',null]){
   const saved=quote(270000);
   saved.lines[0].system.rate=rate;
   const before=structuredClone(saved);
@@ -175,6 +174,22 @@ test('refresh rejects malformed saved overrides and leaves the saved quotation u
  const unknownSource=quote(270000);
  unknownSource.lines[0].system.rateSource='catalog';
  assert.throws(()=>repriceQuotation(unknownSource,catalog,'refresher'));
+});
+
+test('safe manual rates still reject unsafe multiplied opening totals and unsafe quotation sums',()=>{
+ const measured={...opening,quantity:2};
+ const before=structuredClone({measured,catalog});
+ assert.throws(()=>quote(Number.MAX_SAFE_INTEGER,catalog,measured),/Invalid amount/);
+ assert.deepEqual({measured,catalog},before);
+ const second={...opening,id:'second'};
+ const rate=Math.ceil(Number.MAX_SAFE_INTEGER/2);
+ const choices=[{...choice,systemRate:rate},{...choice,openingId:'second',systemRate:rate}];
+ assert.throws(()=>priceQuotation([opening,second],choices,catalog,'indoor-sales'),/Add a measured opening/);
+ const saved=quote(470000,catalog,measured);
+ saved.lines[0].system.rate=Number.MAX_SAFE_INTEGER;
+ const savedBefore=structuredClone(saved);
+ assert.throws(()=>repriceQuotation(saved,catalog,'refresher'),/Invalid amount/);
+ assert.deepEqual(saved,savedBefore);
 });
 
 test('saved quotation rates cannot bypass current product, price, availability, category, or unit validation',()=>{

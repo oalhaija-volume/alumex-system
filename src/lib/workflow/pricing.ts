@@ -30,11 +30,7 @@ export function applyQuotationDiscount(snapshot:QuoteSnapshot,discountPercent:un
 }
 export const money = (n:number) => new Intl.NumberFormat('en-IQ',{maximumFractionDigits:0}).format(n)+' IQD';
 export const QUOTATION_SYSTEM_RATE_MIN = 240_000;
-export const QUOTATION_SYSTEM_RATE_MAX = 300_000;
 type OpeningSellingDetails = Pick<MeasuredOpening,'opening_type'|'opening_direction'>;
-export function quotationSystemRateMax(opening?:OpeningSellingDetails) {
- return opening?.opening_type==='Door'&&opening.opening_direction==='Hinged'?305_000:QUOTATION_SYSTEM_RATE_MAX;
-}
 export function isAlumexSqmSystem(product:Pick<CatalogItem,'name'|'unit'>|null|undefined) {
  return !!product&&product.unit==='sqm'&&/^alumex\b/i.test(product.name.trim());
 }
@@ -90,11 +86,12 @@ export function quotationSellingSuggestion(snapshot:QuoteSnapshot,rawCatalog:Cat
   // Average the actual charges, keeping each opening's own target selling rate.
   if(!Number.isFinite(line.system.quantity)||line.system.quantity<=0)return null;
   billableArea+=line.system.quantity;
-  systemTotal+=Math.round(line.system.quantity*requiredRate);
+  const requiredTotal=Math.round(line.system.quantity*requiredRate);
+  systemTotal+=requiredTotal;
   openingRates.push({openingId:line.opening.id,rate:requiredRate});
   openingCount+=line.opening.quantity??1;
   allGreen=allGreen&&openingSellingBand(area,discountedSystemRate(line.system.rate,discountPercent),line.opening)==='green';
-  canApply=canApply&&requiredRate<=quotationSystemRateMax(line.opening);
+  canApply=canApply&&Number.isSafeInteger(requiredRate)&&requiredRate>=QUOTATION_SYSTEM_RATE_MIN&&Number.isSafeInteger(requiredTotal)&&requiredTotal>0&&Number.isSafeInteger(systemTotal);
  }
  return openingCount?{rate:systemTotal/billableArea,openingCount,allGreen,canApply,billableArea,systemTotal,openingRates}:null;
 }
@@ -130,10 +127,9 @@ function catalogCharge(id:string,quantity:number,catalog:CatalogItem[]):Charge {
  if(!Number.isSafeInteger(total)||total<=0)throw new Error(`Invalid amount for ${item.name}.`);
  return {id:item.id,name:item.name,unit:item.unit,rate:Number(item.unit_price),quantity,total};
 }
-function quotationSystemCharge(charge:Charge,product:CatalogItem|undefined,rate:unknown,opening:MeasuredOpening):Charge {
+function quotationSystemCharge(charge:Charge,product:CatalogItem|undefined,rate:unknown):Charge {
  if(!isQuotationSystemRateEditable(product))throw new Error('Quotation-specific rates are available only for active Alumex systems priced per m².');
- const maximum=quotationSystemRateMax(opening);
- if(typeof rate!=='number'||!Number.isInteger(rate)||rate<QUOTATION_SYSTEM_RATE_MIN||rate>maximum)throw new Error(`Enter an Alumex system rate between 240,000 and ${maximum.toLocaleString('en-US')} IQD, using whole IQD.`);
+ if(typeof rate!=='number'||!Number.isSafeInteger(rate)||rate<QUOTATION_SYSTEM_RATE_MIN)throw new Error('Enter an Alumex system rate of at least 240,000 IQD, using whole IQD.');
  const total=Math.round(charge.quantity*rate);
  if(!Number.isSafeInteger(total)||total<=0)throw new Error(`Invalid amount for ${charge.name}.`);
  return {...charge,rate,total,rateSource:'quotation'};
@@ -161,7 +157,7 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
   let current=catalogCharge(charge.id,charge.quantity,catalog);
   if(charge.rateSource!==undefined){
    if(!opening||charge.rateSource!=='quotation')throw new Error('Quotation-specific rates can only be applied to the opening system.');
-   current=quotationSystemCharge(current,item,charge.rate,opening);
+   current=quotationSystemCharge(current,item,charge.rate);
   }
   return {...charge,rate:current.rate,total:current.total};
  };
@@ -241,7 +237,7 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   const charge=(id:string)=>catalogCharge(id,catalog.find(p=>p.id===id)?.unit==='sqm'?billableArea:quantity,catalog);
   if(!systemOptions(opening,catalog).some(p=>p.id===choice.systemId))throw new Error('Choose a compatible system for this structural type.');
   const catalogSystem=charge(choice.systemId);
-  const system=choice.systemRate===undefined?catalogSystem:quotationSystemCharge(catalogSystem,catalog.find(product=>product.id===choice.systemId),choice.systemRate,opening);
+  const system=choice.systemRate===undefined?catalogSystem:quotationSystemCharge(catalogSystem,catalog.find(product=>product.id===choice.systemId),choice.systemRate);
   if(choice.glassId&&!glassOptions(opening,catalog,choice.systemId).some(p=>p.id===choice.glassId))throw new Error('Choose a compatible glass option.');
   const glass=choice.glassId?charge(choice.glassId):null;
   const extras=priceExtras(choice.extras,addonOptions(opening,catalog,choice.systemId),catalog,billableArea,[choice.systemId,choice.glassId??''],quantity);

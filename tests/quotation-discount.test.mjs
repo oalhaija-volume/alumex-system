@@ -206,16 +206,18 @@ test('discount-aware suggestions round each required gross rate upward and becom
  assert.deepEqual(discounted,before);
 });
 
-test('a discounted hinged door reports an unappliable projection without changing its permitted gross rate range',()=>{
+test('a discounted hinged door can apply its required gross rate above the former price cap',()=>{
  const measured={...opening,id:'hinged-door',width:200,height:100,quantity:1,opening_type:'Door',opening_direction:'Hinged'};
  const selected={openingId:measured.id,systemId:'system',systemRate:305000,extras:[]};
  const saved=priceQuotation([measured],[selected],catalog,'author',[],5);
  const before=structuredClone(saved);
  assert.deepEqual(quotationSellingSuggestion(saved,catalog),{
-  rate:321053,openingCount:1,allGreen:false,canApply:false,billableArea:2,systemTotal:642106,
+  rate:321053,openingCount:1,allGreen:false,canApply:true,billableArea:2,systemTotal:642106,
   openingRates:[{openingId:'hinged-door',rate:321053}],
  });
- assert.throws(()=>priceQuotation([measured],[{...selected,systemRate:321053}],catalog,'author',[],5),/305,000/);
+ const adjusted=priceQuotation([measured],[{...selected,systemRate:321053}],catalog,'author',[],5);
+ assert.equal(adjusted.lines[0].system.rate,321053);
+ assert.equal(quotationSellingSuggestion(adjusted,catalog).allGreen,true);
  assert.deepEqual(saved,before);
 });
 

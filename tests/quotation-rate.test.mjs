@@ -80,7 +80,7 @@ test('facade, louver, glass, and standalone products cannot receive a system rat
 });
 
 test('quotation rates retain each repeated window minimum and all accessory units',()=>{
- const result=quote(270000,catalog,{...opening,quantity:4},{...choice,glassId:'glass',extras:[{id:'shutter',quantity:99},{id:'handle',quantity:2},{id:'bars',quantity:1.5}]});
+ const result=quote(270000,catalog,{...opening,quantity:4},{...choice,glassId:'glass',extras:[{id:'shutter',quantity:99,motorPrice:10000},{id:'handle',quantity:2},{id:'bars',quantity:1.5}]});
  const line=result.lines[0];
  assert.equal(line.area,2,'Measured area remains separate from billable window minimums');
  assert.equal(line.system.quantity,4);
@@ -89,10 +89,11 @@ test('quotation rates retain each repeated window minimum and all accessory unit
  assert.equal(line.glass.total,80000);
  assert.deepEqual(line.extras.map(item=>({id:item.id,rate:item.rate,quantity:item.quantity,total:item.total})),[
   {id:'shutter',rate:30000,quantity:4,total:120000},
+  {id:'roller-shutter-motor:shutter',rate:10000,quantity:4,total:40000},
   {id:'handle',rate:5000,quantity:8,total:40000},
   {id:'bars',rate:2000,quantity:6,total:12000},
  ]);
- assert.equal(result.total,1332000);
+ assert.equal(result.total,1372000);
  assert.equal(Object.hasOwn(line.glass,'rateSource'),false);
  assert.ok(line.extras.every(item=>!Object.hasOwn(item,'rateSource')));
 });

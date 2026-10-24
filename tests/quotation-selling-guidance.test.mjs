@@ -114,7 +114,7 @@ test('the overall denominator preserves saved billed quantities, including histo
 });
 
 test('glass, add-ons and standalone charges cannot make an underpriced opening green',()=>{
- const initial=quote([opening('small',3)],[{...choice('small'),glassId:'glass',extras:[{id:'shutter',quantity:1}]}],catalog,[
+ const initial=quote([opening('small',3)],[{...choice('small'),glassId:'glass',extras:[{id:'shutter',quantity:1,motorPrice:10000}]}],catalog,[
   {id:'facade',quantity:1,measurements:[{label:'North facade',width:10,height:10,quantity:1}]},
   {id:'standalone',quantity:20},
  ]);

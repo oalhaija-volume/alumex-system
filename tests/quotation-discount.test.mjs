@@ -40,7 +40,7 @@ const catalog=[
  product('door','A Swing Door','standalone_product','item',100000),
 ];
 const opening={id:'opening',floor:'GF',room:'Office',width:50,height:100,quantity:2,opening_type:'Window',opening_direction:'Sliding'};
-const choice={openingId:'opening',systemId:'system',glassId:'glass',extras:[{id:'shutter',quantity:1},{id:'handle',quantity:2}]};
+const choice={openingId:'opening',systemId:'system',glassId:'glass',extras:[{id:'shutter',quantity:1,motorPrice:100000},{id:'handle',quantity:2}]};
 const additional=[{id:'facade',quantity:1,measurements:[{label:'North facade',width:2,height:3,quantity:1}],extras:[{id:'pushout',quantity:2}]},{id:'door',quantity:2}];
 const quotation=discountPercent=>priceQuotation([opening],[choice],catalog,'original-author',additional,discountPercent);
 const projectId='11111111-1111-4111-8111-111111111111';
@@ -50,9 +50,9 @@ test('the optional five-percent discount applies once after every system, glass,
  const gross=quotation();
  const before=structuredClone({gross,catalog,opening,choice,additional});
  const discounted=applyQuotationDiscount(gross,5);
- assert.equal(gross.total,1414000);
- assert.deepEqual(discounted.discount,{percent:5,subtotal:1414000,amount:70700});
- assert.equal(discounted.total,1343300);
+ assert.equal(gross.total,1614000);
+ assert.deepEqual(discounted.discount,{percent:5,subtotal:1614000,amount:80700});
+ assert.equal(discounted.total,1533300);
  assert.deepEqual(discounted.lines,gross.lines);
  assert.deepEqual(discounted.additionalItems,gross.additionalItems);
  assert.deepEqual(applyQuotationDiscount(discounted,5),discounted,'Selecting five percent again must not compound the discount');
@@ -70,7 +70,7 @@ test('the default and zero-percent paths preserve legacy quotation shape and rem
  assert.equal(Object.hasOwn(explicitZero,'discount'),false);
  const removed=applyQuotationDiscount(applyQuotationDiscount(gross,5),0);
  assert.equal(Object.hasOwn(removed,'discount'),false);
- assert.equal(removed.total,1414000);
+ assert.equal(removed.total,1614000);
 });
 
 test('gross subtotal is reconstructed from saved charges rather than stale quotation and opening totals',()=>{
@@ -79,8 +79,8 @@ test('gross subtotal is reconstructed from saved charges rather than stale quota
  saved.discount={percent:5,subtotal:3,amount:1};
  const before=structuredClone(saved);
  const corrected=applyQuotationDiscount(saved,5);
- assert.deepEqual(corrected.discount,{percent:5,subtotal:1414000,amount:70700});
- assert.equal(corrected.total,1343300);
+ assert.deepEqual(corrected.discount,{percent:5,subtotal:1614000,amount:80700});
+ assert.equal(corrected.total,1533300);
  assert.deepEqual(saved,before);
 });
 
@@ -107,8 +107,8 @@ test('priceQuotation can generate the discounted snapshot directly while keeping
  const discounted=quotation(5);
  assert.deepEqual(discounted.lines,gross.lines);
  assert.deepEqual(discounted.additionalItems,gross.additionalItems);
- assert.deepEqual(discounted.discount,{percent:5,subtotal:1414000,amount:70700});
- assert.equal(discounted.total,1343300);
+ assert.deepEqual(discounted.discount,{percent:5,subtotal:1614000,amount:80700});
+ assert.equal(discounted.total,1533300);
 });
 
 test('catalog refresh preserves five percent, recalculates the gross subtotal and never compounds discounts',()=>{
@@ -116,8 +116,9 @@ test('catalog refresh preserves five percent, recalculates the gross subtotal an
  const before=structuredClone(saved);
  const doubled=catalog.map(item=>({...item,unit_price:item.unit_price*2}));
  const refreshed=repriceQuotation(saved,doubled,'refresher');
- assert.deepEqual(refreshed.discount,{percent:5,subtotal:2828000,amount:141400});
- assert.equal(refreshed.total,2686600);
+ assert.deepEqual(refreshed.discount,{percent:5,subtotal:3028000,amount:151400});
+ assert.equal(refreshed.total,2876600);
+ assert.deepEqual(refreshed.lines[0].extras.find(extra=>extra.motorFor==='shutter'),saved.lines[0].extras.find(extra=>extra.motorFor==='shutter'),'Catalog refresh keeps the manual price per motor and repeated motor quantity');
  assert.deepEqual(repriceQuotation(refreshed,doubled,'again').discount,refreshed.discount);
  assert.equal(repriceQuotation(refreshed,doubled,'again').total,refreshed.total);
  assert.deepEqual(saved,before);
@@ -126,8 +127,8 @@ test('catalog refresh preserves five percent, recalculates the gross subtotal an
  assert.equal(explicitRefresh.lines[0].system.rate,275000);
  assert.equal(explicitRefresh.lines[0].system.rateSource,'quotation');
  assert.equal(explicitRefresh.discount.percent,5);
- assert.equal(explicitRefresh.discount.subtotal,2418000);
- assert.equal(explicitRefresh.total,2297100);
+ assert.equal(explicitRefresh.discount.subtotal,2618000);
+ assert.equal(explicitRefresh.total,2487100);
 });
 
 test('price keys distinguish discount preferences while existing gross-only quotations retain matching keys',()=>{
@@ -271,21 +272,58 @@ test('the save API calculates the five-percent discount and ignores forged monet
  assert.equal(args.p_action,'save');
  assert.equal(args.p_revision,4);
  assert.equal(args.p_actor,actorId);
- assert.deepEqual(args.p_payload.discount,{percent:5,subtotal:1414000,amount:70700});
- assert.equal(args.p_payload.total,1343300);
+ assert.deepEqual(args.p_payload.discount,{percent:5,subtotal:1614000,amount:80700});
+ assert.equal(args.p_payload.total,1533300);
  assert.equal(args.p_payload.preparedBy,actorId);
  assert.deepEqual({tables:x.tables,stored:x.stored,unrelated:x.unrelated},before);
+});
+
+test('the save API creates one manually priced motor for each repeated shutter and ignores forged charges',async()=>{
+ const x=fixture();
+ const selection={...choice,extras:choice.extras.map(extra=>extra.id==='shutter'?{...extra,motorPrice:125000,total:1,rate:1}:extra)};
+ const response=await x.post({...saveBody,choices:[selection],discountPercent:5,total:1,lines:[{extras:[{id:'forged-motor',motorFor:'shutter',rate:1,quantity:99,total:1}]}],motorPrice:1});
+ assert.equal(response.status,200);
+ assert.equal(x.calls.length,1);
+ const quotation=x.calls[0].args.p_payload;
+ const motor=quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter');
+ assert.deepEqual(motor,{id:'roller-shutter-motor:shutter',name:'Roller shutter motor',unit:'item',rate:125000,quantity:2,total:250000,motorFor:'shutter'});
+ assert.equal(quotation.lines[0].extras.filter(extra=>extra.motorFor).length,1);
+ assert.equal(quotation.lines[0].total,850000);
+ assert.deepEqual(quotation.discount,{percent:5,subtotal:1664000,amount:83200});
+ assert.equal(quotation.total,1580800);
+ assert.equal(quotation.preparedBy,actorId);
+});
+
+test('the save API requires a positive whole-IQD motor price on every selected shutter',async()=>{
+ for(const motorPrice of [undefined,null,0,-1,0.5,'100000',true,{},[],Number.MAX_SAFE_INTEGER]){
+  const x=fixture();
+  const selection={...choice,extras:choice.extras.map(extra=>extra.id==='shutter'?{...extra,motorPrice}:extra)};
+  const before=structuredClone(x.stored);
+  const response=await x.post({...saveBody,choices:[selection]});
+  assert.equal(response.status,400,`Invalid motor price: ${JSON.stringify(motorPrice)}`);
+  assert.equal(x.calls.length,0,'Invalid motor prices must not reach the workflow save transaction');
+  assert.deepEqual(x.stored,before);
+ }
+});
+
+test('the save API rejects manual motor prices on other add-ons and forged standalone motor choices',async()=>{
+ for(const extras of [[{id:'handle',quantity:1,motorPrice:100000}],[{id:'roller-shutter-motor:shutter',quantity:1,motorPrice:100000}]]){
+  const x=fixture();
+  const response=await x.post({...saveBody,choices:[{...choice,extras}]});
+  assert.equal(response.status,400);
+  assert.equal(x.calls.length,0);
+ }
 });
 
 test('omitting the save discount preserves the saved preference and explicit zero removes it',async()=>{
  const x=fixture({discountPercent:5});
  assert.equal((await x.post(saveBody)).status,200);
  assert.equal(x.calls[0].args.p_payload.discount.percent,5);
- assert.equal(x.calls[0].args.p_payload.total,1343300);
+ assert.equal(x.calls[0].args.p_payload.total,1533300);
  x.calls.length=0;
  assert.equal((await x.post({...saveBody,discountPercent:0})).status,200);
  assert.equal(Object.hasOwn(x.calls[0].args.p_payload,'discount'),false);
- assert.equal(x.calls[0].args.p_payload.total,1414000);
+ assert.equal(x.calls[0].args.p_payload.total,1614000);
 });
 
 test('set-discount changes only the discount on saved charges and invokes the existing revision save transaction',async()=>{
@@ -301,8 +339,8 @@ test('set-discount changes only the discount on saved charges and invokes the ex
  assert.equal(args.p_actor,actorId);
  assert.deepEqual(args.p_payload.lines,x.stored.quotation.lines);
  assert.deepEqual(args.p_payload.additionalItems,x.stored.quotation.additionalItems);
- assert.deepEqual(args.p_payload.discount,{percent:5,subtotal:1414000,amount:70700});
- assert.equal(args.p_payload.total,1343300);
+ assert.deepEqual(args.p_payload.discount,{percent:5,subtotal:1614000,amount:80700});
+ assert.equal(args.p_payload.total,1533300);
  assert.ok(!x.reads.some(read=>read.table==='product_price_settings'||read.table==='openings'),'Discount-only revisions must not change rates or quantities through repricing');
  assert.deepEqual({tables:x.tables,stored:x.stored,unrelated:x.unrelated},before);
 });
@@ -311,7 +349,7 @@ test('set-discount can remove five percent without changing saved specifications
  const x=fixture({discountPercent:5});
  assert.equal((await x.post({...setDiscountBody,discountPercent:0})).status,200);
  assert.equal(Object.hasOwn(x.calls[0].args.p_payload,'discount'),false);
- assert.equal(x.calls[0].args.p_payload.total,1414000);
+ assert.equal(x.calls[0].args.p_payload.total,1614000);
  assert.deepEqual(x.calls[0].args.p_payload.lines,x.stored.quotation.lines);
 });
 
@@ -384,9 +422,11 @@ test('price-preview and refresh preserve the saved five-percent discount and ser
  const preview=await x.post({action:'preview-prices',revision:4,discountPercent:0});
  assert.equal(preview.status,200);
  assert.equal(x.calls.length,0);
- assert.deepEqual(preview.body.quotation.discount,{percent:5,subtotal:2828000,amount:141400});
- assert.equal(preview.body.quotation.total,2686600);
- assert.equal((await x.post({action:'update-prices',revision:4,priceKey:preview.body.priceKey,confirmed:true,discountPercent:0})).status,200);
+ assert.deepEqual(preview.body.quotation.discount,{percent:5,subtotal:3028000,amount:151400});
+ assert.equal(preview.body.quotation.total,2876600);
+ assert.deepEqual(preview.body.quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter'),x.stored.quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter'));
+ assert.equal((await x.post({action:'update-prices',revision:4,priceKey:preview.body.priceKey,confirmed:true,discountPercent:0,choices:[{...choice,extras:[{id:'shutter',quantity:1,motorPrice:1}]}],motorPrice:1,total:1})).status,200);
  assert.deepEqual(x.calls[0].args.p_payload.discount,preview.body.quotation.discount);
- assert.equal(x.calls[0].args.p_payload.total,2686600);
+ assert.equal(x.calls[0].args.p_payload.total,2876600);
+ assert.deepEqual(x.calls[0].args.p_payload.lines[0].extras.find(extra=>extra.motorFor==='shutter'),x.stored.quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter'));
 });

@@ -23,13 +23,14 @@ function ChargeRows({items,labels}:{items:Charge[];labels?:string[]}) {
  const {term,formatNumber}=useI18n();
  return <>{items.map((item,i)=><tr key={item.id}><td>{labels&&<span className="document-charge-kind">{term(labels[i])}</span>}<span dir="auto">{term(item.name)}</span></td><td>{formatNumber(item.quantity)} {term(item.unit==='sqm'?'m²':item.unit==='meter'?'m':item.unit)}</td><td>{formatNumber(item.rate)}</td><td>{formatNumber(item.total)}</td></tr>)}</>;
 }
-export function OpeningSchedule({quote,showAreaColors=false,blendSystemRates=false,colorDiscountPercent=quote.discount?.percent??0}:{quote:QuoteSnapshot;showAreaColors?:boolean;blendSystemRates?:boolean;colorDiscountPercent?:0|5}) {
+export function OpeningSchedule({quote,showAreaColors=false,blendSystemRates=false,showOpeningAreaTotal=false,colorDiscountPercent=quote.discount?.percent??0}:{quote:QuoteSnapshot;showAreaColors?:boolean;blendSystemRates?:boolean;showOpeningAreaTotal?:boolean;colorDiscountPercent?:0|5}) {
  const {term,locale,formatMoney,formatNumber}=useI18n();
+ const totalOpeningArea=quote.lines.reduce((sum,line)=>sum+line.area,0);
  const clientPricing=blendSystemRates?quotationClientPricing(quote):null;
  const clientOpenings=new Map(clientPricing?.openings.map(opening=>[opening.openingId,opening]));
- return <section className="document-schedule">{!!quote.lines.length&&<div className="document-section-heading"><h3>{term('Opening schedule')}{locale==='en'&&<span lang="ar">جدول الفتحات</span>}</h3><p>{term('{count} openings · {area} m² measured',{count:formatNumber(quote.lines.reduce((sum,line)=>sum+(line.opening.quantity??1),0)),area:formatNumber(quote.lines.reduce((sum,line)=>sum+line.area,0),2)})}</p></div>}
+ return <section className="document-schedule">{!!quote.lines.length&&<div className="document-section-heading"><h3>{term('Opening schedule')}{locale==='en'&&<span lang="ar">جدول الفتحات</span>}</h3><p>{term('{count} openings · {area} m² measured',{count:formatNumber(quote.lines.reduce((sum,line)=>sum+(line.opening.quantity??1),0)),area:formatNumber(totalOpeningArea,2)})}</p></div>}
  {showAreaColors&&quote.lines.some(line=>isAlumexSqmSystem(line.system))&&<OpeningSellingLegend discountPercent={colorDiscountPercent}/>}
- {clientPricing&&<div className="document-note" data-client-system-rate={clientPricing.rate}>
+ {clientPricing&&<div className="document-note print:hidden" data-client-system-rate={clientPricing.rate}>
   <p className="font-semibold">{term('Common Alumex system rate')}: {formatNumber(clientPricing.rate,4)} {term('IQD')} / {term('m²')}</p>
   <p>{term('The same average system rate applies to each billable m². Glass and add-ons are priced separately.')}</p>
   <p>{term(quote.discount?'The displayed average rate is rounded; opening amounts are rounded to whole IQD and reconcile to the quotation subtotal.':'The displayed average rate is rounded; opening amounts are rounded to whole IQD and reconcile to the quotation total.')}</p>
@@ -76,9 +77,12 @@ export function OpeningSchedule({quote,showAreaColors=false,blendSystemRates=fal
  </section>)}
  {quote.skylightsPricedSeparately&&<p className="document-note">{term('Skylights are priced separately in the calculator and are not included in this quotation.')}</p>}
  <div className="break-inside-avoid">
-  {quote.discount&&<dl className="mb-4 ms-auto max-w-sm space-y-2 text-sm text-slate-700">
-   <div className="flex items-baseline justify-between gap-4"><dt>{term('Subtotal')}</dt><dd className="font-semibold"><bdi>{formatMoney(quote.discount.subtotal)}</bdi></dd></div>
-   <div className="flex items-baseline justify-between gap-4"><dt>{term('Discount (5%)')}</dt><dd className="font-semibold"><bdi>{formatMoney(-quote.discount.amount)}</bdi></dd></div>
+  {(showOpeningAreaTotal||quote.discount)&&<dl className="mb-4 ms-auto max-w-sm space-y-2 text-sm text-slate-700">
+   {showOpeningAreaTotal&&<div className="flex items-baseline justify-between gap-4"><dt>{term('Total opening area')}</dt><dd className="font-semibold"><bdi>{formatNumber(totalOpeningArea,2)} {term('m²')}</bdi></dd></div>}
+   {quote.discount&&<>
+    <div className="flex items-baseline justify-between gap-4"><dt>{term('Subtotal')}</dt><dd className="font-semibold"><bdi>{formatMoney(quote.discount.subtotal)}</bdi></dd></div>
+    <div className="flex items-baseline justify-between gap-4"><dt>{term('Discount (5%)')}</dt><dd className="font-semibold"><bdi>{formatMoney(-quote.discount.amount)}</bdi></dd></div>
+   </>}
   </dl>}
   <div className="document-total"><div><span>{term('TOTAL / الإجمالي')}</span><p>{term('All amounts in Iraqi dinars')}</p></div><strong>{formatMoney(quote.total)}</strong></div>
  </div></section>;

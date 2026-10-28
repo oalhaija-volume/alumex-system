@@ -22,7 +22,7 @@ export function NotificationCenter({ compact = false, onNavigate }: { compact?: 
         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
         {unread > 0 && <span aria-hidden="true" className="absolute -end-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-700 px-1 text-[10px] font-bold text-white">{formatNumber(Math.min(unread, 99))}{unread > 99 ? '+' : ''}</span>}
       </summary>
-      <div className="absolute end-0 z-[100] mt-2 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-lg border border-slate-200 bg-white text-start shadow-lg">
+      <div className="fixed inset-x-4 z-[100] mx-auto mt-2 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-lg border border-slate-200 bg-white text-start shadow-lg sm:absolute sm:inset-x-auto sm:end-0 sm:mx-0">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2">
           <p className="text-sm font-semibold text-slate-900">{term('Notifications')}</p>
           {unread > 0 && <button type="button" onClick={() => void markNotificationsRead()} className="min-h-11 text-xs font-semibold text-blue-700">{term('Mark all read')}</button>}

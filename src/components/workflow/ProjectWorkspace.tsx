@@ -37,6 +37,7 @@ export function ProjectWorkspace({followUps=false,canDelete=false}:{followUps?:b
    {p.readiness_note&&<p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-700"><span className="font-semibold">{term('Reason not ready for measurement')}: </span><span dir="auto">{p.readiness_note}</span></p>}
    {p.phone&&<a dir="ltr" href={`tel:${p.phone}`} className="mt-3 inline-block text-sm font-medium text-blue-600">{p.phone}</a>}
    <p className="mt-4 text-xs text-slate-500">{term("Created by")} {p.registeredBy==='Employee'?term('Employee'):p.registeredBy}{p.original_creator_role?` (${term(p.original_creator_role)})`:""} · <time dateTime={p.created_at} dir="ltr">{formatDateTime(p.created_at)}</time></p>
+   {p.legacy_outdoor_sales_id&&<p className="mt-2 break-words text-sm text-red-800">{term('Original Outdoor Sales owner')}: <bdi className="font-semibold">{p.legacyOutdoorSalesOwner??term('Employee')}</bdi></p>}
    <p className="mt-2 text-sm text-slate-600">{term('Outdoor Sales')}: {p.assignedOutdoorSales??term("Not assigned")}</p>
    {p.assignedToYou&&<p className="mt-3 rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800">{term('Assigned to you')} · {term(stageDetails(p).action)}</p>}
    <Link href={projectLink(p,canAccessCRM(data?.actor.role))} className="mt-5 inline-block py-2 text-sm font-semibold text-blue-600">{term("Open project →")}</Link>

@@ -262,6 +262,7 @@ export type Database = {
           sales_engineer_id: string | null;
           measurement_assignment_id: string | null;
           assigned_outdoor_sales_id: string | null;
+          legacy_outdoor_sales_id: string | null;
           status: Database["public"]["Enums"]["project_status"];
           workflow_status: Database["public"]["Enums"]["project_workflow_status"];
           operations_manager_id: string | null;
@@ -342,6 +343,7 @@ export type Database = {
           sales_engineer_id?: string | null;
           measurement_assignment_id?: string | null;
           assigned_outdoor_sales_id?: string | null;
+          legacy_outdoor_sales_id?: string | null;
           status?: Database["public"]["Enums"]["project_status"];
           workflow_status?: Database["public"]["Enums"]["project_workflow_status"];
           operations_manager_id?: string | null;

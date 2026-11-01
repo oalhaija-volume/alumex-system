@@ -10,7 +10,7 @@ function load(path, dependencies = {}) {
   const exports = {};
   new Function('require', 'exports', source)(name => {if(name==='@/lib/measurements/visitHistory')return load('../src/lib/measurements/visitHistory.ts');if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});
     if(name==='@/lib/intake/projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(name==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts',{});
-    if(name==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts',{});
+    if(name==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts',{});if(name==='@/lib/intake/legacyOutdoorSales')return load('../src/lib/intake/legacyOutdoorSales.ts',{});
     assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
     return dependencies[name];
   }, exports);
@@ -49,7 +49,7 @@ for (const endpoint of ['workspace', 'offline']) {
     const response = route.GET(new Request(`http://localhost:3003/api/${endpoint}`));
     await tick();
     assert.deepEqual([...started.keys()].sort(), (endpoint === 'offline' ? ['actor', 'directory', 'projects'] : ['directory', 'projects']).sort());
-    assert.deepEqual(filters, ['created_by.eq.employee,assigned_outdoor_sales_id.eq.employee']);
+    assert.deepEqual(filters, ['created_by.eq.employee,assigned_outdoor_sales_id.eq.employee,legacy_outdoor_sales_id.eq.employee']);
     started.get('projects')([project]);
     started.get('directory')([{ id: actor.id, full_name: 'Employee', role: actor.role }]);
     started.get('actor')?.({ full_name: 'Employee', branch: 'Karkh' });

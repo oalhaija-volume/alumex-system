@@ -9,6 +9,7 @@ function load(path, dependencies = {}) {
   }).outputText;
   const exports = {};
   new Function('require', 'exports', js)(name => {
+    if (name === '@/lib/intake/legacyOutdoorSales') return load('../src/lib/intake/legacyOutdoorSales.ts');
     assert.ok(name in dependencies, name);
     return dependencies[name];
   }, exports);

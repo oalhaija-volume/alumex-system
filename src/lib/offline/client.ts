@@ -6,6 +6,7 @@ import { isOfflineDevice } from './device';
 import { normalizeBuildingType } from '@/lib/intake/buildingType';
 import { canCancelProject, normalizeClientCancellation, canDelayMeasurements, canResumeMeasurements, normalizeMeasurementDelay } from '@/lib/measurements/measurementDelay';
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
+import { normalizeLegacyOutdoorSalesId } from '@/lib/intake/legacyOutdoorSales';
 import { canAccessCRM } from '@/lib/auth/permissions';
 import { canAccessProjectBranch } from '@/lib/auth/projectBranchAccess';
 import { canAccessFieldProject } from './projectAccess';
@@ -116,13 +117,22 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    const governorate=normalizeProjectGovernorate(branch,project.governorate);
    const buildingType=normalizeBuildingType(project.buildingType,s.actor.role==='Outdoor Sales');
    const readinessNote=normalizeReadinessNote(s.actor.role,project.structureReadiness,project.readinessNote);
+   const legacyOutdoorSalesId=normalizeLegacyOutdoorSalesId(project.legacyOutdoorSalesId,s.actor.role);
+   const legacyOwner=legacyOutdoorSalesId?s.outdoorSales?.find(employee=>employee.id===legacyOutdoorSalesId):null;
+   if(legacyOutdoorSalesId&&!legacyOwner)throw new Error('Choose an active Outdoor Sales employee as the original project owner.');
+   // Omit the optional attribution when disabled and keep only its normalized ID
+   // when enabled. The durable registration payload survives every sync retry.
+   if(Object.hasOwn(project,'legacyOutdoorSalesId')){
+    const normalizedProject={...project};delete normalizedProject.legacyOutdoorSalesId;
+    change.payload={...payload,project:{...normalizedProject,...(legacyOutdoorSalesId?{legacyOutdoorSalesId}:{})}};
+   }
    const assigned=typeof project.assignedOutdoorSalesId==='string'?project.assignedOutdoorSalesId:'';
    if((s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')&&!['Karkh','Rasafa'].includes(s.actor.branch??''))throw new Error('Ask Admin to assign your Karkh or Rasafa branch before creating a project.');
    const selfAssigned=(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')&&assigned===s.actor.id;
    if((s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')&&!assigned)throw new Error('Choose yourself or an Outdoor Sales employee to collect the initial measurements.');
    if(assigned&&!selfAssigned&&!s.outdoorSales?.some(e=>e.id===assigned))throw new Error('Choose an Outdoor Sales employee from the list. Connect online to refresh employees.');
    const location=parseProjectLocation(project.locationLatitude,project.locationLongitude);
-   p={location_latitude:location.latitude,location_longitude:location.longitude,building_type:buildingType,branch:(s.actor.role === 'Outdoor Sales'||s.actor.role === 'Indoor Sales'||s.actor.role === 'Sales Manager')?branch:null,governorate,assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.id:null,followUpOwner:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
+   p={location_latitude:location.latitude,location_longitude:location.longitude,building_type:buildingType,branch:(s.actor.role === 'Outdoor Sales'||s.actor.role === 'Indoor Sales'||s.actor.role === 'Sales Manager')?branch:null,governorate,...(legacyOutdoorSalesId?{legacy_outdoor_sales_id:legacyOutdoorSalesId,owner_id:legacyOutdoorSalesId,sales_engineer_id:legacyOutdoorSalesId,legacyOutdoorSalesOwner:legacyOwner?.name??null}:{}),assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.id:null,followUpOwner:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
   }else{
    if(!canAccessFieldProject(s,p))throw new Error('Project is not available to this employee.');
    if(!p)throw new Error('Open this project online once before working on it offline.');

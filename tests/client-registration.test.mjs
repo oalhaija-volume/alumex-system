@@ -11,7 +11,7 @@ function loadModule(path, dependencies) {
   new Function('require', 'exports', source)((name) => {if(name==='@/lib/measurements/visitHistory')return loadModule('../src/lib/measurements/visitHistory.ts',{});if(name==='@/lib/auth/projectBranchAccess')return loadModule('../src/lib/auth/projectBranchAccess.ts',{});
     if(name==='@/lib/measurements/completion')return loadModule('../src/lib/measurements/completion.ts',{});if(name==='@/lib/measurements/measurementDelay')return loadModule('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':loadModule('../src/lib/auth/permissions.ts',{})});
     if(name==='@/lib/intake/projectBranch')return loadModule('../src/lib/intake/projectBranch.ts',{});if(name==='@/lib/intake/buildingType')return loadModule('../src/lib/intake/buildingType.ts',{});
-    if(name==='@/lib/intake/readinessNote')return loadModule('../src/lib/intake/readinessNote.ts',{});
+    if(name==='@/lib/intake/readinessNote')return loadModule('../src/lib/intake/readinessNote.ts',{});if(name==='@/lib/intake/legacyOutdoorSales')return loadModule('../src/lib/intake/legacyOutdoorSales.ts',{});
     if (!(name in dependencies)) throw new Error(`Unexpected dependency: ${name}`);
     return dependencies[name];
   }, exports);

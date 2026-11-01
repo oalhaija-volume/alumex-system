@@ -14,6 +14,7 @@ import { ProjectLocationPicker } from "@/components/projects/ProjectLocationPick
 import { canAccessCRM } from '@/lib/auth/permissions';
 import Link from "next/link";
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
+import { canAssignLegacyOutdoorSales, normalizeLegacyOutdoorSalesId } from '@/lib/intake/legacyOutdoorSales';
 
 
 type IntakeEmployeeState = Pick<FieldState, 'actor' | 'outdoorSales'>;
@@ -35,14 +36,18 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
   const [readinessNote, setReadinessNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [saved, setSaved] = useState<{projectId:string;pending:boolean;registeredBy:string;createdAt?:string}|null>(null);
+  const [saved, setSaved] = useState<{projectId:string;pending:boolean;registeredBy:string;createdAt?:string;legacyOutdoorSalesOwner?:string|null}|null>(null);
   const [offline,setOffline]=useState(false);
   const [employeeState,setEmployeeState]=useState<IntakeEmployeeState|null>(initialEmployeeState);
   const [assignedOutdoorSalesId,setAssignedOutdoorSalesId]=useState('');
+  const [legacyProject,setLegacyProject]=useState(false);
+  const [legacyOutdoorSalesId,setLegacyOutdoorSalesId]=useState('');
   // Resolve the device date after hydration so server and client clocks cannot
   // produce different radio options in the initial HTML.
   const [rotationDate,setRotationDate]=useState<Date|null>(null);
   const actorRole = employeeState?.actor.role;
+  const canCreditLegacyProject=canAssignLegacyOutdoorSales(actorRole);
+  const legacyOwner=legacyProject&&canCreditLegacyProject?employeeState?.outdoorSales?.find(employee=>employee.id===legacyOutdoorSalesId):undefined;
   const rotationStartBranch = employeeState?.actor.outdoorRotationStartBranch;
   const allowedProjectBranches = employeeState&&rotationDate ? outdoorProjectBranches(employeeState.actor,rotationDate) : [];
   const assignedBaghdadBranch = allowedProjectBranches.find(branch=>branch!=='Governorates');
@@ -115,6 +120,11 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
     if(addressOnly && !siteAddress.trim()){setError('Enter the project site address.');return;}
     if((employeeState.actor.role === 'Indoor Sales' || employeeState.actor.role === 'Sales Manager')&&!employeeState.actor.branch){setError('Ask Admin to assign your Karkh or Rasafa branch before creating a project.');return;}
     if((employeeState.actor.role === 'Indoor Sales' || employeeState.actor.role === 'Sales Manager')&&!outdoorAssignee){setError('Choose yourself or an Outdoor Sales employee to collect the initial measurements.');return;}
+    let creditedOutdoorSalesId:string|null;
+    try{
+      if(legacyProject&&canCreditLegacyProject&&!legacyOwner)throw new Error('Choose the Outdoor Sales employee who originally brought this project.');
+      creditedOutdoorSalesId=normalizeLegacyOutdoorSalesId(legacyProject&&canCreditLegacyProject?legacyOutdoorSalesId:null,employeeState.actor.role);
+    }catch(cause){setError((cause as Error).message);return;}
     setSaving(true);
     setError("");
     try {
@@ -128,6 +138,7 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
           client: { clientType, clientName: name.trim(), mobile: phone.trim() },
           project: {
             projectName: name.trim(),
+            ...(creditedOutdoorSalesId?{legacyOutdoorSalesId:creditedOutdoorSalesId}:{}),
             ...(employeeState.actor.role==='Outdoor Sales'?{buildingType,branch,...(branch==='Governorates'?{governorate}:{})}:{}),
             assignedOutdoorSalesId: outdoorAssignee||null,
             address: siteAddress.trim(),
@@ -142,7 +153,7 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
       if (!response.ok || !result.projectId) throw new Error(result.error || t("intake.errors.save"));
       if ((readiness === 'ready' && !collectsMeasurements) || (readiness === 'not_ready' && !canAccessCRM(employeeState.actor.role))) {
         const registered=(await readFieldState().catch(()=>null))?.projects.find(project=>project.id===result.projectId);
-        setSaved({projectId:result.projectId,pending:!!result.pending,registeredBy:registered?.registeredBy??employeeState.actor.name,createdAt:registered?.created_at});
+        setSaved({projectId:result.projectId,pending:!!result.pending,registeredBy:registered?.registeredBy??employeeState.actor.name,createdAt:registered?.created_at,legacyOutdoorSalesOwner:registered?.legacyOutdoorSalesOwner??legacyOwner?.name});
         return;
       }
       if (!result.pending && isFieldOnline() && !isDeviceWorkspace()) window.location.assign(readiness === "ready" ? `/initial-measurements/${result.projectId}` : "/mini-crm");
@@ -159,9 +170,10 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
       <h1 className="text-xl font-bold text-slate-950">{t("registration.saved")}</h1>
       <p className="text-slate-600">{readiness === 'not_ready' ? term('The project is in the CRM queue. Indoor Sales will follow up until the site is ready for measurements.') : assignedEmployee ? term('The project is assigned to {name} for initial measurements.',{name:assignedEmployee.name}) : term('The project is ready. Outdoor Sales will collect the initial measurements.')}</p>
       <p className="text-sm text-slate-600">{term('Created by')} <bdi>{saved.registeredBy==='Employee'?term('Employee'):saved.registeredBy}</bdi>{saved.createdAt&&<time dateTime={saved.createdAt} dir="ltr" className="mt-1 block w-fit max-w-full">{formatDateTime(saved.createdAt)}</time>}</p>
+      {saved.legacyOutdoorSalesOwner&&<p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">{term('Original Outdoor Sales owner')}: <bdi className="font-semibold">{saved.legacyOutdoorSalesOwner}</bdi></p>}
       {saved.pending && <p className="text-sm text-amber-800">{term('Saved on device · Pending sync')}</p>}
       <Link href={!canAccessCRM(employeeState?.actor.role) ? (saved.pending || offline ? "/offline?path=/dashboard" : "/dashboard") : saved.pending || offline ? '/offline?path=/mini-crm' : `/mini-crm#project-${saved.projectId}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700">{term(canAccessCRM(employeeState?.actor.role)?'Open follow-ups':mobileOutdoor?'Measurement assignments':'Dashboard')}</Link>
-      <button type="button" onClick={() => { setProjectBranch(''); setProjectGovernorate(''); setBuildingType(''); setClientType("individual"); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setOfflineAddressStarted(false); setReadiness(""); setReadinessNote(''); setAssignedOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
+      <button type="button" onClick={() => { setProjectBranch(''); setProjectGovernorate(''); setBuildingType(''); setClientType("individual"); setName(""); setPhone(""); setLocation({latitude:null,longitude:null}); setSiteAddress(""); setOfflineAddressStarted(false); setReadiness(""); setReadinessNote(''); setAssignedOutdoorSalesId(''); setLegacyProject(false); setLegacyOutdoorSalesId(''); setSaved(null); }} className="flex min-h-12 w-full items-center justify-center rounded-md bg-blue-600 px-4 font-semibold text-white">{t("registration.another")}</button>
     </section>
   );
 
@@ -172,6 +184,23 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
         <p className="mt-2 text-sm leading-6 text-slate-500">{t("registration.description")}</p>
       </header>
       <fieldset disabled={saving} className="min-w-0 space-y-6 rounded-lg bg-white sm:border sm:border-slate-200 sm:p-7">
+        {canCreditLegacyProject&&<section aria-label={term('Pre-system project ownership')} className="rounded-lg border-2 border-red-300 bg-red-50 p-4 text-red-900">
+          <h2 className="text-sm font-semibold">{term('Pre-system project ownership')}</h2>
+          <label htmlFor="legacy-outdoor-project" className="mt-3 flex min-h-11 cursor-pointer items-start gap-3 text-sm font-medium leading-6">
+            <input id="legacy-outdoor-project" type="checkbox" checked={legacyProject} onChange={event=>{setLegacyProject(event.target.checked);setLegacyOutdoorSalesId('');setError('');}} className="mt-1 h-4 w-4 shrink-0 accent-red-600"/>
+            <span>{term('Old project collected by Outdoor Sales')}</span>
+          </label>
+          <p className="mt-1 text-xs leading-5 text-red-800">{term('Use this when entering a project brought in before the system.')}</p>
+          {legacyProject&&<div className="mt-4">
+            <label htmlFor="legacy-outdoor-owner" className="block text-sm font-semibold">{term('Original Outdoor Sales owner')} {term('(required)')}</label>
+            <select id="legacy-outdoor-owner" required aria-describedby="legacy-outdoor-credit-help" value={legacyOutdoorSalesId} onChange={event=>{setLegacyOutdoorSalesId(event.target.value);setError('');}} className="mt-2 min-h-12 w-full rounded-md border border-red-300 bg-white px-3 text-base text-slate-900 outline-none focus:border-red-600 focus:ring-2 focus:ring-red-200">
+              <option value="">{term('Choose the original Outdoor Sales owner')}</option>
+              {employeeState?.outdoorSales?.map(employee=><option key={employee.id} value={employee.id}>{employee.name==='Employee'?term('Employee'):employee.name}</option>)}
+            </select>
+            <p id="legacy-outdoor-credit-help" className="mt-2 text-xs leading-5 text-red-800">{term('Project ownership and sales credit go to this employee. Your name remains recorded as the person who entered the project. Measurements are assigned separately below.')}</p>
+            {!employeeState?.outdoorSales?.length&&<p className="mt-2 text-xs font-semibold">{term('No active Outdoor Sales employees available. Add one in Employees and reconnect to refresh this list.')}</p>}
+          </div>}
+        </section>}
         {employeeState?.actor.role==='Outdoor Sales'&&<fieldset aria-describedby="project-branch-assignment project-branch-rotation">
           <legend className="mb-3 text-sm font-semibold text-slate-900">{term('Project branch')} {term('(required)')}</legend>
           <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">

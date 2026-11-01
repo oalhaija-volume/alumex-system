@@ -17,6 +17,7 @@ function load(path,dependencies={}) {
 }
 const catalogRules=load('../src/lib/workflow/catalogRules.ts');
 const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules});
+const itemGroups=load('../src/lib/quotations/itemGroups.ts',{'../workflow/catalogRules':catalogRules,'@/lib/workflow/catalogRules':catalogRules});
 const messages=Object.fromEntries(['en','ar'].map(locale=>[locale,JSON.parse(readFileSync(new URL(`../messages/${locale}.json`,import.meta.url),'utf8'))]));
 const catalog=[
  {id:'system',name:'Alumex System',category:'aluminum_system',unit:'sqm',unit_price:240000,is_active:true},
@@ -58,7 +59,7 @@ function components(locale) {
  const translations=i18n(locale);
  const shared={'react':React,'react/jsx-runtime':jsxRuntime,'@/components/i18n/I18nProvider':{useI18n:()=>translations},'@/lib/workflow/pricing':pricing};
  const indicators=load('../src/components/workflow/OpeningAreaIndicator.tsx',shared);
- const document=load('../src/components/workflow/CommercialDocument.tsx',{...shared,'./OpeningAreaIndicator':indicators});
+ const document=load('../src/components/workflow/CommercialDocument.tsx',{...shared,'@/lib/quotations/itemGroups':itemGroups,'./OpeningAreaIndicator':indicators});
  return {translations,shared,indicators,document};
 }
 const text=html=>html.replace(/<[^>]*>/g,'').replaceAll('&amp;','&');
@@ -84,6 +85,11 @@ function checkSavedPrices(html,translations,discount) {
  const displayedTotal=text(html.match(/<div class="document-total">[\s\S]*?<strong>([\s\S]*?)<\/strong>/)[1]);
  const openingTotals=rows.map(group=>Number(group[0].at(-1).replaceAll(',','')));
  assert.equal(openingTotals.reduce((sum,value)=>sum+value,0)+100000,2125000,'Displayed opening totals plus the standalone item reconcile to the saved subtotal');
+ const groupSubtotals=new Map([...html.matchAll(/<div class="document-group-subtotal" data-group-subtotal="([^"]+)"><span>([\s\S]*?)<\/span><strong>([\s\S]*?)<\/strong><\/div>/g)].map(match=>[match[1],{label:text(match[2]),amount:text(match[3])}]));
+ assert.deepEqual([...groupSubtotals.keys()],['sliding','a swing door']);
+ assert.deepEqual(groupSubtotals.get('sliding'),{label:term('{group} subtotal',{group:term('Sliding')}),amount:money(2025000)});
+ assert.deepEqual(groupSubtotals.get('a swing door'),{label:term('{group} subtotal',{group:term('A Swing Door')}),amount:money(100000)});
+ assert.ok(html.includes(`<span>${term('Grand total')}</span>`),'Both document languages explicitly label the final grand total');
  assert.equal(displayedTotal,money(discount?2018750:2125000));
  if(discount){
   assert.equal(summary.get(term('Subtotal')),money(2125000));

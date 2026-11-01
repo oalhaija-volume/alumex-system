@@ -4,6 +4,7 @@ import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBran
 import type { ReactNode } from 'react';
 import type { QuoteSnapshot,Charge } from '@/lib/workflow/pricing';
 import { discountedSystemRate,measuredOpeningArea,openingSellingBand,isAlumexSqmSystem } from '@/lib/workflow/pricing';
+import { quotationItemGroups } from '@/lib/quotations/itemGroups';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import { OpeningAreaBadge,OpeningSellingLegend } from './OpeningAreaIndicator';
 
@@ -25,14 +26,19 @@ function ChargeRows({items,labels}:{items:Charge[];labels?:string[]}) {
 export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal=false,colorDiscountPercent=quote.discount?.percent??0}:{quote:QuoteSnapshot;showAreaColors?:boolean;showOpeningAreaTotal?:boolean;colorDiscountPercent?:0|5}) {
  const {term,locale,formatMoney,formatNumber}=useI18n();
  const totalOpeningArea=quote.lines.reduce((sum,line)=>sum+line.area,0);
+ const groups=quotationItemGroups(quote);
+ const openingNumbers=new Map(groups.flatMap(group=>group.lines).map((line,index)=>[line.opening.id,index+1]));
  return <section className="document-schedule">{!!quote.lines.length&&<div className="document-section-heading"><h3>{term('Opening schedule')}{locale==='en'&&<span lang="ar">جدول الفتحات</span>}</h3><p>{term('{count} openings · {area} m² measured',{count:formatNumber(quote.lines.reduce((sum,line)=>sum+(line.opening.quantity??1),0)),area:formatNumber(totalOpeningArea,2)})}</p></div>}
  {showAreaColors&&quote.lines.some(line=>isAlumexSqmSystem(line.system))&&<OpeningSellingLegend discountPercent={colorDiscountPercent}/>}
- {!!quote.lines.length&&<div className="document-schedule-scroll" role="region" aria-label={term('Opening schedule')} tabIndex={0}>
+ {!quote.lines.length&&!!groups.length&&<div className="document-section-heading"><h3>{term('Standalone products & facade services')}</h3></div>}
+ {groups.map(group=><section key={group.key} className="document-item-group" data-item-group={group.key} aria-label={term(group.label)}>
+  <h4 className="document-item-group-title">{term(group.label)}</h4>
+ {!!group.lines.length&&<div className="document-schedule-scroll" role="region" aria-label={`${term('Opening schedule')} · ${term(group.label)}`} tabIndex={0}>
   <table className="document-opening-table">
-   <caption className="sr-only">{term('Opening schedule')}</caption>
+   <caption className="sr-only">{term('Opening schedule')} · {term(group.label)}</caption>
    <colgroup>{[4,12,16,5,21,10,10,11,11].map((width,index)=><col key={index} style={{width:`${width}%`}}/>)}</colgroup>
    <thead><tr>{['No.','Floor / room','Opening / dimensions','Qty','Specification','Basis','Rate · IQD','Amount · IQD','Opening total · IQD'].map(label=><th key={label} scope="col">{term(label)}</th>)}</tr></thead>
-   {quote.lines.map((line,index)=>{
+   {group.lines.map(line=>{
     const charges=[line.system,...(line.glass?[line.glass]:[]),...line.extras];
     const labels=['Aluminum / system',...(line.glass?['Glass']:[]),...line.extras.map(()=>'Add-on')];
     const area=measuredOpeningArea(line.opening);
@@ -41,7 +47,7 @@ export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal
     return <tbody key={line.opening.id} data-area-band={band} className={`document-opening-group${band?` opening-area-${band}`:''}`}>
      {charges.map((charge,chargeIndex)=><tr key={`${charge.id}-${chargeIndex}`}>
       {chargeIndex===0&&<>
-       <th scope="rowgroup" rowSpan={charges.length} className="document-opening-index">{formatNumber(index+1)}</th>
+       <th scope="rowgroup" rowSpan={charges.length} className="document-opening-index">{formatNumber(openingNumbers.get(line.opening.id)!)}</th>
        <td rowSpan={charges.length}><strong dir="auto">{term(line.opening.floor)}</strong><span className="document-table-detail" dir="auto">{line.opening.work_area==='internal'?`${term('Internal works')} · ${term(line.opening.room)}`:term(line.opening.room)}</span></td>
        <td rowSpan={charges.length}><strong>{term(line.opening.opening_type)} {line.opening.opening_direction?term(line.opening.opening_direction):''}{line.opening.has_arch?` · ${term('Arch')}`:''}{line.opening.has_roller_shutter?` · ${term('Roller shutter')}`:''}</strong><span className="document-table-detail"><bdi dir="ltr">{formatNumber(line.opening.width)} × {formatNumber(line.opening.height)}</bdi> {term('cm')}</span><span className="document-table-detail">{formatNumber(line.area,2)} {term('m²')}</span>{showAreaColors&&<span className="document-opening-area-indicator mt-1 block">{band?<OpeningAreaBadge area={area} rate={line.system.rate} opening={line.opening} discountPercent={colorDiscountPercent}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}</span>}{minimumApplied&&<span className="document-table-detail">{term('Minimum billable area: 1 m² per window.')}</span>}</td>
        <td rowSpan={charges.length} className="document-table-number">{formatNumber(line.opening.quantity??1)}</td>
@@ -56,18 +62,20 @@ export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal
    })}
   </table>
  </div>}
- {!!quote.facadeMeasurements?.length&&<section className="document-opening">
-  <div className="document-section-heading"><h3>{term('Recorded facade dimensions')}</h3></div>
-  <table><caption className="sr-only">{term('Recorded facade dimensions')}</caption><thead><tr>{['Facade','Width (cm)','Length (cm)'].map(label=><th key={label}>{term(label)}</th>)}</tr></thead><tbody>{quote.facadeMeasurements.map(o=><tr key={o.id}><th scope="row">{term('Facade {number}',{number:String(o.facade_number)})}</th><td>{formatNumber(o.width)}</td><td>{formatNumber(o.height)}</td></tr>)}</tbody></table>
- </section>}
- {!!quote.additionalItems?.length&&<div className="document-section-heading"><h3>{term('Standalone products & facade services')}{locale==='en'&&<span lang="ar">منتجات مستقلة وخدمات واجهات</span>}</h3></div>}
- {quote.additionalItems?.map(item=><section key={item.id} className="document-opening">
+ {group.additionalItems.map(item=><section key={item.id} className="document-opening">
   <div className="document-opening-heading"><h4>{term(item.name)}</h4></div>
   {!!item.measurements?.length&&<table><caption className="sr-only">{term('Measured facade areas')}</caption><thead><tr><th>{term('Area / elevation name')}</th><th>{term('Dimensions (m)')}</th><th>{term('Quantity')}</th><th>{term('Area (m²)')}</th></tr></thead><tbody>{item.measurements.map((area,index)=><tr key={index}><td dir="auto">{term(area.label)}</td><td><bdi>{formatNumber(area.width,3)} × {formatNumber(area.height,3)}</bdi></td><td>{formatNumber(area.quantity)}</td><td>{formatNumber(area.width*area.height*area.quantity,3)}</td></tr>)}</tbody></table>}
   <table><caption className="sr-only">{term('Project products and services')}</caption><thead><tr><th>{term('Product / service')}</th><th>{term('Basis')}</th><th>{term('Rate · IQD')}</th><th>{term('Amount · IQD')}</th></tr></thead><tbody><ChargeRows items={[item,...(item.extras??[])]}/></tbody></table>
  </section>)}
+ <div className="document-group-subtotal" data-group-subtotal={group.key}><span>{term('{group} subtotal',{group:term(group.label)})}</span><strong><bdi>{formatMoney(group.subtotal)}</bdi></strong></div>
+ </section>)}
+ {!!quote.facadeMeasurements?.length&&<section className="document-opening">
+  <div className="document-section-heading"><h3>{term('Recorded facade dimensions')}</h3></div>
+  <table><caption className="sr-only">{term('Recorded facade dimensions')}</caption><thead><tr>{['Facade','Width (cm)','Length (cm)'].map(label=><th key={label}>{term(label)}</th>)}</tr></thead><tbody>{quote.facadeMeasurements.map(o=><tr key={o.id}><th scope="row">{term('Facade {number}',{number:String(o.facade_number)})}</th><td>{formatNumber(o.width)}</td><td>{formatNumber(o.height)}</td></tr>)}</tbody></table>
+ </section>}
  {quote.skylightsPricedSeparately&&<p className="document-note">{term('Skylights are priced separately in the calculator and are not included in this quotation.')}</p>}
  <div className="break-inside-avoid">
+  {quote.discount&&!!groups.length&&<p className="mb-3 text-sm text-slate-600">{term('Group subtotals are before the quotation discount.')}</p>}
   {(showOpeningAreaTotal||quote.discount)&&<dl className="mb-4 ms-auto max-w-sm space-y-2 text-sm text-slate-700">
    {showOpeningAreaTotal&&<div className="flex items-baseline justify-between gap-4"><dt>{term('Total opening area')}</dt><dd className="font-semibold"><bdi>{formatNumber(totalOpeningArea,2)} {term('m²')}</bdi></dd></div>}
    {quote.discount&&<>
@@ -75,7 +83,7 @@ export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal
     <div className="flex items-baseline justify-between gap-4"><dt>{term('Discount (5%)')}</dt><dd className="font-semibold"><bdi>{formatMoney(-quote.discount.amount)}</bdi></dd></div>
    </>}
   </dl>}
-  <div className="document-total"><div><span>{term('TOTAL / الإجمالي')}</span><p>{term('All amounts in Iraqi dinars')}</p></div><strong>{formatMoney(quote.total)}</strong></div>
+  <div className="document-total"><div><span>{term('Grand total')}</span><p>{term('All amounts in Iraqi dinars')}</p></div><strong>{formatMoney(quote.total)}</strong></div>
  </div></section>;
 }
 export function DocumentFooter({reference}:{reference:string}){const {term}=useI18n();return <footer className="document-footer"><strong>{term('ALUMEX EXPERTS')}</strong><bdi dir="ltr">{reference}</bdi></footer>;}

@@ -792,6 +792,12 @@ textarea {
 .document-opening tfoot { border-top:1px solid #dbe3e8; font-weight:600; }
 .document-schedule-scroll { overflow-x:auto; margin-bottom:18px; }
 .document-schedule-scroll:focus-visible { outline:2px solid #2563eb; outline-offset:3px; }
+.document-item-group { margin-bottom:24px; }
+.document-item-group-title { padding:10px 12px; background:#edf3f6; color:#194b65; font-size:14px; font-weight:650; border-inline-start:3px solid #194b65; }
+.document-item-group .document-schedule-scroll { margin-bottom:0; }
+.document-item-group .document-opening { margin-top:12px; margin-bottom:0; }
+.document-group-subtotal { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:8px 16px; padding:12px; border-top:2px solid #becdd6; background:#f8fafb; color:#194b65; font-weight:600; }
+.document-group-subtotal strong { font-variant-numeric:tabular-nums; white-space:nowrap; }
 .document-opening-table { width:100%; min-width:780px; border-collapse:collapse; table-layout:fixed; font-size:11px; line-height:1.4; }
 .document-opening-table th,.document-opening-table td { border:1px solid #dbe3e8; padding:5px 6px; text-align:start; vertical-align:top; overflow-wrap:anywhere; }
 .document-opening-table thead th { background:#edf3f6; color:#194b65; font-weight:650; font-size:10px; vertical-align:middle; }
@@ -845,7 +851,9 @@ textarea {
 @media print {
  .commercial-document { border:0; border-radius:0; box-shadow:none; padding:0; font-size:11px; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
  .commercial-document .opening-area-legend,.commercial-document .document-opening-area-indicator { display:none; }
- .document-header,.document-parties,.document-total,.document-footer,.document-company-signature { break-inside:avoid; }
+ .document-header,.document-parties,.document-total,.document-group-subtotal,.document-footer,.document-company-signature { break-inside:avoid; }
+ .document-item-group-title { break-after:avoid; page-break-after:avoid; }
+ .document-group-subtotal { break-before:avoid; page-break-before:avoid; }
  .document-schedule-scroll { overflow:visible; margin-bottom:14px; }
  .document-opening-table { min-width:0; font-size:10.5px; line-height:1.35; }
  .document-opening-table th,.document-opening-table td { padding:4px; }

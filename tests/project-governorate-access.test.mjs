@@ -138,6 +138,7 @@ for (const branch of ['Governorates', 'Karkh']) {
       'react/jsx-runtime': jsxRuntime,
       '@/components/i18n/I18nProvider': { useI18n: () => ({ term: value => value }) },
       '@/lib/quotations/clientPricing': {},
+      '@/lib/quotations/itemGroups': {},
       '@/lib/workflow/pricing': {}, './OpeningAreaIndicator': {},
     });
     const markup = renderToStaticMarkup(React.createElement(DocumentParties, {

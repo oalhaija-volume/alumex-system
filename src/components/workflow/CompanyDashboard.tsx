@@ -42,7 +42,8 @@ export function CompanyDashboard({ role }: { role: AppRole }) {
             <div><p className="text-xs font-semibold text-blue-700">{project.project_number}</p><h3 className="mt-1 font-semibold">{project.project_name}</h3></div>
             <span className="rounded-md bg-slate-100 px-3 py-2 text-xs font-medium">{term(stageDetails(project).label)}</span>
           </div>
-          <p className="mt-3 text-xs text-slate-500">{term('Last updated')}: {formatDateTime(project.updated_at)}</p>
+          <p className="mt-3 break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">{term('Created by')}: <bdi className="font-medium text-slate-800">{project.registeredBy === 'Employee' ? term('Employee') : project.registeredBy}</bdi><time dateTime={project.created_at} dir="ltr" className="block w-fit max-w-full">{formatDateTime(project.created_at)}</time></p>
+          <p className="mt-1 text-xs text-slate-500">{term('Last updated')}: {formatDateTime(project.updated_at)}</p>
         </article>)}</div>}
       </section>
     </>}

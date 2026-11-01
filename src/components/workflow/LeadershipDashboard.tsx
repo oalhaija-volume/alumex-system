@@ -80,6 +80,7 @@ function ProjectRow({ project, data, leadership, overdue, busy, onDelete }: {
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-1.5 lg:border-0 lg:pt-0">
         <dl className="flex min-w-0 flex-1 basis-full flex-wrap gap-x-5 gap-y-2 text-xs leading-5 lg:basis-0">
+          <div className="min-w-0 break-words [overflow-wrap:anywhere]"><dt className="inline text-slate-500">{term('Created by')}: </dt><dd className="inline font-medium text-slate-800"><bdi>{project.registeredBy === 'Employee' ? term('Employee') : project.registeredBy}</bdi></dd></div>
           <div className="min-w-0 break-words"><dt className="inline text-slate-500">{term('Responsible Indoor Sales')}: </dt><dd className="inline font-medium text-slate-800"><bdi>{project.followUpOwner ?? term('Not assigned')}</bdi></dd></div>
           <div className="min-w-0 break-words"><dt className="inline text-slate-500">{term('Measurements by')}: </dt><dd className="inline font-medium text-slate-800"><bdi>{outdoor ?? term('Not assigned')}</bdi></dd></div>
           {needsSalesFollowUp(project) && <div className={`min-w-0 break-words ${overdue ? 'rounded bg-rose-50 px-1.5 text-rose-800' : 'text-slate-500'}`}><dt className="inline">{term(overdue ? 'Overdue follow-up' : 'Next follow-up')}: </dt><dd className={`inline font-medium ${overdue ? '' : 'text-slate-700'}`}>{project.next_follow_up_at ? <time dateTime={project.next_follow_up_at}>{formatDateTime(project.next_follow_up_at)}</time> : term('Follow-up date not set')}</dd></div>}

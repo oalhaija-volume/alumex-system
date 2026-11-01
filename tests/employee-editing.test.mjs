@@ -167,6 +167,7 @@ for (const branch of ['Karkh','Rasafa',null]) test(`printed document renders the
   '@/components/i18n/I18nProvider':{useI18n:()=>({term:value=>value})},
   '@/lib/workflow/pricing':{},
   '@/lib/quotations/clientPricing':{},
+  '@/lib/quotations/itemGroups':{},
   './OpeningAreaIndicator':{},
  });
  const markup=renderToStaticMarkup(React.createElement(DocumentParties,{client:{name:'Client',mobile:'07700000000'},project:{number:'PRJ-TEST',address:'Baghdad',branch}}));

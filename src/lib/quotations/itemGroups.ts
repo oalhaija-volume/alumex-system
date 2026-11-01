@@ -6,6 +6,8 @@ export type QuotationItemGroup = {
  lines:QuoteLine[];
  additionalItems:StandaloneCharge[];
  subtotal:number;
+ area:number;
+ openingCount:number;
 };
 
 const groupOrder = ['sliding','hinged','curtain wall','louver'];
@@ -45,7 +47,7 @@ export function quotationItemGroups(quote:Pick<QuoteSnapshot,'lines'|'additional
   const key=normalize(label);
   let group=groups.get(key);
   if(!group){
-   group={key,label,lines:[],additionalItems:[],subtotal:0};
+   group={key,label,lines:[],additionalItems:[],subtotal:0,area:0,openingCount:0};
    groups.set(key,group);
   }
   return group;
@@ -54,11 +56,16 @@ export function quotationItemGroups(quote:Pick<QuoteSnapshot,'lines'|'additional
   const group=groupFor(openingGroup(line));
   group.lines.push(line);
   group.subtotal+=line.total;
+  // Saved line area already includes repeated openings and excludes billing minima.
+  group.area+=line.area;
+  group.openingCount+=line.opening.quantity??1;
  }
  for(const item of quote.additionalItems??[]){
   const group=groupFor(productGroup(item.name));
   group.additionalItems.push(item);
   group.subtotal+=item.total+(item.extras??[]).reduce((sum,extra)=>sum+extra.total,0);
+  // Services have area, but no physical opening count; accessories add neither.
+  if(item.unit==='sqm')group.area+=item.quantity;
  }
  return [...groups.values()].sort((a,b)=>{
   const aIndex=groupOrder.indexOf(a.key),bIndex=groupOrder.indexOf(b.key);

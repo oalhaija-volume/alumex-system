@@ -798,6 +798,10 @@ textarea {
 .document-item-group .document-opening { margin-top:12px; margin-bottom:0; }
 .document-group-subtotal { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:8px 16px; padding:12px; border-top:2px solid #becdd6; background:#f8fafb; color:#194b65; font-weight:600; }
 .document-group-subtotal strong { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.document-summary-values { display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:10px 24px; margin-inline-start:auto; }
+.document-summary-measures { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 20px; }
+.document-summary-measures dt { color:#526574; font-size:10px; font-weight:400; }
+.document-summary-measures dd { font-size:14px; font-weight:650; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .document-opening-table { width:100%; min-width:780px; border-collapse:collapse; table-layout:fixed; font-size:11px; line-height:1.4; }
 .document-opening-table th,.document-opening-table td { border:1px solid #dbe3e8; padding:5px 6px; text-align:start; vertical-align:top; overflow-wrap:anywhere; }
 .document-opening-table thead th { background:#edf3f6; color:#194b65; font-weight:650; font-size:10px; vertical-align:middle; }
@@ -822,6 +826,8 @@ textarea {
 .document-total span { font-size:11px; letter-spacing:.08em; }
 .document-total p { font-size:10px; opacity:.8; }
 .document-total strong { font-size:24px; white-space:nowrap; }
+.document-total .document-summary-measures dt { color:inherit; opacity:.8; }
+.document-total .document-summary-measures dd { font-size:16px; }
 .document-note { margin:22px 0; font-size:11px; color:#637786; }
 .document-footer { margin-top:30px; padding-top:14px; border-top:1px solid #dbe3e8; display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; font-size:10px; color:#637786; }
 .document-footer strong { letter-spacing:.1em; color:#194b65; }
@@ -847,6 +853,7 @@ textarea {
  .document-opening th,.document-opening td { padding:8px 5px; font-size:10px; }
  .document-total { padding:14px; flex-wrap:wrap; }
  .document-total strong { font-size:21px; }
+ .document-summary-values { width:100%; justify-content:space-between; gap:10px 16px; }
 }
 @media print {
  .commercial-document { border:0; border-radius:0; box-shadow:none; padding:0; font-size:11px; print-color-adjust:exact; -webkit-print-color-adjust:exact; }

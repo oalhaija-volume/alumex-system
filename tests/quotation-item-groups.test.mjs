@@ -19,10 +19,10 @@ const {quotationItemGroups}=load('../src/lib/quotations/itemGroups.ts',{
  '@/lib/workflow/catalogRules':catalogRules,
 });
 const charge=(id,name,total)=>({id,name,unit:'item',rate:total,quantity:1,total});
-function line(id,{type='Window',direction='Sliding',product='Alumex System',systemAmount=240000,glassAmount=0,extras=[]}={}) {
+function line(id,{type='Window',direction='Sliding',product='Alumex System',systemAmount=240000,glassAmount=0,extras=[],width=100,height=100,quantity=1}={}) {
  const system={...charge(`system-${id}`,product,systemAmount),unit:'sqm'};
  const glass=glassAmount?{...charge(`glass-${id}`,'Low-E Glass',glassAmount),unit:'sqm'}:null;
- return {opening:{id,floor:'GF',room:'Office',width:100,height:100,quantity:1,opening_type:type,opening_direction:direction},area:1,system,glass,extras,total:system.total+(glass?.total??0)+extras.reduce((sum,item)=>sum+item.total,0)};
+ return {opening:{id,floor:'GF',room:'Office',width,height,quantity,opening_type:type,opening_direction:direction},area:width*height/10000*quantity,system,glass,extras,total:system.total+(glass?.total??0)+extras.reduce((sum,item)=>sum+item.total,0)};
 }
 function freeze(value) {
  if(value&&typeof value==='object'){
@@ -72,6 +72,8 @@ test('group subtotals include glass, shutters, motors and facade extras without 
  const groupTotal=result.reduce((sum,group)=>sum+group.subtotal,0);
  assert.equal(groupTotal,saved.discount.subtotal);
  assert.equal(groupTotal-saved.discount.amount,saved.total);
+ assert.equal(result.reduce((sum,group)=>sum+group.area,0),3);
+ assert.equal(result.reduce((sum,group)=>sum+group.openingCount,0),3);
  assert.deepEqual(saved,before,'Display grouping must not reorder saved arrays or change any saved amounts');
 });
 
@@ -137,4 +139,72 @@ test('unknown and historical opening types remain visible with their full saved 
  assert.deepEqual(new Set(result.flatMap(group=>group.lines.map(item=>item.opening.id))),new Set(['custom','no-type','no-label']));
  assert.ok(result.every(group=>group.label.trim().length>0));
  assert.equal(result.reduce((sum,group)=>sum+group.subtotal,0),703701);
+});
+
+test('each group totals measured area and repeated physical openings exactly once',()=>{
+ const result=quotationItemGroups({lines:[
+  line('sliding-a',{width:75,height:150,quantity:3}),
+  line('sliding-b',{width:125,height:200,quantity:2}),
+  line('hinged',{direction:'Hinged',width:80,height:125,quantity:4}),
+ ]});
+ assert.deepEqual(result.map(group=>[group.key,group.area,group.openingCount]),[
+  ['sliding',8.375,5],['hinged',4,4],
+ ]);
+ assert.equal(result.reduce((sum,group)=>sum+group.area,0),12.375);
+ assert.equal(result.reduce((sum,group)=>sum+group.openingCount,0),9);
+});
+
+test('metrics use measured window area while prices retain the per-window billing minimum',()=>{
+ const opening={id:'small-window',floor:'GF',room:'Office',width:50,height:75,quantity:4,opening_type:'Window',opening_direction:'Sliding'};
+ const catalog=[{id:'alumex',name:'Alumex System',category:'aluminum_system',unit:'sqm',unit_price:240000,is_active:true}];
+ const quote=pricing.priceQuotation([opening],[{openingId:opening.id,systemId:'alumex',extras:[]}],catalog,'fixture');
+ assert.equal(quote.lines[0].system.quantity,4);
+ const [group]=quotationItemGroups(quote);
+ assert.equal(group.area,1.5);
+ assert.equal(group.openingCount,4);
+ assert.equal(group.subtotal,960000);
+ assert.equal(quote.total,960000);
+});
+
+test('mixed opening and facade services add priced service area without counting reference facades or accessories',()=>{
+ const sqm=(id,name,quantity,total)=>({...charge(id,name,total),unit:'sqm',quantity});
+ const quote={
+  lines:[line('curtain',{type:'Curtain Wall',direction:null,product:'Curtain Wall',width:125,height:200,quantity:2,
+   glassAmount:30000,extras:[sqm('film','Window film',5,15000),charge('shutter','Roller shutter',35000),charge('motor','Roller shutter motor',125000)]})],
+  additionalItems:[{...sqm('curtain-service','Curtain Wall',12.345678,600000),
+   measurements:[{label:'Front',width:123,height:456,quantity:20}],
+   extras:[sqm('service-glass','Facade glass',12.345678,50000),charge('pushout','Curtain Wall Pushout',80000)]}],
+  facadeMeasurements:[{id:'reference-only',width:1650,height:390,quantity:1,opening_type:'Facade',facade_number:1}],
+ };
+ const before=structuredClone(quote);freeze(quote);
+ const [group]=quotationItemGroups(quote);
+ assert.equal(group.area,17.345678);
+ assert.equal(group.openingCount,2);
+ assert.equal(group.subtotal,1175000);
+ assert.deepEqual(quote,before);
+});
+
+test('standalone sqm quantities contribute area without inventing opening counts or using other unit quantities',()=>{
+ const result=quotationItemGroups({lines:[],additionalItems:[
+  {...charge('sqm-a','Cladding',100000),unit:'sqm',quantity:0.125},
+  {...charge('sqm-b','Cladding',200000),unit:'sqm',quantity:0.375},
+  {...charge('items','Cladding',30000),unit:'item',quantity:25},
+  {...charge('length','Cladding',40000),unit:'meter',quantity:100,extras:[{...charge('extra','Glass',5000),unit:'sqm',quantity:999}]},
+  {...charge('project','Installation',60000),unit:'project',quantity:1},
+ ]});
+ assert.deepEqual(result.map(group=>[group.key,group.area,group.openingCount]),[
+  ['cladding',0.5,0],['installation',0,0],
+ ]);
+ assert.equal(result.reduce((sum,group)=>sum+group.subtotal,0),435000);
+});
+
+test('older lines without quantities still count one opening and use their saved decimal area',()=>{
+ const older=line('older',{width:125,height:125});
+ delete older.opening.quantity;
+ const [group]=quotationItemGroups({lines:[older]});
+ assert.equal(group.area,1.5625);
+ assert.equal(group.openingCount,1);
+ const [standalone]=quotationItemGroups({lines:[],additionalItems:[charge('product','Historic product',12345)]});
+ assert.equal(standalone.area,0);
+ assert.equal(standalone.openingCount,0);
 });

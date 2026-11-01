@@ -117,7 +117,7 @@ for(const locale of ['en','ar'])for(const discount of [0,5])test(`${locale} acti
   const {QuotationWorkspace}=load('../src/components/workflow/QuotationWorkspace.tsx',{
    ...shared,'next/link':({children,href})=>React.createElement('a',{href},children),'@/lib/workflow/catalogRules':catalogRules,
    '@/lib/workflow/quotationOpenings':{quotationOpenings:(existing,added)=>{assert.deepEqual(added,[]);return existing;}},
-   './StandaloneItems':{StandaloneItems:empty},'@/components/measurements/MeasurementReports':{MeasurementReports:empty},'./ProjectRecord':{ProjectRecord:empty},'./QuotationOpeningForm':{QuotationOpeningForm:empty},'./OpeningAreaIndicator':indicators,'./CommercialDocument':document,
+   './StandaloneItems':{StandaloneItems:empty},'@/components/measurements/MeasurementReports':{MeasurementReports:empty},'./ProjectRecord':{ProjectRecord:empty},'./QuotationOpeningForm':{QuotationOpeningForm:empty},'./QuotationFacadeForm':{QuotationFacadeForm:empty},'./OpeningAreaIndicator':indicators,'./CommercialDocument':document,
    './ui':{button:'button',card:'card',field:'field',secondary:'secondary',Notice:empty,Workspace:({children})=>React.createElement('main',null,children),useResource:()=>({data,loading:false,error:'',reload:()=>{throw Error('Rendering must not write or fetch data');}}),api:()=>{throw Error('Rendering must not write or fetch data');}},
   });
   return renderToStaticMarkup(React.createElement(QuotationWorkspace,{projectId:'project-fixture'}));

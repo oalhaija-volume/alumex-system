@@ -1,5 +1,6 @@
 "use client";
 import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBranch';
+import type { BuildingType } from '@/lib/intake/buildingType';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -12,12 +13,13 @@ import type { QuotationRevision,SalesFlow } from '@/lib/workflow/types';
 import {MeasurementReports} from "@/components/measurements/MeasurementReports";
 import { ProjectRecord } from './ProjectRecord';
 import { QuotationOpeningForm } from './QuotationOpeningForm';
+import { QuotationFacadeForm } from './QuotationFacadeForm';
 import { discountedSystemRate,measuredOpeningArea,billableOpeningArea,openingSellingBand,openingMinimumSellingRate,quotationSellingSuggestion } from '@/lib/workflow/pricing';
 import { OpeningAreaBadge,OpeningSellingLegend } from './OpeningAreaIndicator';
 import { DocumentHeader,DocumentParties,OpeningSchedule,DocumentFooter,DocumentPaper } from './CommercialDocument';
 import { api,button,card,field,Notice,secondary,useResource,Workspace } from './ui';
 
-type QuoteData={project:{additional_openings_state?:'requested'|'submitted'|null;branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;project_name:string;project_number:string;address:string;sales_status:string};client:{name:string;mobile:string;client_type?:string};openings:MeasuredOpening[];catalog:CatalogItem[];flow:SalesFlow|null;history:QuotationRevision[]};
+type QuoteData={project:{additional_openings_state?:'requested'|'submitted'|null;building_type?:BuildingType|null;branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;project_name:string;project_number:string;address:string;sales_status:string};client:{name:string;mobile:string;client_type?:string};openings:MeasuredOpening[];catalog:CatalogItem[];flow:SalesFlow|null;history:QuotationRevision[]};
 const quantityLabel=(unit?:string)=>unit==='sqm'?'Area (m²)':unit==='meter'?'Length (m)':'Quantity';
 type PricePreview={quotation:QuoteSnapshot;priceKey:string;revision:number};
 const pricePreviewConflicts=new Set(['Catalog prices changed. Preview the updated prices again before saving.','The project changed. Reload and try again.']);
@@ -28,7 +30,9 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const {flow}=data;
  const catalog=data.catalog.map(normalizeCatalogItem);
  const [newOpenings,setNewOpenings]=useState<RegistrationOpening[]>([]);
- const openings=quotableOpenings(quotationOpenings(data.openings,newOpenings));
+ const measured=quotationOpenings(data.openings,newOpenings);
+ const openings=quotableOpenings(measured);
+ const facades=measured.filter(opening=>opening.opening_type==='Facade').sort((a,b)=>(a.facade_number??0)-(b.facade_number??0));
  const [choices,setChoices]=useState<OpeningChoice[]>(()=>quotableOpenings(data.openings).map(o=>{
   const saved=flow?.quotation.lines.find(l=>l.opening.id===o.id);
   return {openingId:o.id,systemId:saved?.system.id??defaultSystem(o,catalog)?.id??'',...(saved?.system.rateSource==='quotation'?{systemRate:saved.system.rate}:{}),glassId:saved?.glass?.id??'',extras:saved?.extras.filter(e=>!isRollerShutterMotor(e)).map(e=>{
@@ -40,6 +44,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const [discountPercent,setDiscountPercent]=useState<0|5>(flow?.quotation.discount?.percent??0);
  const [editing,setEditing]=useState(!flow);
  const [addingOpening,setAddingOpening]=useState(false);
+ const [addingFacade,setAddingFacade]=useState(false);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [approved,setApproved]=useState(false);
@@ -62,7 +67,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  let draftTotal:number|undefined;
  let draftQuotation:QuoteSnapshot|undefined;
  let pricingError='';
- if(editing){try{draftQuotation=priceQuotation(openings,choices,catalog,'preview',additionalItems,discountPercent);draftTotal=draftQuotation.total;}catch(e){pricingError=(e as Error).message;}}
+ if(editing){try{draftQuotation=priceQuotation(measured,choices,catalog,'preview',additionalItems,discountPercent);draftTotal=draftQuotation.total;}catch(e){pricingError=(e as Error).message;}}
  const discountChanged=discountPercent!==(flow?.quotation.discount?.percent??0);
  let discountPreview:QuoteSnapshot|undefined;
  if(flow&&canUpdatePrices&&!editing){try{discountPreview=applyQuotationDiscount(flow.quotation,discountPercent);}catch{/* Invalid saved amounts cannot be discounted. */}}
@@ -78,7 +83,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const targetRates=new Map(sellingSuggestion?.openingRates.map(opening=>[opening.openingId,opening.rate]));
  const suggestedChoices=sellingSuggestion?choices.map(choice=>targetRates.has(choice.openingId)?{...choice,systemRate:targetRates.get(choice.openingId)}:choice):choices;
  let suggestedQuotation:QuoteSnapshot|undefined;
- if(sellingSuggestion?.canApply){try{suggestedQuotation=priceQuotation(openings,suggestedChoices,catalog,'preview',additionalItems,discountPercent);}catch{/* Incomplete selections remain editable. */}}
+ if(sellingSuggestion?.canApply){try{suggestedQuotation=priceQuotation(measured,suggestedChoices,catalog,'preview',additionalItems,discountPercent);}catch{/* Incomplete selections remain editable. */}}
  const suggestedPricing=suggestedQuotation?quotationSellingSuggestion(suggestedQuotation,catalog):sellingSuggestion?.canApply===false?sellingSuggestion:null;
  function applySuggestedRate(){
   if(!sellingSuggestion?.canApply||busy||pricePreview)return;
@@ -95,6 +100,10 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   setNewOpenings(rows=>[...rows,opening]);
   setChoices(rows=>[...rows,{openingId:opening.id,systemId:defaultSystem(measured,catalog)?.id??'',glassId:'',extras:[]}]);
   setAddingOpening(false);
+ }
+ function addFacade(facade:RegistrationOpening){
+  setNewOpenings(rows=>[...rows,facade]);
+  setAddingFacade(false);
  }
  async function act(action:string){
   if(busy||pricePreview)return;
@@ -125,7 +134,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
    }else setError(message);
   }finally{setBusy(false);setPreviewLoading(false);}
  }
- async function cancel(){setBusy(true);setError('');try{await reload();setEditing(false);setAddingOpening(false);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ async function cancel(){setBusy(true);setError('');try{await reload();setEditing(false);setAddingOpening(false);setAddingFacade(false);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  return <>
   <Notice error={error}/>
   {needsRevision&&<p role="status" className="mb-5 rounded-md bg-amber-50 p-4 text-sm text-amber-900 print:hidden">{term(waiting?'Additional openings are being measured. Wait for submission before revising the quotation.':'Additional measurements received. Save a quotation revision before approval or contract signing.')}</p>}
@@ -183,20 +192,24 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     </section>;
    })}
    {data.openings.some(o=>o.opening_type==='Skylight')&&<p className="rounded-lg bg-blue-50 p-4 text-sm">{term('Skylights are priced separately in the calculator and are not included in this quotation.')} <Link href="/skylight" className="font-semibold underline">{term('Open skylight calculator')}</Link> · <Link href={`/initial-measurements/${projectId}`} className="font-semibold underline">{term('View skylight photos and drawings')}</Link></p>}
-   {addingOpening?<QuotationOpeningForm onAdd={addOpening} onCancel={()=>setAddingOpening(false)}/>:<button type="button" disabled={newOpenings.length>=100} onClick={()=>setAddingOpening(true)} className={secondary}>{term("+ Add opening")}</button>}
-   {data.openings.some(o=>o.opening_type==='Facade')&&<section className={card} aria-label={term('Recorded facade dimensions')}>
-    <h2 className="font-semibold">{term('Recorded facade dimensions')}</h2>
-    <table className="mt-3 w-full text-start text-sm"><thead><tr>{['Facade','Width (cm)','Length (cm)'].map(label=><th key={label} className="py-2 text-start">{term(label)}</th>)}</tr></thead><tbody>{data.openings.filter(o=>o.opening_type==='Facade').map(o=><tr key={o.id} className="border-t border-slate-200"><th scope="row" className="py-3 text-start">{term('Facade {number}',{number:String(o.facade_number)})}</th><td>{formatNumber(o.width)}</td><td>{formatNumber(o.height)}</td></tr>)}</tbody></table>
-    <p className="mt-2 text-sm text-slate-600">{term('Choose a facade service below to price the recorded areas.')}</p>
+   {addingOpening?<QuotationOpeningForm onAdd={addOpening} onCancel={()=>setAddingOpening(false)}/>:<button type="button" disabled={newOpenings.length>=100||addingFacade} onClick={()=>setAddingOpening(true)} className={secondary}>{term("+ Add opening")}</button>}
+   {(data.project.building_type==='commercial_building'||facades.length>0)&&<section className={card} aria-label={term('Recorded facade dimensions')}>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Recorded facade dimensions')}</h2>{!addingFacade&&<button type="button" disabled={newOpenings.length>=100||facades.length>=1000||addingOpening} onClick={()=>setAddingFacade(true)} className={secondary}>{term('+ Add facade')}</button>}</div>
+    {!!facades.length&&<table className="mt-3 w-full table-fixed text-start text-sm"><thead><tr>{['Facade','Width (cm)','Length (cm)'].map(label=><th key={label} className="py-2 text-start">{term(label)}</th>)}<th className="w-14"><span className="sr-only">{term('Actions')}</span></th></tr></thead><tbody>{facades.map(facade=>{
+     const isNew=newOpenings.some(opening=>opening.id===facade.id);
+     return <tr key={facade.id} className="border-t border-slate-200"><th scope="row" className="break-words py-3 text-start">{term('Facade {number}',{number:String(facade.facade_number)})}{isNew&&<span className="block text-xs font-normal text-slate-500">{term('Not saved yet')}</span>}</th><td className="break-words">{formatNumber(facade.width)}</td><td className="break-words">{formatNumber(facade.height)}</td><td>{isNew&&<button type="button" aria-label={term('Remove new facade {number}',{number:String(facade.facade_number)})} className="min-h-11 px-1 text-xs font-semibold text-red-700" onClick={()=>setNewOpenings(rows=>rows.filter(opening=>opening.id!==facade.id))}>{term('Remove')}</button>}</td></tr>;
+    })}</tbody></table>}
+    {addingFacade&&<QuotationFacadeForm facades={facades} onAdd={addFacade} onCancel={()=>setAddingFacade(false)}/>}
+    <p className="mt-3 text-sm leading-6 text-slate-600">{term(newOpenings.some(opening=>opening.structuralType==='Facade')?'To include new facades in a service price, use its Use recorded facade dimensions button below.':'Choose a facade service below to price the recorded areas.')}</p>
    </section>}
-   <StandaloneItems recordedAreas={recordedFacadeAreas(data.openings)} items={additionalItems} catalog={catalog} onChange={setAdditionalItems}/>
+   <StandaloneItems recordedAreas={recordedFacadeAreas(measured)} items={additionalItems} catalog={catalog} onChange={setAdditionalItems}/>
    <div className={card}>
     <div className="mb-5 border-b border-slate-200 pb-5">{discountOption(draftQuotation)}</div>
     <div className="flex flex-wrap justify-between gap-3"><div><p className="text-sm font-semibold">{flow?term("Revised total"):term("Quotation total")}</p>{flow&&<p className="mt-1 text-xs text-slate-500">{term("Currently saved:")} {formatMoney(flow.quotation.total)}</p>}</div><p className="text-xl font-semibold" aria-label={term("Draft total")}>{draftTotal===undefined?term("Complete selections"):formatMoney(draftTotal)}</p></div>
     {pricingError&&<p role="status" className="mt-3 text-sm text-amber-800">{errorMessage(pricingError)}</p>}
     {flow?.stage==='contract'&&<label className="mt-5 flex items-start gap-3 rounded-md bg-amber-50 p-4 text-sm leading-6 text-amber-900"><input type="checkbox" checked={replaceContract} onChange={e=>setReplaceContract(e.target.checked)} className="mt-1"/>{term("Replace the unsigned contract. The previous document will be kept in history, and the revised quotation must be approved before a new contract can be generated.")}</label>}
-    <div className="mt-5 flex flex-wrap gap-3"><button disabled={draftTotal===undefined||addingOpening||(flow?.stage==='contract'&&!replaceContract)} onClick={()=>void act('save')} className={button}>{busy?term("Saving…"):flow?term("Save revised quotation"):term("Generate quotation")}</button>{flow&&<button className={secondary} onClick={()=>void cancel()}>{term("Cancel changes")}</button>}</div>
-    {addingOpening&&<p className="mt-3 text-sm text-slate-500">{term("Add or cancel the opening form before saving.")}</p>}
+    <div className="mt-5 flex flex-wrap gap-3"><button disabled={draftTotal===undefined||addingOpening||addingFacade||(flow?.stage==='contract'&&!replaceContract)} onClick={()=>void act('save')} className={button}>{busy?term("Saving…"):flow?term("Save revised quotation"):term("Generate quotation")}</button>{flow&&<button className={secondary} onClick={()=>void cancel()}>{term("Cancel changes")}</button>}</div>
+    {(addingOpening||addingFacade)&&<p className="mt-3 text-sm text-slate-500">{term(addingFacade?'Add or cancel the facade form before saving.':'Add or cancel the opening form before saving.')}</p>}
    </div>
   </fieldset>:null}
   {flow&&<section className="mt-6">

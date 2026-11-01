@@ -165,11 +165,11 @@ test('new quotation openings require complete individual measurements and preser
  assert.throws(()=>quotationOpenings.quotationOpenings([],[{...input,structuralType:'Window',openingType:null}]));
  assert.equal(quotationOpenings.quotationOpenings([],[{...input,structuralType:'Louver',openingType:'Sliding'}])[0].opening_direction,'Hinged');
 });
-function revisionRoute(flow){
+function revisionRoute(flow,measured=[opening],priceCatalog=catalog,project={id:'project'}){
  const inputs=[];
  const savedFlow={quotation:pricing.priceQuotation([opening],[choice],catalog,'original-author'),...flow};
- const admin={from(table){return {select(){return this;},eq(){return this;},order(){return this;},maybeSingle:async()=>({data:savedFlow,error:null}),then(resolve){return Promise.resolve({data:table==='openings'?[opening]:catalog,error:null}).then(resolve);}};},rpc:async(name,args)=>{inputs.push(args);return {data:{},error:null};}};
- const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project'}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
+ const admin={from(table){return {select(){return this;},eq(){return this;},order(){return this;},maybeSingle:async()=>({data:savedFlow,error:null}),then(resolve){return Promise.resolve({data:table==='openings'?measured:priceCatalog,error:null}).then(resolve);}};},rpc:async(name,args)=>{inputs.push(args);return {data:{},error:null};}};
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
  return {inputs,post:body=>route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),{params:Promise.resolve({projectId:'project'})})};
 }
 test('unsigned contract revision requires confirmation and sends complete server-priced snapshot atomically',async()=>{
@@ -349,5 +349,107 @@ test('whole facade dimensions are separate from priced openings, convert cm to m
  assert.equal(q.lines.length,1);assert.deepEqual(q.facadeMeasurements,facades);assert.equal(q.additionalItems[0].quantity,1200);assert.equal(q.additionalItems[0].total,1200000);
  const facadeOnly=pricing.priceQuotation(facades,[],[service],'actor',[{id:'facade',quantity:1,measurements:areas}]);
  assert.equal(facadeOnly.lines.length,0);assert.equal(facadeOnly.total,1200000);
- assert.throws(()=>quotationOpenings.quotationOpenings([], [{id:'11111111-1111-4111-8111-111111111111',structuralType:'Facade',workArea:'facade',facadeNumber:1,width:1200,height:2500}]),/Complete the floor/);
+ const added=quotationOpenings.quotationOpenings(facades,[{id:'11111111-1111-4111-8111-111111111111',structuralType:'Facade',workArea:'facade',facadeNumber:5,width:1200,height:2500}]);
+ assert.equal(added.length,5);assert.equal(added[4].facade_number,5);assert.equal(pricing.recordedFacadeAreas(added).length,5);
+});
+
+const facadeDraft=(facadeNumber=5,id='11111111-1111-4111-8111-111111111111')=>({id,structuralType:'Facade',workArea:'facade',facadeNumber,width:1650,height:380});
+const measuredFacade=(number)=>({id:`saved-facade-${number}`,floor:'Whole building',room:`Facade ${number}`,width:1650,height:number>2?390:380,quantity:1,opening_type:'Facade',opening_direction:null,work_area:'facade',facade_number:number});
+
+test('quotation facade additions preserve the saved four facades and require no room or floor input',()=>{
+ const existing=Object.freeze([1,2,3,4].map(number=>Object.freeze(measuredFacade(number))));
+ const addition=Object.freeze({...facadeDraft(),openingType:'Sliding'});
+ const before=structuredClone({existing,addition});
+ const combined=quotationOpenings.quotationOpenings(existing,[addition]);
+ assert.deepEqual(combined.slice(0,4),existing);
+ assert.deepEqual(combined[4],{has_roller_shutter:false,has_arch:false,id:addition.id,floor:'Whole building',room:'Facade 5',width:1650,height:380,quantity:1,opening_type:'Facade',opening_direction:null,work_area:'facade',facade_number:5});
+ assert.deepEqual(pricing.recordedFacadeAreas(combined).at(-1),{label:'Facade 5',width:16.5,height:3.8,quantity:1});
+ assert.deepEqual({existing,addition},before,'Draft additions must not mutate saved or pending measurements');
+});
+
+test('facade numbers are unique among whole facades but may match a facade window number',()=>{
+ const sameNumber=facadeDraft(5,'22222222-2222-4222-8222-222222222222');
+ assert.throws(()=>quotationOpenings.quotationOpenings([measuredFacade(5)],[facadeDraft()]));
+ assert.throws(()=>quotationOpenings.quotationOpenings([],[facadeDraft(),sameNumber]));
+ const facadeWindow={...opening,work_area:'facade',facade_number:5};
+ assert.equal(quotationOpenings.quotationOpenings([facadeWindow],[facadeDraft()]).length,2);
+});
+
+test('quotation facade additions reject invalid dimensions, numbering, repeated quantity, arch and shutter flags',()=>{
+ const input=facadeDraft();
+ const invalid=[
+  ...[0,-1,1.5,1001,null,'5'].map(facadeNumber=>({...input,facadeNumber})),
+  ...[0,-1,NaN,Infinity,100001].map(width=>({...input,width})),
+  ...[0,-1,NaN,Infinity,100001].map(height=>({...input,height})),
+  {...input,quantity:2},{...input,workArea:'internal'},{...input,hasArch:true},{...input,hasRollerShutter:true},
+ ];
+ for(const row of invalid)assert.throws(()=>quotationOpenings.quotationOpenings([],[row]));
+ assert.throws(()=>quotationOpenings.quotationOpenings([{...measuredFacade(1),id:input.id}],[input]));
+ assert.throws(()=>quotationOpenings.quotationOpenings([],[input,input]));
+ const tooMany=Array.from({length:101},(_,index)=>facadeDraft(index+1,`00000000-0000-4000-8000-${(index+1).toString(16).padStart(12,'0')}`));
+ assert.throws(()=>quotationOpenings.quotationOpenings([],tooMany),/100 openings/);
+});
+
+test('facade dimensions preserve up to three decimal places and reject values the database would round',()=>{
+ for(const [width,height] of [[1650,380],[1650.1,380.12],[1650.125,380.123],[0.001,0.001]]){
+  const [facade]=quotationOpenings.quotationOpenings([],[{...facadeDraft(),width,height}]);
+  assert.equal(facade.width,width);assert.equal(facade.height,height);
+ }
+ for(const [width,height] of [[1650.1234,380],[1650,380.0001],[0.0001,380],[1650,0.12345]]){
+  assert.throws(()=>quotationOpenings.quotationOpenings([],[{...facadeDraft(),width,height}]),/valid width and length/);
+ }
+ const [window]=quotationOpenings.quotationOpenings([],[{id:facadeDraft().id,floor:'GF',room:'Office',structuralType:'Window',openingType:'Sliding',width:120.1234,height:150.5678}]);
+ assert.equal(window.width,120.1234);assert.equal(window.height,150.5678,'The facade precision restriction must not alter other opening measurements');
+});
+
+test('saving an added facade sends one complete server-priced snapshot with existing and draft facade measurements',async()=>{
+ const facades=[1,2,3,4].map(measuredFacade);
+ const addition=facadeDraft();
+ const allMeasured=quotationOpenings.quotationOpenings([...facades,opening],[addition]);
+ const service={id:'facade',name:'Cladding',category:'facade_service',unit:'sqm',unit_price:1000,is_active:true};
+ const {post,inputs}=revisionRoute({revision:3,stage:'quotation'},[...facades,opening],[...catalog,service],{id:'project',building_type:'commercial_building'});
+ const areas=pricing.recordedFacadeAreas(allMeasured);
+ const response=await post({action:'save',revision:3,choices:[choice],newOpenings:[addition],additionalItems:[{id:service.id,quantity:1,rate:1,total:1,measurements:areas}],total:1});
+ assert.equal(response.status,200);assert.equal(inputs.length,1);
+ const snapshot=inputs[0].p_payload;
+ assert.equal(snapshot.lines.length,1);assert.deepEqual(snapshot.lines[0].opening,opening);
+ assert.deepEqual(snapshot.facadeMeasurements,allMeasured.filter(row=>row.opening_type==='Facade'));
+ assert.deepEqual(snapshot.facadeMeasurements.map(row=>row.facade_number),[1,2,3,4,5]);
+ assert.deepEqual(snapshot.additionalItems[0].measurements,areas);
+ assert.equal(snapshot.additionalItems[0].rate,1000);
+ assert.equal(snapshot.additionalItems[0].quantity,316.8);
+ assert.equal(snapshot.additionalItems[0].total,316800);
+ assert.equal(snapshot.total,551000+316800);
+});
+
+test('facade-only quotation revisions can add more recorded facades without a window choice',async()=>{
+ const existing=[measuredFacade(1)];
+ const addition=facadeDraft(2);
+ const combined=quotationOpenings.quotationOpenings(existing,[addition]);
+ const service={id:'facade',name:'Cladding',category:'facade_service',unit:'sqm',unit_price:1000,is_active:true};
+ const {post,inputs}=revisionRoute({revision:1,stage:'quotation'},existing,[service],{id:'project',building_type:'commercial_building'});
+ assert.equal((await post({action:'save',revision:1,choices:[],newOpenings:[addition],additionalItems:[{id:service.id,quantity:999,measurements:pricing.recordedFacadeAreas(combined)}]})).status,200);
+ assert.equal(inputs.length,1);assert.deepEqual(inputs[0].p_payload.lines,[]);
+ assert.equal(inputs[0].p_payload.facadeMeasurements.length,2);
+ assert.equal(inputs[0].p_payload.total,125400);
+});
+
+test('invalid or duplicate facade additions never reach the quotation save transaction',async()=>{
+ const {post,inputs}=revisionRoute({revision:2,stage:'quotation'},[measuredFacade(5),opening],catalog,{id:'project',building_type:'commercial_building'});
+ for(const addition of [facadeDraft(),{...facadeDraft(6),width:0},{...facadeDraft(6),quantity:2}]){
+  assert.equal((await post({action:'save',revision:2,choices:[choice],newOpenings:[addition]})).status,400);
+ }
+ assert.deepEqual(inputs,[]);
+});
+
+for(const building_type of ['residential_building',null])test(`${building_type??'unspecified'} projects reject new whole facades without blocking normal new openings`,async()=>{
+ const {post,inputs}=revisionRoute({revision:2,stage:'quotation'},[opening],catalog,{id:'project',building_type});
+ const rejected=await post({action:'save',revision:2,choices:[choice],newOpenings:[facadeDraft()]});
+ assert.equal(rejected.status,400);
+ assert.equal(rejected.body.error,'Facade and Internal works are only available for commercial buildings.');
+ assert.deepEqual(inputs,[],'Noncommercial facade additions must be rejected before the transaction RPC');
+ const newWindow={id:facadeDraft().id,floor:'1',room:'Bedroom',width:100,height:100,structuralType:'Window',openingType:'Hinged'};
+ const accepted=await post({action:'save',revision:2,choices:[choice,{openingId:newWindow.id,systemId:'alumex',extras:[]}],newOpenings:[newWindow]});
+ assert.equal(accepted.status,200);assert.equal(inputs.length,1);
+ assert.equal(inputs[0].p_payload.lines.length,2);
 });

@@ -75,6 +75,7 @@ export async function POST(request:Request,context:Context){
    if(openings.error||catalog.error)throw new Error('Unable to load pricing.');
    if(!Array.isArray(body.choices))throw new Error('Select a system for every opening.');
    const measured=quotationOpenings(openings.data??[],body.newOpenings??[]);
+   if(measured.slice(openings.data?.length??0).some(opening=>opening.opening_type==='Facade')&&project.building_type!=='commercial_building')throw new Error('Facade and Internal works are only available for commercial buildings.');
    const discountPercent=body.discountPercent===undefined?flow?.quotation.discount?.percent??0:body.discountPercent;
    payload={...priceQuotation(measured,body.choices as OpeningChoice[],catalog.data as CatalogItem[],auth.user.id,(body.additionalItems??[]) as AdditionalChoice[],discountPercent),branch:project.branch,governorate:project.governorate??null} as unknown as Json;
   }

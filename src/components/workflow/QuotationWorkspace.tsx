@@ -201,6 +201,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     })}</tbody></table>}
     {addingFacade&&<QuotationFacadeForm facades={facades} onAdd={addFacade} onCancel={()=>setAddingFacade(false)}/>}
     <p className="mt-3 text-sm leading-6 text-slate-600">{term(newOpenings.some(opening=>opening.structuralType==='Facade')?'To include new facades in a service price, use its Use recorded facade dimensions button below.':'Choose a facade service below to price the recorded areas.')}</p>
+    {['new_lead','ready_for_quotation'].includes(data.project.sales_status??'')&&!data.project.additional_openings_state&&<Link href={`/initial-measurements/${projectId}`} className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-blue-700 underline print:hidden">{term('Review measurements')}</Link>}
    </section>}
    <StandaloneItems recordedAreas={recordedFacadeAreas(measured)} items={additionalItems} catalog={catalog} onChange={setAdditionalItems}/>
    <div className={card}>

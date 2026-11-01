@@ -96,11 +96,11 @@ export async function PATCH(request: Request, context: Context) {
   if (body?.action !== "finish" && body?.action !== "reopen") return NextResponse.json({error:"Invalid measurement action."},{status:400});
   if (body.action === "finish") {
     const {data:openings,error} = await result.admin.from("openings")
-      .select("id, floor, room, width, height, quantity, has_arch,has_roller_shutter,opening_type, opening_direction").eq("project_id",result.project.id);
+      .select("id, floor, room, width, height, quantity, has_arch,has_roller_shutter,opening_type, opening_direction,work_area,facade_number").eq("project_id",result.project.id);
     if (error) return NextResponse.json({error:"Unable to check saved measurements."},{status:500});
     if (!openings?.length || openings.some(row=>{
       const opening = normalizeRegistrationOpening({id:row.id,floor:row.floor,room:"Other",otherRoom:row.room,
-        width:Number(row.width),height:Number(row.height),quantity:row.quantity,hasArch:row.has_arch,hasRollerShutter:row.has_roller_shutter,structuralType:row.opening_type,openingType:row.opening_direction});
+        width:Number(row.width),height:Number(row.height),quantity:row.quantity,hasArch:row.has_arch,hasRollerShutter:row.has_roller_shutter,structuralType:row.opening_type,openingType:row.opening_direction,workArea:row.work_area,facadeNumber:row.facade_number});
       return !opening || opening.openingType !== row.opening_direction;
     })) return NextResponse.json({error:"Save at least one opening and complete the floor, room, dimensions and types for every opening."},{status:400});
   }

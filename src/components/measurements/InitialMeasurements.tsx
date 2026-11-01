@@ -59,6 +59,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   const [editing,setEditing] = useState<RegistrationOpening|null>(null);
   const [editOperationId,setEditOperationId] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
+  const focusFacadeForm = useRef(false);
   const [loading,setLoading] = useState(true);
   const [saving,setSaving] = useState(false);
   const [error,setError] = useState("");
@@ -69,6 +70,12 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   const [delayReason,setDelayReason] = useState<'client_no_answer'|'site_closed'|'client_delay'>('client_no_answer');
   const [finishOpen,setFinishOpen] = useState(false);
   const [finished,setFinished] = useState(false);
+  useEffect(()=>{
+    if(finished||workArea!=='facade'||!focusFacadeForm.current)return;
+    focusFacadeForm.current=false;
+    formRef.current?.scrollIntoView({behavior:'smooth',block:'start'});
+    formRef.current?.querySelector<HTMLInputElement>('input[type="number"]')?.focus({preventScroll:true});
+  },[finished,workArea]);
   const endpoint = `/api/initial-measurements/${projectId}`;
   useEffect(()=>{
     const controller = new AbortController();
@@ -124,7 +131,9 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
       const response = await fieldFetch(endpoint,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,...completion})});
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      setFinished(data.salesStatus === "ready_for_quotation");setNotice("");setFinishOpen(false);return true;
+      const salesStatus = data.salesStatus === "ready_for_quotation" ? "ready_for_quotation" : "new_lead";
+      setProject(current=>current?{...current,sales_status:salesStatus}:current);
+      setFinished(salesStatus === "ready_for_quotation");setNotice("");setFinishOpen(false);return true;
     } catch(cause) {setError(cause instanceof Error ? cause.message : t("initialStep.failed"));return false;}
     finally {setSaving(false);}
   }
@@ -247,6 +256,13 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
       </table>
       {!finished&&!project?.measurement_delayed&&<div className="mt-3 flex flex-wrap gap-3">
         {(['facade','internal'] as const).map(area=><button key={area} type="button" disabled={saving||photoBusy||dirty} onClick={()=>{chooseWorkArea(area);formRef.current?.scrollIntoView({behavior:'smooth'});}} className="min-h-11 rounded-md border border-blue-200 px-3 text-sm font-semibold text-blue-700 disabled:opacity-40">{term(area==='facade'?'Add another facade':'Add internal opening')}</button>)}
+      </div>}
+      {finished&&project?.sales_status==='ready_for_quotation'&&!project.measurement_delayed&&!project.additional_openings_state&&<div className="mt-3">
+        <button type="button" disabled={saving||photoBusy} onClick={async()=>{
+          if(!await updateMeasurementStatus('reopen'))return;
+          focusFacadeForm.current=true;chooseWorkArea('facade');
+        }} className="min-h-11 rounded-md border border-blue-200 px-3 text-sm font-semibold text-blue-700 disabled:opacity-40">{term('Add another facade')}</button>
+        <p className="mt-1 text-xs text-slate-500">{t('initialStep.reopen')}</p>
       </div>}
     </section>}
     {openings.length ? <div className="mt-7">

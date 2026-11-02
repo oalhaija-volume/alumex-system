@@ -44,9 +44,18 @@ export async function POST(request:Request,context:Context){
  }else{body=await request.json().catch(()=>({}));}
  const action=body.action;const revision=body.revision;
  if(project.additional_openings_state==='requested'||(project.additional_openings_state==='submitted'&&action!=='save'))return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.'},{status:409});
- if(!['save','approve','contract','sign','preview-prices','update-prices','set-discount'].includes(String(action))||!Number.isInteger(revision)||revision!==(flow?.revision??0))return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
+ if(!['save','approve','contract','sign','preview-prices','update-prices','set-discount','change-contract-template'].includes(String(action))||!Number.isInteger(revision)||revision!==(flow?.revision??0))return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
  let payload:Json={};let uploadedPath:string|null=null;
  try{
+  if(action==='change-contract-template'){
+   if(flow?.signed_at||flow?.evidence||flow?.accepted_at||flow?.accepted_by||['contract_signed','transferred_to_operations'].includes(project.sales_status))return NextResponse.json({error:'Signed contracts cannot be changed.'},{status:409});
+   if(!flow?.contract||flow.stage!=='contract'||project.sales_status!=='contract_generated')return NextResponse.json({error:'Only an unsigned generated contract can have its type changed.'},{status:409});
+   const kind=body.template;
+   if(kind!=='residential'&&kind!=='commercial')throw new Error('Choose the residential or commercial contract template.');
+   if(body.confirmed!==true)throw new Error('Confirm that you want to change the contract type.');
+   if(kind===flow.contract.template)throw new Error('Choose a different contract type.');
+   payload={template:kind,terms:uploadedContractTerms(kind)};
+  }
   if(action==='set-discount'){
    if(!flow)throw new Error('Save a quotation before changing its discount.');
    if(flow.signed_at||!['quotation','approved','contract'].includes(flow.stage)||['contract_signed','transferred_to_operations'].includes(project.sales_status))return NextResponse.json({error:'Signed contracts cannot be changed.'},{status:409});

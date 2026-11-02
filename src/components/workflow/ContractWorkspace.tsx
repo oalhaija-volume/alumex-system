@@ -94,7 +94,7 @@ function ContractContent({projectId,project,flow,contract,onFlow,setError,setNot
    <DocumentHeader kind="Contract" number={contract.number} createdAt={contract.createdAt}/>
    <DocumentParties client={contract.client} project={{...contract.project,branch:contract.branch??contract.project.branch}}/>
    <p className="document-note">{contract.template==='commercial'?term('Commercial supply & installation contract / عقد بيع وتركيب ألمنيوم — مشروع تجاري'):contract.template==='residential'?term('Residential supply & installation contract / عقد بيع وتركيب ألمنيوم — مشروع سكني'):term('Supply & installation contract / عقد بيع وتركيب ألمنيوم')}</p>
-   <OpeningSchedule quote={contract.quotation}/><ContractTerms terms={contract.terms}/>
+   <ContractTerms terms={contract.terms}/><OpeningSchedule quote={contract.quotation}/>
    <section className="mt-9 break-inside-avoid border-t border-slate-200 pt-6">
     <div className="document-company-signature"><h3>{term('For Alumex Experts / الطرف الأول')}</h3><p>{term('Authorized signature & company stamp')}</p><div/></div>
     <h3 className="font-semibold">{term('Client signature / الطرف الثاني')}</h3>

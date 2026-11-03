@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { applyQuotationDiscount,recordedFacadeAreas,defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,isQuotationSystemRateEditable,isRollerShutterMotor,QUOTATION_SYSTEM_RATE_MIN,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice,type QuoteSnapshot } from '@/lib/workflow/pricing';
 import { StandaloneItems } from './StandaloneItems';
-import { isShutterBox, isRollerShutter, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
+import { CurtainWallArchOption } from './CurtainWallArchOption';
+import { isShutterBox, isRollerShutter, isCurtainWallArch, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
 import type { RegistrationOpening } from '@/lib/measurements/registrationOpening';
 import type { QuotationRevision,SalesFlow } from '@/lib/workflow/types';
@@ -35,14 +36,15 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const facades=measured.filter(opening=>opening.opening_type==='Facade').sort((a,b)=>(a.facade_number??0)-(b.facade_number??0));
  const [choices,setChoices]=useState<OpeningChoice[]>(()=>quotableOpenings(data.openings).map(o=>{
   const saved=flow?.quotation.lines.find(l=>l.opening.id===o.id);
-  return {openingId:o.id,systemId:saved?.system.id??defaultSystem(o,catalog)?.id??'',...(saved?.system.rateSource==='quotation'?{systemRate:saved.system.rate}:{}),glassId:saved?.glass?.id??'',extras:saved?.extras.filter(e=>!isRollerShutterMotor(e)).map(e=>{
+  return {openingId:o.id,systemId:saved?.system.id??defaultSystem(o,catalog)?.id??'',...(saved?.system.rateSource==='quotation'?{systemRate:saved.system.rate}:{}),glassId:saved?.glass?.id??'',hasCurtainWallArch:saved?saved.extras.some(isCurtainWallArch):o.opening_type==='Curtain Wall'&&o.has_arch===true,extras:saved?.extras.filter(e=>!isRollerShutterMotor(e)&&!isCurtainWallArch(e)).map(e=>{
    const motor=saved.extras.find(charge=>isRollerShutterMotor(charge)&&charge.motorFor===e.id);
    return {id:e.id,quantity:isRollerShutter(e)?1:e.unit==='sqm'?e.quantity:e.quantity/(saved.opening.quantity??1),...(motor?{motorPrice:motor.rate}:{})};
   })??[]};
  }));
- const [additionalItems,setAdditionalItems]=useState<AdditionalChoice[]>(()=>flow?.quotation.additionalItems?.map(item=>({id:item.id,quantity:item.quantity,measurements:item.measurements,extras:item.extras?.map(e=>({id:e.id,quantity:e.quantity}))}))??[]);
+ const [additionalItems,setAdditionalItems]=useState<AdditionalChoice[]>(()=>flow?.quotation.additionalItems?.map(item=>({id:item.id,quantity:item.quantity,measurements:item.measurements,hasCurtainWallArch:item.extras?.some(isCurtainWallArch)??false,extras:item.extras?.filter(e=>!isCurtainWallArch(e)).map(e=>({id:e.id,quantity:e.quantity}))}))??[]);
  const [discountPercent,setDiscountPercent]=useState<0|5>(flow?.quotation.discount?.percent??0);
  const [editing,setEditing]=useState(!flow);
+ const [productPickerRequest,setProductPickerRequest]=useState(0);
  const [addingOpening,setAddingOpening]=useState(false);
  const [addingFacade,setAddingFacade]=useState(false);
  const [busy,setBusy]=useState(false);
@@ -95,10 +97,14 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   try{window.localStorage.setItem(suggestionPreferenceKey,hidden?'1':'0');}catch{/* The toggle still works when browser storage is unavailable. */}
  }
  function edit(index:number,patch:Partial<OpeningChoice>){setChoices(c=>c.map((v,i)=>i===index?{...v,...patch}:v));}
+ function addProduct(){
+  clearActionError();setEditing(true);setViewVersion('current');setApproved(false);
+  setProductPickerRequest(request=>request+1);
+ }
  function addOpening(opening:RegistrationOpening){
   const measured=quotationOpenings([], [opening])[0];
   setNewOpenings(rows=>[...rows,opening]);
-  setChoices(rows=>[...rows,{openingId:opening.id,systemId:defaultSystem(measured,catalog)?.id??'',glassId:'',extras:[]}]);
+  setChoices(rows=>[...rows,{openingId:opening.id,systemId:defaultSystem(measured,catalog)?.id??'',glassId:'',extras:[],hasCurtainWallArch:measured.opening_type==='Curtain Wall'&&measured.has_arch===true}]);
   setAddingOpening(false);
  }
  function addFacade(facade:RegistrationOpening){
@@ -138,7 +144,10 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  return <>
   <Notice error={error}/>
   {needsRevision&&<p role="status" className="mb-5 rounded-md bg-amber-50 p-4 text-sm text-amber-900 print:hidden">{term(waiting?'Additional openings are being measured. Wait for submission before revising the quotation.':'Additional measurements received. Save a quotation revision before approval or contract signing.')}</p>}
-  {['ready_for_quotation','quotation_in_progress','quotation_approved','contract_generated'].includes(data.project.sales_status)&&<Link href={`/mini-crm#project-${projectId}`} className={`${secondary} mb-5 inline-flex print:hidden`}>{term('Add more openings')}</Link>}
+  <div className="mb-5 flex flex-wrap gap-3 print:hidden">
+   {canEdit&&<button type="button" disabled={busy||!!pricePreview} onClick={addProduct} className={secondary}>{term('+ Add product')}</button>}
+   {['ready_for_quotation','quotation_in_progress','quotation_approved','contract_generated'].includes(data.project.sales_status)&&<Link href={`/mini-crm#project-${projectId}`} className={`${secondary} inline-flex`}>{term('Add more openings')}</Link>}
+  </div>
    {data.openings.some(o=>o.opening_type==='Curtain Wall')&&<Link href={`/initial-measurements/${projectId}`} className="block min-h-11 text-sm font-semibold text-blue-700 underline print:hidden">{term('View Curtain Wall photos and notes')}</Link>}
   {editing&&canEdit?<fieldset disabled={busy} className="min-w-0 space-y-5 print:hidden">
    <div className="rounded-md bg-blue-50 p-4 text-sm leading-6 text-blue-900">
@@ -170,6 +179,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
       </div>}
      </div>
      {(opening.quantity??1)>1&&<p className="mt-3 text-xs text-slate-600">{term('Specifications and add-on quantities apply to each identical opening. Area and totals include all openings.')}</p>}
+     {opening.opening_type==='Curtain Wall'&&<div className="mt-5"><CurtainWallArchOption checked={choice.hasCurtainWallArch??false} quantity={opening.quantity??1} onChange={checked=>edit(index,{hasCurtainWallArch:checked})}/></div>}
      {opening.has_roller_shutter&&<div className="mt-5 rounded-md border border-blue-200 bg-blue-50 p-4">
       <p className="mb-3 text-sm font-semibold text-blue-900">{term('Roller shutter requested for this window')}</p>
       <label className="block text-sm">{term('Roller shutter type')}<select aria-label={term('Roller shutter type')} value={choice.extras.find(e=>catalog.some(p=>p.id===e.id&&isRollerShutter(p)))?.id??''} className={field} onChange={event=>edit(index,{extras:[...choice.extras.filter(e=>!catalog.some(p=>p.id===e.id&&(isRollerShutter(p)||(!event.target.value&&isShutterBox(p))))),...(event.target.value?[{id:event.target.value,quantity:1}]:[])]})}>
@@ -203,7 +213,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <p className="mt-3 text-sm leading-6 text-slate-600">{term(newOpenings.some(opening=>opening.structuralType==='Facade')?'To include new facades in a service price, use its Use recorded facade dimensions button below.':'Choose a facade service below to price the recorded areas.')}</p>
     {['new_lead','ready_for_quotation'].includes(data.project.sales_status??'')&&!data.project.additional_openings_state&&<Link href={`/initial-measurements/${projectId}`} className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-blue-700 underline print:hidden">{term('Review measurements')}</Link>}
    </section>}
-   <StandaloneItems recordedAreas={recordedFacadeAreas(measured)} items={additionalItems} catalog={catalog} onChange={setAdditionalItems}/>
+   <StandaloneItems recordedAreas={recordedFacadeAreas(measured)} focusRequest={productPickerRequest} items={additionalItems} catalog={catalog} onChange={setAdditionalItems}/>
    <div className={card}>
     <div className="mb-5 border-b border-slate-200 pb-5">{discountOption(draftQuotation)}</div>
     <div className="flex flex-wrap justify-between gap-3"><div><p className="text-sm font-semibold">{flow?term("Revised total"):term("Quotation total")}</p>{flow&&<p className="mt-1 text-xs text-slate-500">{term("Currently saved:")} {formatMoney(flow.quotation.total)}</p>}</div><p className="text-xl font-semibold" aria-label={term("Draft total")}>{draftTotal===undefined?term("Complete selections"):formatMoney(draftTotal)}</p></div>

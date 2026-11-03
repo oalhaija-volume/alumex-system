@@ -5,7 +5,7 @@ const facadeNames = new Set(['cladding', 'frontek', 'swisspearl', 'swiss pearl',
 
 export function catalogKind(product: Pick<CatalogProduct, 'name' | 'category'>): CatalogKind {
   const name = key(product.name);
-  if (['windows doors', 'windows and doors', 'reynaers system', 'aluman system', 'photocell doors', 'fiber cement', 'fibre cement'].includes(name)) return 'removed';
+  if (isCurtainWallArch(product) || ['windows doors', 'windows and doors', 'reynaers system', 'aluman system', 'photocell doors', 'fiber cement', 'fibre cement'].includes(name)) return 'removed';
   if (name === 'skylight') return 'calculator';
   if (facadeNames.has(name)) return 'facade';
   if (['photocell door', 'a swing door', 'swing door'].includes(name) || name.startsWith('photocell door ')) return 'standalone';
@@ -24,13 +24,14 @@ export function catalogKind(product: Pick<CatalogProduct, 'name' | 'category'>):
 export function isRollerShutter(product: Pick<CatalogProduct, 'name'>) { return /^roller shutters?(?:$| )/.test(key(product.name)) && !isShutterBox(product); }
 export function isShutterBox(product: Pick<CatalogProduct, 'name'>) { return ['roller shutter box', 'shutter box'].includes(key(product.name)); }
 export function isPushout(product: Pick<CatalogProduct, 'name'>) { return key(product.name) === 'curtain wall pushout'; }
+export function isCurtainWallArch(product: Pick<CatalogProduct, 'name'>) { return key(product.name) === 'curtain wall arch'; }
 export function isCurtainWall(product: Pick<CatalogProduct, 'name'>) { return key(product.name) === 'curtain wall'; }
 export function isLouver(product: Pick<CatalogProduct, 'name'>) { return ['louver', 'louvres', 'louvers'].includes(key(product.name)); }
 export function isAvailable(product: CatalogProduct) { return product.is_active && !['removed', 'calculator'].includes(catalogKind(product)); }
 export function normalizeCatalogItem<T extends CatalogProduct>(product: T): T {
   const kind = catalogKind(product);
   const category = ({facade:'facade_service',standalone:'standalone_product',opening:'opening_product',glass:'glass_option',addon:'addon'} as Partial<Record<CatalogKind,string>>)[kind];
-  return {...product, category:category ?? product.category, unit:isRollerShutter(product) ? 'item' : kind === 'facade' ? 'sqm' : product.unit, is_active:product.is_active && kind !== 'removed'};
+  return {...product, category:category ?? product.category, unit:isRollerShutter(product) || isPushout(product) || isCurtainWallArch(product) ? 'item' : kind === 'facade' ? 'sqm' : product.unit, is_active:product.is_active && kind !== 'removed'};
 }
 export const catalogGroups: {kind:CatalogKind;label:string;description:string}[] = [
   {kind:'system',label:'Window & door systems',description:'Base products selected for measured window and door openings.'},
@@ -46,6 +47,7 @@ export function catalogUsage(product: Pick<CatalogProduct,'name'|'category'>) {
   if(isShutterBox(product)) return 'Optional with roller shutters when the structure has no concealed shutter recess.';
   if(isRollerShutter(product)) return 'Window and door openings in all systems. Charged once per opening, with a separately priced motor.';
   if(isPushout(product)) return 'Curtain wall only. Enter the number of pushouts; each is charged separately.';
+  if(isCurtainWallArch(product)) return 'Curtain wall arch is a fixed 150,000 IQD checkbox option in the quotation.';
   if(['tilt turn','tilt and turn'].includes(name)) return 'Window add-on only.';
   if(name.startsWith('hydraulic door closer')) return 'Door add-on only.';
   if(['georgian bars','georgien bars'].includes(name)) return 'Window and door add-on, priced by length.';

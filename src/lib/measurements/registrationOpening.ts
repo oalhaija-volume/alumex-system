@@ -50,7 +50,7 @@ export function normalizeRegistrationOpening(value: unknown): RegistrationOpenin
   const structuralType = input.structuralType as RegistrationStructure;
   if(structuralType==='Facade'&&(workArea!=='facade'||quantity!==1))return null;
   if(input.hasRollerShutter!==undefined&&(typeof input.hasRollerShutter!=='boolean'||(input.hasRollerShutter&&structuralType!=='Window')))return null;
-  if(input.hasArch!==undefined&&(typeof input.hasArch!=='boolean'||(input.hasArch&&!['Window','Door'].includes(structuralType))))return null;
+  if(input.hasArch!==undefined&&(typeof input.hasArch!=='boolean'||(input.hasArch&&!['Window','Door','Curtain Wall'].includes(structuralType))))return null;
   const skylight=input.skylight===undefined||input.skylight===null?undefined:normalizeSkylightCapture(input.skylight);
   if(skylight===null||(skylight&&structuralType!=='Skylight'))return null;
   const curtainWall=input.curtainWall===undefined||input.curtainWall===null?undefined:normalizeCurtainWallCapture(input.curtainWall);

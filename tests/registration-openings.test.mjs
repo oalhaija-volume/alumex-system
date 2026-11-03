@@ -7,6 +7,7 @@ function load(path,dependencies={}) {
  const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(!(name in dependencies))throw Error(name);return dependencies[name];},exports);return exports;
 }
 const rules=load('../src/lib/measurements/registrationOpening.ts');
+const {quotationOpenings}=load('../src/lib/workflow/quotationOpenings.ts',{'@/lib/measurements/registrationOpening':rules});
 const base={id:'11111111-1111-4111-8111-111111111111',width:120,height:150,floor:"Ground floor",room:"Bedroom"};
 for(const structuralType of ['Window','Door']) test(`${structuralType} requires Sliding or Hinged`,()=>{
  for(const openingType of ['Sliding','Hinged']) assert.ok(rules.normalizeRegistrationOpening({...base,structuralType,openingType}));
@@ -66,18 +67,51 @@ for(const scenario of ['complete','repeated','invalid-quantity','empty','incompl
  else assert.equal(updates[0].sales_status,scenario==='reopen'?'new_lead':'ready_for_quotation');
 });
 
-for (const structuralType of ['Window','Door']) test(`${structuralType} retains the arch choice and rejects non-boolean values`,()=>{
+for (const structuralType of ['Window','Door','Curtain Wall']) test(`${structuralType} retains the arch choice and rejects non-boolean values`,()=>{
  const opening={...base,structuralType,openingType:'Sliding'};
  for(const hasArch of [true,false])assert.equal(rules.normalizeRegistrationOpening({...opening,hasArch}).hasArch,hasArch);
- for(const hasArch of [null,'true',1,''])assert.equal(rules.normalizeRegistrationOpening({...opening,hasArch}),null);
+ for(const hasArch of [null,'true','false',1,0,'',{},[]])assert.equal(rules.normalizeRegistrationOpening({...opening,hasArch}),null);
+ assert.ok(rules.normalizeRegistrationOpening(opening),'Older measurements may omit the optional arch field');
+ assert.equal(rules.normalizeRegistrationOpening(opening).hasArch??false,false);
 });
-test('arches only apply to windows and doors, and legacy false remains compatible with edits',()=>{
- for(const structuralType of ['Skylight','Curtain Wall','Louver'])assert.equal(rules.normalizeRegistrationOpening({...base,structuralType,hasArch:true}),null);
+test('arches only apply to windows, doors and curtain walls, and legacy false remains compatible with edits',()=>{
+ for(const structuralType of ['Skylight','Louver','Facade'])assert.equal(rules.normalizeRegistrationOpening({...base,structuralType,...(structuralType==='Facade'?{workArea:'facade',facadeNumber:1}:{}),hasArch:true}),null);
  const opening={...base,structuralType:'Window',openingType:'Sliding'};
  assert.ok(rules.sameOpeningMeasurements(opening,{...opening,hasArch:false}));
  assert.ok(rules.sameOpeningMeasurements({...opening,hasArch:false},opening));
  assert.equal(rules.sameOpeningMeasurements(opening,{...opening,hasArch:true}),false);
  assert.equal(rules.sameOpeningMeasurements({...opening,hasArch:true},{...opening,hasArch:false}),false);
+});
+
+test('curtain wall Arch changes participate in measurement edit conflicts without changing saved capture',()=>{
+ const opening={...base,structuralType:'Curtain Wall',openingType:null,quantity:2,curtainWall:{note:'Check curved frame'}};
+ assert.ok(rules.sameOpeningMeasurements(opening,{...opening,hasArch:false}));
+ assert.ok(rules.sameOpeningMeasurements({...opening,hasArch:false},opening));
+ assert.equal(rules.sameOpeningMeasurements(opening,{...opening,hasArch:true}),false);
+ assert.equal(rules.sameOpeningMeasurements({...opening,hasArch:true},{...opening,hasArch:false}),false);
+ const before=structuredClone(opening);
+ const edit=rules.normalizeOpeningEdit({previous:opening,opening:{...opening,hasArch:true}});
+ assert.ok(edit);
+ assert.equal(edit.opening.hasArch,true);
+ assert.equal(edit.previous.hasArch??false,false);
+ assert.equal(edit.opening.curtainWall,undefined,'Measurement edits preserve stored media through the existing separate capture path');
+ assert.deepEqual(opening,before);
+ assert.equal(rules.normalizeOpeningEdit({previous:opening,opening:{...opening,hasArch:'true'}}),null);
+});
+
+test('curtain wall Arch survives queued JSON data and maps to the authoritative quotation measurement',()=>{
+ for(const hasArch of [true,false,undefined]){
+  const draft={...base,structuralType:'Curtain Wall',openingType:null,quantity:3,...(hasArch===undefined?{}:{hasArch})};
+  const queued=JSON.parse(JSON.stringify(draft));
+  const normalized=rules.normalizeRegistrationOpening(queued);
+  assert.ok(normalized);
+  const [measured]=quotationOpenings([],[normalized]);
+  assert.equal(measured.has_arch,hasArch??false);
+  assert.equal(measured.opening_type,'Curtain Wall');
+  assert.equal(measured.opening_direction,null);
+  assert.equal(measured.quantity,3);
+  assert.deepEqual(queued,draft,'Normalizing and quoting must not mutate queued measurements');
+ }
 });
 
 test('roller shutter requests are optional booleans on windows only and participate in edit conflicts',()=>{

@@ -18,7 +18,7 @@ import { readFieldState } from "@/lib/offline/store";
 import { fieldFetch,isDeviceWorkspace } from "@/lib/offline/client";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
-import { normalizeRegistrationOpening, registrationRoomTypes, registrationStructureTypes, type CurtainWallCapture, type SkylightCapture, type RegistrationOpening, type RegistrationStructure } from "@/lib/measurements/registrationOpening";
+import { normalizeOpeningEdit, normalizeRegistrationOpening, registrationRoomTypes, registrationStructureTypes, type CurtainWallCapture, type SkylightCapture, type RegistrationOpening, type RegistrationStructure } from "@/lib/measurements/registrationOpening";
 
 const measurementFloors = ["GF", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "Roof", "Basement"];
 const field = "mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
@@ -112,7 +112,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     event.preventDefault();
     if (saving || photoBusy) return;
     if(commercial&&!workArea){setError('Choose Facade or Internal works.');return;}
-    const opening = normalizeRegistrationOpening({...commercial&&{workArea,...(workArea==='facade'?{facadeNumber:Number(facadeNumber)}:{})},id:draftId,hasRollerShutter:structuralType==='Window'&&hasRollerShutter,hasArch:['Window','Door'].includes(structuralType)?hasArch:false,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor:floor==="Other"?otherFloor:floor,room,otherRoom,...(!editing&&structuralType==='Curtain Wall'&&(curtainWall.photo||curtainWall.note.trim())?{curtainWall}:{}),...(!editing&&structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
+    const opening = normalizeRegistrationOpening({...commercial&&{workArea,...(workArea==='facade'?{facadeNumber:Number(facadeNumber)}:{})},id:draftId,hasRollerShutter:structuralType==='Window'&&hasRollerShutter,hasArch:structuralType==='Curtain Wall'?hasArch===true:['Window','Door'].includes(structuralType)?hasArch:false,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor:floor==="Other"?otherFloor:floor,room,otherRoom,...(!editing&&structuralType==='Curtain Wall'&&(curtainWall.photo||curtainWall.note.trim())?{curtainWall}:{}),...(!editing&&structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
     if(wholeFacade&&facades.some(o=>o.id!==draftId&&o.facadeNumber===Number(facadeNumber))){setError("This facade number is already saved. Edit it or choose another number.");return;}
     if (!opening) {setError(t("initialStep.invalid"));return;}
     setSaving(true);setError("");setNotice("");
@@ -123,6 +123,19 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
       setNotice(editing?term("Opening measurements updated."):wholeFacade?term("Facade saved."):t("initialStep.saved"));resetForm();
     } catch(cause) {setError(cause instanceof Error?cause.message:t("initialStep.failed"));}
     finally {setSaving(false);}
+  }
+  async function toggleCurtainWallArch(opening:RegistrationOpening,checked:boolean) {
+    if(saving||photoBusy||dirty||finished||project?.measurement_delayed||project?.additional_openings_original_ids?.includes(opening.id))return;
+    const edit=normalizeOpeningEdit({opening:{...opening,hasArch:checked},previous:opening});
+    if(!edit||opening.structuralType!=='Curtain Wall')return;
+    setSaving(true);setError('');setNotice('');
+    try {
+      const response=await fieldFetch(endpoint,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'edit-opening',...edit,operationId:crypto.randomUUID()})});
+      const data=await response.json();if(!response.ok)throw new Error(data.error);
+      setOpenings(current=>current.map(row=>row.id===opening.id?{...row,hasArch:checked}:row));
+      setNotice(term('Opening measurements updated.'));
+    }catch(cause){setError(cause instanceof Error?cause.message:t('initialStep.failed'));}
+    finally{setSaving(false);}
   }
   async function updateMeasurementStatus(action: "finish" | "reopen",completion?:MeasurementCompletion):Promise<boolean> {
     if (saving || photoBusy) return false;
@@ -218,6 +231,9 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           {structuralType==='Window'&&<label className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-md border p-3 text-sm ${hasRollerShutter?'border-blue-600 bg-blue-50':'border-slate-300'}`}>
             <input type="checkbox" checked={hasRollerShutter} onChange={event=>setHasRollerShutter(event.target.checked)} className="h-5 w-5 accent-blue-600"/>{term('Roller shutter')}
           </label>}
+          {structuralType==='Curtain Wall'&&<label className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-md border p-3 text-sm font-semibold ${hasArch===true?'border-blue-600 bg-blue-50':'border-slate-300'}`}>
+            <input type="checkbox" aria-label={term('Arch / قوس')} checked={hasArch===true} onChange={event=>setHasArch(event.target.checked)} className="h-5 w-5 accent-blue-600"/>{term('Arch / قوس')}
+          </label>}
           {['Window','Door'].includes(structuralType)&&<fieldset>
             <legend className="mb-2 text-sm font-medium text-slate-800">{term('Opening arch')}</legend>
             <div className="grid grid-cols-2 gap-3">{[true,false].map(value=><label key={String(value)} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-md border p-3 text-sm ${hasArch===value?"border-blue-600 bg-blue-50 text-slate-900":"border-slate-300 text-slate-700"}`}>
@@ -284,7 +300,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
               <th scope="row" className={`sticky start-0 border-e border-slate-200 px-3 py-3 text-start font-semibold tabular-nums text-slate-700 ${index%2===0?"bg-white":"bg-slate-50"}`}>{formatNumber(index+1)}{!finished&&!project?.measurement_delayed&&!project?.additional_openings_original_ids?.includes(opening.id)&&<button type="button" disabled={saving||photoBusy||dirty} aria-label={`${term('Edit opening')} ${formatNumber(index+1)}`} onClick={()=>editOpening(opening)} className="mt-1 block min-h-11 rounded-md px-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-40">{term('Edit')}</button>}</th>
               <td className="max-w-40 break-words px-3 py-3 text-slate-700">{term(opening.floor)}</td>
               <td className="max-w-48 break-words px-3 py-3 text-slate-700">{opening.workArea==='internal'&&<span className="block text-xs text-slate-500">{term('Internal works')}</span>}{opening.workArea==='facade'?term('Facade {number}',{number:String(opening.facadeNumber)}):opening.room === "Other" ? opening.otherRoom : t(`initialStep.rooms.${opening.room}`)}</td>
-              <td className="px-3 py-3 text-slate-900">{t(`initialStep.types.${opening.structuralType}`)}{opening.hasRollerShutter&&<span className="mt-1 block text-xs font-semibold text-blue-700">{term('Roller shutter')}</span>}{['Window','Door'].includes(opening.structuralType)&&<span className="mt-1 block text-xs text-slate-500">{term(opening.hasArch?'Arch':'No arch')}</span>}</td>
+              <td className="px-3 py-3 text-slate-900">{t(`initialStep.types.${opening.structuralType}`)}{opening.hasRollerShutter&&<span className="mt-1 block text-xs font-semibold text-blue-700">{term('Roller shutter')}</span>}{['Window','Door'].includes(opening.structuralType)&&<span className="mt-1 block text-xs text-slate-500">{term(opening.hasArch?'Arch':'No arch')}</span>}{opening.structuralType==='Curtain Wall'&&<label className="mt-1 flex min-h-11 items-center gap-2 text-xs font-semibold"><input type="checkbox" aria-label={term('Arch for opening {number}',{number:formatNumber(index+1)})} checked={opening.hasArch??false} disabled={saving||photoBusy||dirty||finished||!!project?.measurement_delayed||!!project?.additional_openings_original_ids?.includes(opening.id)} onChange={event=>void toggleCurtainWallArch(opening,event.target.checked)} className="h-4 w-4 accent-blue-600"/>{term('Arch / قوس')}</label>}</td>
               <td className="px-3 py-3 text-slate-700">{opening.openingType ? t(`initialStep.${opening.openingType}`) : "—"}</td>
               <td className="whitespace-nowrap px-3 py-3 font-medium tabular-nums text-slate-900"><bdi>{formatNumber(opening.width)}</bdi></td>
               <td className="whitespace-nowrap px-3 py-3 font-medium tabular-nums text-slate-900"><bdi>{formatNumber(opening.height)}</bdi></td>

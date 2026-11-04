@@ -1,4 +1,4 @@
-import { catalogKind, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
+import { catalogKind, isCurtainWallArch, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
 import { leadershipRoles } from '@/lib/auth/permissions';
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth/adminServer';
@@ -6,7 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export async function GET(){
  const auth=await requireRole(leadershipRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const {data,error}=await createAdminClient().from('product_price_settings').select('id,name:product_name,category,unit,unit_price,is_active').order('product_name');
- return error?NextResponse.json({error:'Unable to load catalog.'},{status:500}):NextResponse.json({items:(data??[]).map(normalizeCatalogItem).filter(item=>!['removed','calculator'].includes(catalogKind(item)))},{headers:{'Cache-Control':'no-store'}});
+ return error?NextResponse.json({error:'Unable to load catalog.'},{status:500}):NextResponse.json({items:(data??[]).map(normalizeCatalogItem).filter(item=>!isCurtainWallArch(item)&&!['removed','calculator'].includes(catalogKind(item)))},{headers:{'Cache-Control':'no-store'}});
 }
 export async function PATCH(request:Request){
  const auth=await requireRole(['Admin']);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});

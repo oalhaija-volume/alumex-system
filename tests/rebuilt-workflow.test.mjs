@@ -216,7 +216,7 @@ test('catalog classification overrides incorrect legacy categories and excludes 
  assert.ok(systems.includes('lift')&&systems.includes('louver'));
  for(const id of ['reynaers','aluman','windows','skylight'])assert.ok(!systems.includes(id));
  const standalone=pricing.additionalOptions(correctedCatalog).map(p=>p.id);
- assert.deepEqual(standalone,['swing','cladding','curtain','photocell','photocell-turkey']);
+ assert.deepEqual(standalone,['swing','cladding','curtain','pushout','photocell','photocell-turkey','curtain-wall-arch']);
  assert.deepEqual(pricing.glassOptions(opening,correctedCatalog).map(p=>p.id),['glass','sand','saint']);
 });
 
@@ -230,15 +230,17 @@ test('standalone facade pricing sums measured areas and snapshots measurements; 
  assert.throws(()=>pricing.priceQuotation([],[],correctedCatalog,'actor',[]));
 });
 
-test('curtain wall pushouts multiply per-item prices on both measured openings and standalone facade services',()=>{
- const additional=[{id:'curtain',quantity:1,measurements:[surface],extras:[{id:'pushout',quantity:3}]}];
+test('curtain wall pushouts are project quantities independent of measured openings and facade services',()=>{
+ const additional=[{id:'curtain',quantity:1,measurements:[surface]},{id:'pushout',quantity:3}];
  const quote=pricing.priceQuotation([],[],correctedCatalog,'actor',additional);
- assert.equal(quote.additionalItems[0].total,6000000);assert.equal(quote.additionalItems[0].extras[0].total,30000);assert.equal(quote.total,6030000);
- const curtainOpening={...opening,opening_type:'Curtain Wall',opening_direction:null};
- const openingQuote=pricing.priceQuotation([curtainOpening],[{...plainChoice,systemId:'curtain',extras:[{id:'pushout',quantity:4}]}],correctedCatalog,'actor');
- assert.equal(openingQuote.lines[0].extras[0].total,40000);
- for(const quantity of [0,-1,1.5,NaN])assert.throws(()=>pricing.priceQuotation([],[],correctedCatalog,'actor',[{...additional[0],extras:[{id:'pushout',quantity}]}]));
- assert.throws(()=>pricing.priceQuotation([],[],correctedCatalog,'actor',[{...additional[0],id:'cladding'}]));
+ assert.equal(quote.additionalItems[0].total,6000000);assert.equal(quote.additionalItems[1].total,30000);assert.equal(quote.total,6030000);
+ const curtainOpening={...opening,opening_type:'Curtain Wall',opening_direction:null,quantity:3};
+ const openingQuote=pricing.priceQuotation([curtainOpening],[{...plainChoice,systemId:'curtain',extras:[]}],correctedCatalog,'actor',[{id:'pushout',quantity:4}]);
+ assert.deepEqual(openingQuote.lines[0].extras,[]);
+ assert.equal(openingQuote.additionalItems[0].quantity,4);
+ assert.equal(openingQuote.additionalItems[0].total,40000);
+ for(const quantity of [0,-1,1.5,NaN])assert.throws(()=>pricing.priceQuotation([],[],correctedCatalog,'actor',[{id:'pushout',quantity}]));
+ assert.throws(()=>pricing.priceQuotation([],[],correctedCatalog,'actor',[{...additional[0],extras:[{id:'pushout',quantity:1}]}]),/compatible/);
 });
 
 test('window and door accessories enforce compatibility and shutter-box dependency on the server',()=>{
@@ -268,9 +270,9 @@ test('standalone doors are independently priced and skylights are excluded from 
 });
 
 test('Operations receives facade measurements and pushout counts without monetary fields',()=>{
- const quote=pricing.priceQuotation([],[],correctedCatalog,'actor',[{id:'curtain',quantity:1,measurements:[surface],extras:[{id:'pushout',quantity:3}]}]);
+ const quote=pricing.priceQuotation([],[],correctedCatalog,'actor',[{id:'curtain',quantity:1,measurements:[surface]},{id:'pushout',quantity:3}]);
  const safe=load('../src/lib/workflow/operations.ts').operationalAdditionalItems(quote);
- assert.deepEqual(safe,[{name:'Curtain Wall',quantity:60,unit:'sqm',measurements:[surface],extras:[{name:'Curtain Wall Pushout',quantity:3,unit:'item'}]}]);
+ assert.deepEqual(safe,[{name:'Curtain Wall',quantity:60,unit:'sqm',measurements:[surface]},{name:'Curtain Wall Pushout',quantity:3,unit:'item'}]);
  assert.equal(/rate|price|total|signature|contract/.test(JSON.stringify(safe)),false);
 });
 

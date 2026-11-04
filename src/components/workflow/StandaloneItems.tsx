@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useRef } from 'react';
 import { useI18n } from '@/components/i18n/I18nProvider';
-import { catalogKind, isCurtainWall, isPushout } from '@/lib/workflow/catalogRules';
+import { catalogKind, isCurtainWallArch, isPushout } from '@/lib/workflow/catalogRules';
 import { additionalOptions, facadeAddonOptions, type AdditionalChoice, type SurfaceMeasurement, type CatalogItem } from '@/lib/workflow/pricing';
 import { card, field, secondary } from './ui';
-import { CurtainWallArchOption } from './CurtainWallArchOption';
 
 export function StandaloneItems({items,catalog,onChange,recordedAreas=[],focusRequest=0}:{recordedAreas?:SurfaceMeasurement[];focusRequest?:number;items:AdditionalChoice[];catalog:CatalogItem[];onChange:(items:AdditionalChoice[])=>void}){
  const {term,formatMoney,formatNumber}=useI18n();
  const productPicker=useRef<HTMLSelectElement>(null);
+ const products=additionalOptions(catalog);
  useEffect(()=>{
   if(!focusRequest)return;
   productPicker.current?.focus({preventScroll:true});
@@ -17,10 +17,10 @@ export function StandaloneItems({items,catalog,onChange,recordedAreas=[],focusRe
  const update=(id:string,patch:Partial<AdditionalChoice>)=>onChange(items.map(item=>item.id===id?{...item,...patch}:item));
  const rateLabel=(product:CatalogItem)=>product.unit_price>0?`${formatMoney(product.unit_price)} / ${term(product.unit)}`:term('Price required');
  return <section className={`${card} space-y-5`}>
-  <div><h2 className="font-semibold">{term('Standalone products & facade services')}</h2><p className="mt-2 text-sm text-slate-500">{term('Add products such as swing doors and photocell doors to this quotation. Enter a quantity for each product or measured areas for facade services.')}</p></div>
-  <label className="block text-sm">{term('Add product or service')}<select ref={productPicker} aria-label={term('Add product or service')} className={field} value="" onChange={e=>{const product=catalog.find(p=>p.id===e.target.value);if(product)onChange([...items,{id:product.id,quantity:1,...(catalogKind(product)==='facade'?{measurements:recordedAreas.length?recordedAreas.map(a=>({...a})):[{label:'',width:0,height:0,quantity:1}]}:{}),extras:[]}]);}}><option value="">{term('Choose from the price catalog')}</option>{additionalOptions(catalog).filter(p=>!items.some(item=>item.id===p.id)).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
+  <div><h2 className="font-semibold">{term('Standalone products, project add-ons & facade services')}</h2><p className="mt-2 text-sm text-slate-500">{term('Add swing doors, photocell doors, curtain wall arches and pushouts for the whole project. Enter a quantity for each product or measured areas for facade services.')}</p></div>
+  <label className="block text-sm">{term('Add product or service')}<select ref={productPicker} aria-label={term('Add product or service')} className={field} value="" onChange={e=>{const product=products.find(p=>p.id===e.target.value);if(product)onChange([...items,{id:product.id,quantity:1,...(catalogKind(product)==='facade'?{measurements:recordedAreas.length?recordedAreas.map(a=>({...a})):[{label:'',width:0,height:0,quantity:1}]}:{}),extras:[]}]);}}><option value="">{term('Choose from the price catalog')}</option>{products.filter(p=>!items.some(item=>item.id===p.id)).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
   {items.map(item=>{
-   const product=catalog.find(p=>p.id===item.id);
+   const product=products.find(p=>p.id===item.id)??catalog.find(p=>p.id===item.id);
    const facade=product&&catalogKind(product)==='facade';
    const areas=item.measurements??[];
    const extras=item.extras??[];
@@ -39,8 +39,8 @@ export function StandaloneItems({items,catalog,onChange,recordedAreas=[],focusRe
       </div>
      </fieldset>)}
      <div className="flex flex-wrap items-center justify-between gap-3"><button type="button" disabled={areas.length>=100} className={secondary} onClick={()=>update(item.id,{measurements:[...areas,{label:'',width:0,height:0,quantity:1}]})}>{term('+ Add measured area')}</button><p className="text-sm font-semibold">{term('Total area')}: {formatNumber(areas.reduce((sum,a)=>sum+a.width*a.height*a.quantity,0),3)} {term('m²')}</p></div>
-    </>:<label className="block text-sm">{term(product?.unit==='sqm'?'Area (m²)':product?.unit==='meter'?'Length (m)':'Quantity')}<input aria-label={term('{name} project quantity',{name:term(product?.name)})} className={`${field} max-w-40`} type="number" min={product?.unit==='item'?1:0.01} max="1000000" step={product?.unit==='item'?1:0.01} value={item.quantity||''} onChange={e=>update(item.id,{quantity:Number(e.target.value)})}/></label>}
-    {product&&isCurtainWall(product)&&<CurtainWallArchOption checked={item.hasCurtainWallArch??false} onChange={checked=>update(item.id,{hasCurtainWallArch:checked})}/>}
+    </>:<label className="block text-sm">{term(product?.unit==='sqm'?'Area (m²)':product?.unit==='meter'?'Length (m)':'Quantity')}<input aria-label={term('{name} project quantity',{name:term(product?.name)})} className={`${field} block max-w-40`} type="number" min={product?.unit==='item'?1:0.01} max="1000000" step={product?.unit==='item'?1:0.01} value={item.quantity||''} onChange={e=>update(item.id,{quantity:Number(e.target.value)})}/></label>}
+    {product&&(isCurtainWallArch(product)||isPushout(product))&&<p className="text-xs leading-5 text-slate-600">{term('Enter the total quantity for the whole project. This quantity is independent of curtain wall counts and areas.')}</p>}
     {!!allowed.length&&<label className="block text-sm">{term('Facade add-on')}<select aria-label={term('Facade add-on')} className={field} value="" onChange={e=>{if(e.target.value)update(item.id,{extras:[...extras,{id:e.target.value,quantity:1}]});}}><option value="">{term('Choose add-on')}</option>{allowed.filter(p=>!extras.some(e=>e.id===p.id)).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>}
     {extras.map(extra=>{const p=catalog.find(p=>p.id===extra.id);return <div key={extra.id} className="flex flex-wrap items-end gap-3 rounded-md bg-slate-50 p-3"><div className="flex-1 text-sm">{p?.unit==='sqm'?<><p>{term(p.name)}</p><p className="mt-1 text-xs text-slate-500">{term('Uses the total measured facade area')}</p></>:<label>{term(p?.name??'Unavailable item')}<input aria-label={term('{name} quantity',{name:term(p?.name)})} type="number" min={p?.unit==='item'?1:0.01} step={p?.unit==='item'?1:0.01} max="1000000" className={field} value={extra.quantity||''} onChange={e=>update(item.id,{extras:extras.map(x=>x.id===extra.id?{...x,quantity:Number(e.target.value)}:x)})}/></label>}</div><button type="button" className="min-h-11 px-3 text-sm text-red-700" onClick={()=>update(item.id,{extras:extras.filter(x=>x.id!==extra.id)})}>{term('Remove')}</button>{p&&isPushout(p)&&<p className="w-full text-xs text-slate-500">{term('Each pushout is charged separately at the catalog unit price.')}</p>}</div>;})}
    </section>;

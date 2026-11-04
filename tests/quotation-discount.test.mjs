@@ -41,7 +41,7 @@ const catalog=[
 ];
 const opening={id:'opening',floor:'GF',room:'Office',width:50,height:100,quantity:2,opening_type:'Window',opening_direction:'Sliding'};
 const choice={openingId:'opening',systemId:'system',glassId:'glass',extras:[{id:'shutter',quantity:1,motorPrice:100000},{id:'handle',quantity:2}]};
-const additional=[{id:'facade',quantity:1,measurements:[{label:'North facade',width:2,height:3,quantity:1}],extras:[{id:'pushout',quantity:2}]},{id:'door',quantity:2}];
+const additional=[{id:'facade',quantity:1,measurements:[{label:'North facade',width:2,height:3,quantity:1}]},{id:'door',quantity:2},{id:'pushout',quantity:2}];
 const quotation=discountPercent=>priceQuotation([opening],[choice],catalog,'original-author',additional,discountPercent);
 const projectId='11111111-1111-4111-8111-111111111111';
 const actorId='33333333-3333-4333-8333-333333333333';

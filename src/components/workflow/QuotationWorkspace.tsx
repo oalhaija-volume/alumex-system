@@ -4,10 +4,9 @@ import type { BuildingType } from '@/lib/intake/buildingType';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import Link from 'next/link';
 import { useState } from 'react';
-import { applyQuotationDiscount,recordedFacadeAreas,defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,isQuotationSystemRateEditable,isRollerShutterMotor,QUOTATION_SYSTEM_RATE_MIN,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice,type QuoteSnapshot } from '@/lib/workflow/pricing';
+import { applyQuotationDiscount,quotationAdditionalChoices,recordedFacadeAreas,defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,isQuotationSystemRateEditable,isRollerShutterMotor,QUOTATION_SYSTEM_RATE_MIN,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice,type QuoteSnapshot } from '@/lib/workflow/pricing';
 import { StandaloneItems } from './StandaloneItems';
-import { CurtainWallArchOption } from './CurtainWallArchOption';
-import { isShutterBox, isRollerShutter, isCurtainWallArch, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
+import { isShutterBox, isRollerShutter, isCurtainWallArch, isPushout, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
 import type { RegistrationOpening } from '@/lib/measurements/registrationOpening';
 import type { QuotationRevision,SalesFlow } from '@/lib/workflow/types';
@@ -36,12 +35,12 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const facades=measured.filter(opening=>opening.opening_type==='Facade').sort((a,b)=>(a.facade_number??0)-(b.facade_number??0));
  const [choices,setChoices]=useState<OpeningChoice[]>(()=>quotableOpenings(data.openings).map(o=>{
   const saved=flow?.quotation.lines.find(l=>l.opening.id===o.id);
-  return {openingId:o.id,systemId:saved?.system.id??defaultSystem(o,catalog)?.id??'',...(saved?.system.rateSource==='quotation'?{systemRate:saved.system.rate}:{}),glassId:saved?.glass?.id??'',hasCurtainWallArch:saved?saved.extras.some(isCurtainWallArch):o.opening_type==='Curtain Wall'&&o.has_arch===true,extras:saved?.extras.filter(e=>!isRollerShutterMotor(e)&&!isCurtainWallArch(e)).map(e=>{
+  return {openingId:o.id,systemId:saved?.system.id??defaultSystem(o,catalog)?.id??'',...(saved?.system.rateSource==='quotation'?{systemRate:saved.system.rate}:{}),glassId:saved?.glass?.id??'',extras:saved?.extras.filter(e=>!isRollerShutterMotor(e)&&!isCurtainWallArch(e)&&!isPushout(e)).map(e=>{
    const motor=saved.extras.find(charge=>isRollerShutterMotor(charge)&&charge.motorFor===e.id);
    return {id:e.id,quantity:isRollerShutter(e)?1:e.unit==='sqm'?e.quantity:e.quantity/(saved.opening.quantity??1),...(motor?{motorPrice:motor.rate}:{})};
   })??[]};
  }));
- const [additionalItems,setAdditionalItems]=useState<AdditionalChoice[]>(()=>flow?.quotation.additionalItems?.map(item=>({id:item.id,quantity:item.quantity,measurements:item.measurements,hasCurtainWallArch:item.extras?.some(isCurtainWallArch)??false,extras:item.extras?.filter(e=>!isCurtainWallArch(e)).map(e=>({id:e.id,quantity:e.quantity}))}))??[]);
+ const [additionalItems,setAdditionalItems]=useState<AdditionalChoice[]>(()=>flow?quotationAdditionalChoices(flow.quotation):[]);
  const [discountPercent,setDiscountPercent]=useState<0|5>(flow?.quotation.discount?.percent??0);
  const [editing,setEditing]=useState(!flow);
  const [productPickerRequest,setProductPickerRequest]=useState(0);
@@ -104,7 +103,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  function addOpening(opening:RegistrationOpening){
   const measured=quotationOpenings([], [opening])[0];
   setNewOpenings(rows=>[...rows,opening]);
-  setChoices(rows=>[...rows,{openingId:opening.id,systemId:defaultSystem(measured,catalog)?.id??'',glassId:'',extras:[],hasCurtainWallArch:measured.opening_type==='Curtain Wall'&&measured.has_arch===true}]);
+  setChoices(rows=>[...rows,{openingId:opening.id,systemId:defaultSystem(measured,catalog)?.id??'',glassId:'',extras:[]}]);
   setAddingOpening(false);
  }
  function addFacade(facade:RegistrationOpening){
@@ -179,7 +178,6 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
       </div>}
      </div>
      {(opening.quantity??1)>1&&<p className="mt-3 text-xs text-slate-600">{term('Specifications and add-on quantities apply to each identical opening. Area and totals include all openings.')}</p>}
-     {opening.opening_type==='Curtain Wall'&&<div className="mt-5"><CurtainWallArchOption checked={choice.hasCurtainWallArch??false} quantity={opening.quantity??1} onChange={checked=>edit(index,{hasCurtainWallArch:checked})}/></div>}
      {opening.has_roller_shutter&&<div className="mt-5 rounded-md border border-blue-200 bg-blue-50 p-4">
       <p className="mb-3 text-sm font-semibold text-blue-900">{term('Roller shutter requested for this window')}</p>
       <label className="block text-sm">{term('Roller shutter type')}<select aria-label={term('Roller shutter type')} value={choice.extras.find(e=>catalog.some(p=>p.id===e.id&&isRollerShutter(p)))?.id??''} className={field} onChange={event=>edit(index,{extras:[...choice.extras.filter(e=>!catalog.some(p=>p.id===e.id&&(isRollerShutter(p)||(!event.target.value&&isShutterBox(p))))),...(event.target.value?[{id:event.target.value,quantity:1}]:[])]})}>

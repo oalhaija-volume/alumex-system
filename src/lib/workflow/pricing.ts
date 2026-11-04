@@ -1,5 +1,5 @@
 import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBranch';
-import { catalogKind, compatibleAddon, compatibleGlass, isAvailable, isCurtainWall, isCurtainWallArch, isLouver, isRollerShutter, isShutterBox, normalizeCatalogItem } from './catalogRules';
+import { catalogKind, compatibleAddon, compatibleGlass, isAvailable, isCurtainWall, isCurtainWallArch, isLouver, isPushout, isRollerShutter, isShutterBox, normalizeCatalogItem } from './catalogRules';
 export type CatalogItem = {id:string;name:string;category:string|null;unit:string;unit_price:number;is_active:boolean};
 export type MeasuredOpening = {has_roller_shutter?:boolean;work_area?:"facade"|"internal"|null;facade_number?:number|null;has_arch?:boolean;id:string;floor:string|null;room:string|null;width:number;height:number;quantity?:number;opening_type:string|null;opening_direction:string|null};
 export type ExtraChoice = {id:string;quantity:number;motorPrice?:number};
@@ -37,7 +37,7 @@ export function isCurtainWallArchCharge(charge:Pick<Charge,'id'>) {
  return charge.id===CURTAIN_WALL_ARCH_ID;
 }
 function curtainWallArchCharge(quantity:number):Charge {
- if(!Number.isSafeInteger(quantity)||quantity<1||quantity>10000)throw new Error('Enter a valid curtain wall quantity.');
+ if(!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000)throw new Error('Enter a whole-number arch quantity between 1 and 1,000,000.');
  return {id:CURTAIN_WALL_ARCH_ID,name:'Curtain Wall Arch',unit:'item',rate:CURTAIN_WALL_ARCH_PRICE,quantity,total:CURTAIN_WALL_ARCH_PRICE*quantity};
 }
 function priceCurtainWallArch(selected:unknown,curtain:boolean,quantity:number):Charge[] {
@@ -132,7 +132,30 @@ export function systemOptions(opening:MeasuredOpening,catalog:CatalogItem[]) {
 }
 export function glassOptions(opening:MeasuredOpening,catalog:CatalogItem[],systemId?:string) { return catalog.filter(p=>compatibleGlass(p,opening.opening_type,catalog.find(s=>s.id===systemId))); }
 export function addonOptions(opening:MeasuredOpening,catalog:CatalogItem[],systemId?:string) { return catalog.filter(p=>compatibleAddon(p,opening.opening_type,catalog.find(s=>s.id===systemId))); }
-export function additionalOptions(catalog:CatalogItem[]) { return catalog.filter(p=>isAvailable(p)&&['facade','standalone'].includes(catalogKind(p))); }
+export function additionalOptions(catalog:CatalogItem[]):CatalogItem[] {
+ // Arch has a fixed quotation price; legacy catalog rows must not override it.
+ return [...catalog.filter(p=>!isCurtainWallArch(p)&&p.id!==CURTAIN_WALL_ARCH_ID&&isAvailable(p)&&['facade','standalone'].includes(catalogKind(p))).map(normalizeCatalogItem),{id:CURTAIN_WALL_ARCH_ID,name:'Curtain Wall Arch',category:'standalone_product',unit:'item',unit_price:CURTAIN_WALL_ARCH_PRICE,is_active:true}];
+}
+// Edit old quotations using their saved absolute add-on counts. In particular,
+// never multiply a pushout count by repeated walls for a second time.
+export function quotationAdditionalChoices(snapshot:Pick<QuoteSnapshot,'lines'|'additionalItems'>):AdditionalChoice[] {
+ const items:AdditionalChoice[]=[];
+ const projectAddon=(charge:Charge)=>isCurtainWallArchCharge(charge)||isCurtainWallArch(charge)||isPushout(charge);
+ const addProjectAddon=(charge:Charge)=>{
+  const id=isCurtainWallArchCharge(charge)||isCurtainWallArch(charge)?CURTAIN_WALL_ARCH_ID:charge.id;
+  const existing=items.find(item=>item.id===id);
+  if(existing)existing.quantity+=charge.quantity;
+  else items.push({id,quantity:charge.quantity});
+ };
+ for(const item of snapshot.additionalItems??[]){
+  if(projectAddon(item))addProjectAddon(item);
+  else items.push({id:item.id,quantity:item.quantity,...(item.measurements?{measurements:item.measurements.map(surface=>({...surface}))}:{}),extras:(item.extras??[]).filter(extra=>!projectAddon(extra)).map(extra=>({id:extra.id,quantity:extra.quantity}))});
+ }
+ for(const extra of [...snapshot.lines.flatMap(line=>line.extras),...(snapshot.additionalItems??[]).flatMap(item=>item.extras??[])]){
+  if(projectAddon(extra))addProjectAddon(extra);
+ }
+ return items;
+}
 export function facadeAddonOptions(product:CatalogItem,catalog:CatalogItem[]) { return catalog.filter(p=>compatibleAddon(p,null,product)); }
 function catalogCharge(id:string,quantity:number,catalog:CatalogItem[]):Charge {
  const item=catalog.find(p=>p.id===id && isAvailable(p));
@@ -195,9 +218,13 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
   });
   return {...line,system,glass,extras,total:system.total+(glass?.total??0)+extras.reduce((sum,extra)=>sum+extra.total,0)};
  });
- if(quotation.additionalItems)quotation.additionalItems=quotation.additionalItems.map(item=>({
-  ...refresh(item),...(item.extras?{extras:item.extras.map(extra=>isCurtainWallArchCharge(extra)?refreshArch(extra,isCurtainWall(item),1,item.extras!):refresh(extra))}:{}),
- }));
+ if(quotation.additionalItems)quotation.additionalItems=quotation.additionalItems.map(item=>{
+  if(isCurtainWallArchCharge(item)){
+   if(item.name!=='Curtain Wall Arch'||item.unit!=='item'||item.rateSource!==undefined||item.motorFor!==undefined||item.measurements!==undefined||(item.extras?.length??0)>0||quotation.additionalItems!.filter(isCurtainWallArchCharge).length!==1)throw new Error(curtainWallArchReview);
+   return curtainWallArchCharge(item.quantity);
+  }
+  return {...refresh(item),...(item.extras?{extras:item.extras.map(extra=>isCurtainWallArchCharge(extra)?refreshArch(extra,isCurtainWall(item),1,item.extras!):refresh(extra))}:{})};
+ });
  quotation.total=quotation.lines.reduce((sum,line)=>sum+line.total,0)+(quotation.additionalItems??[]).reduce((sum,item)=>sum+item.total+(item.extras??[]).reduce((extraSum,extra)=>extraSum+extra.total,0),0);
  if(!Number.isSafeInteger(quotation.total)||quotation.total<=0)throw new Error('Add a measured opening, facade service or standalone product before quoting.');
  quotation.createdAt=new Date().toISOString();
@@ -262,7 +289,7 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   const system=choice.systemRate===undefined?catalogSystem:quotationSystemCharge(catalogSystem,catalog.find(product=>product.id===choice.systemId),choice.systemRate);
   if(choice.glassId&&!glassOptions(opening,catalog,choice.systemId).some(p=>p.id===choice.glassId))throw new Error('Choose a compatible glass option.');
   const glass=choice.glassId?charge(choice.glassId):null;
-  const arch=choice.hasCurtainWallArch===undefined?opening.opening_type==='Curtain Wall'&&opening.has_arch===true:choice.hasCurtainWallArch;
+  const arch=choice.hasCurtainWallArch;
   const extras=[...priceExtras(choice.extras,addonOptions(opening,catalog,choice.systemId),catalog,billableArea,[choice.systemId,choice.glassId??''],quantity),...priceCurtainWallArch(arch,opening.opening_type==='Curtain Wall',quantity)];
   if(opening.has_roller_shutter&&!extras.some(isRollerShutter))throw new Error('This window requires roller shutters. Choose a roller shutter add-on.');
   return {opening,area,system,glass,extras,total:system.total+(glass?.total??0)+extras.reduce((s,p)=>s+p.total,0)};
@@ -273,7 +300,7 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   if(!product)throw new Error('Choose an active standalone product or facade service from the catalog.');
   const facade=catalogKind(product)==='facade';
   const quantity=facade?measuredFacadeArea(item.measurements??[]):item.quantity;
-  const base=catalogCharge(item.id,quantity,catalog);
+  const base=item.id===CURTAIN_WALL_ARCH_ID?curtainWallArchCharge(quantity):catalogCharge(item.id,quantity,catalog);
   const extras=[...priceExtras(item.extras??[],facadeAddonOptions(product,catalog),catalog,quantity),...priceCurtainWallArch(item.hasCurtainWallArch,isCurtainWall(product),1)];
   return {...base,...(facade?{measurements:item.measurements!.map(s=>({label:s.label.trim(),width:s.width,height:s.height,quantity:s.quantity}))}:{}),...(extras.length?{extras}:{} )};
  });

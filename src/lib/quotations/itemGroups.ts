@@ -16,7 +16,7 @@ const normalize = (value:string) => value.trim().toLowerCase().replace(/[&-]/g,'
 function productGroup(name:string):string {
  const key=normalize(name);
  if(['louver','louvers','louvres'].includes(key))return 'Louver';
- if(key==='curtain wall')return 'Curtain Wall';
+ if(['curtain wall','curtain wall arch','curtain wall pushout'].includes(key))return 'Curtain Wall';
  if(['lift slide','lift and slide'].includes(key))return 'Sliding';
  if(key==='sliding')return 'Sliding';
  if(key==='hinged')return 'Hinged';

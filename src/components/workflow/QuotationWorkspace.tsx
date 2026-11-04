@@ -30,8 +30,12 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const {flow}=data;
  const catalog=data.catalog.map(normalizeCatalogItem);
  const [newOpenings,setNewOpenings]=useState<RegistrationOpening[]>([]);
+ const [excludedOpeningIds,setExcludedOpeningIds]=useState<string[]>(()=>flow?.quotation.excludedOpeningIds??[]);
  const measured=quotationOpenings(data.openings,newOpenings);
- const openings=quotableOpenings(measured);
+ const allOpenings=quotableOpenings(measured);
+ const activeMeasured=measured.filter(opening=>!excludedOpeningIds.includes(opening.id));
+ const openings=quotableOpenings(activeMeasured);
+ const removedOpenings=allOpenings.filter(opening=>excludedOpeningIds.includes(opening.id));
  const facades=measured.filter(opening=>opening.opening_type==='Facade').sort((a,b)=>(a.facade_number??0)-(b.facade_number??0));
  const [choices,setChoices]=useState<OpeningChoice[]>(()=>quotableOpenings(data.openings).map(o=>{
   const saved=flow?.quotation.lines.find(l=>l.opening.id===o.id);
@@ -40,6 +44,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
    return {id:e.id,quantity:isRollerShutter(e)?1:e.unit==='sqm'?e.quantity:e.quantity/(saved.opening.quantity??1),...(motor?{motorPrice:motor.rate}:{})};
   })??[]};
  }));
+ const activeChoices=choices.filter(choice=>openings.some(opening=>opening.id===choice.openingId));
  const [additionalItems,setAdditionalItems]=useState<AdditionalChoice[]>(()=>flow?quotationAdditionalChoices(flow.quotation):[]);
  const [discountPercent,setDiscountPercent]=useState<0|5>(flow?.quotation.discount?.percent??0);
  const [editing,setEditing]=useState(!flow);
@@ -68,7 +73,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  let draftTotal:number|undefined;
  let draftQuotation:QuoteSnapshot|undefined;
  let pricingError='';
- if(editing){try{draftQuotation=priceQuotation(measured,choices,catalog,'preview',additionalItems,discountPercent);draftTotal=draftQuotation.total;}catch(e){pricingError=(e as Error).message;}}
+ if(editing){try{draftQuotation=priceQuotation(activeMeasured,activeChoices,catalog,'preview',additionalItems,discountPercent);draftTotal=draftQuotation.total;}catch(e){pricingError=(e as Error).message;}}
  const discountChanged=discountPercent!==(flow?.quotation.discount?.percent??0);
  let discountPreview:QuoteSnapshot|undefined;
  if(flow&&canUpdatePrices&&!editing){try{discountPreview=applyQuotationDiscount(flow.quotation,discountPercent);}catch{/* Invalid saved amounts cannot be discounted. */}}
@@ -84,7 +89,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const targetRates=new Map(sellingSuggestion?.openingRates.map(opening=>[opening.openingId,opening.rate]));
  const suggestedChoices=sellingSuggestion?choices.map(choice=>targetRates.has(choice.openingId)?{...choice,systemRate:targetRates.get(choice.openingId)}:choice):choices;
  let suggestedQuotation:QuoteSnapshot|undefined;
- if(sellingSuggestion?.canApply){try{suggestedQuotation=priceQuotation(measured,suggestedChoices,catalog,'preview',additionalItems,discountPercent);}catch{/* Incomplete selections remain editable. */}}
+ if(sellingSuggestion?.canApply){try{suggestedQuotation=priceQuotation(activeMeasured,suggestedChoices.filter(choice=>openings.some(opening=>opening.id===choice.openingId)),catalog,'preview',additionalItems,discountPercent);}catch{/* Incomplete selections remain editable. */}}
  const suggestedPricing=suggestedQuotation?quotationSellingSuggestion(suggestedQuotation,catalog):sellingSuggestion?.canApply===false?sellingSuggestion:null;
  function applySuggestedRate(){
   if(!sellingSuggestion?.canApply||busy||pricePreview)return;
@@ -95,7 +100,15 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   setSuggestionHidden(hidden);
   try{window.localStorage.setItem(suggestionPreferenceKey,hidden?'1':'0');}catch{/* The toggle still works when browser storage is unavailable. */}
  }
- function edit(index:number,patch:Partial<OpeningChoice>){setChoices(c=>c.map((v,i)=>i===index?{...v,...patch}:v));}
+ function edit(openingId:string,patch:Partial<OpeningChoice>){setChoices(rows=>rows.map(choice=>choice.openingId===openingId?{...choice,...patch}:choice));}
+ function removeOpening(opening:MeasuredOpening){
+  if(busy)return;
+  clearActionError();setError('');setApproved(false);
+  if(newOpenings.some(row=>row.id===opening.id)){
+   setNewOpenings(rows=>rows.filter(row=>row.id!==opening.id));setChoices(rows=>rows.filter(choice=>choice.openingId!==opening.id));
+  }else setExcludedOpeningIds(ids=>ids.includes(opening.id)?ids:[...ids,opening.id]);
+ }
+ function restoreOpening(openingId:string){setExcludedOpeningIds(ids=>ids.filter(id=>id!==openingId));setError('');setApproved(false);clearActionError();}
  function addProduct(){
   clearActionError();setEditing(true);setViewVersion('current');setApproved(false);
   setProductPickerRequest(request=>request+1);
@@ -114,7 +127,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   if(busy||pricePreview)return;
   setBusy(true);setError('');clearActionError();
   try{
-   await api(`/api/sales-flow/${projectId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,choices,additionalItems,newOpenings,discountPercent,revision:flow?.revision??0,confirmed:approved,template,replaceUnsignedContract:replaceContract})});
+   await api(`/api/sales-flow/${projectId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,choices:activeChoices,excludedOpeningIds,additionalItems,newOpenings,discountPercent,revision:flow?.revision??0,confirmed:approved,template,replaceUnsignedContract:replaceContract})});
    await reload();
   }catch(e){setError((e as Error).message);}finally{setBusy(false);}
  }
@@ -154,8 +167,9 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <p>{term("Catalog rates apply unless you set an Alumex system rate for this quotation. Review the new total before saving.")}</p>
    </div>
    {!!openings.length&&<OpeningSellingLegend discountPercent={discountPercent}/>}
-   {openings.map((opening,index)=>{
-    const choice=choices[index];
+   {openings.map(opening=>{
+    const index=allOpenings.findIndex(row=>row.id===opening.id);
+    const choice=choices.find(row=>row.openingId===opening.id)!;
     const system=catalog.find(p=>p.id===choice.systemId);
     const editableRate=!!system&&isQuotationSystemRateEditable(system);
     const systemRate=choice.systemRate??Number(system?.unit_price);
@@ -164,15 +178,15 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     const area=measuredOpeningArea(opening);
     const band=editableRate?openingSellingBand(area,discountedSystemRate(systemRate,discountPercent),opening):undefined;
     const minimumApplied=billableOpeningArea(opening)>area&&[choice.systemId,choice.glassId,...choice.extras.map(extra=>extra.id)].some(id=>catalog.some(item=>item.id===id&&item.unit==='sqm'));
-    return <section key={opening.id} data-area-band={band} className={`${card} quotation-opening${band?` opening-area-${band}`:''}`} aria-label={term('Opening {number}',{number:formatNumber(index+1)})}>
-     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Opening {number}',{number:formatNumber(index+1)})} · {term(opening.opening_type)} {opening.opening_direction?term(opening.opening_direction):''}{opening.has_arch?` · ${term('Arch')}`:''}</h2>{editableRate?<OpeningAreaBadge area={area} rate={systemRate} opening={opening} discountPercent={discountPercent}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}{isNew&&<button type="button" className="min-h-11 px-3 text-sm text-red-700" onClick={()=>{setNewOpenings(rows=>rows.filter(o=>o.id!==opening.id));setChoices(rows=>rows.filter(c=>c.openingId!==opening.id));}}>{term("Remove new opening")}</button>}</div>
+    return <section key={opening.id} data-area-band={band} data-opening-id={opening.id} className={`${card} quotation-opening${band?` opening-area-${band}`:''}`} aria-label={term('Opening {number}',{number:formatNumber(index+1)})}>
+     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Opening {number}',{number:formatNumber(index+1)})} · {term(opening.opening_type)} {opening.opening_direction?term(opening.opening_direction):''}{opening.has_arch?` · ${term('Arch')}`:''}</h2>{editableRate?<OpeningAreaBadge area={area} rate={systemRate} opening={opening} discountPercent={discountPercent}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}<button type="button" aria-label={term('Remove opening {number} from quotation',{number:formatNumber(index+1)})} className="min-h-11 rounded-md px-3 text-sm font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700" onClick={()=>removeOpening(opening)}>{term('Remove from quotation')}</button></div>
      <p className="mt-2 text-sm text-slate-500">{term("Floor")} {term(opening.floor)} · {opening.work_area==='internal'?`${term('Internal works')} · ${term(opening.room)}`:term(opening.room)} · {formatNumber(opening.width)} × {formatNumber(opening.height)} {term("cm")} · {term("Quantity")}: {formatNumber(opening.quantity??1)}{isNew?` · ${term('Not saved yet')}`:''}</p>
      {minimumApplied&&<p className="mt-2 text-xs text-slate-600">{term('Minimum billable area: 1 m² per window.')} {term('Billable area: {area} m²',{area:formatNumber(billableOpeningArea(opening)*(opening.quantity??1))})}</p>}
      <div className="mt-5 grid gap-4 sm:grid-cols-2">
-      <label className="text-sm">{term("System / product")}<select aria-label={term("System / product")} value={choice.systemId} onChange={e=>edit(index,{systemId:e.target.value,systemRate:undefined,glassId:'',extras:[]})} className={field}><option value="">{term("Choose system")}</option>{systemOptions(opening,catalog).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
-      <label className="text-sm">{term("Glass")}<select aria-label={term("Glass")} value={choice.glassId} onChange={e=>edit(index,{glassId:e.target.value,extras:choice.extras.filter(x=>x.id!==e.target.value)})} className={field}><option value="">{term("Standard glass included")}</option>{glassOptions(opening,catalog,choice.systemId).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
+      <label className="text-sm">{term("System / product")}<select aria-label={term("System / product")} value={choice.systemId} onChange={e=>edit(opening.id,{systemId:e.target.value,systemRate:undefined,glassId:'',extras:[]})} className={field}><option value="">{term("Choose system")}</option>{systemOptions(opening,catalog).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
+      <label className="text-sm">{term("Glass")}<select aria-label={term("Glass")} value={choice.glassId} onChange={e=>edit(opening.id,{glassId:e.target.value,extras:choice.extras.filter(x=>x.id!==e.target.value)})} className={field}><option value="">{term("Standard glass included")}</option>{glassOptions(opening,catalog,choice.systemId).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
       {editableRate&&<div className="sm:col-span-2">
-       <label className="block text-sm">{term('Quotation system rate (IQD / m²)')}<input aria-label={term('Quotation system rate (IQD / m²)')} aria-describedby={`system-rate-help-${opening.id}`} aria-invalid={invalidRate} type="number" inputMode="numeric" min={QUOTATION_SYSTEM_RATE_MIN} step={1} value={systemRate||''} onChange={e=>edit(index,{systemRate:Number(e.target.value)})} className={`${field} block sm:max-w-xs`}/></label>
+       <label className="block text-sm">{term('Quotation system rate (IQD / m²)')}<input aria-label={term('Quotation system rate (IQD / m²)')} aria-describedby={`system-rate-help-${opening.id}`} aria-invalid={invalidRate} type="number" inputMode="numeric" min={QUOTATION_SYSTEM_RATE_MIN} step={1} value={systemRate||''} onChange={e=>edit(opening.id,{systemRate:Number(e.target.value)})} className={`${field} block sm:max-w-xs`}/></label>
        <p id={`system-rate-help-${opening.id}`} className="mt-2 text-xs leading-5 text-slate-600">{term('Enter at least {minimum} IQD per m² in whole IQD. Applies to this quotation only.',{minimum:formatNumber(QUOTATION_SYSTEM_RATE_MIN)})}</p>
        <p className="mt-1 text-xs font-medium text-slate-700">{term('Minimum rate for green: {rate} / m²',{rate:formatMoney(openingMinimumSellingRate(area,opening))})}</p>
       </div>}
@@ -180,18 +194,18 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
      {(opening.quantity??1)>1&&<p className="mt-3 text-xs text-slate-600">{term('Specifications and add-on quantities apply to each identical opening. Area and totals include all openings.')}</p>}
      {opening.has_roller_shutter&&<div className="mt-5 rounded-md border border-blue-200 bg-blue-50 p-4">
       <p className="mb-3 text-sm font-semibold text-blue-900">{term('Roller shutter requested for this window')}</p>
-      <label className="block text-sm">{term('Roller shutter type')}<select aria-label={term('Roller shutter type')} value={choice.extras.find(e=>catalog.some(p=>p.id===e.id&&isRollerShutter(p)))?.id??''} className={field} onChange={event=>edit(index,{extras:[...choice.extras.filter(e=>!catalog.some(p=>p.id===e.id&&(isRollerShutter(p)||(!event.target.value&&isShutterBox(p))))),...(event.target.value?[{id:event.target.value,quantity:1}]:[])]})}>
+      <label className="block text-sm">{term('Roller shutter type')}<select aria-label={term('Roller shutter type')} value={choice.extras.find(e=>catalog.some(p=>p.id===e.id&&isRollerShutter(p)))?.id??''} className={field} onChange={event=>edit(opening.id,{extras:[...choice.extras.filter(e=>!catalog.some(p=>p.id===e.id&&(isRollerShutter(p)||(!event.target.value&&isShutterBox(p))))),...(event.target.value?[{id:event.target.value,quantity:1}]:[])]})}>
        <option value="">{term('Choose roller shutter type')}</option>{addonOptions(opening,catalog,choice.systemId).filter(isRollerShutter).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}
       </select></label>
      </div>}
-     <div className="mt-5"><label className="text-sm">{term("Add an extra")}<select aria-label={term("Add an extra")} value="" onChange={e=>{if(e.target.value)edit(index,{extras:[...choice.extras,{id:e.target.value,quantity:1}]});}} className={field}><option value="">{term("Choose add-on")}</option>{addonOptions(opening,catalog,choice.systemId).filter(p=>p.id!==choice.systemId&&p.id!==choice.glassId&&!choice.extras.some(e=>e.id===p.id)&&(!isShutterBox(p)||choice.extras.some(e=>catalog.some(c=>c.id===e.id&&isRollerShutter(c))))&&(!isRollerShutter(p)||!choice.extras.some(e=>catalog.some(c=>c.id===e.id&&isRollerShutter(c))))).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
+     <div className="mt-5"><label className="text-sm">{term("Add an extra")}<select aria-label={term("Add an extra")} value="" onChange={e=>{if(e.target.value)edit(opening.id,{extras:[...choice.extras,{id:e.target.value,quantity:1}]});}} className={field}><option value="">{term("Choose add-on")}</option>{addonOptions(opening,catalog,choice.systemId).filter(p=>p.id!==choice.systemId&&p.id!==choice.glassId&&!choice.extras.some(e=>e.id===p.id)&&(!isShutterBox(p)||choice.extras.some(e=>catalog.some(c=>c.id===e.id&&isRollerShutter(c))))&&(!isRollerShutter(p)||!choice.extras.some(e=>catalog.some(c=>c.id===e.id&&isRollerShutter(c))))).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
       {choice.extras.map(extra=>{const p=catalog.find(p=>p.id===extra.id);const maximumMotorPrice=Math.floor(Number.MAX_SAFE_INTEGER/(opening.quantity??1));const invalidMotorPrice=p&&isRollerShutter(p)&&(!Number.isSafeInteger(extra.motorPrice)||(extra.motorPrice??0)<1||(extra.motorPrice??0)>maximumMotorPrice);return <div key={extra.id} className="mt-3 flex flex-wrap items-center gap-3 rounded-md bg-slate-50 p-3">
        <span className="w-full min-w-0 text-sm sm:w-auto sm:flex-1">{term(p?.name??'Unavailable item')}{p&&isRollerShutter(p)?<span className="block text-xs text-slate-500">{term('Fixed shutter price per opening: {price}',{price:formatMoney(p.unit_price)})}</span>:p?.unit==='sqm'&&<span className="block text-xs text-slate-500">{term(minimumApplied?'Uses this opening’s billable area':'Uses this opening’s area')}</span>}</span>
        {p&&isShutterBox(p)&&<p className="w-full text-xs text-slate-500">{term('Optional with roller shutters when the structure has no concealed shutter recess.')}</p>}
-       {p?.unit!=='sqm'&&(!p||!isRollerShutter(p))&&<label className="text-xs">{term(quantityLabel(p?.unit))}<input aria-label={term('{name} quantity',{name:term(p?.name)})} type="number" min={p?.unit==='item'?1:0.01} max="1000000" step={p?.unit==='item'?1:0.01} value={extra.quantity||''} className={`${field} max-w-28`} onChange={e=>edit(index,{extras:choice.extras.map(x=>x.id===extra.id?{...x,quantity:Number(e.target.value)}:x)})}/></label>}
-       <button type="button" className="min-h-11 px-3 text-sm text-red-700" onClick={()=>edit(index,{extras:choice.extras.filter(x=>x.id!==extra.id&&!(p&&isRollerShutter(p)&&catalog.some(c=>c.id===x.id&&isShutterBox(c))))})}>{term("Remove")}</button>
+       {p?.unit!=='sqm'&&(!p||!isRollerShutter(p))&&<label className="text-xs">{term(quantityLabel(p?.unit))}<input aria-label={term('{name} quantity',{name:term(p?.name)})} type="number" min={p?.unit==='item'?1:0.01} max="1000000" step={p?.unit==='item'?1:0.01} value={extra.quantity||''} className={`${field} max-w-28`} onChange={e=>edit(opening.id,{extras:choice.extras.map(x=>x.id===extra.id?{...x,quantity:Number(e.target.value)}:x)})}/></label>}
+       <button type="button" className="min-h-11 px-3 text-sm text-red-700" onClick={()=>edit(opening.id,{extras:choice.extras.filter(x=>x.id!==extra.id&&!(p&&isRollerShutter(p)&&catalog.some(c=>c.id===x.id&&isShutterBox(c))))})}>{term("Remove")}</button>
        {p&&isRollerShutter(p)&&<div className="w-full border-t border-slate-200 pt-3">
-        <label className="block text-sm font-medium">{term('Motor price (IQD per motor)')}<input aria-label={term('Motor price (IQD per motor)')} aria-describedby={`motor-price-help-${opening.id}-${extra.id}`} aria-invalid={invalidMotorPrice} required type="number" inputMode="numeric" min={1} max={maximumMotorPrice} step={1} value={extra.motorPrice??''} onChange={event=>edit(index,{extras:choice.extras.map(item=>item.id===extra.id?{...item,motorPrice:event.target.value===''?undefined:Number(event.target.value)}:item)})} className={`${field} block sm:max-w-xs`}/></label>
+        <label className="block text-sm font-medium">{term('Motor price (IQD per motor)')}<input aria-label={term('Motor price (IQD per motor)')} aria-describedby={`motor-price-help-${opening.id}-${extra.id}`} aria-invalid={invalidMotorPrice} required type="number" inputMode="numeric" min={1} max={maximumMotorPrice} step={1} value={extra.motorPrice??''} onChange={event=>edit(opening.id,{extras:choice.extras.map(item=>item.id===extra.id?{...item,motorPrice:event.target.value===''?undefined:Number(event.target.value)}:item)})} className={`${field} block sm:max-w-xs`}/></label>
         <p id={`motor-price-help-${opening.id}-${extra.id}`} className="mt-2 text-xs leading-5 text-slate-600">{term('All roller shutters are motorized. Enter the motor price manually based on shutter weight. One motor is charged per opening.')}</p>
         {(opening.quantity??1)>1&&Number.isSafeInteger(extra.motorPrice)&&(extra.motorPrice??0)>0&&!invalidMotorPrice&&<p className="mt-1 text-xs font-medium text-slate-700">{term('Motor total: {count} × {price} = {total}',{count:formatNumber(opening.quantity??1),price:formatMoney(extra.motorPrice??0),total:formatMoney((extra.motorPrice??0)*(opening.quantity??1))})}</p>}
        </div>}
@@ -199,6 +213,14 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
      </div>
     </section>;
    })}
+   {removedOpenings.length>0&&<section aria-label={term('Removed from this quotation')} className={`${card} border-amber-200 bg-amber-50`}>
+    <h2 className="font-semibold text-slate-900">{term('Removed from this quotation')}</h2>
+    <p className="mt-2 text-sm leading-6 text-slate-700">{term('Original measurements are kept. Removal applies when you save this quotation.')}</p>
+    <ul className="mt-3 divide-y divide-amber-200">{removedOpenings.map(opening=>{
+     const number=formatNumber(allOpenings.findIndex(row=>row.id===opening.id)+1);
+     return <li key={opening.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div className="min-w-0 text-sm"><p className="font-semibold">{term('Opening {number}',{number})} · {term(opening.opening_type)}</p><p className="mt-1 break-words text-slate-600">{term(opening.floor)} · {term(opening.room)} · {formatNumber(opening.width)} × {formatNumber(opening.height)} {term('cm')}</p></div><button type="button" className={secondary} onClick={()=>restoreOpening(opening.id)}>{term('Restore opening {number}',{number})}</button></li>;
+    })}</ul>
+   </section>}
    {data.openings.some(o=>o.opening_type==='Skylight')&&<p className="rounded-lg bg-blue-50 p-4 text-sm">{term('Skylights are priced separately in the calculator and are not included in this quotation.')} <Link href="/skylight" className="font-semibold underline">{term('Open skylight calculator')}</Link> · <Link href={`/initial-measurements/${projectId}`} className="font-semibold underline">{term('View skylight photos and drawings')}</Link></p>}
    {addingOpening?<QuotationOpeningForm onAdd={addOpening} onCancel={()=>setAddingOpening(false)}/>:<button type="button" disabled={newOpenings.length>=100||addingFacade} onClick={()=>setAddingOpening(true)} className={secondary}>{term("+ Add opening")}</button>}
    {(data.project.building_type==='commercial_building'||facades.length>0)&&<section className={card} aria-label={term('Recorded facade dimensions')}>

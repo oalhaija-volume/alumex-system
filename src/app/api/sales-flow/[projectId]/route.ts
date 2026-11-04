@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { uploadedContractTerms } from '@/lib/contracts/uploadedTerms';
 import { salesProject } from '@/lib/workflow/access';
 import { applyQuotationDiscount, priceQuotation, repriceQuotation, quotationPriceKey, type CatalogItem, type OpeningChoice, type AdditionalChoice } from '@/lib/workflow/pricing';
-import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
+import { normalizeExcludedOpeningIds, quotationOpenings } from '@/lib/workflow/quotationOpenings';
 import type { Json } from '@/lib/supabase/database.types';
 import type { SalesFlow } from '@/lib/workflow/types';
 type Context={params:Promise<{projectId:string}>};
@@ -83,10 +83,13 @@ export async function POST(request:Request,context:Context){
    const [openings,catalog]=await Promise.all([admin.from('openings').select('id,floor,room,width,height,quantity,work_area,facade_number,has_arch,has_roller_shutter,opening_type,opening_direction').eq('project_id',projectId).order('created_at'),admin.from('product_price_settings').select('id,name:product_name,category,unit,unit_price,is_active').eq('is_active',true)]);
    if(openings.error||catalog.error)throw new Error('Unable to load pricing.');
    if(!Array.isArray(body.choices))throw new Error('Select a system for every opening.');
-   const measured=quotationOpenings(openings.data??[],body.newOpenings??[]);
-   if(measured.slice(openings.data?.length??0).some(opening=>opening.opening_type==='Facade')&&project.building_type!=='commercial_building')throw new Error('Facade and Internal works are only available for commercial buildings.');
+   const allMeasured=quotationOpenings(openings.data??[],body.newOpenings??[]);
+   if(allMeasured.slice(openings.data?.length??0).some(opening=>opening.opening_type==='Facade')&&project.building_type!=='commercial_building')throw new Error('Facade and Internal works are only available for commercial buildings.');
+   const excludedOpeningIds=normalizeExcludedOpeningIds(openings.data??[],body.excludedOpeningIds===undefined?flow?.quotation.excludedOpeningIds??[]:body.excludedOpeningIds);
+   const excluded=new Set(excludedOpeningIds);
+   const measured=allMeasured.filter(opening=>!excluded.has(opening.id));
    const discountPercent=body.discountPercent===undefined?flow?.quotation.discount?.percent??0:body.discountPercent;
-   payload={...priceQuotation(measured,body.choices as OpeningChoice[],catalog.data as CatalogItem[],auth.user.id,(body.additionalItems??[]) as AdditionalChoice[],discountPercent),branch:project.branch,governorate:project.governorate??null} as unknown as Json;
+   payload={...priceQuotation(measured,body.choices as OpeningChoice[],catalog.data as CatalogItem[],auth.user.id,(body.additionalItems??[]) as AdditionalChoice[],discountPercent),...(excludedOpeningIds.length?{excludedOpeningIds}:{}),branch:project.branch,governorate:project.governorate??null} as unknown as Json;
   }
   if(action==='approve' && body.confirmed!==true)throw new Error('Confirm that the client approved this quotation.');
   if(action==='contract'){

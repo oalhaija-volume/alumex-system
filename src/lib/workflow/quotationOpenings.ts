@@ -1,6 +1,15 @@
 import { normalizeRegistrationOpening } from '@/lib/measurements/registrationOpening';
 import type { MeasuredOpening } from './pricing';
 
+// Removal changes the quotation only. Recorded site measurements remain intact.
+export function normalizeExcludedOpeningIds(existing: MeasuredOpening[], input: unknown = []): string[] {
+ const eligible = new Set(existing.filter(opening => opening.opening_type !== 'Facade' && opening.opening_type !== 'Skylight').map(opening => opening.id));
+ if (!Array.isArray(input) || input.some(id => typeof id !== 'string' || !eligible.has(id)) || new Set(input).size !== input.length) {
+  throw new Error('Invalid removed openings. Reload the quotation.');
+ }
+ return [...input] as string[];
+}
+
 // New openings stay in the quotation draft until a single database transaction
 // saves both the measurements and the freshly priced quotation.
 export function quotationOpenings(existing:MeasuredOpening[], input:unknown):MeasuredOpening[] {

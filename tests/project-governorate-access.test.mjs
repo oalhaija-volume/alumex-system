@@ -115,7 +115,7 @@ for (const action of ['save', 'contract']) {
       '@/lib/workflow/access': { salesProject: async () => ({ project, admin, auth: { role: 'Indoor Sales', user: { id: 'indoor' } } }) },
       '@/lib/contracts/uploadedTerms': { uploadedContractTerms: () => [] },
       '@/lib/workflow/pricing': { priceQuotation: () => ({ lines: [], total: 100, currency: 'IQD' }) },
-      '@/lib/workflow/quotationOpenings': { quotationOpenings: () => [] },
+      '@/lib/workflow/quotationOpenings': { quotationOpenings: () => [], normalizeExcludedOpeningIds: load('lib/workflow/quotationOpenings.ts').normalizeExcludedOpeningIds },
     });
     const result = await route.POST(new Request('http://localhost:3003/api/sales-flow/basra', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, revision: 0, choices: [], template: 'residential' }),

@@ -9,7 +9,7 @@ export type AdditionalChoice = {id:string;quantity:number;measurements?:SurfaceM
 export type Charge = {id:string;name:string;unit:string;rate:number;quantity:number;total:number;rateSource?:'quotation';motorFor?:string};
 export type StandaloneCharge = Charge & {measurements?:SurfaceMeasurement[];extras?:Charge[];projectAddon?:true};
 export type QuoteLine = {opening:MeasuredOpening;system:Charge;glass:Charge|null;extras:Charge[];area:number;total:number};
-export type QuoteSnapshot = {facadeMeasurements?:MeasuredOpening[];branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;discount?:{percent:5;subtotal:number;amount:number};total:number;currency:"IQD";createdAt:string;preparedBy:string};
+export type QuoteSnapshot = {excludedOpeningIds?:string[];facadeMeasurements?:MeasuredOpening[];branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;discount?:{percent:5;subtotal:number;amount:number};total:number;currency:"IQD";createdAt:string;preparedBy:string};
 // Keep charge rates intact and deduct the discount once from the whole quotation.
 // Reconstructing the subtotal also makes removal and repeated edits non-stacking.
 export function applyQuotationDiscount(snapshot:QuoteSnapshot,discountPercent:unknown=0):QuoteSnapshot {

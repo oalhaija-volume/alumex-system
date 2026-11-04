@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import * as jsxRuntime from 'react/jsx-runtime';
 
 function load(path,dependencies={}) {
- const code=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+ const code=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText;
  const exports={};
  new Function('require','exports',code)(name=>{
   if(!(name in dependencies))throw Error(`Unexpected dependency: ${name}`);
@@ -207,4 +210,59 @@ test('older lines without quantities still count one opening and use their saved
  const [standalone]=quotationItemGroups({lines:[],additionalItems:[charge('product','Historic product',12345)]});
  assert.equal(standalone.area,0);
  assert.equal(standalone.openingCount,0);
+});
+
+
+for(const locale of ['en','ar'])test(`${locale} Curtain Wall measured summary precedes add-ons and its subtotal shows only money`,()=>{
+ const terms=JSON.parse(readFileSync(new URL(`../messages/${locale}.json`,import.meta.url),'utf8')).terms;
+ const term=(value,replacements={})=>(terms[value]??value??'').replace(/\{(\w+)\}/g,(match,key)=>replacements[key]??match);
+ const formatNumber=(value,maximumFractionDigits=4)=>new Intl.NumberFormat('en-GB',{maximumFractionDigits}).format(value);
+ const formatMoney=value=>`${formatNumber(value,0)} ${locale==='ar'?'د.ع':'IQD'}`;
+ const document=load('../src/components/workflow/CommercialDocument.tsx',{
+  'react/jsx-runtime':jsxRuntime,
+  '@/components/i18n/I18nProvider':{useI18n:()=>({locale,term,formatNumber,formatMoney})},
+  '@/lib/workflow/pricing':pricing,
+  '@/lib/quotations/itemGroups':{quotationItemGroups},
+  './OpeningAreaIndicator':{},
+ });
+ const catalog=[
+  {id:'curtain',name:'Curtain Wall',category:'facade_service',unit:'sqm',unit_price:100000,is_active:true},
+  {id:'pushout',name:'Curtain Wall Pushout',category:'addon',unit:'sqm',unit_price:750000,is_active:true},
+  {id:'system',name:'Alumex System',category:'aluminum_system',unit:'sqm',unit_price:240000,is_active:true},
+ ];
+ const measured=[
+  {id:'curtain-opening',floor:'Ground',room:'Office',width:589,height:500,quantity:1,opening_type:'Curtain Wall',opening_direction:null},
+  {id:'sliding-opening',floor:'Ground',room:'Office',width:100,height:100,quantity:1,opening_type:'Window',opening_direction:'Sliding'},
+ ];
+ const quote=pricing.priceQuotation(measured,[{openingId:'curtain-opening',systemId:'curtain',extras:[]},{openingId:'sliding-opening',systemId:'system',extras:[]}],catalog,'fixture',[
+  {id:'curtain',quantity:1,measurements:[{label:'Main facade',width:50,height:10,quantity:1}]},
+  {id:'pushout',quantity:12},
+ ]);
+ const before=structuredClone(quote);
+ const markup=renderToStaticMarkup(React.createElement(document.OpeningSchedule,{quote}));
+ const headingStart=markup.indexOf('document-curtain-wall-heading');
+ assert.ok(headingStart>0);
+ const heading=markup.slice(headingStart,markup.indexOf('</dl></div>',headingStart));
+ assert.ok(heading.includes(term('Curtain Wall')));
+ assert.ok(heading.includes('data-area="529.45" data-opening-count="1"'));
+ assert.ok(heading.includes(`529.45 ${term('m²')}`));
+ const pushoutRow=markup.match(/<tr>[\s\S]*?<\/tr>/g).find(row=>row.includes(term('Curtain Wall Pushout')));
+ assert.ok(pushoutRow);
+ assert.ok(pushoutRow.includes(`12 ${term('item')}`));
+ assert.ok(pushoutRow.includes('750,000'));
+ assert.ok(pushoutRow.includes('9,000,000'));
+ assert.equal(pushoutRow.includes(term('m²')),false,'Pushout basis is a count, never the facade area');
+ assert.ok(headingStart<markup.indexOf(pushoutRow),'Curtain Wall summary belongs above the add-on rows');
+ const subtotalStart=markup.indexOf('data-group-subtotal="curtain wall"');
+ const subtotal=markup.slice(subtotalStart,markup.indexOf('</section>',subtotalStart));
+ assert.ok(subtotal.includes(formatMoney(61945000)));
+ assert.equal(subtotal.includes('document-summary-measures'),false);
+ assert.equal(subtotal.includes(term('m²')),false,'The Curtain Wall subtotal cannot appear to apply facade area to Pushout');
+ const slidingStart=markup.indexOf('data-group-subtotal="sliding"');
+ const slidingSubtotal=markup.slice(slidingStart,markup.indexOf('</section>',slidingStart));
+ assert.ok(slidingSubtotal.includes('document-summary-measures'),'Other group summaries keep their existing subtotal layout');
+ const grandTotal=markup.slice(markup.indexOf('class="document-total"'));
+ assert.ok(grandTotal.includes('data-area="530.45" data-opening-count="2"'));
+ assert.ok(grandTotal.includes(formatMoney(62185000)));
+ assert.deepEqual(quote,before,'Schedule layout cannot change charges or saved quantities');
 });

@@ -41,7 +41,7 @@ export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal
  {showAreaColors&&quote.lines.some(line=>isAlumexSqmSystem(line.system))&&<OpeningSellingLegend discountPercent={colorDiscountPercent}/>}
  {!quote.lines.length&&!!groups.length&&<div className="document-section-heading"><h3>{term('Standalone products & facade services')}</h3></div>}
  {groups.map(group=><section key={group.key} className="document-item-group" data-item-group={group.key} aria-label={term(group.label)}>
-  <h4 className="document-item-group-title">{term(group.label)}</h4>
+  {group.key==='curtain wall'?<div className="document-item-group-title document-curtain-wall-heading"><h4>{term(group.label)}</h4>{(group.area>0||group.openingCount>0)&&<ScheduleMeasures area={group.area} openingCount={group.openingCount}/>}</div>:<h4 className="document-item-group-title">{term(group.label)}</h4>}
  {!!group.lines.length&&<div className="document-schedule-scroll" role="region" aria-label={`${term('Opening schedule')} · ${term(group.label)}`} tabIndex={0}>
   <table className="document-opening-table">
    <caption className="sr-only">{term('Opening schedule')} · {term(group.label)}</caption>
@@ -76,7 +76,7 @@ export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal
   {!!item.measurements?.length&&<table><caption className="sr-only">{term('Measured facade areas')}</caption><thead><tr><th>{term('Area / elevation name')}</th><th>{term('Dimensions (m)')}</th><th>{term('Quantity')}</th><th>{term('Area (m²)')}</th></tr></thead><tbody>{item.measurements.map((area,index)=><tr key={index}><td dir="auto">{term(area.label)}</td><td><bdi>{formatNumber(area.width,3)} × {formatNumber(area.height,3)}</bdi></td><td>{formatNumber(area.quantity)}</td><td>{formatNumber(area.width*area.height*area.quantity,3)}</td></tr>)}</tbody></table>}
   <table><caption className="sr-only">{term('Project products and services')}</caption><thead><tr><th>{term('Product / service')}</th><th>{term('Basis')}</th><th>{term('Rate · IQD')}</th><th>{term('Amount · IQD')}</th></tr></thead><tbody><ChargeRows items={[item,...(item.extras??[])]}/></tbody></table>
  </section>)}
- <div className="document-group-subtotal" data-group-subtotal={group.key}><span>{term('{group} subtotal',{group:term(group.label)})}</span><div className="document-summary-values"><ScheduleMeasures area={group.area} openingCount={group.openingCount}/><strong><bdi>{formatMoney(group.subtotal)}</bdi></strong></div></div>
+ <div className="document-group-subtotal" data-group-subtotal={group.key}><span>{term('{group} subtotal',{group:term(group.label)})}</span><div className="document-summary-values">{group.key!=='curtain wall'&&<ScheduleMeasures area={group.area} openingCount={group.openingCount}/>}<strong><bdi>{formatMoney(group.subtotal)}</bdi></strong></div></div>
  </section>)}
  {!!quote.facadeMeasurements?.length&&<section className="document-opening">
   <div className="document-section-heading"><h3>{term('Recorded facade dimensions')}</h3></div>

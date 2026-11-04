@@ -39,7 +39,7 @@ export const catalogGroups: {kind:CatalogKind;label:string;description:string}[]
   {kind:'standalone',label:'Standalone products',description:'Products quoted separately, including photocell and swing doors.'},
   {kind:'opening',label:'Opening products',description:'Select these as the main product for a measured opening, not as an add-on.'},
   {kind:'glass',label:'Glass options',description:'Glass finishes selected and priced on compatible openings.'},
-  {kind:'addon',label:'Add-ons',description:'Accessories attached only to compatible openings or facade services.'},
+  {kind:'addon',label:'Add-ons',description:'Accessories selected on compatible openings or entered as project quantities.'},
   {kind:'other',label:'Other catalog items',description:'Review the category before using these items in a quotation.'},
 ];
 export function catalogUsage(product: Pick<CatalogProduct,'name'|'category'>) {

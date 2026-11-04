@@ -216,7 +216,7 @@ test('catalog classification overrides incorrect legacy categories and excludes 
  assert.ok(systems.includes('lift')&&systems.includes('louver'));
  for(const id of ['reynaers','aluman','windows','skylight'])assert.ok(!systems.includes(id));
  const standalone=pricing.additionalOptions(correctedCatalog).map(p=>p.id);
- assert.deepEqual(standalone,['swing','cladding','curtain','pushout','photocell','photocell-turkey','curtain-wall-arch']);
+ assert.deepEqual(standalone,['closer','swing','cladding','curtain','pushout','tilt','hydraulic','film','georgian','photocell','photocell-turkey','curtain-wall-arch']);
  assert.deepEqual(pricing.glassOptions(opening,correctedCatalog).map(p=>p.id),['glass','sand','saint']);
 });
 
@@ -266,7 +266,7 @@ test('standalone doors are independently priced and skylights are excluded from 
  const quote=pricing.priceQuotation([],[],correctedCatalog,'actor',[{id:'photocell',quantity:2},{id:'swing',quantity:1}]);assert.equal(quote.total,30000);
  const skylight={...opening,id:'sky',opening_type:'Skylight',opening_direction:null};
  const mixed=pricing.priceQuotation([opening,skylight],[plainChoice],correctedCatalog,'actor');assert.equal(mixed.lines.length,1);
- for(const id of ['skylight','reynaers','aluman','windows','tilt','sand','photocell-generic','fiber'])assert.throws(()=>pricing.priceQuotation([],[],correctedCatalog,'actor',[{id,quantity:1}]));
+ for(const id of ['skylight','reynaers','aluman','windows','sand','photocell-generic','fiber','roller','foam','box'])assert.throws(()=>pricing.priceQuotation([],[],correctedCatalog,'actor',[{id,quantity:1}]));
 });
 
 test('Operations receives facade measurements and pushout counts without monetary fields',()=>{

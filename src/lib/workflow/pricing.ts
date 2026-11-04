@@ -7,7 +7,7 @@ export type OpeningChoice = {openingId:string;systemId:string;systemRate?:number
 export type SurfaceMeasurement = {label:string;width:number;height:number;quantity:number};
 export type AdditionalChoice = {id:string;quantity:number;measurements?:SurfaceMeasurement[];extras?:ExtraChoice[];hasCurtainWallArch?:boolean};
 export type Charge = {id:string;name:string;unit:string;rate:number;quantity:number;total:number;rateSource?:'quotation';motorFor?:string};
-export type StandaloneCharge = Charge & {measurements?:SurfaceMeasurement[];extras?:Charge[]};
+export type StandaloneCharge = Charge & {measurements?:SurfaceMeasurement[];extras?:Charge[];projectAddon?:true};
 export type QuoteLine = {opening:MeasuredOpening;system:Charge;glass:Charge|null;extras:Charge[];area:number;total:number};
 export type QuoteSnapshot = {facadeMeasurements?:MeasuredOpening[];branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;discount?:{percent:5;subtotal:number;amount:number};total:number;currency:"IQD";createdAt:string;preparedBy:string};
 // Keep charge rates intact and deduct the discount once from the whole quotation.
@@ -134,7 +134,8 @@ export function glassOptions(opening:MeasuredOpening,catalog:CatalogItem[],syste
 export function addonOptions(opening:MeasuredOpening,catalog:CatalogItem[],systemId?:string) { return catalog.filter(p=>compatibleAddon(p,opening.opening_type,catalog.find(s=>s.id===systemId))); }
 export function additionalOptions(catalog:CatalogItem[]):CatalogItem[] {
  // Arch has a fixed quotation price; legacy catalog rows must not override it.
- return [...catalog.filter(p=>!isCurtainWallArch(p)&&p.id!==CURTAIN_WALL_ARCH_ID&&isAvailable(p)&&['facade','standalone'].includes(catalogKind(p))).map(normalizeCatalogItem),{id:CURTAIN_WALL_ARCH_ID,name:'Curtain Wall Arch',category:'standalone_product',unit:'item',unit_price:CURTAIN_WALL_ARCH_PRICE,is_active:true}];
+ // Roller shutters remain on openings so their motors and boxes stay linked.
+ return [...catalog.filter(p=>!isCurtainWallArch(p)&&p.id!==CURTAIN_WALL_ARCH_ID&&isAvailable(p)&&(['facade','standalone'].includes(catalogKind(p))||catalogKind(p)==='addon'&&!isRollerShutter(p)&&!isShutterBox(p))).map(normalizeCatalogItem),{id:CURTAIN_WALL_ARCH_ID,name:'Curtain Wall Arch',category:'standalone_product',unit:'item',unit_price:CURTAIN_WALL_ARCH_PRICE,is_active:true}];
 }
 // Edit old quotations using their saved absolute add-on counts. In particular,
 // never multiply a pushout count by repeated walls for a second time.
@@ -302,7 +303,7 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   const quantity=facade?measuredFacadeArea(item.measurements??[]):item.quantity;
   const base=item.id===CURTAIN_WALL_ARCH_ID?curtainWallArchCharge(quantity):catalogCharge(item.id,quantity,catalog);
   const extras=[...priceExtras(item.extras??[],facadeAddonOptions(product,catalog),catalog,quantity),...priceCurtainWallArch(item.hasCurtainWallArch,isCurtainWall(product),1)];
-  return {...base,...(facade?{measurements:item.measurements!.map(s=>({label:s.label.trim(),width:s.width,height:s.height,quantity:s.quantity}))}:{}),...(extras.length?{extras}:{} )};
+  return {...base,...(catalogKind(product)==='addon'?{projectAddon:true as const}:{}),...(facade?{measurements:item.measurements!.map(s=>({label:s.label.trim(),width:s.width,height:s.height,quantity:s.quantity}))}:{}),...(extras.length?{extras}:{} )};
  });
  const total=lines.reduce((sum,line)=>sum+line.total,0)+additional.reduce((sum,item)=>sum+item.total+(item.extras?.reduce((s,e)=>s+e.total,0)??0),0);
  if(!Number.isSafeInteger(total)||total<=0)throw new Error('Add a measured opening, facade service or standalone product before quoting.');

@@ -794,6 +794,7 @@ textarea {
 .document-schedule-scroll:focus-visible { outline:2px solid #2563eb; outline-offset:3px; }
 .document-item-group { margin-bottom:24px; }
 .document-item-group-title { padding:10px 12px; background:#edf3f6; color:#194b65; font-size:14px; font-weight:650; border-inline-start:3px solid #194b65; }
+.document-curtain-wall-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 20px; break-inside:avoid; }
 .document-item-group .document-schedule-scroll { margin-bottom:0; }
 .document-item-group .document-opening { margin-top:12px; margin-bottom:0; }
 .document-group-subtotal { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:8px 16px; padding:12px; border-top:2px solid #becdd6; background:#f8fafb; color:#194b65; font-weight:600; }

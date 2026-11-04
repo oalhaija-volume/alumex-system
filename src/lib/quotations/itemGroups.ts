@@ -65,7 +65,7 @@ export function quotationItemGroups(quote:Pick<QuoteSnapshot,'lines'|'additional
   group.additionalItems.push(item);
   group.subtotal+=item.total+(item.extras??[]).reduce((sum,extra)=>sum+extra.total,0);
   // Services have area, but no physical opening count; accessories add neither.
-  if(item.unit==='sqm')group.area+=item.quantity;
+  if(item.unit==='sqm'&&!item.projectAddon)group.area+=item.quantity;
  }
  return [...groups.values()].sort((a,b)=>{
   const aIndex=groupOrder.indexOf(a.key),bIndex=groupOrder.indexOf(b.key);

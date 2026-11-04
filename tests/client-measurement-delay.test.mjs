@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 function load(path,deps={}) {
  const code=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
- const exports={};new Function('require','exports',code)(name=>{if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});
+ const exports={};new Function('require','exports',code)(name=>{if(name==='@/lib/measurements/openingOwnership')return load('../src/lib/measurements/openingOwnership.ts',{});if(name==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});
   if(name==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');
   if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');
   if(name==='@/lib/measurements/registrationOpening')return load('../src/lib/measurements/registrationOpening.ts');
@@ -20,7 +20,7 @@ function route({role='Outdoor Sales',assigned='employee',delayed=false,createdBy
   'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200})}},
   '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,profile:{branch:'Karkh'},user:{id:'employee'}})},
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
-  '@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:project})}),rpc:async(name,args)=>{calls.push({name,args});return {data:{...project,measurement_delayed:true}};}})},
+  '@/lib/supabase/admin':{createAdminClient:()=>({from:table=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:table==='openings'?{id,project_id:id,created_by:'employee'}:project})}),rpc:async(name,args)=>{calls.push({name,args});return {data:{...project,measurement_delayed:true}};}})},
  })};
 }
 const request=body=>({json:async()=>body});

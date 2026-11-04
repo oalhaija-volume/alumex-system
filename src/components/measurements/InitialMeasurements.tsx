@@ -9,7 +9,9 @@ import { SkylightCapturePreview } from './SkylightCapturePreview';
 import { ClientCancellation } from './ClientCancellation';
 import { MeasurementDelayNotice } from './MeasurementDelayNotice';
 import { visitOutcomeLabel } from '@/lib/workflow/projectLog';
-import type { FieldProject } from '@/lib/offline/types';
+import type { FieldActor, FieldProject } from '@/lib/offline/types';
+import { ProjectNameEditor } from '@/components/workflow/ProjectNameEditor';
+import { canEditOpeningEntry } from '@/lib/measurements/openingOwnership';
 import { canPrepareQuotation } from '@/lib/auth/permissions';
 import { useMobileOutdoor } from "@/components/workflow/MobileOutdoorContext";
 import { ProjectRecord } from '@/components/workflow/ProjectRecord';
@@ -22,7 +24,7 @@ import { normalizeRegistrationOpening, registrationRoomTypes, registrationStruct
 
 const measurementFloors = ["GF", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "Roof", "Basement"];
 const field = "mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
-export function InitialMeasurements({projectId,role}:{projectId:string;role?:string}) {
+export function InitialMeasurements({projectId,role,actor}:{projectId:string;role?:string;actor?:FieldActor}) {
   const mobileOutdoor = useMobileOutdoor();
   const canQuote = canPrepareQuotation(role);
   const {t,term,errorMessage,formatNumber} = useI18n();
@@ -102,6 +104,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   }
   function editOpening(opening:RegistrationOpening){
     if(saving||photoBusy||dirty)return;
+    if(!canEditOpeningEntry(opening,actor,role)){setError('You can edit only openings you recorded.');return;}
     setWorkArea(opening.workArea??(commercial?"internal":""));setFacadeNumber(String(opening.facadeNumber??1));
     setEditing(opening);setEditOperationId(crypto.randomUUID());setDraftId(opening.id);
     setFloor(measurementFloors.includes(opening.floor)?opening.floor:"Other");setOtherFloor(measurementFloors.includes(opening.floor)?"":opening.floor);setRoom(opening.room);setOtherRoom(opening.otherRoom);setWidth(String(opening.width));setHeight(String(opening.height));setQuantity(String(opening.quantity??1));setStructuralType(opening.structuralType);setOpeningType(opening.openingType??"");setHasArch(opening.hasArch??false);setHasRollerShutter(opening.hasRollerShutter??false);setError("");setNotice("");
@@ -111,6 +114,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   async function save(event:React.FormEvent) {
     event.preventDefault();
     if (saving || photoBusy) return;
+    if(editing&&!canEditOpeningEntry(openings.find(opening=>opening.id===editing.id)??{},actor,role)){setError('You can edit only openings you recorded.');return;}
     if(commercial&&!workArea){setError('Choose Facade or Internal works.');return;}
     const opening = normalizeRegistrationOpening({...commercial&&{workArea,...(workArea==='facade'?{facadeNumber:Number(facadeNumber)}:{})},id:draftId,hasRollerShutter:structuralType==='Window'&&hasRollerShutter,hasArch:structuralType==='Curtain Wall'?editing?.structuralType==='Curtain Wall'&&editing.hasArch===true:['Window','Door'].includes(structuralType)?hasArch:false,quantity:Number(quantity),width:Number(width),height:Number(height),structuralType,openingType,floor:floor==="Other"?otherFloor:floor,room,otherRoom,...(!editing&&structuralType==='Curtain Wall'&&(curtainWall.photo||curtainWall.note.trim())?{curtainWall}:{}),...(!editing&&structuralType==='Skylight'&&(skylight.photo||skylight.drawing||skylight.sections.length)?{skylight}:{})});
     if(wholeFacade&&facades.some(o=>o.id!==draftId&&o.facadeNumber===Number(facadeNumber))){setError("This facade number is already saved. Edit it or choose another number.");return;}
@@ -119,7 +123,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
     try {
       const response=await fieldFetch(endpoint,{method:editing?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(editing?{action:"edit-opening",opening,previous:editing,operationId:editOperationId}:opening)});
       const data=await response.json();if(!response.ok) throw new Error(data.error);
-      setOpenings(current=>editing?current.map(row=>row.id===opening.id?{...row,...opening,workArea:opening.workArea,facadeNumber:opening.facadeNumber}:row):current.some(row=>row.id===opening.id)?current:[...current,opening]);
+      setOpenings(current=>editing?current.map(row=>row.id===opening.id?{...row,...opening,workArea:opening.workArea,facadeNumber:opening.facadeNumber}:row):current.some(row=>row.id===opening.id)?current:[...current,{...opening,createdBy:actor?.id??null}]);
       setNotice(editing?term("Opening measurements updated."):wholeFacade?term("Facade saved."):t("initialStep.saved"));resetForm();
     } catch(cause) {setError(cause instanceof Error?cause.message:t("initialStep.failed"));}
     finally {setSaving(false);}
@@ -150,9 +154,17 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
   }
   const cancelled = project?.sales_status === 'cancelled';
   const dirty = Boolean(editing || workArea || facadeNumber!=="1" || quantity !== "1" || width || height || structuralType || floor || otherFloor || room || otherRoom);
+  async function refreshProjectName() {
+    const response=await fieldFetch(endpoint);
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.error);
+    setProject(data.project);
+  }
   return <section className="mx-auto w-full max-w-[760px] px-5 py-8 sm:px-8 sm:py-10">
+    {role==='Outdoor Sales'&&<Link href="/projects" className="mb-4 inline-flex min-h-11 items-center text-sm font-semibold text-blue-700">{term('Back to my projects')}</Link>}
     <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{t("initialStep.title")}</h1>
     <p className="mt-2 text-sm leading-6 text-slate-500">{project ? `${project.project_name} · ${term(project.project_number)}` : t("initialStep.description")}</p>
+    {project&&actor&&<ProjectNameEditor project={project} actor={actor} onSaved={refreshProjectName}/>}
     {loading ? <p className="mt-6" role="status">{t("common.loading")}</p> : null}
     {error && !finishOpen ? <p role="alert" className="mt-5 rounded-md bg-red-50 p-3 text-sm text-red-700">{errorMessage(error)}</p> : null}
     <MeasurementCompletionDialog open={finishOpen} busy={saving} error={error} onCancel={()=>{setFinishOpen(false);setError('');}} onSubmit={completion=>updateMeasurementStatus('finish',completion)}/>
@@ -251,7 +263,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
       <table className="mt-3 w-full text-start text-sm"><thead><tr>{['Facade','Width (cm)','Length (cm)','Edit'].map(label=><th className="py-3 text-start" key={label}>{term(label)}</th>)}</tr></thead>
         <tbody>{facades.map(facade=><tr key={facade.id} className="border-t border-slate-200">
           <th scope="row" className="py-3 text-start">{term('Facade {number}',{number:String(facade.facadeNumber)})}</th><td><bdi>{formatNumber(facade.width)}</bdi></td><td><bdi>{formatNumber(facade.height)}</bdi></td>
-          <td>{!finished&&!project?.measurement_delayed&&!project?.additional_openings_original_ids?.includes(facade.id)&&<button type="button" disabled={saving||photoBusy||dirty} aria-label={term('Edit facade {number}',{number:String(facade.facadeNumber)})} onClick={()=>editOpening(facade)} className="min-h-11 px-2 font-semibold text-blue-700 disabled:opacity-40">{term('Edit')}</button>}</td>
+          <td>{!finished&&!project?.measurement_delayed&&!project?.additional_openings_original_ids?.includes(facade.id)&&canEditOpeningEntry(facade,actor,role)&&<button type="button" disabled={saving||photoBusy||dirty} aria-label={term('Edit facade {number}',{number:String(facade.facadeNumber)})} onClick={()=>editOpening(facade)} className="min-h-11 px-2 font-semibold text-blue-700 disabled:opacity-40">{term('Edit')}</button>}</td>
         </tr>)}</tbody>
       </table>
       {!finished&&!project?.measurement_delayed&&<div className="mt-3 flex flex-wrap gap-3">
@@ -281,7 +293,7 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
           </thead>
           <tbody className="divide-y divide-slate-200">
             {internalOpenings.map((opening,index)=><tr key={opening.id} className="odd:bg-white even:bg-slate-50">
-              <th scope="row" className={`sticky start-0 border-e border-slate-200 px-3 py-3 text-start font-semibold tabular-nums text-slate-700 ${index%2===0?"bg-white":"bg-slate-50"}`}>{formatNumber(index+1)}{!finished&&!project?.measurement_delayed&&!project?.additional_openings_original_ids?.includes(opening.id)&&<button type="button" disabled={saving||photoBusy||dirty} aria-label={`${term('Edit opening')} ${formatNumber(index+1)}`} onClick={()=>editOpening(opening)} className="mt-1 block min-h-11 rounded-md px-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-40">{term('Edit')}</button>}</th>
+              <th scope="row" className={`sticky start-0 border-e border-slate-200 px-3 py-3 text-start font-semibold tabular-nums text-slate-700 ${index%2===0?"bg-white":"bg-slate-50"}`}>{formatNumber(index+1)}{!finished&&!project?.measurement_delayed&&!project?.additional_openings_original_ids?.includes(opening.id)&&canEditOpeningEntry(opening,actor,role)&&<button type="button" disabled={saving||photoBusy||dirty} aria-label={`${term('Edit opening')} ${formatNumber(index+1)}`} onClick={()=>editOpening(opening)} className="mt-1 block min-h-11 rounded-md px-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-40">{term('Edit')}</button>}</th>
               <td className="max-w-40 break-words px-3 py-3 text-slate-700">{term(opening.floor)}</td>
               <td className="max-w-48 break-words px-3 py-3 text-slate-700">{opening.workArea==='internal'&&<span className="block text-xs text-slate-500">{term('Internal works')}</span>}{opening.workArea==='facade'?term('Facade {number}',{number:String(opening.facadeNumber)}):opening.room === "Other" ? opening.otherRoom : t(`initialStep.rooms.${opening.room}`)}</td>
               <td className="px-3 py-3 text-slate-900">{t(`initialStep.types.${opening.structuralType}`)}{opening.hasRollerShutter&&<span className="mt-1 block text-xs font-semibold text-blue-700">{term('Roller shutter')}</span>}{['Window','Door'].includes(opening.structuralType)&&<span className="mt-1 block text-xs text-slate-500">{term(opening.hasArch?'Arch':'No arch')}</span>}</td>
@@ -299,6 +311,6 @@ export function InitialMeasurements({projectId,role}:{projectId:string;role?:str
       {!finished && !project?.measurement_delayed ? <><button type="button" disabled={saving || photoBusy || dirty} onClick={()=>{if(role!=='Outdoor Sales'){void updateMeasurementStatus("finish");return;}if(project?.additional_openings_state==='requested'&&!openings.some(o=>!project.additional_openings_original_ids?.includes(o.id))){setError('Add at least one new opening before submitting this task.');return;}setError('');setFinishOpen(true);}} className="mt-5 min-h-12 w-full rounded-md bg-primary px-4 text-sm font-semibold text-material-on-primary hover:bg-primary-hover disabled:opacity-50">{saving ? t("common.loading") : t("initialStep.finish")}</button>{dirty ? <p className="mt-2 text-xs text-slate-500">{t("initialStep.unsaved")}</p>:null}</>:null}
     </div>:null}
     {!finished&&!cancelled&&!project?.measurement_delayed&&!openings.length&&canQuote&&<Link href={`/quotation/${projectId}`} className="mt-6 block rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">{term('Quote facade services or standalone products without window and door openings')}</Link>}
-    {finished && !cancelled ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{canQuote ? t("initialStep.done") : term("Measurements submitted. Indoor Sales will prepare the quotation.")}</p>{!project?.additional_openings_state&&<button disabled={saving||photoBusy} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button>}{!canQuote ? <Link href="/dashboard" className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term(mobileOutdoor?"Back to assignments":"Back to dashboard")}</Link> : <Link href={`/quotation/${projectId}`} onClick={async event=>{event.preventDefault();const state=await readFieldState();if(!navigator.onLine || state?.queue.some(c=>c.projectId===projectId)){setError("Your measurements are saved on this device. Wait for synchronization before preparing a quotation.");return;}window.location.assign(`/quotation/${projectId}`);}} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Continue to quotation")}</Link>}<Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
+    {finished && !cancelled ? <div role="status" className="mt-6 space-y-4"><p className="text-slate-700">{canQuote ? t("initialStep.done") : term("Measurements submitted. Indoor Sales will prepare the quotation.")}</p>{project?.sales_status==='ready_for_quotation'&&!project.additional_openings_state&&<button disabled={saving||photoBusy} onClick={()=>void updateMeasurementStatus("reopen")} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">{saving ? t("common.loading") : t("initialStep.reopen")}</button>}{!canQuote ? <Link href="/dashboard" className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term(mobileOutdoor?"Back to assignments":"Back to dashboard")}</Link> : <Link href={`/quotation/${projectId}`} onClick={async event=>{event.preventDefault();const state=await readFieldState();if(!navigator.onLine || state?.queue.some(c=>c.projectId===projectId)){setError("Your measurements are saved on this device. Wait for synchronization before preparing a quotation.");return;}window.location.assign(`/quotation/${projectId}`);}} className="block min-h-12 rounded-md bg-blue-600 px-5 py-3 text-center font-semibold text-white">{term("Continue to quotation")}</Link>}<Link href="/intake" className="block text-sm font-semibold text-blue-600">{t("registration.another")}</Link></div>:null}
   </section>;
 }

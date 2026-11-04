@@ -19,6 +19,7 @@ export type RoleCheck =
       user: User;
       role: AppRole;
       mobileOutdoor: boolean;
+      outdoorTeamMemberIds?: string[];
       profile: {
         full_name: string | null;
         username: string | null;
@@ -26,6 +27,7 @@ export type RoleCheck =
         is_active: boolean | null;
         branch: string | null;
         status?: string | null;
+        outdoor_team_key?: string | null;
       } | null;
     }
   | { ok: false; status: number; error: string };
@@ -59,7 +61,7 @@ export async function requireRole(
     : supabase;
   const { data: profile, error: profileError } = await profileClient
     .from("profiles")
-    .select("full_name, username, role, is_active, status, branch")
+    .select("full_name, username, role, is_active, status, branch, outdoor_team_key")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -75,6 +77,7 @@ export async function requireRole(
     is_active: boolean | null;
     branch: string | null;
     status?: string | null;
+    outdoor_team_key?: string | null;
   } | null;
   const role =
     isInactiveProfile(profileData)
@@ -92,7 +95,18 @@ export async function requireRole(
   }
 
   const mobileOutdoor = role === "Outdoor Sales" && usesMobileWorkspace(role, await headers());
-  return { ok: true, user, role, mobileOutdoor, profile: profileData };
+  let outdoorTeamMemberIds: string[] | undefined;
+  if (role === 'Outdoor Sales') {
+    outdoorTeamMemberIds = [user.id];
+    if (profileData?.outdoor_team_key) {
+      const members = await profileClient.from('profiles').select('id')
+        .eq('outdoor_team_key', profileData.outdoor_team_key).eq('role', 'Outdoor Sales')
+        .eq('is_active', true).eq('status', 'Active');
+      if (members.error) return { ok: false, status: 503, error: 'Unable to verify your Outdoor Sales team.' };
+      outdoorTeamMemberIds = [...new Set([user.id, ...members.data.map(member => member.id)])];
+    }
+  }
+  return { ok: true, user, role, mobileOutdoor, profile: profileData, outdoorTeamMemberIds };
 }
 
 export async function requireAdminUser(): Promise<AdminCheck> {

@@ -29,6 +29,7 @@ export function OutdoorMobileWorkspace() {
             <p className="text-xs font-semibold text-blue-700">{term(project.project_number)}</p>
             {project.additional_openings_state==='requested'&&<p className="mt-2 text-sm font-semibold text-amber-800">{term('Add more openings')}</p>}
             <h3 className="mt-2 text-lg font-semibold">{project.project_name}</h3>
+            {project.assignedOutdoorSales && <p className="mt-2 text-sm text-slate-600">{term('Measurements by')} <bdi className="font-medium">{project.assignedOutdoorSales}</bdi>{project.assigned_outdoor_sales_id !== data?.actor.id && <span className="ms-2 inline-block rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800">{term('Team assignment')}</span>}</p>}
             <p className="mt-2 text-xs leading-5 text-slate-500">{term('Created by')} <bdi>{project.registeredBy==='Employee'?term('Employee'):project.registeredBy}</bdi><time dateTime={project.created_at} dir="ltr" className="block w-fit max-w-full">{formatDateTime(project.created_at)}</time></p>
             {project.address && <p className="mt-2 text-sm leading-6 text-slate-600">{project.address}</p>}
             {project.phone && <a href={`tel:${project.phone}`} className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-blue-700" dir="ltr">{project.phone}</a>}

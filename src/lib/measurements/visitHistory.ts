@@ -2,9 +2,10 @@ import type { createAdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
 import { measurementDelayReasons, type MeasurementDelayReason } from '@/lib/measurements/measurementDelay';
 import { indoorProjectBranches } from '@/lib/auth/projectBranchAccess';
+import { canAccessOutdoorProject, outdoorProjectFilter } from '@/lib/auth/outdoorTeams';
 
 type Admin = ReturnType<typeof createAdminClient>;
-type Actor = { id: string; role: string; branch?: string | null };
+type Actor = { id: string; role: string; branch?: string | null; outdoorTeamMemberIds?: string[] };
 
 export const workspaceProjectColumns = 'id,additional_openings_state,additional_openings_original_ids,building_type,branch,governorate,project_name,project_number,address,location_latitude,location_longitude,client_id,structure_readiness,sales_status,status,next_follow_up_at,follow_up_type,follow_up_detail,follow_up_owner_id,created_by,created_at,updated_at,project_notes,readiness_note,measurement_delayed,measurement_delay_reason,measurement_delay_note,measurement_delayed_at,measurement_delayed_by,client_cancellation_note,client_cancelled_at,client_cancelled_by,assigned_outdoor_sales_id,measurement_assignment_id,original_creator_role,legacy_outdoor_sales_id' as const;
 
@@ -23,12 +24,12 @@ export type MeasurementAttempt = {
 };
 
 export function isHistoricalProject(project: { created_by: string | null; assigned_outdoor_sales_id: string | null }, actor: Actor) {
-  return actor.role === 'Outdoor Sales' && project.created_by !== actor.id && project.assigned_outdoor_sales_id !== actor.id;
+  return actor.role === 'Outdoor Sales' && !canAccessOutdoorProject(project, actor);
 }
 
 export async function loadWorkspaceProjects(admin: Admin, actor: Actor) {
   let query = admin.from('projects').select(workspaceProjectColumns).order('created_at', { ascending: false });
-  if (actor.role === 'Outdoor Sales') query = query.or(`created_by.eq.${actor.id},assigned_outdoor_sales_id.eq.${actor.id},legacy_outdoor_sales_id.eq.${actor.id}`);
+  if (actor.role === 'Outdoor Sales') query = query.or(outdoorProjectFilter(actor, true));
   if (actor.role === 'Indoor Sales') query = query.in('branch', indoorProjectBranches(actor.branch));
   const result = await query;
   if (result.error || actor.role !== 'Outdoor Sales') return result;

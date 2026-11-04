@@ -8,7 +8,7 @@ function load(path, dependencies = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', code)(name => { if (name === '@/lib/auth/projectBranchAccess') return load('../src/lib/auth/projectBranchAccess.ts'); assert.ok(name in dependencies, name); return dependencies[name]; }, exports);
+  new Function('require', 'exports', code)(name => {if(name==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{}); if (name === '@/lib/auth/projectBranchAccess') return load('../src/lib/auth/projectBranchAccess.ts'); assert.ok(name in dependencies, name); return dependencies[name]; }, exports);
   return exports;
 }
 const roles = load('../src/lib/auth/roles.ts');

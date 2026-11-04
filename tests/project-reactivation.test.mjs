@@ -26,9 +26,10 @@ test('desktop cannot use the device workspace while phones and tablets retain ac
 function route(role) {
   const calls=[];
   const deps={
-    '@/lib/measurements/visitHistory':{},
+    '@/lib/auth/outdoorTeams':{},'@/lib/measurements/visitHistory':{},
     '@/lib/measurements/measurementDelay':{},
     '@/lib/workflow/reactivation':{normalizeReactivation},
+    '@/lib/workflow/projectName':{},
     'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200})}},
     '@/lib/auth/adminServer':{},'@/lib/supabase/admin':{},'@/lib/workflow/followUps':{},
     '@/lib/workflow/access':{salesProject:async()=>({auth:{role,user:{id:'verified-user'}},admin:{rpc:async(name,args)=>{calls.push({name,args});return {data:{}};}},project:{updated_at:'server-version'}})},

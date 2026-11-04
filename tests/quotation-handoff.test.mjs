@@ -4,7 +4,7 @@ import test from 'node:test';
 import ts from 'typescript';
 function load(path,deps={}){
  const source=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
- const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');assert.ok(name in deps,name);return deps[name];},exports);return exports;
+ const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');assert.ok(name in deps,name);return deps[name];},exports);return exports;
 }
 const permissions=load('../src/lib/auth/permissions.ts');
 const stages=load('../src/lib/workflow/stages.ts');

@@ -9,11 +9,12 @@ import { measurementTasks } from '@/lib/workflow/salesTasks';
 import { projectStage, stageDetails } from '@/lib/workflow/stages';
 import { projectVisitHistory, visitEntryLabel, visitOutcomeLabel } from '@/lib/workflow/projectLog';
 import { DashboardProjectFilters } from './DashboardProjectFilters';
+import { ProjectNameEditor } from './ProjectNameEditor';
 import { card, Notice, useResource, Workspace } from './ui';
 
 export function OutdoorProjectLog() {
   const { term, formatDateTime, formatNumber } = useI18n();
-  const { data, error, loading } = useResource<SalesWorkspaceData>('/api/workspace');
+  const { data, error, loading, reload } = useResource<SalesWorkspaceData>('/api/workspace');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const projects = data?.projects ?? [];
@@ -36,6 +37,7 @@ export function OutdoorProjectLog() {
               </div>
               <span className={`max-w-full rounded-md px-2.5 py-1.5 text-xs font-semibold ${project.measurement_delayed ? 'bg-amber-50 text-amber-900' : 'bg-slate-100 text-slate-700'}`}>{term(project.measurement_delayed ? 'Awaiting another visit' : stageDetails(project).label)}</span>
             </div>
+            {data && <ProjectNameEditor project={project} actor={data.actor} onSaved={reload}/>}
             {project.address && <p dir="auto" className="mt-3 break-words text-sm leading-6 text-slate-600">{project.address}</p>}
             {project.phone && <a href={`tel:${project.phone}`} dir="ltr" className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-blue-700">{project.phone}</a>}
             <p className="mt-2 text-xs leading-5 text-slate-500">{term('Created by')} <bdi>{project.registeredBy === 'Employee' ? term('Employee') : project.registeredBy}</bdi><time dateTime={project.created_at} dir="ltr" className="block w-fit max-w-full">{formatDateTime(project.created_at)}</time></p>

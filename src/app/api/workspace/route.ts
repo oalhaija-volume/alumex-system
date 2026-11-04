@@ -6,10 +6,12 @@ import { requireRole } from '@/lib/auth/adminServer';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeFollowUp,normalizeMeasurementAssignment } from '@/lib/workflow/followUps';
 import { salesProject,salesRoles } from '@/lib/workflow/access';
+import { canRenameProject, normalizeProjectName } from '@/lib/workflow/projectName';
+import { isOutdoorAssignmentMember } from '@/lib/auth/outdoorTeams';
 export async function GET(){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const admin=createAdminClient();
- const actor={id:auth.user.id,role:auth.role,branch:auth.profile?.branch};
+ const actor={id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds};
  const [result,directory]=await Promise.all([loadWorkspaceProjects(admin,actor),admin.from('profiles').select('id,full_name,username,role').in('role',['Indoor Sales', 'Sales Manager','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name')]);
  if(result.error)return NextResponse.json({error:'Unable to load projects.'},{status:500});
  const clientIds=[...new Set((result.data??[]).map(p=>p.client_id))];
@@ -27,11 +29,19 @@ export async function GET(){
  const contacts=new Map((clients.data??[]).map(c=>[c.id,c.mobile]));
  const name=(id:string|null)=>id?(people.get(id)?.full_name??people.get(id)?.username):null;
  const actorProfile=people.get(auth.user.id);
- return NextResponse.json({actor:{id:auth.user.id,role:auth.role,branch:auth.role==='Outdoor Sales'?null:auth.profile?.branch??null,outdoorRotationStartBranch:auth.role==='Outdoor Sales'?actorProfile?.outdoor_rotation_start_branch??null:null,name:actorProfile?.full_name??actorProfile?.username??'Employee'},outdoorSales:directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'})),indoorSales:directory.data.filter(p=>(p.role === 'Indoor Sales' || p.role === 'Sales Manager')).map(p=>({id:p.id,name:p.full_name??p.username??'Employee'})),projects:(result.data??[]).map(p=>({...p,project_log_only:isHistoricalProject(p,actor),measurement_attempts:attempts.data?.get(p.id)??[],clientCancelledBy:name(p.client_cancelled_by)??null,measurementDelayedBy:name(p.measurement_delayed_by)??null,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)??null,assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===auth.user.id,registeredBy:name(p.created_by)??'Employee',legacyOutdoorSalesOwner:name(p.legacy_outdoor_sales_id)??null}))},{headers:{'Cache-Control':'no-store'}});
+ return NextResponse.json({actor:{id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds,branch:auth.role==='Outdoor Sales'?null:auth.profile?.branch??null,outdoorRotationStartBranch:auth.role==='Outdoor Sales'?actorProfile?.outdoor_rotation_start_branch??null:null,name:actorProfile?.full_name??actorProfile?.username??'Employee'},outdoorSales:directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'})),indoorSales:directory.data.filter(p=>(p.role === 'Indoor Sales' || p.role === 'Sales Manager')).map(p=>({id:p.id,name:p.full_name??p.username??'Employee'})),projects:(result.data??[]).map(p=>({...p,project_log_only:isHistoricalProject(p,actor),measurement_attempts:attempts.data?.get(p.id)??[],clientCancelledBy:name(p.client_cancelled_by)??null,measurementDelayedBy:name(p.measurement_delayed_by)??null,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)??null,assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===auth.user.id,assignedToTeam:isOutdoorAssignmentMember(p,actor),registeredBy:name(p.created_by)??'Employee',legacyOutdoorSalesOwner:name(p.legacy_outdoor_sales_id)??null}))},{headers:{'Cache-Control':'no-store'}});
 }
 export async function PATCH(request:Request){
  const body=await request.json().catch(()=>null);if(typeof body?.projectId!=='string')return NextResponse.json({error:'Project is required.'},{status:400});
- const access=await salesProject(body.projectId,true);if(access.response)return access.response;
+ const access=await salesProject(body.projectId,body.action==='rename-project'?false:true);if(access.response)return access.response;
+ if(body.action==='rename-project'){
+  if(!canRenameProject(access.project,{id:access.auth.user.id,role:access.auth.role,outdoorTeamMemberIds:access.auth.outdoorTeamMemberIds}))return NextResponse.json({error:'Only the employee who registered this project can change its name.'},{status:403});
+  let payload;
+  try{payload=normalizeProjectName(body);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+  if(typeof body.expectedUpdatedAt!=='string'||!Number.isFinite(Date.parse(body.expectedUpdatedAt)))return NextResponse.json({error:'Reload the project before changing its name.'},{status:400});
+  const result=await access.admin.rpc('sync_field_change',{p_operation:crypto.randomUUID(),p_actor:access.auth.user.id,p_project:body.projectId,p_action:'rename-project',p_payload:payload,p_recorded_at:new Date().toISOString(),p_expected_updated_at:body.expectedUpdatedAt});
+  return result.error?NextResponse.json({error:result.error.message},{status:409}):NextResponse.json({ok:true,project:result.data});
+ }
  if(body.action==='reactivate-project'){
   if(!['Indoor Sales', 'Sales Manager','Admin'].includes(access.auth.role))return NextResponse.json({error:'Only Indoor Sales or Admin can reactivate client-cancelled projects.'},{status:403});
   let input;

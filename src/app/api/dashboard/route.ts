@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth/adminServer';
 import { appRoles } from '@/lib/auth/roles';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { indoorProjectBranches } from '@/lib/auth/projectBranchAccess';
+import { outdoorProjectFilter } from '@/lib/auth/outdoorTeams';
 
 export async function GET() {
   const auth = await requireRole(appRoles);
@@ -14,7 +15,7 @@ export async function GET() {
     .select('id,project_name,project_number,structure_readiness,sales_status,status,created_at,created_by,updated_at,measurement_delayed,client_cancelled_at')
     .is('archived_at', null).order('updated_at', { ascending: false });
   if (auth.role === 'Outdoor Sales') {
-    query = query.or(`created_by.eq.${auth.user.id},assigned_outdoor_sales_id.eq.${auth.user.id}`);
+    query = query.or(outdoorProjectFilter({id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}));
   }
   if (auth.role === 'Indoor Sales') {
     query = query.in('branch', indoorProjectBranches(auth.profile?.branch));

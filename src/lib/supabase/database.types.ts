@@ -132,6 +132,7 @@ export type Database = {
           full_name: string | null;
           branch: "Karkh" | "Rasafa" | null;
           outdoor_rotation_start_branch: "Karkh" | "Rasafa" | null;
+          outdoor_team_key: "ahmad_mohammad" | "sajjad_ehab" | null;
           role: Database["public"]["Enums"]["app_role"];
           is_active: boolean;
           status: string;
@@ -145,6 +146,7 @@ export type Database = {
           full_name?: string | null;
           branch?: "Karkh" | "Rasafa" | null;
           outdoor_rotation_start_branch?: "Karkh" | "Rasafa" | null;
+          outdoor_team_key?: "ahmad_mohammad" | "sajjad_ehab" | null;
           role?: Database["public"]["Enums"]["app_role"];
           is_active?: boolean;
           status?: string;

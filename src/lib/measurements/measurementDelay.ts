@@ -1,7 +1,8 @@
 import { canAccessCRM } from '@/lib/auth/permissions';
+import { isOutdoorAssignmentMember, type OutdoorTeamActor } from '@/lib/auth/outdoorTeams';
 
 type Assignment = { sales_status?: string; created_by: string; assigned_outdoor_sales_id?: string | null };
-type Actor = { id: string; role: string };
+type Actor = OutdoorTeamActor;
 export const measurementDelayReasons = ['client_delay', 'client_no_answer', 'site_closed'] as const;
 export type MeasurementDelayReason = typeof measurementDelayReasons[number];
 
@@ -16,7 +17,7 @@ export function normalizeMeasurementDelay(payload: { reason?: unknown; note?: un
 }
 
 export function canDelayMeasurements(project: Assignment, actor: Actor) {
-  return actor.role === 'Outdoor Sales' && project.assigned_outdoor_sales_id === actor.id;
+  return isOutdoorAssignmentMember(project, actor);
 }
 export function canResumeMeasurements(project: Assignment, actor: Actor) {
   return canAccessCRM(actor.role) && project.sales_status === 'new_lead';
@@ -32,7 +33,7 @@ export function canCancelProject(project: Assignment, actor: Actor) {
   const stages = canAccessCRM(actor.role)
     ? ['new_lead','ready_for_quotation','quotation_in_progress','quotation_approved','contract_generated']
     : ['new_lead','ready_for_quotation'];
-  return (canAccessCRM(actor.role) || canDelayMeasurements(project, actor)) && stages.includes(project.sales_status ?? '');
+  return (canAccessCRM(actor.role) || (actor.role === 'Outdoor Sales' && project.assigned_outdoor_sales_id === actor.id)) && stages.includes(project.sales_status ?? '');
 }
 export function normalizeClientCancellation(payload: { note?: unknown; confirmed?: unknown }) {
   if (payload.confirmed !== true) throw new Error('Confirm that the client cancelled this project.');

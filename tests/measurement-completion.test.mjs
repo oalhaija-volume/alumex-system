@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
-function load(path,deps={}){const source=ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/intake/legacyOutdoorSales')return load('src/lib/intake/legacyOutdoorSales.ts',{});if(name==='@/lib/auth/projectBranchAccess')return load('src/lib/auth/projectBranchAccess.ts',{});assert.ok(name in deps,name);return deps[name];},exports);return exports;}
+function load(path,deps={}){const source=ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/measurements/openingOwnership')return load('src/lib/measurements/openingOwnership.ts',{});if(name==='@/lib/auth/outdoorTeams')return load('src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return load('src/lib/workflow/projectName.ts',{});if(name==='@/lib/intake/legacyOutdoorSales')return load('src/lib/intake/legacyOutdoorSales.ts',{});if(name==='@/lib/auth/projectBranchAccess')return load('src/lib/auth/projectBranchAccess.ts',{});assert.ok(name in deps,name);return deps[name];},exports);return exports;}
 const rules=load('src/lib/measurements/completion.ts');
 const photo='data:image/jpeg;base64,/9j/AAAA';
 test('completion accepts both optional fields separately or together and trims notes',()=>{

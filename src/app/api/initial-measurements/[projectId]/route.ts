@@ -7,6 +7,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseServiceRoleKey } from "@/lib/supabase/config";
 import { normalizeOpeningEdit, normalizeRegistrationOpening, registrationRoomTypes } from "@/lib/measurements/registrationOpening";
 import { canAccessProjectBranch } from '@/lib/auth/projectBranchAccess';
+import { canAccessOutdoorProject, isOutdoorAssignmentMember } from '@/lib/auth/outdoorTeams';
+import { canEditOpeningEntry } from '@/lib/measurements/openingOwnership';
 
 type Context = { params: Promise<{projectId: string}> };
 async function access(context: Context) {
@@ -19,23 +21,23 @@ async function access(context: Context) {
   const {data:project,error} = await admin.from("projects").select("id, additional_openings_state,additional_openings_original_ids,building_type,branch,governorate, project_name, project_number, created_by, assigned_outdoor_sales_id, follow_up_owner_id, structure_readiness, sales_status, updated_at, measurement_delayed, measurement_delay_reason, measurement_delay_note, measurement_delayed_at, measurement_delayed_by, client_cancellation_note, client_cancelled_at, client_cancelled_by").eq("id",projectId).maybeSingle();
   if (error) return {response:NextResponse.json({error:"Unable to load project."},{status:500})};
   if (project && !canAccessProjectBranch({role:auth.role,branch:auth.profile?.branch},project.branch)) return {response:NextResponse.json({error:"Project not found."},{status:404})};
-  if (!project || (!["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager"].includes(auth.role) && project.created_by !== auth.user.id && !(auth.role === "Outdoor Sales" && project.assigned_outdoor_sales_id === auth.user.id) && !((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager') && project.follow_up_owner_id === auth.user.id))) return {response:NextResponse.json({error:"Project not found."},{status:404})};
+  if (!project || (!["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager"].includes(auth.role) && !canAccessOutdoorProject(project,{id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}))) return {response:NextResponse.json({error:"Project not found."},{status:404})};
   if (project.structure_readiness !== "ready") return {response:NextResponse.json({error:"The site must be ready before measurements can be recorded."},{status:409})};
   return {admin,project,auth};
 }
 export async function GET(_request: Request, context: Context) {
   const result = await access(context);
   if (result.response) return result.response;
-  const {data,error} = await result.admin.from("openings").select("id, width, height, quantity,work_area,facade_number,has_curtain_wall_capture,has_skylight_capture, floor, room, has_arch,has_roller_shutter,opening_type, opening_direction").eq("project_id",result.project.id).order("created_at");
+  const {data,error} = await result.admin.from("openings").select("id, created_by, width, height, quantity,work_area,facade_number,has_curtain_wall_capture,has_skylight_capture, floor, room, has_arch,has_roller_shutter,opening_type, opening_direction").eq("project_id",result.project.id).order("created_at");
   if (error) return NextResponse.json({error:"Unable to load openings."},{status:500});
-  return NextResponse.json({project:result.project,canCancelProject:canCancelProject(result.project,{id:result.auth.user.id,role:result.auth.role}),canDelayMeasurements:canDelayMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),canResumeMeasurements:canResumeMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role}),openings:(data ?? []).map(row=>({id:row.id,floor:row.floor ?? "",room:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? row.room : "Other",otherRoom:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? "" : row.room ?? "",width:Number(row.width),height:Number(row.height),quantity:row.quantity,hasArch:row.has_arch,hasRollerShutter:row.has_roller_shutter,...( row.work_area?{workArea:row.work_area,...(row.work_area==='facade'?{facadeNumber:row.facade_number}:{})}:{}),hasCurtainWallCapture:row.has_curtain_wall_capture,hasSkylightCapture:row.has_skylight_capture,structuralType:row.opening_type,openingType:row.opening_direction}))});
+  return NextResponse.json({project:result.project,canCancelProject:canCancelProject(result.project,{id:result.auth.user.id,role:result.auth.role,outdoorTeamMemberIds:result.auth.outdoorTeamMemberIds}),canDelayMeasurements:canDelayMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role,outdoorTeamMemberIds:result.auth.outdoorTeamMemberIds}),canResumeMeasurements:canResumeMeasurements(result.project,{id:result.auth.user.id,role:result.auth.role,outdoorTeamMemberIds:result.auth.outdoorTeamMemberIds}),openings:(data ?? []).map(row=>({id:row.id,createdBy:row.created_by,floor:row.floor ?? "",room:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? row.room : "Other",otherRoom:registrationRoomTypes.some(room => room === row.room && room !== "Other") ? "" : row.room ?? "",width:Number(row.width),height:Number(row.height),quantity:row.quantity,hasArch:row.has_arch,hasRollerShutter:row.has_roller_shutter,...( row.work_area?{workArea:row.work_area,...(row.work_area==='facade'?{facadeNumber:row.facade_number}:{})}:{}),hasCurtainWallCapture:row.has_curtain_wall_capture,hasSkylightCapture:row.has_skylight_capture,structuralType:row.opening_type,openingType:row.opening_direction}))});
 }
 export async function POST(request: Request, context: Context) {
   const result = await access(context);
   if (result.response) return result.response;
   if (result.project.sales_status !== "new_lead") return NextResponse.json({error:"Reopen measurements before adding another opening."},{status:409});
   if(result.project.measurement_delayed)return NextResponse.json({error:"Resume measurements before recording or completing them."},{status:409});
-  if(result.project.additional_openings_state && result.auth.role==='Outdoor Sales' && result.project.assigned_outdoor_sales_id!==result.auth.user.id)return NextResponse.json({error:'Only the assigned employee can complete this task.'},{status:403});
+  if(result.project.additional_openings_state && result.auth.role==='Outdoor Sales' && !isOutdoorAssignmentMember(result.project,{id:result.auth.user.id,role:result.auth.role,outdoorTeamMemberIds:result.auth.outdoorTeamMemberIds}))return NextResponse.json({error:'Only the assigned employee can complete this task.'},{status:403});
   const opening = normalizeRegistrationOpening(await request.json().catch(()=>null));
   if (!opening) return NextResponse.json({error:"Enter floor, room, valid dimensions, structural type, and opening type."},{status:400});
   if(opening.workArea&&result.project.building_type!=='commercial_building')return NextResponse.json({error:'Facade and Internal works are only available for commercial buildings.'},{status:400});
@@ -61,6 +63,14 @@ export async function PATCH(request: Request, context: Context) {
   if (result.response) return result.response;
   if (!["new_lead","ready_for_quotation"].includes(result.project.sales_status ?? "")) return NextResponse.json({error:"Measurements are locked once a quotation has been saved."},{status:409});
   const body = await request.json().catch(()=>null);
+  if(body?.action==='edit-opening'&&result.auth.role==='Outdoor Sales'){
+    const edit=normalizeOpeningEdit(body);
+    if(!edit)return NextResponse.json({error:'Complete the opening details.'},{status:400});
+    const owner=await result.admin.from('openings').select('created_by').eq('id',edit.opening.id).eq('project_id',result.project.id).maybeSingle();
+    if(owner.error)return NextResponse.json({error:'Unable to verify opening ownership.'},{status:503});
+    if(!owner.data)return NextResponse.json({error:'Opening not found in this project.'},{status:404});
+    if(!canEditOpeningEntry({createdBy:owner.data.created_by},{id:result.auth.user.id,role:result.auth.role}))return NextResponse.json({error:'You can edit only openings you recorded.'},{status:403});
+  }
   if(body?.action==='finish'&&(body.note!==undefined||body.photo!==undefined)){
     let completion;
     try{completion=normalizeMeasurementCompletion(body);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
@@ -74,7 +84,7 @@ export async function PATCH(request: Request, context: Context) {
     return saved.error?NextResponse.json({error:saved.error.message},{status:409}):NextResponse.json({project:saved.data,salesStatus:body.action==='finish'?'ready_for_quotation':'new_lead'});
   }
   if (body?.action === 'cancel-project' || body?.action === 'delay-measurements' || body?.action === 'resume-measurements') {
-    const actor={id:result.auth.user.id,role:result.auth.role};
+    const actor={id:result.auth.user.id,role:result.auth.role,outdoorTeamMemberIds:result.auth.outdoorTeamMemberIds};
     if (!(body.action === 'cancel-project' ? canCancelProject(result.project,actor) : body.action === 'delay-measurements' ? canDelayMeasurements(result.project,actor) : canResumeMeasurements(result.project,actor)))
       return NextResponse.json({error:'Only the assigned Outdoor Sales employee can report a client delay.'},{status:403});
     let payload = {};

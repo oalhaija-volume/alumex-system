@@ -30,7 +30,7 @@ export function normalizeCurtainWallCapture(value:unknown):CurtainWallCapture|nu
  if(!media)return null;
  return {...(media.photo?{photo:media.photo}:{}),note};
 }
-export type RegistrationOpening = { hasRollerShutter?:boolean; workArea?:"facade"|"internal"; facadeNumber?:number; curtainWall?:CurtainWallCapture; hasCurtainWallCapture?:boolean; hasArch?:boolean; skylight?:SkylightCapture; hasSkylightCapture?:boolean; id: string; floor: string; room: typeof registrationRoomTypes[number]; otherRoom: string; width: number; height: number; quantity?: number; structuralType: RegistrationStructure; openingType: "Sliding" | "Hinged" | null };
+export type RegistrationOpening = { createdBy?:string|null; hasRollerShutter?:boolean; workArea?:"facade"|"internal"; facadeNumber?:number; curtainWall?:CurtainWallCapture; hasCurtainWallCapture?:boolean; hasArch?:boolean; skylight?:SkylightCapture; hasSkylightCapture?:boolean; id: string; floor: string; room: typeof registrationRoomTypes[number]; otherRoom: string; width: number; height: number; quantity?: number; structuralType: RegistrationStructure; openingType: "Sliding" | "Hinged" | null };
 export function normalizeRegistrationOpening(value: unknown): RegistrationOpening | null {
   if (!value || typeof value !== "object") return null;
   const input = value as Record<string, unknown>;

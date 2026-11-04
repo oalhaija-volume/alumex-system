@@ -12,6 +12,8 @@ import { normalizeFollowUp,normalizeMeasurementAssignment } from '@/lib/workflow
 import { canAccessCRM } from '@/lib/auth/permissions';
 import { canAccessProjectBranch } from '@/lib/auth/projectBranchAccess';
 import { salesRoles } from '@/lib/workflow/access';
+import { normalizeProjectName } from '@/lib/workflow/projectName';
+import { isOutdoorAssignmentMember, outdoorAssignmentIds } from '@/lib/auth/outdoorTeams';
 import { normalizeOpeningEdit,normalizeRegistrationOpening,registrationRoomTypes } from '@/lib/measurements/registrationOpening';
 import { parseProjectLocation } from '@/lib/location/coordinates';
 import type { Json } from '@/lib/supabase/database.types';
@@ -20,13 +22,13 @@ export async function GET(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const admin=createAdminClient();
  const profileQuery=admin.from('profiles').select('full_name,username,branch,outdoor_rotation_start_branch').eq('id',auth.user.id).single();
- const actorFromProfile=(profile:{full_name:string|null;username:string|null;branch:string|null;outdoor_rotation_start_branch:string|null}|null)=>({id:auth.user.id,name:profile?.full_name??profile?.username??'Employee',role:auth.role,branch:auth.role==='Outdoor Sales'?null:profile?.branch??null,outdoorRotationStartBranch:auth.role==='Outdoor Sales'?profile?.outdoor_rotation_start_branch??null:null});
+ const actorFromProfile=(profile:{full_name:string|null;username:string|null;branch:string|null;outdoor_rotation_start_branch:string|null}|null)=>({id:auth.user.id,name:profile?.full_name??profile?.username??'Employee',role:auth.role,branch:auth.role==='Outdoor Sales'?null:profile?.branch??null,outdoorRotationStartBranch:auth.role==='Outdoor Sales'?profile?.outdoor_rotation_start_branch??null:null,outdoorTeamMemberIds:auth.outdoorTeamMemberIds});
  if(new URL(request.url).searchParams.has('session')){
   const profile=await profileQuery;
   if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
   return NextResponse.json({actor:actorFromProfile(profile.data)},{headers:{'Cache-Control':'no-store'}});
  }
- const [profile,projects,directory]=await Promise.all([profileQuery,loadWorkspaceProjects(admin,{id:auth.user.id,role:auth.role,branch:auth.profile?.branch}),admin.from('profiles').select('id,full_name,username,role').in('role',['Indoor Sales', 'Sales Manager','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name')]);
+ const [profile,projects,directory]=await Promise.all([profileQuery,loadWorkspaceProjects(admin,{id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}),admin.from('profiles').select('id,full_name,username,role').in('role',['Indoor Sales', 'Sales Manager','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name')]);
  if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
  const actor=actorFromProfile(profile.data);
  if(projects.error)return NextResponse.json({error:'Unable to download projects.'},{status:500});
@@ -37,7 +39,7 @@ export async function GET(request:Request){
  const peopleIds=[...new Set(projects.data.flatMap(p=>[p.created_by,p.legacy_outdoor_sales_id,p.assigned_outdoor_sales_id,p.follow_up_owner_id,p.measurement_delayed_by,p.client_cancelled_by]).filter((id):id is string=>!!id))];
  const [people,openings,clients,reports,attempts]=await Promise.all([
   peopleIds.length?admin.from('profiles').select('id,full_name,username').in('id',peopleIds):{data:[],error:null},
-  ids.length?admin.from('openings').select('id,project_id,floor,room,width,height,quantity,work_area,facade_number,has_curtain_wall_capture,has_skylight_capture,has_arch,has_roller_shutter,opening_type,opening_direction').in('project_id',ids):{data:[],error:null},
+  ids.length?admin.from('openings').select('id,project_id,created_by,floor,room,width,height,quantity,work_area,facade_number,has_curtain_wall_capture,has_skylight_capture,has_arch,has_roller_shutter,opening_type,opening_direction').in('project_id',ids):{data:[],error:null},
   clientIds.length?admin.from('clients').select('id,mobile').in('id',clientIds):{data:[],error:null},
   ids.length?admin.from('measurement_completion_reports').select('id,project_id,note,has_photo,recorded_by,recorded_by_name,recorded_at').in('project_id',ids):{data:[],error:null},
   loadMeasurementAttempts(admin,projects.data.map(project=>project.id))
@@ -50,7 +52,7 @@ export async function GET(request:Request){
  const employees=new Map((people.data??[]).map(p=>[p.id,p]));
  const contacts=new Map(clients.data.map(c=>[c.id,c.mobile]));
  const name=(id:string|null)=>id?(employees.get(id)?.full_name??employees.get(id)?.username):null;
- return NextResponse.json({measurementReports:reports.data??[],actor,outdoorSales,indoorSales,queue:[],syncedAt:null,projects:projects.data.map(p=>({...p,project_log_only:isHistoricalProject(p,actor),measurement_attempts:attempts.data?.get(p.id)??[],clientCancelledBy:name(p.client_cancelled_by)??null,measurementDelayedBy:name(p.measurement_delayed_by)??null,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)??null,registeredBy:name(p.created_by)??'Employee',legacyOutdoorSalesOwner:name(p.legacy_outdoor_sales_id)??null,assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===actor.id,serverUpdatedAt:p.updated_at})),openings:openings.data.map(o=>({id:o.id,projectId:o.project_id,floor:o.floor??'',room:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?o.room:'Other',otherRoom:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?'':o.room??'',width:Number(o.width),height:Number(o.height),quantity:o.quantity,hasArch:o.has_arch,hasRollerShutter:o.has_roller_shutter,...( o.work_area?{workArea:o.work_area,...(o.work_area==='facade'?{facadeNumber:o.facade_number}:{})}:{}),hasCurtainWallCapture:o.has_curtain_wall_capture,hasSkylightCapture:o.has_skylight_capture,structuralType:o.opening_type,openingType:o.opening_direction}))},{headers:{'Cache-Control':'private, no-store'}});
+ return NextResponse.json({measurementReports:reports.data??[],actor,outdoorSales,indoorSales,queue:[],syncedAt:null,projects:projects.data.map(p=>({...p,project_log_only:isHistoricalProject(p,actor),measurement_attempts:attempts.data?.get(p.id)??[],clientCancelledBy:name(p.client_cancelled_by)??null,measurementDelayedBy:name(p.measurement_delayed_by)??null,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)??null,registeredBy:name(p.created_by)??'Employee',legacyOutdoorSalesOwner:name(p.legacy_outdoor_sales_id)??null,assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===actor.id,assignedToTeam:isOutdoorAssignmentMember(p,actor),serverUpdatedAt:p.updated_at})),openings:openings.data.map(o=>({id:o.id,createdBy:o.created_by,projectId:o.project_id,floor:o.floor??'',room:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?o.room:'Other',otherRoom:registrationRoomTypes.some(r=>r===o.room&&r!=='Other')?'':o.room??'',width:Number(o.width),height:Number(o.height),quantity:o.quantity,hasArch:o.has_arch,hasRollerShutter:o.has_roller_shutter,...( o.work_area?{workArea:o.work_area,...(o.work_area==='facade'?{facadeNumber:o.facade_number}:{})}:{}),hasCurtainWallCapture:o.has_curtain_wall_capture,hasSkylightCapture:o.has_skylight_capture,structuralType:o.opening_type,openingType:o.opening_direction}))},{headers:{'Cache-Control':'private, no-store'}});
 }
 export async function POST(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
@@ -82,6 +84,10 @@ export async function POST(request:Request){
   if(assignee && (typeof assignee!=='string'||!uuid.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
   if((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager')&&!assignee)return NextResponse.json({error:'Choose yourself or an Outdoor Sales employee to collect the initial measurements.'},{status:400});
   payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(branch?{branch}:{}),...(governorate?{governorate}:{}),...(p.buildingType===undefined?{}:{buildingType}),...(assignee?{assignedOutdoorSalesId:assignee}:{}),...(legacyOutdoorSalesId?{legacyOutdoorSalesId}:{}),address:address.slice(0,2000)||`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
+ }else if(body.action==='rename-project'){
+  if(auth.role!=='Outdoor Sales')return NextResponse.json({error:'Only the employee who registered this project can change its name.'},{status:403});
+  if(typeof body.expectedUpdatedAt!=='string'||!Number.isFinite(Date.parse(body.expectedUpdatedAt)))return NextResponse.json({error:'Reload the project before changing its name.'},{status:400});
+  try{payload=normalizeProjectName(body.payload);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  }else if(body.action==='finish'){
   try{payload=body.payload.note===undefined&&body.payload.photo===undefined?{}:normalizeMeasurementCompletion(body.payload);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  }else if(body.action==='opening'){
@@ -110,7 +116,7 @@ export async function POST(request:Request){
   // A missing project may have been deleted while the employee was offline.
   // Confirm deletion and the employee's former access before disclosing it.
   let deletion=admin.from('audit_events').select('id').eq('action','project_deleted').eq('entity_type','project').eq('entity_id',body.projectId);
-  if(!canAccessCRM(auth.role))deletion=deletion.or(`previous_value->>created_by.eq.${auth.user.id},previous_value->>assigned_outdoor_sales_id.eq.${auth.user.id}`);
+  if(!canAccessCRM(auth.role))deletion=deletion.or([`previous_value->>created_by.eq.${auth.user.id}`,...outdoorAssignmentIds({id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}).map(id=>`previous_value->>assigned_outdoor_sales_id.eq.${id}`)].join(','));
   if(auth.role==='Indoor Sales')deletion=['Karkh','Rasafa'].includes(auth.profile?.branch??'')?deletion.in('previous_value->>branch',[auth.profile!.branch!,'Governorates']):deletion.eq('previous_value->>branch','');
   const archived=await deletion.limit(1).maybeSingle();
   if(!archived.error&&archived.data)return NextResponse.json({code:'project_deleted',error:'This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.'},{status:410,headers:{'Cache-Control':'no-store'}});

@@ -5,7 +5,7 @@ import { ProjectRecord } from './ProjectRecord';
 import { useState } from 'react';
 import Link from 'next/link';
 import { SignaturePad } from '@/components/contracts/SignaturePad';
-import type { ContractSnapshot, SalesFlow } from '@/lib/workflow/types';
+import type { ContractSnapshot, SalesFlow, SignedEvidence } from '@/lib/workflow/types';
 import { DocumentHeader,DocumentParties,OpeningSchedule,ContractTerms,DocumentFooter,DocumentPaper } from './CommercialDocument';
 import { api,button,card,field,Notice,secondary,useResource,Workspace } from './ui';
 
@@ -19,7 +19,7 @@ export function ContractWorkspace({projectId}:{projectId:string}) {
  const [notice,setNotice]=useState('');
  const flow=data?.flow,contract=flow?.contract;
  function replaceFlow(updated:SalesFlow){setData(current=>current?{...current,flow:updated}:current);}
- return <Workspace title={term('Client contract')} description={term('Review the complete contract, then sign on an iPad or upload the signed printed copy.')}>
+ return <Workspace title={term('Client contract')} description={term('Review the complete contract, then sign digitally, upload a signed copy, or record that the client signed a hard copy.')}>
   <ProjectRecord projectId={projectId}/><Notice error={error}/>
   {notice&&<p role="status" className="mb-5 rounded-md bg-green-50 p-4 text-sm text-green-800 print:hidden">{term(notice)}</p>}
   {loading?<p>{term('Loading contract…')}</p>:!data||!flow||!contract?<div className={card}>
@@ -40,12 +40,16 @@ function ContractContent({projectId,project,flow,contract,onFlow,setError,setNot
  const [signature,setSignature]=useState('');
  const [signer,setSigner]=useState('');
  const [consent,setConsent]=useState(false);
- const [method,setMethod]=useState<'digital'|'upload'>('digital');
+ const [method,setMethod]=useState<SignedEvidence['method']>('digital');
  const [file,setFile]=useState<File|null>(null);
  const [busy,setBusy]=useState(false);
  const [editingType,setEditingType]=useState(false);
  const [template,setTemplate]=useState(contract.template??'');
  const canChangeType=flow.stage==='contract'&&!flow.signed_at&&!flow.evidence&&!flow.accepted_at&&!flow.accepted_by&&project.sales_status==='contract_generated'&&!project.additional_openings_state;
+ function changeMethod(next:SignedEvidence['method']){
+  if(next===method)return;
+  setMethod(next);setConsent(false);setError('');
+ }
 
  async function changeContractType(){
   if(busy||!canChangeType||!['residential','commercial'].includes(template)||template===contract.template)return;
@@ -64,7 +68,7 @@ function ContractContent({projectId,project,flow,contract,onFlow,setError,setNot
    if(method==='upload'){
     const form=new FormData();form.set('revision',String(flow.revision));form.set('signer',signer);form.set('consent',String(consent));if(file)form.set('file',file);
     init={method:'POST',body:form};
-   }else init={method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'sign',revision:flow.revision,method,signer,signature,consent})};
+   }else init={method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'sign',revision:flow.revision,method,signer,...(method==='digital'?{signature}:{}),consent})};
    const result=await api<{flow:SalesFlow}>(endpoint,init);onFlow(result.flow);
   }catch(cause){setError((cause as Error).message);}
   finally{setBusy(false);}
@@ -99,6 +103,7 @@ function ContractContent({projectId,project,flow,contract,onFlow,setError,setNot
     <div className="document-company-signature"><h3>{term('For Alumex Experts / الطرف الأول')}</h3><p>{term('Authorized signature & company stamp')}</p><div/></div>
     <h3 className="font-semibold">{term('Client signature / الطرف الثاني')}</h3>
     {flow.signed_at?<>
+     {flow.evidence?.method==='hard_copy'&&<p className="mt-2 text-sm font-semibold text-green-800">{term('Client signed hard copy')}</p>}
      <p className="mt-2 text-sm">{flow.evidence?.signer} · {formatDateTime(flow.signed_at)}</p>
      {flow.evidence?.signature&&<div className="mt-3"><img alt={term('Client signature')} src={flow.evidence.signature} className="max-h-40 max-w-full"/></div>}
      {flow.evidence?.method==='upload'&&<a href={`${endpoint}?download=signed`} className="mt-4 inline-block text-blue-600 print:hidden">{term('Download signed copy')}</a>}
@@ -110,15 +115,17 @@ function ContractContent({projectId,project,flow,contract,onFlow,setError,setNot
    <h2 className="mb-5 text-xl font-semibold">{term('Complete signing')}</h2>
    <fieldset disabled={busy} className="min-w-0">
     <div className="mb-6 flex flex-wrap gap-3">
-     <button type="button" className={method==='digital'?button:secondary} onClick={()=>setMethod('digital')}>{term('Sign digitally')}</button>
-     <button type="button" className={method==='upload'?button:secondary} onClick={()=>setMethod('upload')}>{term('Upload signed hard copy')}</button>
+     <button type="button" aria-pressed={method==='digital'} className={method==='digital'?button:secondary} onClick={()=>changeMethod('digital')}>{term('Sign digitally')}</button>
+     <button type="button" aria-pressed={method==='upload'} className={method==='upload'?button:secondary} onClick={()=>changeMethod('upload')}>{term('Upload signed hard copy')}</button>
+     <button type="button" aria-pressed={method==='hard_copy'} className={method==='hard_copy'?button:secondary} onClick={()=>changeMethod('hard_copy')}>{term('Client signed hard copy')}</button>
     </div>
     {method==='digital'?<div className={busy?'pointer-events-none':''}><SignaturePad signerName={signer} value={signature} onChange={setSignature} onSignerNameChange={setSigner} signerLabel={term('Client signer’s full name')} signerPlaceholder={term('Full name')} helpText={term('Use a finger or Apple Pencil to sign inside the box.')} ariaLabel={term('Client signature')} emptyMessage={term('Sign here')}/></div>:<div className="space-y-4">
-     <label className="block">{term('Client signer’s full name')}<input value={signer} onChange={event=>setSigner(event.target.value)} className={field}/></label>
-     <label className="block cursor-pointer">{term('Signed PDF or image (up to 3 MB)')}<span className={`${field} flex items-center gap-3 focus-within:ring-2 focus-within:ring-blue-600`}><span>{file?.name??term('Choose file')}</span><input type="file" accept="application/pdf,image/png,image/jpeg" onChange={event=>setFile(event.target.files?.[0]??null)} className="sr-only"/></span></label>
+     {method==='hard_copy'&&<p className="text-sm leading-6 text-slate-600">{term('Record that the client signed a printed copy of this contract. No upload is required.')}</p>}
+     <label className="block">{term('Client signer’s full name')}<input value={signer} maxLength={150} onChange={event=>setSigner(event.target.value)} className={field}/></label>
+     {method==='upload'&&<label className="block cursor-pointer">{term('Signed PDF or image (up to 3 MB)')}<span className={`${field} flex items-center gap-3 focus-within:ring-2 focus-within:ring-blue-600`}><span>{file?.name??term('Choose file')}</span><input type="file" accept="application/pdf,image/png,image/jpeg" onChange={event=>setFile(event.target.files?.[0]??null)} className="sr-only"/></span></label>}
     </div>}
-    <label className="my-6 flex items-start gap-3 text-sm leading-6"><input type="checkbox" checked={consent} onChange={event=>setConsent(event.target.checked)} className="mt-1"/>{method==='digital'?term('I confirm that I have read and agree to the contract, including all openings, prices, and terms.'):term('I confirm this uploaded copy is the complete contract shown above and has been signed by the client.')}</label>
-    <button type="button" disabled={busy||!consent||!signer.trim()||(method==='digital'?!signature:!file)} onClick={()=>void sign()} className={button}>{busy?term('Saving signed contract…'):term('Save signed contract & send to Operations')}</button>
+    <label className="my-6 flex items-start gap-3 text-sm leading-6"><input type="checkbox" checked={consent} onChange={event=>setConsent(event.target.checked)} className="mt-1"/>{method==='digital'?term('I confirm that I have read and agree to the contract, including all openings, prices, and terms.'):method==='upload'?term('I confirm this uploaded copy is the complete contract shown above and has been signed by the client.'):term('I confirm the client has signed the complete printed contract shown above.')}</label>
+    <button type="button" disabled={busy||!consent||!signer.trim()||(method==='digital'&&!signature)||(method==='upload'&&!file)} onClick={()=>void sign()} className={button}>{busy?term('Saving signed contract…'):method==='hard_copy'?term('Record hard-copy signature & send to Operations'):term('Save signed contract & send to Operations')}</button>
    </fieldset>
   </section>}
  </>;

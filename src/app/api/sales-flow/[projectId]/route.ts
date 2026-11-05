@@ -109,6 +109,7 @@ export async function POST(request:Request,context:Context){
   }
   if(action==='sign'){
    if(flow?.stage!=='contract')throw new Error('Only an unsigned generated contract can be signed.');
+   if(body.method==='hard_copy'&&(flow.signed_at||flow.evidence||flow.accepted_at||flow.accepted_by||project.sales_status!=='contract_generated'))throw new Error('Only an unsigned generated contract can be signed.');
    const signer=typeof body.signer==='string'?body.signer.trim():'';
    if(!signer || signer.length>150 || body.consent!==true)throw new Error('Enter the signer’s name and confirm the contract has been signed.');
    if(body.method==='digital'){
@@ -126,7 +127,9 @@ export async function POST(request:Request,context:Context){
     const result=await admin.storage.from('signed-contracts-private').upload(path,bytes,{contentType:mime,upsert:false});
     if(result.error)throw new Error('Unable to store signed document.');
     uploadedPath=path;payload={method:'upload',signer,path,fileName:upload.name.slice(0,200)};
-   }else throw new Error('Choose digital signing or upload a signed copy.');
+   }else if(body.method==='hard_copy'){
+    payload={method:'hard_copy',signer,confirmed:true};
+   }else throw new Error('Choose digital signing, upload a signed copy, or record a hard-copy signature.');
   }
   const result=await admin.rpc('advance_sales_flow',{p_project:projectId,p_action:action==='update-prices'||action==='set-discount'?'save':String(action),p_revision:revision as number,p_payload:payload,p_actor:auth.user.id});
   if(result.error)throw new Error(result.error.message);

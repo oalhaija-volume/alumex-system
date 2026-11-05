@@ -5,7 +5,10 @@ export const registrationRoomTypes = [
  "Facade room", "Lightwell kitchen", "Lightwell room", "Hawli", "Other",
 ] as const;
 // Retain retired presets for saved measurements and queued edits.
-export const registrationRoomOptions = registrationRoomTypes.filter(room => room !== "Living room");
+export const registrationRoomOptions = [
+ ...registrationRoomTypes.filter(room => !["Living room", "Bedroom", "Kitchen", "Hallway", "Other"].includes(room)).reverse(),
+ "Other",
+] as const;
 export const registrationStructureTypes = ["Window", "Door", "Louver", "Curtain Wall", "Skylight"] as const;
 export type RegistrationStructure = typeof registrationStructureTypes[number] | "Facade";
 export type SkylightCapture = { photo?: string; drawing?: string; sections: { label: string; width: number; length: number }[] };

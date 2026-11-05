@@ -211,7 +211,7 @@ export function InitialMeasurements({projectId,role,actor}:{projectId:string;rol
             {(!commercial||workArea==='internal')&&<label className="block text-sm font-medium text-slate-800">{t("initialStep.room")}
               <select required aria-label={t("initialStep.room")} value={room} onChange={event=>{setRoom(event.target.value);setOtherRoom("");}} className={field}>
                 <option value="">{t("initialStep.chooseRoom")}</option>
-                {editing&&room==='Living room'&&<option value="Living room" disabled hidden>{t('initialStep.rooms.Living room')}</option>}
+                {editing&&room&&!registrationRoomOptions.some(option=>option===room)&&<option value={room} disabled hidden>{t(`initialStep.rooms.${room}`)}</option>}
                 {registrationRoomOptions.map(value=><option key={value} value={value}>{t(`initialStep.rooms.${value}`)}</option>)}
               </select>
             </label>}

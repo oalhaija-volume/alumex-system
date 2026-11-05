@@ -1,7 +1,7 @@
 "use client";
 import { useI18n } from '@/components/i18n/I18nProvider';
 import { useState } from 'react';
-import { normalizeRegistrationOpening, registrationRoomTypes, registrationStructureTypes, type RegistrationOpening } from '@/lib/measurements/registrationOpening';
+import { normalizeRegistrationOpening, registrationRoomOptions, registrationStructureTypes, type RegistrationOpening } from '@/lib/measurements/registrationOpening';
 import { button,card,field,Notice,secondary } from './ui';
 
 export function QuotationOpeningForm({onAdd,onCancel}:{onAdd:(opening:RegistrationOpening)=>void;onCancel:()=>void}) {
@@ -22,7 +22,7 @@ export function QuotationOpeningForm({onAdd,onCancel}:{onAdd:(opening:Registrati
   <Notice error={error}/>
   <div className="grid gap-4 sm:grid-cols-2">
    <label className="text-sm">{term("Floor")}<input name="floor" required maxLength={100} placeholder={term("Ground, 1, 2…")} className={field}/></label>
-   <label className="text-sm">{term("Room")}<select aria-label={term("Room")} required value={room} onChange={e=>setRoom(e.target.value)} className={field}><option value="">{term("Choose room")}</option>{registrationRoomTypes.map(r=><option key={r} value={r}>{term(r)}</option>)}</select></label>
+   <label className="text-sm">{term("Room")}<select aria-label={term("Room")} required value={room} onChange={e=>setRoom(e.target.value)} className={field}><option value="">{term("Choose room")}</option>{registrationRoomOptions.map(r=><option key={r} value={r}>{term(r)}</option>)}</select></label>
   </div>
   {room==='Other'&&<label className="block text-sm">{term("Room name")}<input name="otherRoom" required maxLength={100} className={field}/></label>}
   <div className="grid gap-4 sm:grid-cols-2">

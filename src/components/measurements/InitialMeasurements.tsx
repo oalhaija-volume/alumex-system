@@ -20,7 +20,7 @@ import { readFieldState } from "@/lib/offline/store";
 import { fieldFetch,isDeviceWorkspace } from "@/lib/offline/client";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
-import { normalizeRegistrationOpening, registrationRoomTypes, registrationStructureTypes, type CurtainWallCapture, type SkylightCapture, type RegistrationOpening, type RegistrationStructure } from "@/lib/measurements/registrationOpening";
+import { normalizeRegistrationOpening, registrationRoomOptions, registrationStructureTypes, type CurtainWallCapture, type SkylightCapture, type RegistrationOpening, type RegistrationStructure } from "@/lib/measurements/registrationOpening";
 
 const measurementFloors = ["GF", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "Roof", "Basement"];
 const field = "mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
@@ -211,7 +211,8 @@ export function InitialMeasurements({projectId,role,actor}:{projectId:string;rol
             {(!commercial||workArea==='internal')&&<label className="block text-sm font-medium text-slate-800">{t("initialStep.room")}
               <select required aria-label={t("initialStep.room")} value={room} onChange={event=>{setRoom(event.target.value);setOtherRoom("");}} className={field}>
                 <option value="">{t("initialStep.chooseRoom")}</option>
-                {registrationRoomTypes.map(value=><option key={value} value={value}>{t(`initialStep.rooms.${value}`)}</option>)}
+                {editing&&room==='Living room'&&<option value="Living room" disabled hidden>{t('initialStep.rooms.Living room')}</option>}
+                {registrationRoomOptions.map(value=><option key={value} value={value}>{t(`initialStep.rooms.${value}`)}</option>)}
               </select>
             </label>}
           </div>}

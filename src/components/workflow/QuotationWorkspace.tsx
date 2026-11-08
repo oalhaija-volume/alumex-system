@@ -204,7 +204,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     const editableAlumexRate=!!system&&isQuotationSystemRateEditable(system);
     const editableCurtainRate=opening.opening_type==='Curtain Wall'&&isQuotationCurtainRateEditable(system);
     const editableRate=editableAlumexRate||editableCurtainRate;
-    const minimumRate=editableCurtainRate?1:QUOTATION_SYSTEM_RATE_MIN;
+    const minimumRate=QUOTATION_SYSTEM_RATE_MIN;
     const systemRate=choice.systemRate??Number(system?.unit_price);
     const invalidRate=editableRate&&choice.systemRate!==undefined&&(!Number.isSafeInteger(systemRate)||systemRate<minimumRate);
     const isNew=newOpenings.some(o=>o.id===opening.id);

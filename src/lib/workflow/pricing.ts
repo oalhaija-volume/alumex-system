@@ -173,7 +173,7 @@ function catalogCharge(id:string,quantity:number,catalog:CatalogItem[]):Charge {
 function quotationSystemCharge(charge:Charge,product:CatalogItem|undefined,rate:unknown):Charge {
  const curtain=isQuotationCurtainRateEditable(product);
  if(!isQuotationSystemRateEditable(product)&&!curtain)throw new Error('Quotation-specific rates are available only for active Alumex systems or Curtain Wall priced per m².');
- if(typeof rate!=='number'||!Number.isSafeInteger(rate)||rate<(curtain?1:QUOTATION_SYSTEM_RATE_MIN))throw new Error(curtain?'Enter a Curtain Wall rate greater than zero, using whole IQD.':'Enter an Alumex system rate of at least 240,000 IQD, using whole IQD.');
+ if(typeof rate!=='number'||!Number.isSafeInteger(rate)||rate<QUOTATION_SYSTEM_RATE_MIN)throw new Error(curtain?'Enter a Curtain Wall rate of at least 240,000 IQD, using whole IQD.':'Enter an Alumex system rate of at least 240,000 IQD, using whole IQD.');
  const total=Math.round(charge.quantity*rate);
  if(!Number.isSafeInteger(total)||total<=0)throw new Error(`Invalid amount for ${charge.name}.`);
  return {...charge,rate,total,rateSource:'quotation'};

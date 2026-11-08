@@ -7,7 +7,7 @@ import { priceQuotation, type AdditionalChoice, type CatalogItem, type MeasuredO
 import type { QuotationRevision } from '../../src/lib/workflow/types';
 
 // Exercise the actual quotation editor with isolated fixture APIs and no account.
-const output = resolve('artifacts/quotation-group-rates-20261108');
+const output = resolve('artifacts/group-minimum-20261108');
 const projectId = '11111111-1111-4111-8111-111111111111';
 const actor = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', role: 'Indoor Sales', name: 'Indoor employee', branch: 'Karkh' };
 const openings: MeasuredOpening[] = [
@@ -141,12 +141,41 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   const hingedApply = apply('Apply hinged windows price');
   const curtainApply = apply('Apply curtain wall price');
   await slidingInput.fill(''); await hingedInput.fill(''); await curtainInput.fill('');
+  for (const [input, applyButton] of [[slidingInput, slidingApply], [hingedInput, hingedApply], [curtainInput, curtainApply]]) {
+    await expect(input).toHaveAttribute('min', '240000');
+    await expect(input).toHaveAttribute('step', '1');
+    await input.fill('239999');
+    await expect(input).toHaveAttribute('aria-invalid', 'true');
+    await expect(applyButton).toBeDisabled();
+    await expect(save()).toBeDisabled();
+    expect(posts).toHaveLength(0);
+    await input.fill('240000');
+    await expect(input).toHaveAttribute('aria-invalid', 'false');
+    await expect(applyButton).toBeEnabled();
+    await expect(save()).toBeDisabled();
+    await applyButton.click();
+    await expect(save()).toBeEnabled();
+    expect(posts).toHaveLength(0);
+  }
+  await expect(openingRate('sliding')).toHaveValue('240000');
+  await expect(openingRate('hinged')).toHaveValue('240000');
+  const measuredCurtainRate = card('curtain').getByRole('spinbutton', { name: term('Curtain Wall rate (IQD / m²)'), exact: true });
+  const standaloneCurtainRate = page.getByRole('spinbutton', { name: term('Curtain Wall service rate (IQD / m²)'), exact: true });
+  await expect(measuredCurtainRate).toHaveAttribute('min', '240000');
+  await expect(standaloneCurtainRate).toHaveAttribute('min', '240000');
+  await expect(measuredCurtainRate).toHaveValue('240000');
+  await expect(standaloneCurtainRate).toHaveValue('240000');
+  await group().screenshot({ path: test.info().outputPath(`${locale}-all-groups-minimum-240000.png`) });
+  await cancel().click();
+  await expect(edit()).toBeVisible(); expect(posts).toHaveLength(0); expect(saved).toEqual(initial);
+  await edit().click();
+  await slidingInput.fill(''); await hingedInput.fill(''); await curtainInput.fill('');
   await expect(slidingApply).toBeDisabled(); await expect(hingedApply).toBeDisabled(); await expect(curtainApply).toBeDisabled();
   for (const value of ['239999', '240000.5', '-1', '']) {
     await slidingInput.fill(value); await expect(slidingApply).toBeDisabled();
     if (value) await expect(save()).toBeDisabled(); else await expect(save()).toBeEnabled();
   }
-  for (const value of ['0', '1.5', '']) {
+  for (const value of ['239999', '240000.5', '0', '1.5', '']) {
     await curtainInput.fill(value); await expect(curtainApply).toBeDisabled();
     if (value) await expect(save()).toBeDisabled(); else await expect(save()).toBeEnabled();
   }
@@ -179,22 +208,22 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   await expect(card('louver').getByRole('combobox', { name: term('System / product'), exact: true })).toHaveValue('louver-system');
   await expect(card('other-system').getByRole('combobox', { name: term('System / product'), exact: true })).toHaveValue('other');
   await expect(total()).toHaveText(money(expected(300000, 330000).total));
-  await curtainInput.fill('175000'); await expect(save()).toBeDisabled();
+  await curtainInput.fill('275000'); await expect(save()).toBeDisabled();
   await curtainApply.click(); await expect(save()).toBeEnabled();
-  await expect(total()).toHaveText(money(expected(300000, 330000, 175000).total));
+  await expect(total()).toHaveText(money(expected(300000, 330000, 275000).total));
   await restore().click();
   await expect(openingRate('removed-sliding')).toHaveValue('260000');
   await remove().click();
   await page.getByRole('checkbox', { name: term('Apply 5% discount'), exact: true }).check();
-  await expect(total()).toHaveText(money(expected(300000, 330000, 175000, 5).total));
+  await expect(total()).toHaveText(money(expected(300000, 330000, 275000, 5).total));
   expect(posts).toHaveLength(0); expect(saved).toEqual(initial); expect(catalog).toEqual(originalCatalog);
   await group().screenshot({ path: test.info().outputPath(`${locale}-group-prices.png`) });
   await save().click();
   await expect(edit()).toBeVisible(); expect(posts).toHaveLength(1);
   expect(posts[0].excludedOpeningIds).toEqual(['removed-sliding']);
   expect(posts[0].discountPercent).toBe(5);
-  expect(posts[0].additionalItems.find(item => item.id === 'curtain-wall')).toHaveProperty('unitRate', 175000);
-  expect(saved.total).toBe(expected(300000, 330000, 175000, 5).total);
+  expect(posts[0].additionalItems.find(item => item.id === 'curtain-wall')).toHaveProperty('unitRate', 275000);
+  expect(saved.total).toBe(expected(300000, 330000, 275000, 5).total);
   expect(saved.discount?.amount).toBe(Math.round(saved.discount!.subtotal / 20));
   for (const line of saved.lines) {
     const previous = initial.lines.find(original => original.opening.id === line.opening.id)!;
@@ -202,21 +231,21 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
     expect(line.glass).toEqual(previous.glass); expect(line.extras).toEqual(previous.extras);
     if (['door', 'louver', 'other-system'].includes(line.opening.id)) expect(line).toEqual(previous);
   }
-  expect(saved.lines.find(line => line.opening.id === 'curtain')!.system.rate).toBe(175000);
-  expect(saved.additionalItems!.find(item => item.id === 'curtain-wall')!.rate).toBe(175000);
+  expect(saved.lines.find(line => line.opening.id === 'curtain')!.system.rate).toBe(275000);
+  expect(saved.additionalItems!.find(item => item.id === 'curtain-wall')!.rate).toBe(275000);
   for (const id of ['cladding', 'standalone-door', 'pushout']) expect(saved.additionalItems!.find(item => item.id === id)).toEqual(initial.additionalItems!.find(item => item.id === id));
   expect(history[0].quotation).toEqual(initial); expect(catalog).toEqual(originalCatalog);
   await page.reload(); await edit().click();
   await expect(openingRate('sliding')).toHaveValue('300000');
   await expect(openingRate('hinged')).toHaveValue('330000');
   await expect(card('removed-sliding')).toHaveCount(0);
-  await expect(card('curtain').getByRole('spinbutton', { name: term('Curtain Wall rate (IQD / m²)'), exact: true })).toHaveValue('175000');
-  await expect(page.getByRole('spinbutton', { name: term('Curtain Wall service rate (IQD / m²)'), exact: true })).toHaveValue('175000');
+  await expect(card('curtain').getByRole('spinbutton', { name: term('Curtain Wall rate (IQD / m²)'), exact: true })).toHaveValue('275000');
+  await expect(page.getByRole('spinbutton', { name: term('Curtain Wall service rate (IQD / m²)'), exact: true })).toHaveValue('275000');
   await expect(total()).toHaveText(money(saved.total));
   await save().click();
   await expect(edit()).toBeVisible(); expect(posts).toHaveLength(2);
-  expect(posts[1].additionalItems.find(item => item.id === 'curtain-wall')).toHaveProperty('unitRate', 175000);
-  expect(saved.lines.find(line => line.opening.id === 'curtain')!.system.rate).toBe(175000);
+  expect(posts[1].additionalItems.find(item => item.id === 'curtain-wall')).toHaveProperty('unitRate', 275000);
+  expect(saved.lines.find(line => line.opening.id === 'curtain')!.system.rate).toBe(275000);
   await page.getByRole('combobox', { name: term('Quotation version'), exact: true }).selectOption('1');
   await expect(page.locator('.document-total strong')).toHaveText(money(initial.total));
   await expect(group()).toHaveCount(0);

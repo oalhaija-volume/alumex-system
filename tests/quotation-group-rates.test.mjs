@@ -37,11 +37,11 @@ const additional=[
  {id:'curtain-wall-arch',quantity:1},
 ];
 
-test('all three bulk groups are always returned with their own minimum and no empty-group rate',()=>{
+test('all three bulk groups are always returned with the shared minimum and no empty-group rate',()=>{
  assert.deepEqual(quotationRateGroups([],[],[],catalog),[
   {id:'sliding',openingIds:[],additionalItemIds:[],count:0,minimum:240000},
   {id:'hinged',openingIds:[],additionalItemIds:[],count:0,minimum:240000},
-  {id:'curtain-wall',openingIds:[],additionalItemIds:[],count:0,minimum:1},
+  {id:'curtain-wall',openingIds:[],additionalItemIds:[],count:0,minimum:240000},
  ]);
 });
 
@@ -52,11 +52,11 @@ test('groups use exact opening types and directions, eligible selected products,
  const groups=quotationRateGroups(openings,choices,additional,catalog);
  assert.deepEqual(groups[0],{id:'sliding',openingIds:['small','large'],additionalItemIds:[],count:2,minimum:240000});
  assert.deepEqual(groups[1],{id:'hinged',openingIds:['hinged'],additionalItemIds:[],count:1,minimum:240000,rate:260000});
- assert.deepEqual(groups[2],{id:'curtain-wall',openingIds:['wall'],additionalItemIds:['curtain'],count:2,minimum:1,rate:180000});
+ assert.deepEqual(groups[2],{id:'curtain-wall',openingIds:['wall'],additionalItemIds:['curtain'],count:2,minimum:240000,rate:180000});
  assert.deepEqual({openings,choices,additional,catalog},before);
  const common=quotationRateGroups(openings,choices.map(choice=>choice.openingId==='large'?{...choice,systemRate:240000}:choice),additional,catalog);
  assert.equal(common[0].rate,240000,'An explicit catalog-equal rate and an implicit catalog rate share the same effective rate');
- assert.equal(quotationRateGroups(openings,choices,[{...additional[0],unitRate:190000}],catalog)[2].rate,undefined);
+ assert.equal(quotationRateGroups(openings,choices,[{...additional[0],unitRate:250000}],catalog)[2].rate,undefined);
 });
 
 test('applying a bulk proposal changes only its current active group and leaves original choices intact for cancellation',()=>{
@@ -68,9 +68,9 @@ test('applying a bulk proposal changes only its current active group and leaves 
  assert.deepEqual(sliding.choices[0].extras,choices[0].extras);
  for(let i=1;i<choices.length;i++)assert.strictEqual(sliding.choices[i],choices[i]);
  assert.deepEqual(sliding.additionalItems,additional);
- const curtain=applyQuotationGroupRate('curtain-wall',190000,openings,choices,additional,catalog);
- assert.equal(curtain.choices[4].systemRate,190000);
- assert.equal(curtain.additionalItems[0].unitRate,190000);
+ const curtain=applyQuotationGroupRate('curtain-wall',250000,openings,choices,additional,catalog);
+ assert.equal(curtain.choices[4].systemRate,250000);
+ assert.equal(curtain.additionalItems[0].unitRate,250000);
  assert.deepEqual(curtain.additionalItems[0].measurements,additional[0].measurements);
  assert.deepEqual(curtain.additionalItems[0].extras,additional[0].extras);
  for(let i=1;i<additional.length;i++)assert.strictEqual(curtain.additionalItems[i],additional[i]);
@@ -80,13 +80,35 @@ test('applying a bulk proposal changes only its current active group and leaves 
  assert.deepEqual(applyQuotationGroupRate('sliding',280000,openings,choices,additional,retired).choices,choices);
 });
 
-test('bulk rates enforce independent whole-IQD minimums without coercing values',()=>{
- const openings=[measured('window'),measured('wall','Curtain Wall')],choices=[selection('window'),selection('wall','curtain')];
+test('all bulk groups reject 239999 and accept exactly 240000 whole IQD without coercing values',()=>{
+ const openings=[measured('window'),measured('hinged','Window','Hinged'),measured('wall','Curtain Wall')],choices=[selection('window'),selection('hinged','hinged'),selection('wall','curtain')];
  for(const group of ['sliding','hinged','curtain-wall'])for(const rate of [0,-1,1.5,NaN,Infinity,Number.MAX_SAFE_INTEGER+1,'270000',null,true,{},[]])assert.throws(()=>applyQuotationGroupRate(group,rate,openings,choices,additional,catalog),/using whole IQD/);
- for(const group of ['sliding','hinged'])assert.throws(()=>applyQuotationGroupRate(group,239999,openings,choices,additional,catalog),/at least 240,000/);
- assert.equal(applyQuotationGroupRate('curtain-wall',1,openings,choices,additional,catalog).additionalItems[0].unitRate,1);
- assert.equal(applyQuotationGroupRate('sliding',240000,openings,choices,additional,catalog).choices[0].systemRate,240000);
+ for(const [group,openingId] of [['sliding','window'],['hinged','hinged'],['curtain-wall','wall']]){
+  const before=structuredClone({openings,choices,additional,catalog});
+  assert.throws(()=>applyQuotationGroupRate(group,239999,openings,choices,additional,catalog),/at least 240,000/);
+  const accepted=applyQuotationGroupRate(group,240000,openings,choices,additional,catalog);
+  assert.equal(accepted.choices.find(choice=>choice.openingId===openingId).systemRate,240000);
+  if(group==='curtain-wall')assert.equal(accepted.additionalItems[0].unitRate,240000);
+  assert.deepEqual({openings,choices,additional,catalog},before);
+ }
  assert.throws(()=>applyQuotationGroupRate('other',270000,openings,choices,additional,catalog),/valid quotation rate group/);
+});
+
+test('direct quotation pricing enforces the shared minimum on every measured group and standalone Curtain Wall',()=>{
+ for(const [opening,choice] of [[measured('sliding'),selection('sliding')],[measured('hinged','Window','Hinged'),selection('hinged','hinged')],[measured('wall','Curtain Wall'),selection('wall','curtain')]]){
+  assert.throws(()=>priceQuotation([opening],[{...choice,systemRate:239999}],catalog,'author'),/at least 240,000/);
+  const quote=priceQuotation([opening],[{...choice,systemRate:240000}],catalog,'author');
+  assert.equal(quote.lines[0].system.rate,240000);
+  assert.equal(quote.lines[0].system.rateSource,'quotation');
+ }
+ for(const rate of [1,180000,239999]){
+  assert.throws(()=>priceQuotation([measured('wall','Curtain Wall')],[selection('wall','curtain',{systemRate:rate})],catalog,'author'),/at least 240,000/);
+  assert.throws(()=>priceQuotation([],[],catalog,'author',[{...additional[0],unitRate:rate}]),/at least 240,000/);
+ }
+ const standalone=priceQuotation([],[],catalog,'author',[{...additional[0],unitRate:240000}]);
+ assert.equal(standalone.additionalItems[0].rate,240000);
+ assert.equal(standalone.additionalItems[0].rateSource,'quotation');
+ assert.equal(standalone.additionalItems[0].quantity,12);
 });
 
 test('Curtain Wall quote rates have narrow eligibility and leave Alumex system guidance untouched',()=>{
@@ -97,9 +119,9 @@ test('Curtain Wall quote rates have narrow eligibility and leave Alumex system g
  for(const patch of [{name:'Curtain Wall Arch'},{name:'Curtain Wall Pushout'},{name:'Premium Curtain Wall'},{name:'Alumex Curtain Wall'},{name:'Cladding'},{is_active:false},{unit:'item'},{unit:'meter'},{unit:'project'}])assert.equal(isQuotationCurtainRateEditable({...curtain,...patch}),false,JSON.stringify(patch));
  assert.equal(isQuotationCurtainRateEditable(undefined),false);
  assert.equal(isQuotationCurtainRateEditable(null),false);
- const quote=priceQuotation([measured('wall','Curtain Wall')],[selection('wall','curtain',{systemRate:1})],catalog,'author');
+ const quote=priceQuotation([measured('wall','Curtain Wall')],[selection('wall','curtain',{systemRate:240000})],catalog,'author');
  assert.equal(quote.lines[0].system.quantity,0.5,'Curtain Wall uses measured area with no window minimum');
- assert.equal(quote.total,1);
+ assert.equal(quote.total,120000);
  assert.equal(quote.lines[0].system.rateSource,'quotation');
  assert.equal(quotationSellingSuggestion(quote,catalog),null);
 });
@@ -107,7 +129,7 @@ test('Curtain Wall quote rates have narrow eligibility and leave Alumex system g
 function bulkQuotation(){
  const openings=[measured('sliding','Window','Sliding',3),measured('hinged','Window','Hinged',2),measured('wall','Curtain Wall',null,2)];
  let selected={choices:[selection('sliding','system',{glassId:'glass',extras:[{id:'handle',quantity:2}]}),selection('hinged','hinged'),selection('wall','curtain',{glassId:'glass'})],additionalItems:structuredClone(additional)};
- for(const [group,rate] of [['sliding',270000],['hinged',280000],['curtain-wall',190000]])selected=applyQuotationGroupRate(group,rate,openings,selected.choices,selected.additionalItems,catalog);
+ for(const [group,rate] of [['sliding',270000],['hinged',280000],['curtain-wall',250000]])selected=applyQuotationGroupRate(group,rate,openings,selected.choices,selected.additionalItems,catalog);
  return {openings,...selected,quote:priceQuotation(openings,selected.choices,catalog,'author',selected.additionalItems,5)};
 }
 
@@ -116,46 +138,83 @@ test('bulk rates retain physical window minimums, measured Curtain Wall areas, q
  assert.deepEqual(quote.lines.map(line=>({area:line.area,quantity:line.system.quantity,rate:line.system.rate,total:line.total})),[
   {area:1.5,quantity:3,rate:270000,total:900000},
   {area:1,quantity:2,rate:280000,total:560000},
-  {area:1,quantity:1,rate:190000,total:210000},
+  {area:1,quantity:1,rate:250000,total:270000},
  ]);
  assert.equal(quote.additionalItems[0].quantity,12);
- assert.equal(quote.additionalItems[0].total,2280000);
+ assert.equal(quote.additionalItems[0].total,3000000);
  assert.equal(quote.additionalItems[0].extras[0].total,120000);
  assert.deepEqual(quote.additionalItems.slice(1).map(item=>item.rate),[100000,90000,150000]);
- assert.deepEqual(quote.discount,{percent:5,subtotal:4800000,amount:240000});
- assert.equal(quote.total,4560000);
+ assert.deepEqual(quote.discount,{percent:5,subtotal:5580000,amount:279000});
+ assert.equal(quote.total,5301000);
 });
 
 test('saved standalone Curtain Wall rates survive edit reconstruction and catalog repricing without changing prior quotations',()=>{
  const {openings,choices,quote}=bulkQuotation(),saved=JSON.parse(JSON.stringify(quote)),before=structuredClone(saved);
  const restored=quotationAdditionalChoices(saved);
- assert.equal(restored.find(item=>item.id==='curtain').unitRate,190000);
+ assert.equal(restored.find(item=>item.id==='curtain').unitRate,250000);
  assert.deepEqual(restored.find(item=>item.id==='curtain').measurements,additional[0].measurements);
  assert.deepEqual(priceQuotation(openings,choices,catalog,'editor',restored,5).discount,saved.discount);
  const changed=catalog.map(item=>({...item,unit_price:item.unit_price*2})),catalogBefore=structuredClone(changed);
  const refreshed=repriceQuotation(saved,changed,'refresher');
- assert.deepEqual(refreshed.lines.map(line=>line.system.rate),[270000,280000,190000]);
- assert.equal(refreshed.additionalItems[0].rate,190000);
+ assert.deepEqual(refreshed.lines.map(line=>line.system.rate),[270000,280000,250000]);
+ assert.equal(refreshed.additionalItems[0].rate,250000);
  assert.equal(refreshed.additionalItems[0].rateSource,'quotation');
  assert.equal(refreshed.additionalItems[0].quantity,12);
  assert.equal(refreshed.additionalItems[0].extras[0].rate,20000);
- assert.deepEqual(refreshed.discount,{percent:5,subtotal:5610000,amount:280500});
- assert.equal(refreshed.total,5329500);
+ assert.deepEqual(refreshed.discount,{percent:5,subtotal:6390000,amount:319500});
+ assert.equal(refreshed.total,6070500);
  assert.deepEqual(repriceQuotation(refreshed,changed,'again').lines,refreshed.lines);
  assert.deepEqual(saved,before);
  assert.deepEqual(changed,catalogBefore);
 });
 
 test('explicit catalog-equal Curtain Wall rates remain quotation-local while unmarked rates follow the catalog',()=>{
- const selected={...additional[0],unitRate:180000};
- const marked=priceQuotation([],[],catalog,'author',[selected]);
- const unmarked=priceQuotation([],[],catalog,'author',[additional[0]]);
+ const products=catalog.map(item=>item.id==='curtain'?{...item,unit_price:240000}:item);
+ const selected={...additional[0],unitRate:240000};
+ const marked=priceQuotation([],[],products,'author',[selected]);
+ const unmarked=priceQuotation([],[],products,'author',[additional[0]]);
  assert.equal(marked.additionalItems[0].rateSource,'quotation');
  assert.equal(Object.hasOwn(unmarked.additionalItems[0],'rateSource'),false);
  assert.equal(quotationAdditionalChoices(unmarked)[0].unitRate,undefined);
- const changed=catalog.map(item=>item.id==='curtain'?{...item,unit_price:200000}:item);
- assert.equal(repriceQuotation(marked,changed,'editor').additionalItems[0].rate,180000);
- assert.equal(repriceQuotation(unmarked,changed,'editor').additionalItems[0].rate,200000);
+ const changed=products.map(item=>item.id==='curtain'?{...item,unit_price:260000}:item);
+ assert.equal(repriceQuotation(marked,changed,'editor').additionalItems[0].rate,240000);
+ assert.equal(repriceQuotation(unmarked,changed,'editor').additionalItems[0].rate,260000);
+});
+
+test('lower catalog defaults and reading historical Curtain Wall overrides keep their saved rates and amounts',()=>{
+ const openings=[measured('wall','Curtain Wall')],choices=[selection('wall','curtain')];
+ const catalogQuote=priceQuotation(openings,choices,catalog,'author',[additional[0]]);
+ assert.equal(catalogQuote.lines[0].system.rate,180000);
+ assert.equal(catalogQuote.lines[0].system.total,90000);
+ assert.equal(catalogQuote.additionalItems[0].rate,180000);
+ assert.equal(catalogQuote.additionalItems[0].total,2160000);
+ assert.equal(Object.hasOwn(catalogQuote.lines[0].system,'rateSource'),false);
+ assert.equal(Object.hasOwn(catalogQuote.additionalItems[0],'rateSource'),false);
+ const historical=structuredClone(catalogQuote);
+ Object.assign(historical.lines[0].system,{rate:190000,total:95000,rateSource:'quotation'});
+ historical.lines[0].total=95000;
+ Object.assign(historical.additionalItems[0],{rate:190000,total:2280000,rateSource:'quotation'});
+ historical.total=2495000;
+ const serialized=JSON.stringify(historical),saved=JSON.parse(serialized);
+ const restored=quotationAdditionalChoices(saved);
+ assert.equal(restored[0].unitRate,190000);
+ const groups=quotationRateGroups(openings,[selection('wall','curtain',{systemRate:saved.lines[0].system.rate})],restored,catalog);
+ assert.equal(groups[2].rate,190000,'Reading a saved below-minimum rate must not silently raise it');
+ assert.equal(groups[2].minimum,240000);
+ assert.equal(JSON.stringify(saved),serialized,'Saved quotation reads must not rewrite historical rates, totals or override markers');
+ assert.throws(()=>repriceQuotation(saved,catalog,'editor'),/at least 240,000/,'A new repricing operation must validate historical explicit rates');
+ assert.equal(JSON.stringify(saved),serialized);
+});
+
+test('repricing validates the minimum independently for measured and standalone Curtain Wall overrides',()=>{
+ const measuredQuote=priceQuotation([measured('wall','Curtain Wall')],[selection('wall','curtain',{systemRate:240000})],catalog,'author');
+ const standaloneQuote=priceQuotation([],[],catalog,'author',[{...additional[0],unitRate:240000}]);
+ for(const [quote,select] of [[measuredQuote,quote=>quote.lines[0].system],[standaloneQuote,quote=>quote.additionalItems[0]]]){
+  select(quote).rate=239999;
+  const before=structuredClone(quote);
+  assert.throws(()=>repriceQuotation(quote,catalog,'editor'),/at least 240,000/);
+  assert.deepEqual(quote,before,'Rejected repricing must leave the saved quotation unchanged');
+ }
 });
 
 test('only main Curtain Wall services accept standalone unit-rate overrides and malformed rates are rejected',()=>{

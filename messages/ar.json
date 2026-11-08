@@ -1871,7 +1871,7 @@
     "Curtain Wall rate (IQD / m²)": "سعر فتحة الكيرتن (د.ع / م²)",
     "Curtain Wall service rate (IQD / m²)": "سعر خدمة الكيرتن (د.ع / م²)",
     "Choose a valid quotation rate group.": "اختر مجموعة أسعار صحيحة لعرض السعر.",
-    "Enter a Curtain Wall rate greater than zero, using whole IQD.": "أدخل سعر الكيرتن أكبر من صفر، بأعداد صحيحة دون كسور.",
+    "Enter a Curtain Wall rate of at least 240,000 IQD, using whole IQD.": "أدخل سعر الكيرتن لا يقل عن 240,000 د.ع، بأعداد صحيحة دون كسور.",
     "Quotation-specific rates are available only for active Alumex systems or Curtain Wall priced per m².": "تتوفر الأسعار الخاصة بعرض السعر فقط لأنظمة ألومكس النشطة أو الكيرتن المسعّر بالمتر المربع.",
     "Quotation-specific rates can only be applied to the opening system or standalone Curtain Wall.": "يمكن تطبيق الأسعار الخاصة بعرض السعر على نظام الفتحة أو خدمة الكيرتن المستقلة فقط.",
     "Allowed range: {minimum}–{maximum} IQD per m². Applies to this quotation only.": "النطاق المسموح: {minimum}–{maximum} د.ع لكل م². يسري على عرض السعر هذا فقط.",

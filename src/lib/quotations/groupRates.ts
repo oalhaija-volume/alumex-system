@@ -7,7 +7,7 @@ export type QuotationRateGroup={id:QuotationRateGroupId;openingIds:string[];addi
 export function quotationRateGroups(openings:MeasuredOpening[],choices:OpeningChoice[],additionalItems:AdditionalChoice[],catalog:CatalogItem[]):QuotationRateGroup[]{
  const products=new Map(catalog.map(product=>[product.id,normalizeCatalogItem(product)]));
  const selections=new Map(choices.map(choice=>[choice.openingId,choice]));
- const groups:QuotationRateGroup[]=['sliding','hinged','curtain-wall'].map(id=>({id:id as QuotationRateGroupId,openingIds:[],additionalItemIds:[],count:0,minimum:id==='curtain-wall'?1:QUOTATION_SYSTEM_RATE_MIN}));
+ const groups:QuotationRateGroup[]=['sliding','hinged','curtain-wall'].map(id=>({id:id as QuotationRateGroupId,openingIds:[],additionalItemIds:[],count:0,minimum:QUOTATION_SYSTEM_RATE_MIN}));
  const rates=new Map<QuotationRateGroupId,number[]>();
  function add(group:QuotationRateGroup,rate:number){group.count++;const values=rates.get(group.id)??[];values.push(rate);rates.set(group.id,values);}
  for(const opening of openings){
@@ -36,7 +36,7 @@ export function quotationRateGroups(openings:MeasuredOpening[],choices:OpeningCh
 export function applyQuotationGroupRate(groupId:QuotationRateGroupId,rate:number,openings:MeasuredOpening[],choices:OpeningChoice[],additionalItems:AdditionalChoice[],catalog:CatalogItem[]):{choices:OpeningChoice[];additionalItems:AdditionalChoice[]}{
  const group=quotationRateGroups(openings,choices,additionalItems,catalog).find(group=>group.id===groupId);
  if(!group)throw new Error('Choose a valid quotation rate group.');
- if(!Number.isSafeInteger(rate)||rate<group.minimum)throw new Error(groupId==='curtain-wall'?'Enter a Curtain Wall rate greater than zero, using whole IQD.':'Enter an Alumex system rate of at least 240,000 IQD, using whole IQD.');
+ if(!Number.isSafeInteger(rate)||rate<group.minimum)throw new Error(groupId==='curtain-wall'?'Enter a Curtain Wall rate of at least 240,000 IQD, using whole IQD.':'Enter an Alumex system rate of at least 240,000 IQD, using whole IQD.');
  const openingIds=new Set(group.openingIds),additionalItemIds=new Set(group.additionalItemIds);
  return {
   choices:choices.map(choice=>openingIds.has(choice.openingId)?{...choice,systemRate:rate}:choice),

@@ -65,9 +65,8 @@ for(const patch of [{name:'Other System'},{name:'Alumextra System'},{category:'o
  assert.throws(()=>quote(270000,products));
 });
 
-test('facade, louver, glass, and standalone products cannot receive a system rate through selections',()=>{
+test('louver, glass, and standalone products cannot receive a system rate through selections',()=>{
  const cases=[
-  {opening_type:'Curtain Wall',product:product('system','Curtain Wall','facade_service','sqm',240000)},
   {opening_type:'Louver',product:product('system','Louver','opening_product','sqm',240000)},
   {opening_type:'Window',product:product('system','Alumex Glass','glass_option','sqm',240000)},
   {opening_type:'Door',product:product('system','Alumex Door','standalone_product','item',240000)},

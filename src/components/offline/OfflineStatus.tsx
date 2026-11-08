@@ -18,22 +18,29 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
  const [shellReady,setShellReady]=useState(false);
  const [syncedAt,setSyncedAt]=useState<string|null>(null);
  useEffect(()=>{
-  let mounted=true,connecting=false;
+  if(!isOfflineDevice()){
+   // Online desktop pages do not need a second download of every field record.
+   // Retained work from an older installation can still finish synchronizing.
+   void syncFieldChanges().catch(()=>{});
+   if('serviceWorker' in navigator)void navigator.serviceWorker.getRegistration().then(registration=>registration?.update()).catch(()=>{});
+   return;
+  }
+  let mounted=true,connecting=false,forcePending=false;
   async function refresh(){
    const state=await readFieldState().catch(()=>null);
    if(!mounted)return;
    setOnline(isFieldOnline());setCount(state?.queue.length??0);
    setError(state?.queue.find(c=>c.error)?.error??'');setReady(!!state);setSyncedAt(state?.syncedAt??null);
   }
-  async function connect(){
-   if(connecting)return;
+  async function connect(force=false){
+   if(connecting){forcePending ||= force;return;}
    connecting=true;
    try{
     await refresh();
-    if(navigator.onLine){await syncFieldChanges();if(activeFieldUser())await prepareOffline();}
+    if(navigator.onLine){await syncFieldChanges();if(activeFieldUser())await prepareOffline({background:!force});}
     if(mounted)setSetupError('');
    }catch(e){if(mounted)setSetupError(e instanceof Error?e.message:'Offline setup unavailable.');}
-   finally{connecting=false;await refresh();}
+   finally{connecting=false;await refresh();if(mounted&&forcePending){forcePending=false;void connect(true);}}
   }
   async function prepareShell(){
    if(!('serviceWorker' in navigator))throw new Error('Offline reopening is unavailable in this browser.');
@@ -44,18 +51,20 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
    (registration.active??readyRegistration.active)?.postMessage({type:'REFRESH_OFFLINE_SHELL'});
   }
   async function setup(){
-   try{await prepareOffline();void navigator.storage?.persist?.().catch(()=>false);await syncFieldChanges();}
+   try{const previousAccount=activeFieldUser();await Promise.all([prepareOffline({background:true}),syncFieldChanges()]);void navigator.storage?.persist?.().catch(()=>false);if(activeFieldUser()!==previousAccount)await syncFieldChanges();}
    catch(e){if(mounted)setSetupError(e instanceof Error?e.message:'Offline setup unavailable.');}
    await refresh();
   }
   void refresh();
-  if(isOfflineDevice())void prepareShell().catch(()=>{if(mounted)setShellError('Offline reopening is unavailable in this browser.');});
-  else if('serviceWorker' in navigator)void navigator.serviceWorker.getRegistration().then(registration=>registration?.update()).catch(()=>{});
+  void prepareShell().catch(()=>{if(mounted)setShellError('Offline reopening is unavailable in this browser.');});
   void setup();
   window.addEventListener('field-change',refresh);window.addEventListener('field-connection',refresh);
-  window.addEventListener('online',connect);window.addEventListener('offline',refresh);window.addEventListener('focus',connect);
+  const reconnect=()=>{void connect(true);};
+  const focus=()=>{void connect();};
+  const visible=()=>{if(document.visibilityState==='visible')void connect();};
+  window.addEventListener('online',reconnect);window.addEventListener('offline',refresh);window.addEventListener('focus',focus);document.addEventListener('visibilitychange',visible);
   const timer=window.setInterval(()=>{if(document.visibilityState==='visible')void connect();},30000);
-  return()=>{mounted=false;clearInterval(timer);window.removeEventListener('field-change',refresh);window.removeEventListener('field-connection',refresh);window.removeEventListener('online',connect);window.removeEventListener('offline',refresh);window.removeEventListener('focus',connect);};
+  return()=>{mounted=false;clearInterval(timer);window.removeEventListener('field-change',refresh);window.removeEventListener('field-connection',refresh);window.removeEventListener('online',reconnect);window.removeEventListener('offline',refresh);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',visible);};
  },[]);
  const issue=error||setupError||shellError;
  if(!showOffline)return null;

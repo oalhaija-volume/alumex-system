@@ -19,7 +19,7 @@ import { canAssignLegacyOutdoorSales, normalizeLegacyOutdoorSalesId } from '@/li
 
 type IntakeEmployeeState = Pick<FieldState, 'actor' | 'outdoorSales'>;
 
-export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployeeState?: IntakeEmployeeState | null }) {
+export function OutdoorIntake({ initialEmployeeState = null,onRegistered }: { initialEmployeeState?: IntakeEmployeeState | null;onRegistered?:(projectId:string)=>void }) {
   const mobileOutdoor = useMobileOutdoor();
   const { t, term,errorMessage,formatDateTime } = useI18n();
 
@@ -156,6 +156,7 @@ export function OutdoorIntake({ initialEmployeeState = null }: { initialEmployee
         setSaved({projectId:result.projectId,pending:!!result.pending,registeredBy:registered?.registeredBy??employeeState.actor.name,createdAt:registered?.created_at,legacyOutdoorSalesOwner:registered?.legacyOutdoorSalesOwner??legacyOwner?.name});
         return;
       }
+      if(readiness==='ready'&&onRegistered){onRegistered(result.projectId);return;}
       if (!result.pending && isFieldOnline() && !isDeviceWorkspace()) window.location.assign(readiness === "ready" ? `/initial-measurements/${result.projectId}` : "/mini-crm");
       else window.location.assign(readiness === "ready" ? `/offline?project=${result.projectId}` : "/offline?path=/mini-crm");
     } catch (cause) {

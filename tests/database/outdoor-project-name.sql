@@ -66,8 +66,8 @@ begin
   -- Reuse an Indoor-created project to test reference-only access. Prior visits
   -- and legacy credit intentionally do not create a new write permission.
   target_project:=gen_random_uuid();
-  insert into projects(id,client_id,project_name,project_number,created_by,assigned_outdoor_sales_id,legacy_outdoor_sales_id,structure_readiness)
-  values(target_project,client,'Protected project','NAME-'||target_project,other_outdoor,other_outdoor,outdoor,'ready');
+  insert into projects(id,client_id,project_name,project_number,created_by,assigned_outdoor_sales_id,legacy_outdoor_sales_id,structure_readiness,branch)
+  values(target_project,client,'Protected project','NAME-'||target_project,other_outdoor,other_outdoor,outdoor,'ready','Rasafa');
   insert into field_sync_receipts(operation_id,actor_id,project_id,action,payload_hash,recorded_at,result)
   values(gen_random_uuid(),visitor,target_project,'finish','history',now(),'{}');
   select updated_at into stamp from projects where id=target_project;
@@ -76,7 +76,7 @@ begin
   foreach employee in array array[outdoor,visitor,indoor] loop
     begin
       perform sync_field_change(gen_random_uuid(),employee,target_project,'rename-project','{"projectName":"Forbidden"}',now(),stamp);
-      raise exception using errcode='ZX001',message='Reference-only employee or Indoor Sales renamed a project';
+      raise exception using errcode='ZX001',message='Reference-only employee or Indoor Sales from another branch renamed a project';
     exception when sqlstate '42501' or sqlstate 'P0001' then null;
     end;
   end loop;

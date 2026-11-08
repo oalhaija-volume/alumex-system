@@ -42,6 +42,7 @@ function fixture({ role = 'Outdoor Sales', openingCreator = actorId, projectCrea
       const query = {
         select(fields) { reads.push({ table, fields }); return this; },
         eq(key, value) { filters.push([key, value]); return this; },
+        in(key, values) { filters.push([key, values]); return this; },
         order() { return this; },
         insert(payload) { mutation = payload; return this; },
         async maybeSingle() {

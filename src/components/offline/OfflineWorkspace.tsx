@@ -18,7 +18,7 @@ import { SalesDashboard } from '@/components/workflow/SalesDashboard';
 import { ProjectWorkspace } from '@/components/workflow/ProjectWorkspace';
 import { SyncConflicts } from "./SyncConflicts";
 import { OfflineStatus } from './OfflineStatus';
-import { readFieldState } from '@/lib/offline/store';
+import { readFieldState, type FieldChangeDetail } from '@/lib/offline/store';
 import { isOfflineDevice } from '@/lib/offline/device';
 import type { FieldState } from '@/lib/offline/types';
 export function OfflineWorkspace(){
@@ -27,13 +27,43 @@ export function OfflineWorkspace(){
  return allowed?<DeviceWorkspace/>:null;
 }
 function DeviceWorkspace(){
- const { term } = useI18n();
+ const { term,t,errorMessage } = useI18n();
  const [state,setState]=useState<FieldState|null>(null);const [loaded,setLoaded]=useState(false);const [requestedPath,setPath]=useState('/intake');const [navigationVersion,setNavigationVersion]=useState(0);const [message,setMessage]=useState('');
- useEffect(()=>{let live=true;async function refresh(){const saved=await readFieldState().catch(()=>null);if(live){setState(saved);setLoaded(true);}}const params=new URLSearchParams(location.search);const timer=setTimeout(()=>{const initialPath=params.get('path')??(params.get('project')?'/initial-measurements/'+params.get('project'):'/intake');setPath(initialPath.includes('#')?initialPath:initialPath+location.hash);void refresh();},0);window.addEventListener('field-change',refresh);return()=>{live=false;clearTimeout(timer);window.removeEventListener('field-change',refresh);};},[]);
+ const [storageError,setStorageError]=useState('');
+ const [storageRetry,setStorageRetry]=useState(0);
+ useEffect(()=>{
+  const params=new URLSearchParams(location.search);
+  const timer=setTimeout(()=>{
+   const initialPath=params.get('path')??(params.get('project')?'/initial-measurements/'+params.get('project'):'/intake');
+   setPath(initialPath.includes('#')?initialPath:initialPath+location.hash);
+  },0);
+  return()=>clearTimeout(timer);
+ },[]);
+ useEffect(()=>{
+  let live=true,version=0;
+  async function refresh(event?:Event){
+   const current=++version;
+   // Retain a failed refresh only for the current account. An account change
+   // must remove the previous employee's workspace before reading another one.
+   if((event as CustomEvent<FieldChangeDetail>|undefined)?.detail?.source==='account')setState(null);
+   try{
+    const saved=await readFieldState();
+    if(live&&current===version){setState(saved);setStorageError('');}
+   }catch(error){
+    if(live&&current===version)setStorageError(error instanceof Error?error.message:'Unable to load saved workspace.');
+   }finally{
+    if(live&&current===version)setLoaded(true);
+   }
+  }
+  const timer=setTimeout(()=>void refresh(),0);
+  window.addEventListener('field-change',refresh);
+  return()=>{live=false;clearTimeout(timer);window.removeEventListener('field-change',refresh);};
+ },[storageRetry]);
  const outdoor = state?.actor.role === 'Outdoor Sales';
  const mobileOutdoor = state?.actor.role === 'Outdoor Sales' && isPhoneRequest(new Headers({'user-agent': navigator.userAgent}));
  const basePath=requestedPath.split('#')[0];
  const path = mobileOutdoor && !isMobileWorkspaceRoute(basePath) ? '/dashboard' : basePath;
+ const onlinePath=/^\/(?:dashboard|intake|project-log|projects|mini-crm)$/.test(basePath)||/^\/initial-measurements\/[0-9a-f-]{36}$/i.test(basePath)||/^\/projects\/[0-9a-f-]{36}\/follow-ups$/i.test(basePath)?requestedPath:'/dashboard';
  useEffect(()=>{
   const fragment=requestedPath.split('#')[1];
   if(!fragment||!/^project-[0-9a-f-]{36}$/i.test(fragment))return;
@@ -49,7 +79,7 @@ function DeviceWorkspace(){
   const timer=setTimeout(()=>observer?.disconnect(),15000);
   return()=>{observer?.disconnect();clearTimeout(timer);};
  },[requestedPath,navigationVersion]);
- function navigate(next:string){
+ function navigate(next:string,newRegistration=false){
   let route=next.split('#')[0];
   if(/^\/(quotation|contract)\//.test(route)&&!canPrepareQuotation(state?.actor.role)){setMessage(term('Measurements submitted. Indoor Sales will prepare the quotation.'));return;}
   if(mobileOutdoor&&!isMobileWorkspaceRoute(route)){next='/dashboard';route=next;}
@@ -57,10 +87,10 @@ function DeviceWorkspace(){
   if(/^\/projects\/[0-9a-f-]{36}\/follow-ups$/i.test(route)||/^\/(dashboard|intake|project-log|projects|mini-crm)$/.test(route)||/^\/initial-measurements\/[0-9a-f-]{36}$/i.test(route)){
    setPath(next);setNavigationVersion(version=>version+1);setMessage('');
    const fragment=next.includes('#')?'#'+next.split('#')[1]:'';
-   history.replaceState(null,'','/offline?path='+encodeURIComponent(next)+fragment);
+   history.replaceState(null,'',newRegistration&&route.startsWith('/initial-measurements/')?'/offline?project='+route.split('/')[2]:'/offline?path='+encodeURIComponent(next)+fragment);
   }else if(navigator.onLine&&!state?.queue.length)location.assign(next);
   else setMessage('Quotations and contracts need an internet connection. Your field work stays saved here.');
  }
  const projectId=path.startsWith('/initial-measurements/')?path.split('/')[2]:null;
- return <MobileOutdoorProvider value={mobileOutdoor}><div className="min-h-dvh bg-slate-50 text-slate-900">{loaded&&!outdoor&&<header className="border-b border-slate-200 bg-white px-5 py-5"><div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4"><span className="text-xl font-semibold">{term("Alumex · Device workspace")}</span><a href="/intake" className="text-sm text-blue-600">{term("Open online system")}</a><div className="flex items-center gap-3"><NotificationCenter compact onNavigate={navigate}/><LanguageSwitcher/></div></div></header>}<OfflineStatus quiet={!loaded||outdoor}/><SalesReminders/>{loaded&&!state?<div className="mx-auto max-w-xl p-8"><h1 className="text-xl font-semibold">{term("Sign in online to prepare this device")}</h1><p className="mt-3 text-sm text-slate-600">{term("Offline work is available after an employee signs in and the device downloads its workspace.")}</p><a href="/login" className="mt-5 inline-block text-blue-600">{term("Sign in")}</a></div>:state?<>{outdoor?<OutdoorWorkspaceNav state={state} path={path} onNavigate={navigate}/>:<nav className="mx-auto flex max-w-5xl flex-wrap gap-2 px-5 pt-5">{[['/dashboard',mobileOutdoor?'Measurement assignments':'Dashboard'],['/intake','New project'],['/projects','Projects'],['/mini-crm','Follow-ups']].filter(([href])=>mobileOutdoor?isMobileWorkspaceRoute(href):href!=='/mini-crm'||canAccessCRM(state.actor.role)).map(([href,label])=><button key={href} onClick={()=>navigate(href)} className={`min-h-11 rounded-md px-4 text-sm font-semibold ${path===href?'bg-blue-600 text-white':'border border-slate-300 bg-white text-slate-700'}`}>{term(label)}</button>)}<span className="w-full py-2 text-xs text-slate-500">{term('Signed in as {name}. Saved changes sync when the app is open and connected. Don’t clear site data while changes are waiting to sync.',{name:state.actor.name==='Employee'?term('Employee'):state.actor.name})}</span></nav>}<SyncConflicts state={state}/>{message&&<p role="alert" className="mx-auto max-w-5xl px-5 pt-4 text-amber-800">{term(message)}</p>}<div onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a[href]');const href=link?.getAttribute('href');if(href?.startsWith('/')&&!href.startsWith('/api/')){event.preventDefault();event.stopPropagation();navigate(href);}}}>{isCRMRoute(path)&&!canAccessCRM(state.actor.role)?<p role="alert" className="mx-auto max-w-5xl p-5 text-sm text-red-700">{term('CRM access is limited to Indoor Sales and company leadership.')}</p>:path==='/dashboard'?(outdoor?<OutdoorMobileWorkspace/>:<SalesDashboard/>):path==='/project-log'&&outdoor?<OutdoorProjectLog/>:path==='/projects'&&outdoor?<OutdoorProjects/>:/^\/projects\/[^/]+\/follow-ups$/.test(path)?<FollowUpWorkspace key={path} projectId={path.split('/')[2]}/>:projectId?<InitialMeasurements key={projectId} projectId={projectId} role={state.actor.role} actor={state.actor}/>:path==='/projects'||path==='/mini-crm'?<ProjectWorkspace key={`${requestedPath}:${navigationVersion}`} followUps={path==='/mini-crm'}/>:<OutdoorIntake key={path}/>}</div></>:<p className="p-8">{term("Loading saved workspace…")}</p>}</div></MobileOutdoorProvider>;
+ return <MobileOutdoorProvider value={mobileOutdoor}><div className="min-h-dvh bg-slate-50 text-slate-900">{loaded&&!outdoor&&<header className="border-b border-slate-200 bg-white px-5 py-5"><div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4"><span className="text-xl font-semibold">{term("Alumex · Device workspace")}</span><a href="/intake" className="text-sm text-blue-600">{term("Open online system")}</a><div className="flex items-center gap-3"><NotificationCenter compact onNavigate={navigate}/><LanguageSwitcher/></div></div></header>}<OfflineStatus quiet={!loaded||outdoor}/><SalesReminders/>{storageError&&<div role="alert" className="mx-auto my-5 max-w-5xl rounded-md border border-red-200 bg-red-50 p-5 text-sm text-red-800"><p className="font-semibold">{term('Unable to load saved workspace.')}</p><p className="mt-2">{errorMessage(storageError)}</p><div className="mt-3 flex flex-wrap items-center gap-3"><button type="button" onClick={()=>{setStorageError('');setLoaded(false);setStorageRetry(value=>value+1);}} className="min-h-11 rounded-md border border-red-300 bg-white px-4 font-semibold">{t('common.retry')}</button><a href={onlinePath} className="inline-flex min-h-11 items-center px-2 font-semibold text-blue-700 underline">{term('Open online system')}</a></div></div>}{loaded&&!state&&storageError?null:loaded&&!state?<div className="mx-auto max-w-xl p-8"><h1 className="text-xl font-semibold">{term("Sign in online to prepare this device")}</h1><p className="mt-3 text-sm text-slate-600">{term("Offline work is available after an employee signs in and the device downloads its workspace.")}</p><a href="/login" className="mt-5 inline-block text-blue-600">{term("Sign in")}</a></div>:state?<>{outdoor?<OutdoorWorkspaceNav state={state} path={path} onNavigate={navigate}/>:<nav className="mx-auto flex max-w-5xl flex-wrap gap-2 px-5 pt-5">{[['/dashboard',mobileOutdoor?'Measurement assignments':'Dashboard'],['/intake','New project'],['/projects','Projects'],['/mini-crm','Follow-ups']].filter(([href])=>mobileOutdoor?isMobileWorkspaceRoute(href):href!=='/mini-crm'||canAccessCRM(state.actor.role)).map(([href,label])=><button key={href} onClick={()=>navigate(href)} className={`min-h-11 rounded-md px-4 text-sm font-semibold ${path===href?'bg-blue-600 text-white':'border border-slate-300 bg-white text-slate-700'}`}>{term(label)}</button>)}<span className="w-full py-2 text-xs text-slate-500">{term('Signed in as {name}. Saved changes sync when the app is open and connected. Don’t clear site data while changes are waiting to sync.',{name:state.actor.name==='Employee'?term('Employee'):state.actor.name})}</span></nav>}<SyncConflicts state={state}/>{message&&<p role="alert" className="mx-auto max-w-5xl px-5 pt-4 text-amber-800">{term(message)}</p>}<div onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a[href]');const href=link?.getAttribute('href');if(href?.startsWith('/')&&!href.startsWith('/api/')){event.preventDefault();event.stopPropagation();navigate(href);}}}>{isCRMRoute(path)&&!canAccessCRM(state.actor.role)?<p role="alert" className="mx-auto max-w-5xl p-5 text-sm text-red-700">{term('CRM access is limited to Indoor Sales and company leadership.')}</p>:path==='/dashboard'?(outdoor?<OutdoorMobileWorkspace/>:<SalesDashboard/>):path==='/project-log'&&outdoor?<OutdoorProjectLog/>:path==='/projects'&&outdoor?<OutdoorProjects/>:/^\/projects\/[^/]+\/follow-ups$/.test(path)?<FollowUpWorkspace key={path} projectId={path.split('/')[2]}/>:projectId?<InitialMeasurements key={projectId} projectId={projectId} role={state.actor.role} actor={state.actor}/>:path==='/projects'||path==='/mini-crm'?<ProjectWorkspace key={`${requestedPath}:${navigationVersion}`} followUps={path==='/mini-crm'}/>:<OutdoorIntake key={path} onRegistered={projectId=>navigate('/initial-measurements/'+projectId,true)}/>}</div></>:<p className="p-8">{term("Loading saved workspace…")}</p>}</div></MobileOutdoorProvider>;
 }

@@ -5,7 +5,7 @@ export type MeasuredOpening = {has_roller_shutter?:boolean;work_area?:"facade"|"
 export type ExtraChoice = {id:string;quantity:number;motorPrice?:number};
 export type OpeningChoice = {openingId:string;systemId:string;systemRate?:number;glassId?:string;extras:ExtraChoice[];hasCurtainWallArch?:boolean};
 export type SurfaceMeasurement = {label:string;width:number;height:number;quantity:number};
-export type AdditionalChoice = {id:string;quantity:number;measurements?:SurfaceMeasurement[];extras?:ExtraChoice[];hasCurtainWallArch?:boolean};
+export type AdditionalChoice = {id:string;quantity:number;unitRate?:number;measurements?:SurfaceMeasurement[];extras?:ExtraChoice[];hasCurtainWallArch?:boolean};
 export type Charge = {id:string;name:string;unit:string;rate:number;quantity:number;total:number;rateSource?:'quotation';motorFor?:string};
 export type StandaloneCharge = Charge & {measurements?:SurfaceMeasurement[];extras?:Charge[];projectAddon?:true};
 export type QuoteLine = {opening:MeasuredOpening;system:Charge;glass:Charge|null;extras:Charge[];area:number;total:number};
@@ -52,6 +52,9 @@ export function isAlumexSqmSystem(product:Pick<CatalogItem,'name'|'unit'>|null|u
 }
 export function isQuotationSystemRateEditable(product:CatalogItem|null|undefined) {
  return !!product&&isAvailable(product)&&catalogKind(product)==='system'&&isAlumexSqmSystem(product);
+}
+export function isQuotationCurtainRateEditable(product:CatalogItem|null|undefined) {
+ return !!product&&isAvailable(product)&&catalogKind(product)==='facade'&&product.unit==='sqm'&&isCurtainWall(product);
 }
 export function measuredOpeningArea(opening:Pick<MeasuredOpening,'width'|'height'>) {
  return Number(opening.width)*Number(opening.height)/10000;
@@ -150,7 +153,7 @@ export function quotationAdditionalChoices(snapshot:Pick<QuoteSnapshot,'lines'|'
  };
  for(const item of snapshot.additionalItems??[]){
   if(projectAddon(item))addProjectAddon(item);
-  else items.push({id:item.id,quantity:item.quantity,...(item.measurements?{measurements:item.measurements.map(surface=>({...surface}))}:{}),extras:(item.extras??[]).filter(extra=>!projectAddon(extra)).map(extra=>({id:extra.id,quantity:extra.quantity}))});
+  else items.push({id:item.id,quantity:item.quantity,...(item.rateSource==='quotation'&&item.unit==='sqm'&&isCurtainWall(item)?{unitRate:item.rate}:{}),...(item.measurements?{measurements:item.measurements.map(surface=>({...surface}))}:{}),extras:(item.extras??[]).filter(extra=>!projectAddon(extra)).map(extra=>({id:extra.id,quantity:extra.quantity}))});
  }
  for(const extra of [...snapshot.lines.flatMap(line=>line.extras),...(snapshot.additionalItems??[]).flatMap(item=>item.extras??[])]){
   if(projectAddon(extra))addProjectAddon(extra);
@@ -168,8 +171,9 @@ function catalogCharge(id:string,quantity:number,catalog:CatalogItem[]):Charge {
  return {id:item.id,name:item.name,unit:item.unit,rate:Number(item.unit_price),quantity,total};
 }
 function quotationSystemCharge(charge:Charge,product:CatalogItem|undefined,rate:unknown):Charge {
- if(!isQuotationSystemRateEditable(product))throw new Error('Quotation-specific rates are available only for active Alumex systems priced per m².');
- if(typeof rate!=='number'||!Number.isSafeInteger(rate)||rate<QUOTATION_SYSTEM_RATE_MIN)throw new Error('Enter an Alumex system rate of at least 240,000 IQD, using whole IQD.');
+ const curtain=isQuotationCurtainRateEditable(product);
+ if(!isQuotationSystemRateEditable(product)&&!curtain)throw new Error('Quotation-specific rates are available only for active Alumex systems or Curtain Wall priced per m².');
+ if(typeof rate!=='number'||!Number.isSafeInteger(rate)||rate<(curtain?1:QUOTATION_SYSTEM_RATE_MIN))throw new Error(curtain?'Enter a Curtain Wall rate greater than zero, using whole IQD.':'Enter an Alumex system rate of at least 240,000 IQD, using whole IQD.');
  const total=Math.round(charge.quantity*rate);
  if(!Number.isSafeInteger(total)||total<=0)throw new Error(`Invalid amount for ${charge.name}.`);
  return {...charge,rate,total,rateSource:'quotation'};
@@ -190,14 +194,15 @@ function rollerShutterMotorCharge(shutterId:string,rate:unknown,quantity:number)
 export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[],actor:string):QuoteSnapshot {
  const catalog=rawCatalog.map(normalizeCatalogItem);
  const quotation=structuredClone(snapshot);
- const refresh=<T extends Charge>(charge:T,opening?:MeasuredOpening):T=>{
+ const refresh=<T extends Charge>(charge:T,opening?:MeasuredOpening,standaloneCurtain=false):T=>{
   if(isCurtainWallArchCharge(charge)||isCurtainWallArch(charge))throw new Error(curtainWallArchReview);
   if(charge.motorFor!==undefined)throw new Error('Review the roller shutter motor in Edit quotation before updating prices.');
   const item=catalog.find(item=>item.id===charge.id&&isAvailable(item));
   if(item&&item.unit!==charge.unit)throw new Error('A catalog unit changed. Use Edit quotation to review the affected items before updating prices.');
   let current=catalogCharge(charge.id,charge.quantity,catalog);
   if(charge.rateSource!==undefined){
-   if(!opening||charge.rateSource!=='quotation')throw new Error('Quotation-specific rates can only be applied to the opening system.');
+   const curtain=isQuotationCurtainRateEditable(item);
+   if(charge.rateSource!=='quotation'||(!opening&&!(standaloneCurtain&&curtain))||curtain&&opening&&opening.opening_type!=='Curtain Wall')throw new Error('Quotation-specific rates can only be applied to the opening system or standalone Curtain Wall.');
    current=quotationSystemCharge(current,item,charge.rate);
   }
   return {...charge,rate:current.rate,total:current.total};
@@ -224,7 +229,7 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
    if(item.name!=='Curtain Wall Arch'||item.unit!=='item'||item.rateSource!==undefined||item.motorFor!==undefined||item.measurements!==undefined||(item.extras?.length??0)>0||quotation.additionalItems!.filter(isCurtainWallArchCharge).length!==1)throw new Error(curtainWallArchReview);
    return curtainWallArchCharge(item.quantity);
   }
-  return {...refresh(item),...(item.extras?{extras:item.extras.map(extra=>isCurtainWallArchCharge(extra)?refreshArch(extra,isCurtainWall(item),1,item.extras!):refresh(extra))}:{})};
+  return {...refresh(item,undefined,true),...(item.extras?{extras:item.extras.map(extra=>isCurtainWallArchCharge(extra)?refreshArch(extra,isCurtainWall(item),1,item.extras!):refresh(extra))}:{})};
  });
  quotation.total=quotation.lines.reduce((sum,line)=>sum+line.total,0)+(quotation.additionalItems??[]).reduce((sum,item)=>sum+item.total+(item.extras??[]).reduce((extraSum,extra)=>extraSum+extra.total,0),0);
  if(!Number.isSafeInteger(quotation.total)||quotation.total<=0)throw new Error('Add a measured opening, facade service or standalone product before quoting.');
@@ -301,7 +306,9 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   if(!product)throw new Error('Choose an active standalone product or facade service from the catalog.');
   const facade=catalogKind(product)==='facade';
   const quantity=facade?measuredFacadeArea(item.measurements??[]):item.quantity;
-  const base=item.id===CURTAIN_WALL_ARCH_ID?curtainWallArchCharge(quantity):catalogCharge(item.id,quantity,catalog);
+  const catalogBase=item.id===CURTAIN_WALL_ARCH_ID?curtainWallArchCharge(quantity):catalogCharge(item.id,quantity,catalog);
+  if(item.unitRate!==undefined&&!isQuotationCurtainRateEditable(product))throw new Error('Standalone quotation rates are available only for active Curtain Wall priced per m².');
+  const base=item.unitRate===undefined?catalogBase:quotationSystemCharge(catalogBase,product,item.unitRate);
   const extras=[...priceExtras(item.extras??[],facadeAddonOptions(product,catalog),catalog,quantity),...priceCurtainWallArch(item.hasCurtainWallArch,isCurtainWall(product),1)];
   return {...base,...(catalogKind(product)==='addon'?{projectAddon:true as const}:{}),...(facade?{measurements:item.measurements!.map(s=>({label:s.label.trim(),width:s.width,height:s.height,quantity:s.quantity}))}:{}),...(extras.length?{extras}:{} )};
  });

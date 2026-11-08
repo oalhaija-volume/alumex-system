@@ -29,6 +29,7 @@ export function InitialMeasurements({projectId,role,actor}:{projectId:string;rol
   const canQuote = canPrepareQuotation(role);
   const {t,term,errorMessage,formatNumber} = useI18n();
   const [project,setProject] = useState<FieldProject|null>(null);
+  const [projectRecordError,setProjectRecordError] = useState(false);
   const [openings,setOpenings] = useState<RegistrationOpening[]>([]);
   const [floor,setFloor] = useState("");
   const [otherFloor,setOtherFloor] = useState("");
@@ -89,7 +90,7 @@ export function InitialMeasurements({projectId,role,actor}:{projectId:string;rol
         const data=await response.json();
         if(controller.signal.aborted||current!==version)return;
         if(!response.ok)throw new Error(data.error);
-        setProject(data.project);setCanDelay(data.canDelayMeasurements===true);setCanCancel(data.canCancelProject===true);setOpenings(data.openings);setFinished(data.project.sales_status!=="new_lead");
+        setProject(data.project);setProjectRecordError(data.recordError===true);setCanDelay(data.canDelayMeasurements===true);setCanCancel(data.canCancelProject===true);setOpenings(data.openings);setFinished(data.project.sales_status!=="new_lead");
         setDraftId(existing=>existing||crypto.randomUUID());setError("");
       }catch(cause){if(!controller.signal.aborted&&current===version)setError(cause instanceof Error?cause.message:"Unable to load measurements.");}
       finally{if(!controller.signal.aborted&&current===version)setLoading(false);}
@@ -169,7 +170,7 @@ export function InitialMeasurements({projectId,role,actor}:{projectId:string;rol
     {error && !finishOpen ? <p role="alert" className="mt-5 rounded-md bg-red-50 p-3 text-sm text-red-700">{errorMessage(error)}</p> : null}
     <MeasurementCompletionDialog open={finishOpen} busy={saving} error={error} onCancel={()=>{setFinishOpen(false);setError('');}} onSubmit={completion=>updateMeasurementStatus('finish',completion)}/>
     <MeasurementReports key={String(finished)} projectId={projectId}/>
-    <ProjectRecord projectId={projectId} inactive={project?.measurement_delayed||cancelled}/>
+    <ProjectRecord projectId={projectId} project={project} loadError={projectRecordError} inactive={project?.measurement_delayed||cancelled}/>
     {project && <MeasurementDelayNotice project={project}/>}
     {project?.measurement_delayed && <div className="mt-4 space-y-3 text-sm"><p>{term(project.pending?'Visit saved on this device. It will return to Indoor Sales after sync.':'Returned to CRM. Indoor Sales will arrange and assign the next measurement visit.')}</p><Link href={canQuote?`/mini-crm#project-${projectId}`:'/dashboard'} className="inline-flex min-h-11 items-center font-semibold text-blue-700">{term(canQuote?'Open CRM':'Back to assignments')}</Link>{role==='Outdoor Sales'&&<Link href="/project-log" className="ms-4 inline-flex min-h-11 items-center font-semibold text-blue-700">{term('Open project log')}</Link>}</div>}
     {cancelled && <Link href="/dashboard" className="mt-4 inline-flex min-h-11 items-center font-semibold text-blue-700">{term('Back to dashboard')}</Link>}

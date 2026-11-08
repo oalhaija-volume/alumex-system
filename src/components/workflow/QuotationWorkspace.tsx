@@ -10,11 +10,12 @@ import { isShutterBox, isRollerShutter, isCurtainWallArch, isPushout, normalizeC
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
 import type { RegistrationOpening } from '@/lib/measurements/registrationOpening';
 import type { QuotationRevision,SalesFlow } from '@/lib/workflow/types';
+import { applyQuotationGroupRate,quotationRateGroups,type QuotationRateGroupId } from '@/lib/quotations/groupRates';
 import {MeasurementReports} from "@/components/measurements/MeasurementReports";
 import { ProjectRecord } from './ProjectRecord';
 import { QuotationOpeningForm } from './QuotationOpeningForm';
 import { QuotationFacadeForm } from './QuotationFacadeForm';
-import { discountedSystemRate,measuredOpeningArea,billableOpeningArea,openingSellingBand,openingMinimumSellingRate,quotationSellingSuggestion } from '@/lib/workflow/pricing';
+import { discountedSystemRate,measuredOpeningArea,billableOpeningArea,openingSellingBand,openingMinimumSellingRate,quotationSellingSuggestion,isQuotationCurtainRateEditable } from '@/lib/workflow/pricing';
 import { OpeningAreaBadge,OpeningSellingLegend } from './OpeningAreaIndicator';
 import { DocumentHeader,DocumentParties,OpeningSchedule,DocumentFooter,DocumentPaper } from './CommercialDocument';
 import { api,button,card,field,Notice,secondary,useResource,Workspace } from './ui';
@@ -46,6 +47,9 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  }));
  const activeChoices=choices.filter(choice=>openings.some(opening=>opening.id===choice.openingId));
  const [additionalItems,setAdditionalItems]=useState<AdditionalChoice[]>(()=>flow?quotationAdditionalChoices(flow.quotation):[]);
+ const [groupRateInputs,setGroupRateInputs]=useState<Partial<Record<QuotationRateGroupId,string>>>({});
+ const rateGroups=quotationRateGroups(openings,choices,additionalItems,catalog);
+ const hasUnappliedGroupRates=rateGroups.some(group=>group.count>0&&(groupRateInputs[group.id]?.trim()??'')!=='');
  const [discountPercent,setDiscountPercent]=useState<0|5>(flow?.quotation.discount?.percent??0);
  const [editing,setEditing]=useState(!flow);
  const [productPickerRequest,setProductPickerRequest]=useState(0);
@@ -101,6 +105,15 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   try{window.localStorage.setItem(suggestionPreferenceKey,hidden?'1':'0');}catch{/* The toggle still works when browser storage is unavailable. */}
  }
  function edit(openingId:string,patch:Partial<OpeningChoice>){setChoices(rows=>rows.map(choice=>choice.openingId===openingId?{...choice,...patch}:choice));}
+ function applyGroupRate(groupId:QuotationRateGroupId,value:string){
+  if(busy||!canEdit||!value.trim())return;
+  try{
+   const updated=applyQuotationGroupRate(groupId,Number(value),openings,choices,additionalItems,catalog);
+   setChoices(updated.choices);setAdditionalItems(updated.additionalItems);
+   setGroupRateInputs(inputs=>{const next={...inputs};delete next[groupId];return next;});
+   setApproved(false);setError('');clearActionError();
+  }catch(cause){setError((cause as Error).message);}
+ }
  function removeOpening(opening:MeasuredOpening){
   if(busy)return;
   clearActionError();setError('');setApproved(false);
@@ -124,7 +137,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   setAddingFacade(false);
  }
  async function act(action:string){
-  if(busy||pricePreview)return;
+  if(busy||pricePreview||action==='save'&&hasUnappliedGroupRates)return;
   setBusy(true);setError('');clearActionError();
   try{
    await api(`/api/sales-flow/${projectId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,choices:activeChoices,excludedOpeningIds,additionalItems,newOpenings,discountPercent,revision:flow?.revision??0,confirmed:approved,template,replaceUnsignedContract:replaceContract})});
@@ -166,29 +179,49 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <p>{flow?term('Editing revision {current}. Saving creates revision {next} and requires new client approval.',{current:formatNumber(flow.quotation.version??1),next:formatNumber((flow.quotation.version??1)+1)}):term("Alumex is selected by default. Choose the specifications requested by the client.")}</p>
     <p>{term("Catalog rates apply unless you set an Alumex system rate for this quotation. Review the new total before saving.")}</p>
    </div>
+   <section aria-label={term('Group prices')} className={`${card} space-y-4`}>
+    <div><h2 className="font-semibold">{term('Group prices')}</h2><p className="mt-2 text-sm leading-6 text-slate-600">{term('Set one rate for all matching items in this quotation. Glass, accessories and quantities stay the same.')}</p><p className="mt-1 text-xs leading-5 text-slate-600">{term('Sliding and hinged prices apply to Alumex windows. Curtain Wall includes measured walls and its facade service.')}</p></div>
+    <div className="grid gap-5 lg:grid-cols-3">{rateGroups.map(group=>{
+     const label=group.id==='sliding'?'Sliding windows (IQD / m²)':group.id==='hinged'?'Hinged windows (IQD / m²)':'Curtain Wall (IQD / m²)';
+     const applyLabel=group.id==='sliding'?'Apply sliding windows price':group.id==='hinged'?'Apply hinged windows price':'Apply curtain wall price';
+     const value=groupRateInputs[group.id]??(group.rate===undefined?'':String(group.rate));
+     const invalid=value!==''&&(!Number.isSafeInteger(Number(value))||Number(value)<group.minimum);
+     return <div key={group.id} className="min-w-0 rounded-md border border-slate-200 bg-slate-50 p-4">
+      <label className="block text-sm font-medium" htmlFor={`quotation-group-rate-${group.id}`}>{term(label)}</label>
+      <p className="mt-2 text-xs text-slate-600">{group.count?term('{count} quotation items',{count:formatNumber(group.count)}):term('No matching items')}</p>
+      <input id={`quotation-group-rate-${group.id}`} aria-label={term(label)} aria-describedby={`quotation-group-rate-help-${group.id}`} aria-invalid={invalid} type="number" inputMode="numeric" min={group.minimum} step={1} disabled={!group.count} value={value} placeholder={term(group.count?'Different prices':'No matching items')} onChange={event=>setGroupRateInputs(inputs=>({...inputs,[group.id]:event.target.value}))} className={field}/>
+      <p id={`quotation-group-rate-help-${group.id}`} className="mt-2 text-xs leading-5 text-slate-600">{term('Minimum {minimum} IQD / m² · whole IQD',{minimum:formatNumber(group.minimum)})}</p>
+      <button type="button" aria-label={term(applyLabel)} disabled={!group.count||value===''||invalid} onClick={()=>applyGroupRate(group.id,value)} className={`${secondary} mt-3 w-full bg-white`}>{term('Apply to all')}</button>
+     </div>;
+    })}</div>
+    <p className="text-xs leading-5 text-slate-600">{term('Group prices apply to this quotation only. Save the revised quotation to keep these changes.')}</p>
+   </section>
    {!!openings.length&&<OpeningSellingLegend discountPercent={discountPercent}/>}
    {openings.map(opening=>{
     const index=allOpenings.findIndex(row=>row.id===opening.id);
     const choice=choices.find(row=>row.openingId===opening.id)!;
     const system=catalog.find(p=>p.id===choice.systemId);
-    const editableRate=!!system&&isQuotationSystemRateEditable(system);
+    const editableAlumexRate=!!system&&isQuotationSystemRateEditable(system);
+    const editableCurtainRate=opening.opening_type==='Curtain Wall'&&isQuotationCurtainRateEditable(system);
+    const editableRate=editableAlumexRate||editableCurtainRate;
+    const minimumRate=editableCurtainRate?1:QUOTATION_SYSTEM_RATE_MIN;
     const systemRate=choice.systemRate??Number(system?.unit_price);
-    const invalidRate=editableRate&&choice.systemRate!==undefined&&(!Number.isSafeInteger(systemRate)||systemRate<QUOTATION_SYSTEM_RATE_MIN);
+    const invalidRate=editableRate&&choice.systemRate!==undefined&&(!Number.isSafeInteger(systemRate)||systemRate<minimumRate);
     const isNew=newOpenings.some(o=>o.id===opening.id);
     const area=measuredOpeningArea(opening);
-    const band=editableRate?openingSellingBand(area,discountedSystemRate(systemRate,discountPercent),opening):undefined;
+    const band=editableAlumexRate?openingSellingBand(area,discountedSystemRate(systemRate,discountPercent),opening):undefined;
     const minimumApplied=billableOpeningArea(opening)>area&&[choice.systemId,choice.glassId,...choice.extras.map(extra=>extra.id)].some(id=>catalog.some(item=>item.id===id&&item.unit==='sqm'));
     return <section key={opening.id} data-area-band={band} data-opening-id={opening.id} className={`${card} quotation-opening${band?` opening-area-${band}`:''}`} aria-label={term('Opening {number}',{number:formatNumber(index+1)})}>
-     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Opening {number}',{number:formatNumber(index+1)})} · {term(opening.opening_type)} {opening.opening_direction?term(opening.opening_direction):''}{opening.has_arch?` · ${term('Arch')}`:''}</h2>{editableRate?<OpeningAreaBadge area={area} rate={systemRate} opening={opening} discountPercent={discountPercent}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}<button type="button" aria-label={term('Remove opening {number} from quotation',{number:formatNumber(index+1)})} className="min-h-11 rounded-md px-3 text-sm font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700" onClick={()=>removeOpening(opening)}>{term('Remove from quotation')}</button></div>
+     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Opening {number}',{number:formatNumber(index+1)})} · {term(opening.opening_type)} {opening.opening_direction?term(opening.opening_direction):''}{opening.has_arch?` · ${term('Arch')}`:''}</h2>{editableAlumexRate?<OpeningAreaBadge area={area} rate={systemRate} opening={opening} discountPercent={discountPercent}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}<button type="button" aria-label={term('Remove opening {number} from quotation',{number:formatNumber(index+1)})} className="min-h-11 rounded-md px-3 text-sm font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700" onClick={()=>removeOpening(opening)}>{term('Remove from quotation')}</button></div>
      <p className="mt-2 text-sm text-slate-500">{term("Floor")} {term(opening.floor)} · {opening.work_area==='internal'?`${term('Internal works')} · ${term(opening.room)}`:term(opening.room)} · {formatNumber(opening.width)} × {formatNumber(opening.height)} {term("cm")} · {term("Quantity")}: {formatNumber(opening.quantity??1)}{isNew?` · ${term('Not saved yet')}`:''}</p>
      {minimumApplied&&<p className="mt-2 text-xs text-slate-600">{term('Minimum billable area: 1 m² per window.')} {term('Billable area: {area} m²',{area:formatNumber(billableOpeningArea(opening)*(opening.quantity??1))})}</p>}
      <div className="mt-5 grid gap-4 sm:grid-cols-2">
       <label className="text-sm">{term("System / product")}<select aria-label={term("System / product")} value={choice.systemId} onChange={e=>edit(opening.id,{systemId:e.target.value,systemRate:undefined,glassId:'',extras:[]})} className={field}><option value="">{term("Choose system")}</option>{systemOptions(opening,catalog).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
       <label className="text-sm">{term("Glass")}<select aria-label={term("Glass")} value={choice.glassId} onChange={e=>edit(opening.id,{glassId:e.target.value,extras:choice.extras.filter(x=>x.id!==e.target.value)})} className={field}><option value="">{term("Standard glass included")}</option>{glassOptions(opening,catalog,choice.systemId).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
       {editableRate&&<div className="sm:col-span-2">
-       <label className="block text-sm">{term('Quotation system rate (IQD / m²)')}<input aria-label={term('Quotation system rate (IQD / m²)')} aria-describedby={`system-rate-help-${opening.id}`} aria-invalid={invalidRate} type="number" inputMode="numeric" min={QUOTATION_SYSTEM_RATE_MIN} step={1} value={systemRate||''} onChange={e=>edit(opening.id,{systemRate:Number(e.target.value)})} className={`${field} block sm:max-w-xs`}/></label>
-       <p id={`system-rate-help-${opening.id}`} className="mt-2 text-xs leading-5 text-slate-600">{term('Enter at least {minimum} IQD per m² in whole IQD. Applies to this quotation only.',{minimum:formatNumber(QUOTATION_SYSTEM_RATE_MIN)})}</p>
-       <p className="mt-1 text-xs font-medium text-slate-700">{term('Minimum rate for green: {rate} / m²',{rate:formatMoney(openingMinimumSellingRate(area,opening))})}</p>
+       <label className="block text-sm">{term(editableCurtainRate?'Curtain Wall rate (IQD / m²)':'Quotation system rate (IQD / m²)')}<input aria-label={term(editableCurtainRate?'Curtain Wall rate (IQD / m²)':'Quotation system rate (IQD / m²)')} aria-describedby={`system-rate-help-${opening.id}`} aria-invalid={invalidRate} type="number" inputMode="numeric" min={minimumRate} step={1} value={systemRate||''} onChange={e=>edit(opening.id,{systemRate:Number(e.target.value)})} className={`${field} block sm:max-w-xs`}/></label>
+       <p id={`system-rate-help-${opening.id}`} className="mt-2 text-xs leading-5 text-slate-600">{term('Enter at least {minimum} IQD per m² in whole IQD. Applies to this quotation only.',{minimum:formatNumber(minimumRate)})}</p>
+       {editableAlumexRate&&<p className="mt-1 text-xs font-medium text-slate-700">{term('Minimum rate for green: {rate} / m²',{rate:formatMoney(openingMinimumSellingRate(area,opening))})}</p>}
       </div>}
      </div>
      {(opening.quantity??1)>1&&<p className="mt-3 text-xs text-slate-600">{term('Specifications and add-on quantities apply to each identical opening. Area and totals include all openings.')}</p>}
@@ -238,8 +271,9 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <div className="mb-5 border-b border-slate-200 pb-5">{discountOption(draftQuotation)}</div>
     <div className="flex flex-wrap justify-between gap-3"><div><p className="text-sm font-semibold">{flow?term("Revised total"):term("Quotation total")}</p>{flow&&<p className="mt-1 text-xs text-slate-500">{term("Currently saved:")} {formatMoney(flow.quotation.total)}</p>}</div><p className="text-xl font-semibold" aria-label={term("Draft total")}>{draftTotal===undefined?term("Complete selections"):formatMoney(draftTotal)}</p></div>
     {pricingError&&<p role="status" className="mt-3 text-sm text-amber-800">{errorMessage(pricingError)}</p>}
+    {hasUnappliedGroupRates&&<p role="status" className="mt-3 text-sm text-amber-800">{term('Apply the group prices or clear those fields before saving.')}</p>}
     {flow?.stage==='contract'&&<label className="mt-5 flex items-start gap-3 rounded-md bg-amber-50 p-4 text-sm leading-6 text-amber-900"><input type="checkbox" checked={replaceContract} onChange={e=>setReplaceContract(e.target.checked)} className="mt-1"/>{term("Replace the unsigned contract. The previous document will be kept in history, and the revised quotation must be approved before a new contract can be generated.")}</label>}
-    <div className="mt-5 flex flex-wrap gap-3"><button disabled={draftTotal===undefined||addingOpening||addingFacade||(flow?.stage==='contract'&&!replaceContract)} onClick={()=>void act('save')} className={button}>{busy?term("Saving…"):flow?term("Save revised quotation"):term("Generate quotation")}</button>{flow&&<button className={secondary} onClick={()=>void cancel()}>{term("Cancel changes")}</button>}</div>
+    <div className="mt-5 flex flex-wrap gap-3"><button disabled={draftTotal===undefined||hasUnappliedGroupRates||addingOpening||addingFacade||(flow?.stage==='contract'&&!replaceContract)} onClick={()=>void act('save')} className={button}>{busy?term("Saving…"):flow?term("Save revised quotation"):term("Generate quotation")}</button>{flow&&<button className={secondary} onClick={()=>void cancel()}>{term("Cancel changes")}</button>}</div>
     {(addingOpening||addingFacade)&&<p className="mt-3 text-sm text-slate-500">{term(addingFacade?'Add or cancel the facade form before saving.':'Add or cancel the opening form before saving.')}</p>}
    </div>
   </fieldset>:null}

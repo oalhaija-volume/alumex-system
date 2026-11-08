@@ -43,7 +43,10 @@ for(const locale of ['en','ar'])test(`${locale}: simplified Outdoor workspace co
  await expect.poll(async()=>(await savedFieldState(page)).queue.length).toBe(0);expect(posts).toHaveLength(1);expect(posts[0].action).toBe('finish');
  await expect(badge).toHaveText('1');
  // Once the last waiting task closes on the server, its badge disappears on refresh.
- state.projects[1].sales_status='ready_for_quotation';await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ state.projects[1].sales_status='ready_for_quotation';
+ // Routine focus refreshes reuse snapshots for up to one minute.
+ await page.clock.setFixedTime(new Date(await page.evaluate(()=>Date.now())+61000));
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await expect(badge).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

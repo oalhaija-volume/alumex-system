@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import { catalogKind, isCurtainWallArch, isPushout } from '@/lib/workflow/catalogRules';
-import { additionalOptions, facadeAddonOptions, type AdditionalChoice, type SurfaceMeasurement, type CatalogItem } from '@/lib/workflow/pricing';
+import { additionalOptions, facadeAddonOptions, isQuotationCurtainRateEditable, type AdditionalChoice, type SurfaceMeasurement, type CatalogItem } from '@/lib/workflow/pricing';
 import { card, field, secondary } from './ui';
 
 export function StandaloneItems({items,catalog,onChange,recordedAreas=[],focusRequest=0}:{recordedAreas?:SurfaceMeasurement[];focusRequest?:number;items:AdditionalChoice[];catalog:CatalogItem[];onChange:(items:AdditionalChoice[])=>void}){
@@ -25,8 +25,12 @@ export function StandaloneItems({items,catalog,onChange,recordedAreas=[],focusRe
    const areas=item.measurements??[];
    const extras=item.extras??[];
    const allowed=product?facadeAddonOptions(product,catalog):[];
+   const editableCurtainRate=isQuotationCurtainRateEditable(product);
+   const unitRate=item.unitRate??product?.unit_price;
+   const invalidRate=item.unitRate!==undefined&&(!Number.isSafeInteger(item.unitRate)||item.unitRate<1);
    return <section key={item.id} aria-label={term(product?.name??'Unavailable item')} className="space-y-4 rounded-lg border border-slate-200 p-4">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">{term(product?.name??'Unavailable item')}</h3>{product&&<p className="mt-1 text-xs text-slate-500">{rateLabel(product)}</p>}</div><button type="button" aria-label={term('Remove {name}',{name:term(product?.name)})} className="min-h-11 px-3 text-sm text-red-700" onClick={()=>onChange(items.filter(x=>x.id!==item.id))}>{term('Remove')}</button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">{term(product?.name??'Unavailable item')}</h3>{product&&<p className="mt-1 text-xs text-slate-500">{item.unitRate===undefined?rateLabel(product):`${formatMoney(item.unitRate)} / ${term('m²')}`}</p>}</div><button type="button" aria-label={term('Remove {name}',{name:term(product?.name)})} className="min-h-11 px-3 text-sm text-red-700" onClick={()=>onChange(items.filter(x=>x.id!==item.id))}>{term('Remove')}</button></div>
+    {editableCurtainRate&&<div><label className="block text-sm">{term('Curtain Wall service rate (IQD / m²)')}<input aria-label={term('Curtain Wall service rate (IQD / m²)')} aria-describedby={`curtain-service-rate-help-${item.id}`} aria-invalid={invalidRate} type="number" inputMode="numeric" min={1} step={1} value={unitRate||''} onChange={event=>update(item.id,{unitRate:Number(event.target.value)})} className={`${field} block sm:max-w-xs`}/></label><p id={`curtain-service-rate-help-${item.id}`} className="mt-2 text-xs leading-5 text-slate-600">{term('Enter at least {minimum} IQD per m² in whole IQD. Applies to this quotation only.',{minimum:formatNumber(1)})}</p></div>}
     {facade?<>
      {recordedAreas.length>0&&<button type="button" className={secondary} onClick={()=>update(item.id,{measurements:recordedAreas.map(a=>({...a}))})}>{term('Use recorded facade dimensions')}</button>}
      {!areas.length&&<p className="text-sm text-amber-800">{term('Enter the measured areas for this facade service.')}</p>}

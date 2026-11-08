@@ -636,3 +636,295 @@ test('a server rotation rejection preserves every queued change and retries the 
  assert.deepEqual(posted.map(change=>change.id),[before.queue[0].id,before.queue[0].id,before.queue[1].id]);
  assert.equal(x.state.queue.length,0);assert.equal(x.state.openings[0].width,opening.width);
 });
+
+for(const openingState of ['not-yet-saved','queued','synced'])test(`a snapshot started before registration sync retains the new site with its first opening ${openingState}`,async()=>{
+ const outdoor=outdoorActorForCurrentBranch('Rasafa');
+ const x=setup({actor:outdoor});window.location={pathname:'/offline'};
+ await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,assignedOutdoorSalesId:null}});
+ const registered=structuredClone(x.state.projects[0]);
+ const snapshot={...structuredClone(x.state),projects:[],openings:[],queue:[]};
+ const opening={id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'};
+ let releaseSnapshot,startedSnapshot,posts=0,gets=0;
+ const started=new Promise(resolve=>{startedSnapshot=resolve;});
+ globalThis.fetch=async(url,init)=>{
+  if(url==='/api/offline?session=1')return Response.json({actor:outdoor});
+  if(init?.method==='POST')return Response.json({project:{...registered,project_number:'PRJ-NEW',updated_at:new Date(Date.parse(registered.updated_at)+ ++posts).toISOString()}});
+  assert.equal(url,'/api/offline');
+  if(++gets===1){startedSnapshot();return new Promise(resolve=>{releaseSnapshot=()=>resolve(Response.json(snapshot));});}
+  return Response.json(snapshot);
+ };
+ navigator.onLine=true;
+ const preparing=x.client.prepareOffline();await started;
+ await x.client.syncFieldChanges();
+ assert.equal(x.state.queue.length,0,'Registration has synchronized while its older snapshot is still in flight');
+ if(openingState!=='not-yet-saved'){
+  navigator.onLine=false;
+  const response=await x.client.fieldFetch(`/api/initial-measurements/${projectId}`,{method:'POST',body:JSON.stringify(opening)});
+  assert.equal(response.status,201);
+  if(openingState==='synced'){navigator.onLine=true;await x.client.syncFieldChanges();assert.equal(x.state.queue.length,0);}
+ }
+ releaseSnapshot();await preparing;
+ let response=await x.client.fieldFetch(`/api/initial-measurements/${projectId}`);
+ assert.equal(response.status,200,'The stale snapshot must not remove or hide a project registered after its server read');
+ if(openingState==='not-yet-saved'){
+  navigator.onLine=false;
+  response=await x.client.fieldFetch(`/api/initial-measurements/${projectId}`,{method:'POST',body:JSON.stringify(opening)});
+  assert.equal(response.status,201,'The first opening remains writable after navigation and registration sync');
+ }
+ response=await x.client.fieldFetch(`/api/initial-measurements/${projectId}`);
+ assert.equal(response.status,200);
+ const saved=await response.json();
+ assert.equal(saved.project.project_number,'PRJ-NEW');
+ assert.equal(saved.openings.length,1);
+ assert.equal(saved.openings[0].id,opening.id);
+ assert.equal(x.state.unavailableProjectIds?.includes(projectId)??false,false);
+ const retainedQueue=structuredClone(x.state.queue);
+ // Protection lasts for the in-flight response only. A subsequent authoritative
+ // absence still revokes access and retains any outstanding local changes.
+ navigator.onLine=true;await x.client.prepareOffline();
+ assert.equal((await x.client.fieldFetch(`/api/initial-measurements/${projectId}`)).status,404);
+ assert.deepEqual(x.state.queue,retainedQueue);
+});
+
+test('a first opening synchronized during a snapshot is retained even when that snapshot already contains the project',async()=>{
+ const outdoor=outdoorActorForCurrentBranch('Rasafa');
+ const site={id:projectId,created_by:outdoor.id,assigned_outdoor_sales_id:null,branch:'Rasafa',structure_readiness:'ready',sales_status:'new_lead',project_name:'New site',project_number:'PRJ-NEW',created_at:'2026-11-08T08:00:00Z',updated_at:'2026-11-08T08:00:00Z'};
+ const x=setup({actor:outdoor,projects:[site]});window.location={pathname:'/offline'};
+ const snapshot=structuredClone(x.state);
+ const opening={id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'};
+ let releaseSnapshot,startedSnapshot,gets=0;
+ const started=new Promise(resolve=>{startedSnapshot=resolve;});
+ globalThis.fetch=async(url,init)=>{
+  if(url==='/api/offline?session=1')return Response.json({actor:outdoor});
+  if(init?.method==='POST')return Response.json({project:{...site,updated_at:'2026-11-08T08:00:01Z'}});
+  assert.equal(url,'/api/offline');
+  if(++gets===1){startedSnapshot();return new Promise(resolve=>{releaseSnapshot=()=>resolve(Response.json(snapshot));});}
+  return Response.json(snapshot);
+ };
+ navigator.onLine=true;const preparing=x.client.prepareOffline();await started;
+ navigator.onLine=false;await x.client.saveFieldChange('opening',projectId,opening);
+ navigator.onLine=true;await x.client.syncFieldChanges();
+ assert.equal(x.state.queue.length,0);
+ releaseSnapshot();await preparing;
+ const response=await x.client.fieldFetch(`/api/initial-measurements/${projectId}`);
+ assert.equal(response.status,200);
+ assert.equal((await response.json()).openings[0]?.id,opening.id,'A stale empty opening list must not erase a just-synchronized first opening');
+ // The next snapshot can remove a server-side-deleted opening once there is no
+ // local change made during that request.
+ await x.client.prepareOffline();
+ assert.equal(x.state.openings.length,0);
+});
+
+function backgroundSnapshots(t){
+ const previous=new Map(['window','navigator','fetch'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
+ t.after(()=>{for(const [key,descriptor] of previous){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else Reflect.deleteProperty(globalThis,key);}});
+ let now=100000,active=actor.id,calls=0,failure=null;
+ t.mock.method(Date,'now',()=>now);
+ globalThis.window=new EventTarget();window.location={pathname:'/offline'};
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{onLine:true}});
+ const stateFor=id=>({actor:{...actor,id},projects:[{id:projectId,created_by:id,branch:'Karkh',assigned_outdoor_sales_id:id,structure_readiness:'ready',sales_status:'new_lead',project_name:id,project_number:'PRJ-1'}],openings:[],queue:[],syncedAt:null,outdoorSales:[],indoorSales:[]});
+ const accounts=new Map([[actor.id,stateFor(actor.id)]]),remote=new Map([[actor.id,stateFor(actor.id)]]);
+ const access=load('../src/lib/offline/projectAccess.ts');
+ function accountEvent(id){const event=new Event('field-change');event.detail={source:'account',userId:id};window.dispatchEvent(event);}
+ const store={
+  activeFieldUser:()=>active,
+  setFieldUser(id){const old=active;active=id;if(old!==id)accountEvent(id);},
+  readStoredFieldState:async(id=active)=>structuredClone(accounts.get(id)??null),
+  readFieldState:async(id=active)=>accounts.has(id)?access.visibleFieldState(structuredClone(accounts.get(id))):null,
+  updateFieldState:async(id,change)=>{const state=change(structuredClone(accounts.get(id)??null));accounts.set(id,state);return access.visibleFieldState(structuredClone(state));},
+ };
+ globalThis.fetch=async url=>{
+  assert.equal(url,'/api/offline');calls++;
+  if(failure==='network')throw Error('Connection lost');
+  if(failure==='server')return Response.json({error:'Temporarily unavailable'},{status:503});
+  return Response.json(remote.get(active));
+ };
+ const client=load('../src/lib/offline/client.ts',{'./store':store,'./device':{isOfflineDevice:()=>true},'@/lib/workflow/followUps':load('../src/lib/workflow/followUps.ts'),'@/lib/workflow/stages':load('../src/lib/workflow/stages.ts'),'@/lib/measurements/registrationOpening':load('../src/lib/measurements/registrationOpening.ts')});
+ return {client,store,accounts,remote,accountEvent,get calls(){return calls;},advance(ms){now+=ms;},fail(value){failure=value;},addAccount(id){accounts.set(id,stateFor(id));remote.set(id,stateFor(id));}};
+}
+
+test('background preparation shares a recent download while reading newly saved local work',async t=>{
+ const x=backgroundSnapshots(t);
+ await x.client.prepareOffline({background:true});assert.equal(x.calls,1);
+ x.advance(1000);
+ const opening={id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',projectId,createdBy:actor.id,width:100,height:150};
+ await x.store.updateFieldState(actor.id,state=>({...state,openings:[opening],queue:[{id:'local-opening',projectId,action:'opening',payload:opening}]}));
+ const current=await x.client.prepareOffline({background:true});
+ assert.equal(x.calls,1,'Routine focus/poll work must not download the full workspace again within a minute');
+ assert.equal(current.openings[0].id,opening.id);
+ assert.equal(current.queue[0].id,'local-opening','The freshness gate must return current storage, not the previous downloaded snapshot');
+});
+
+test('background preparation downloads again after one minute regardless of local writes and syncedAt',async t=>{
+ const x=backgroundSnapshots(t);
+ await x.client.prepareOffline({background:true});
+ x.advance(30000);
+ await x.store.updateFieldState(actor.id,state=>({...state,syncedAt:'2999-01-01T00:00:00Z',queue:[{id:'new-local-change',projectId,action:'opening'}]}));
+ x.advance(29999);await x.client.prepareOffline({background:true});assert.equal(x.calls,1);
+ x.advance(1);const state=await x.client.prepareOffline({background:true});
+ assert.equal(x.calls,2,'Only the last successful download sets the freshness interval');
+ assert.equal(state.queue[0].id,'new-local-change');
+});
+
+test('explicit preparation bypasses the background freshness interval',async t=>{
+ const x=backgroundSnapshots(t);
+ await x.client.prepareOffline({background:true});
+ x.advance(1);x.remote.get(actor.id).projects[0].project_name='Updated on the server';
+ const forced=await x.client.prepareOffline();
+ assert.equal(x.calls,2);
+ assert.equal(forced.projects[0].project_name,'Updated on the server');
+ await x.client.prepareOffline({background:true});assert.equal(x.calls,2);
+});
+
+for(const failure of ['network','server'])test(`a ${failure} snapshot failure falls back to saved work without advancing download freshness`,async t=>{
+ const x=backgroundSnapshots(t);
+ await x.client.prepareOffline({background:true});
+ x.advance(60000);x.fail(failure);
+ const fallback=await x.client.prepareOffline({background:true});
+ assert.equal(fallback.actor.id,actor.id);assert.equal(x.calls,2);
+ x.advance(1);x.fail(null);
+ await x.client.prepareOffline({background:true});
+ assert.equal(x.calls,3,'The next background call must retry the expired download immediately');
+});
+
+test('an account change event invalidates freshness even when the employee ID is unchanged',async t=>{
+ const x=backgroundSnapshots(t);
+ await x.client.prepareOffline({background:true});
+ x.advance(1000);await x.client.prepareOffline({background:true});assert.equal(x.calls,1);
+ x.accountEvent(actor.id);
+ await x.client.prepareOffline({background:true});
+ assert.equal(x.calls,2);
+});
+
+test('background freshness never crosses accounts or survives an account switch back',async t=>{
+ const x=backgroundSnapshots(t),otherId='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+ x.addAccount(otherId);
+ await x.client.prepareOffline({background:true});assert.equal(x.calls,1);
+ x.store.setFieldUser(otherId);
+ const other=await x.client.prepareOffline({background:true});
+ assert.equal(x.calls,2);assert.equal(other.actor.id,otherId);assert.equal(other.projects[0].created_by,otherId);
+ x.store.setFieldUser(actor.id);
+ const original=await x.client.prepareOffline({background:true});
+ assert.equal(x.calls,3);assert.equal(original.actor.id,actor.id);
+});
+
+test('a forced call joining a completed background shortcut still downloads current server data',async t=>{
+ const x=backgroundSnapshots(t);
+ await x.client.prepareOffline({background:true});assert.equal(x.calls,1);
+ x.remote.get(actor.id).projects[0].project_name='Changed after background download';
+ const background=x.client.prepareOffline({background:true});
+ // Let the background call choose its fresh-storage shortcut while its shared
+ // promise is still settling, then require an explicit server verification.
+ await Promise.resolve();
+ const forced=x.client.prepareOffline();
+ await background;
+ const current=await forced;
+ assert.equal(x.calls,2);
+ assert.equal(current.projects[0].project_name,'Changed after background download');
+});
+
+test('a delayed snapshot cannot reactivate its employee after sign-out or an account switch',async t=>{
+ for(const destination of [null,'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'])await t.test(destination?'switch account':'sign out',async t=>{
+  const x=backgroundSnapshots(t);
+  if(destination)x.addAccount(destination);
+  const before=structuredClone(x.accounts.get(actor.id)),snapshot=structuredClone(x.remote.get(actor.id));
+  let release,signalStarted;
+  const started=new Promise(resolve=>{signalStarted=resolve;});
+  globalThis.fetch=async url=>{assert.equal(url,'/api/offline');signalStarted();return new Promise(resolve=>{release=()=>resolve(Response.json(snapshot));});};
+  const pending=x.client.prepareOffline();
+  const rejected=assert.rejects(pending,/employee who opened this registration form/);
+  await started;x.store.setFieldUser(destination);release();await rejected;
+  assert.equal(x.store.activeFieldUser(),destination);
+  assert.deepEqual(x.accounts.get(actor.id),before,'An obsolete snapshot must not persist after its account changes');
+  if(destination){
+   globalThis.fetch=async()=>Response.json(x.remote.get(destination));
+   const current=await x.client.prepareOffline();
+   assert.equal(current.actor.id,destination,'Discarding the old request must release initialization for the new account');
+   assert.equal(x.store.activeFieldUser(),destination);
+  }
+ });
+});
+
+test('late synchronization authorization failures cannot sign out a newer employee',async t=>{
+ for(const phase of ['session','saved change'])await t.test(phase,async t=>{
+  const x=backgroundSnapshots(t),otherId='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  x.addAccount(otherId);
+  await x.store.updateFieldState(actor.id,state=>({...state,queue:[{id:'queued-opening',projectId,userId:actor.id,action:'opening',payload:{},recordedAt:'2026-11-08T08:00:00Z'}]}));
+  const beforeA=structuredClone(x.accounts.get(actor.id)),beforeB=structuredClone(x.accounts.get(otherId));
+  let release,signalStarted;
+  const started=new Promise(resolve=>{signalStarted=resolve;});
+  globalThis.fetch=async(url,init)=>{
+   if(url==='/api/offline?session=1'&&phase==='saved change')return Response.json({actor});
+   assert.equal(url,phase==='session'?'/api/offline?session=1':'/api/offline');
+   if(phase==='saved change')assert.equal(init.method,'POST');
+   signalStarted();return new Promise(resolve=>{release=()=>resolve(Response.json({error:'Authentication is required.'},{status:401}));});
+  };
+  const pending=x.client.syncFieldChanges();await started;
+  x.store.setFieldUser(otherId);release();await pending;
+  assert.equal(x.store.activeFieldUser(),otherId);
+  assert.deepEqual(x.accounts.get(actor.id).queue,beforeA.queue,'Failed old-account operations remain durable for their original employee');
+  assert.deepEqual(x.accounts.get(otherId),beforeB);
+ });
+});
+
+test('one synchronization run immediately drains a first opening saved while registration is being acknowledged',async()=>{
+ const outdoor=outdoorActorForCurrentBranch('Rasafa'),x=setup({actor:outdoor});
+ await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,assignedOutdoorSalesId:null}});
+ const registration=x.state.queue[0],registered=structuredClone(x.state.projects[0]);
+ const posted=[];let sessions=0,releaseRegistration,signalStarted;
+ const started=new Promise(resolve=>{signalStarted=resolve;});
+ const registeredVersion='2026-11-08T08:00:01Z',openingVersion='2026-11-08T08:00:02Z';
+ globalThis.fetch=async(url,init)=>{
+  if(url==='/api/offline?session=1'){sessions++;return Response.json({actor:outdoor});}
+  assert.equal(url,'/api/offline');assert.equal(init.method,'POST');
+  const change=JSON.parse(init.body);posted.push(change);
+  if(change.action==='register'){
+   signalStarted();return new Promise(resolve=>{releaseRegistration=()=>resolve(Response.json({project:{...registered,project_number:'PRJ-NEW',updated_at:registeredVersion}}));});
+  }
+  assert.equal(change.action,'opening');
+  assert.equal(change.expectedUpdatedAt,registeredVersion,'The opening uses the acknowledged registration version');
+  return Response.json({project:{...registered,project_number:'PRJ-NEW',updated_at:openingVersion}});
+ };
+ navigator.onLine=true;
+ const syncing=x.client.syncFieldChanges();await started;
+ const opening={id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'};
+ await x.client.saveFieldChange('opening',projectId,opening);
+ const queuedOpening=x.state.queue.find(change=>change.action==='opening');
+ assert.deepEqual(posted.map(change=>change.id),[registration.id],'Opening saving must not wait for the registration request');
+ releaseRegistration();await syncing;
+ assert.deepEqual(posted.map(change=>change.id),[registration.id,queuedOpening.id]);
+ assert.equal(new Set(posted.map(change=>change.id)).size,2);
+ assert.equal(sessions,1);
+ assert.equal(x.state.queue.length,0,'The first opening must not wait for the next polling interval');
+ assert.equal(x.state.openings[0].id,opening.id);
+ assert.equal(x.state.projects[0].serverUpdatedAt,openingVersion);
+ assert.equal(x.state.projects[0].pending,false);
+});
+
+test('a dynamic sync conflict blocks later changes for that project while newly queued other projects continue',async()=>{
+ const outdoor=outdoorActorForCurrentBranch('Rasafa'),x=setup({actor:outdoor});
+ const secondProjectId='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+ await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,assignedOutdoorSalesId:null}});
+ const registration=x.state.queue[0],posted=[];let releaseRegistration,signalStarted;
+ const started=new Promise(resolve=>{signalStarted=resolve;});
+ globalThis.fetch=async(url,init)=>{
+  if(url==='/api/offline?session=1')return Response.json({actor:outdoor});
+  const change=JSON.parse(init.body);posted.push(change);
+  if(change.id===registration.id){signalStarted();return new Promise(resolve=>{releaseRegistration=()=>resolve(Response.json({error:'Project changed on another device'},{status:409}));});}
+  assert.equal(change.projectId,secondProjectId,'The conflicted project must not send any later operation in this run');
+  return Response.json({project:{...x.state.projects.find(project=>project.id===secondProjectId),project_number:'PRJ-OTHER',updated_at:'2026-11-08T08:00:02Z'}});
+ };
+ navigator.onLine=true;const syncing=x.client.syncFieldChanges();await started;
+ const opening={id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',floor:'Ground',room:'Kitchen',width:120,height:150,structuralType:'Window',openingType:'Sliding'};
+ await x.client.saveFieldChange('opening',projectId,opening);
+ await x.client.saveFieldChange('register',secondProjectId,{...payload,client:{...payload.client,clientName:'Other site'},project:{...payload.project,assignedOutdoorSalesId:null}});
+ await x.client.saveFieldChange('opening',secondProjectId,{...opening,id:'ffffffff-ffff-4fff-8fff-ffffffffffff'});
+ const queue=structuredClone(x.state.queue);
+ releaseRegistration();await syncing;
+ assert.deepEqual(posted.map(change=>change.id),[registration.id,...queue.filter(change=>change.projectId===secondProjectId).map(change=>change.id)]);
+ assert.equal(new Set(posted.map(change=>change.id)).size,3,'A conflict must not be retried within the same run');
+ assert.deepEqual(x.state.queue.map(change=>change.id),queue.filter(change=>change.projectId===projectId).map(change=>change.id));
+ assert.match(x.state.queue[0].error,/another device/);
+ assert.equal(x.state.openings.length,2);
+ assert.equal(x.state.projects.find(project=>project.id===secondProjectId).pending,false);
+});

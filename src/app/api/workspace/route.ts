@@ -35,7 +35,7 @@ export async function PATCH(request:Request){
  const body=await request.json().catch(()=>null);if(typeof body?.projectId!=='string')return NextResponse.json({error:'Project is required.'},{status:400});
  const access=await salesProject(body.projectId,body.action==='rename-project'?false:true);if(access.response)return access.response;
  if(body.action==='rename-project'){
-  if(!canRenameProject(access.project,{id:access.auth.user.id,role:access.auth.role,outdoorTeamMemberIds:access.auth.outdoorTeamMemberIds}))return NextResponse.json({error:'Only the employee who registered this project can change its name.'},{status:403});
+  if(!canRenameProject(access.project,{id:access.auth.user.id,role:access.auth.role,branch:access.auth.profile?.branch,outdoorTeamMemberIds:access.auth.outdoorTeamMemberIds}))return NextResponse.json({error:'Only the employee who registered this project can change its name.'},{status:403});
   let payload;
   try{payload=normalizeProjectName(body);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   if(typeof body.expectedUpdatedAt!=='string'||!Number.isFinite(Date.parse(body.expectedUpdatedAt)))return NextResponse.json({error:'Reload the project before changing its name.'},{status:400});

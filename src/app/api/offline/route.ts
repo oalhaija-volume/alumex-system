@@ -85,7 +85,7 @@ export async function POST(request:Request){
   if((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager')&&!assignee)return NextResponse.json({error:'Choose yourself or an Outdoor Sales employee to collect the initial measurements.'},{status:400});
   payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(branch?{branch}:{}),...(governorate?{governorate}:{}),...(p.buildingType===undefined?{}:{buildingType}),...(assignee?{assignedOutdoorSalesId:assignee}:{}),...(legacyOutdoorSalesId?{legacyOutdoorSalesId}:{}),address:address.slice(0,2000)||`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
  }else if(body.action==='rename-project'){
-  if(auth.role!=='Outdoor Sales')return NextResponse.json({error:'Only the employee who registered this project can change its name.'},{status:403});
+  if(!['Outdoor Sales','Indoor Sales','Sales Manager'].includes(auth.role))return NextResponse.json({error:'Only the employee who registered this project can change its name.'},{status:403});
   if(typeof body.expectedUpdatedAt!=='string'||!Number.isFinite(Date.parse(body.expectedUpdatedAt)))return NextResponse.json({error:'Reload the project before changing its name.'},{status:400});
   try{payload=normalizeProjectName(body.payload);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  }else if(body.action==='finish'){

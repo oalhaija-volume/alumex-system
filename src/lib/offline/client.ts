@@ -10,13 +10,13 @@ import { normalizeLegacyOutdoorSalesId } from '@/lib/intake/legacyOutdoorSales';
 import { canAccessCRM } from '@/lib/auth/permissions';
 import { canAccessProjectBranch } from '@/lib/auth/projectBranchAccess';
 import { isOutdoorAssignmentMember } from '@/lib/auth/outdoorTeams';
-import { canAccessFieldProject } from './projectAccess';
+import { canAccessFieldProject, visibleFieldState } from './projectAccess';
 import { normalizeFollowUp,type FollowUpInput } from '@/lib/workflow/followUps';
 import { needsSalesFollowUp } from '@/lib/workflow/stages';
 import { canRenameProject, normalizeProjectName } from '@/lib/workflow/projectName';
 import { canEditOpeningEntry } from '@/lib/measurements/openingOwnership';
 import { normalizeOpeningEdit, sameOpeningMeasurements, normalizeRegistrationOpening, type RegistrationOpening } from '@/lib/measurements/registrationOpening';
-import { activeFieldUser,readFieldState,readStoredFieldState,setFieldUser,updateFieldState } from './store';
+import { activeFieldUser,readFieldState,readStoredFieldState,setFieldUser,updateFieldState,type FieldChangeDetail } from './store';
 import type { FieldChange,FieldProject,FieldState,SalesWorkspaceData } from './types';
 // Captures are immutable after save. Keep downloaded media when refreshing lightweight metadata.
 export function retainSkylightCapture<T extends RegistrationOpening & {projectId:string}>(opening:T,cached:FieldState['openings']):T {
@@ -37,25 +37,70 @@ let connectionAvailable=true;
 export function isFieldOnline(){return typeof navigator!=="undefined" && navigator.onLine && (!isOfflineDevice() || connectionAvailable);}
 function connection(available:boolean){if(connectionAvailable!==available){connectionAvailable=available;window.dispatchEvent(new Event('field-connection'));}}
 let initializing:Promise<FieldState>|null=null;
+let initializationContext:{generation:number;force:boolean;downloaded:boolean}|null=null;
 let syncing:Promise<void>|null=null;
-export async function prepareOffline():Promise<FieldState>{
- if(initializing)return initializing;
+let lastSnapshot:{actorId:string;downloadedAt:number}|null=null;
+let accountGeneration=0;
+const BACKGROUND_REFRESH_INTERVAL=60000;
+if(typeof window!=='undefined')window.addEventListener?.('field-change',event=>{
+ if((event as CustomEvent<FieldChangeDetail>).detail?.source==='account'){accountGeneration++;lastSnapshot=null;}
+});
+export async function prepareOffline({background=false}:{background?:boolean}={}):Promise<FieldState>{
+ if(initializing){
+  const pending=initializing,context=initializationContext!;
+  context.force ||= !background;
+  let state:FieldState;
+  try{state=await pending;}catch(error){if(context.generation!==accountGeneration)return prepareOffline({background});throw error;}
+  if(context.generation!==accountGeneration||(!background&&!context.downloaded&&navigator.onLine))return prepareOffline({background});
+  return state;
+ }
+ const context={generation:accountGeneration,force:!background,downloaded:false};
+ initializationContext=context;
+ const requestedAccount=activeFieldUser();
+ const checkAccount=()=>{if(context.generation!==accountGeneration||activeFieldUser()!==requestedAccount)throw new Error('Sign in with the employee who opened this registration form.');};
  initializing=(async()=>{
-  if(!navigator.onLine){const state=await readFieldState();if(!state)throw new Error('Sign in online once to prepare this device for offline work.');return state;}
+  if(!navigator.onLine){const state=await readFieldState();checkAccount();if(!state)throw new Error('Sign in online once to prepare this device for offline work.');return state;}
+  // Remember local progress before downloading. Registration and the first
+  // opening can both finish syncing while this snapshot is still in flight.
+  const stored=await readStoredFieldState();
+  checkAccount();
+  const age=lastSnapshot?Date.now()-lastSnapshot.downloadedAt:Infinity;
+  if(!context.force&&stored&&lastSnapshot?.actorId===stored.actor.id&&activeFieldUser()===stored.actor.id&&age>=0&&age<BACKGROUND_REFRESH_INTERVAL)return visibleFieldState(stored);
+  const snapshotBase=stored?{
+   actorId:stored.actor.id,
+   projectIds:new Set(stored.projects.map(project=>project.id)),
+   registrationIds:new Set(stored.queue.filter(change=>change.action==='register').map(change=>change.projectId)),
+   openingIds:new Set(stored.openings.map(opening=>opening.id)),
+  }:null;
   let response:Response;
-  try{response=await fetch('/api/offline',{cache:'no-store',signal:AbortSignal.timeout(8000)});connection(true);}catch{connection(false);const cached=await readFieldState();if(cached)return cached;throw new Error('Connect once to prepare this device for offline work.');}
-  if(!response.ok){if([401,403].includes(response.status))setFieldUser(null);else if(response.status>=500){connection(false);const cached=await readFieldState();if(cached)return cached;}throw new Error('Sign in with an active sales account to use offline work.');}
+  try{response=await fetch('/api/offline',{cache:'no-store',signal:AbortSignal.timeout(8000)});checkAccount();connection(true);}catch{checkAccount();connection(false);const cached=await readFieldState();checkAccount();if(cached)return cached;throw new Error('Connect once to prepare this device for offline work.');}
+  checkAccount();
+  if(!response.ok){if([401,403].includes(response.status))setFieldUser(null);else if(response.status>=500){connection(false);const cached=await readFieldState();checkAccount();if(cached)return cached;}throw new Error('Sign in with an active sales account to use offline work.');}
   const remote=await response.json() as FieldState;
+  checkAccount();
   const state=await updateFieldState(remote.actor.id,old=>{
-   const pending=new Set(old?.queue.map(c=>c.projectId)??[]);
+   checkAccount();
    const remoteProjects=new Map(remote.projects.map(project=>[project.id,project]));
-   const registrations=new Set(old?.queue.filter(change=>change.action==='register').map(change=>change.projectId)??[]);
+   const freshProjects=new Set<string>();
+   if(snapshotBase?.actorId===remote.actor.id){
+    const remoteOpenings=new Set(remote.openings.map(opening=>opening.id));
+    const newOpeningProjects=new Set(old?.openings.filter(opening=>opening.createdBy===remote.actor.id&&!snapshotBase.openingIds.has(opening.id)&&!remoteOpenings.has(opening.id)).map(opening=>opening.projectId));
+    for(const project of old?.projects??[]){
+     if(project.created_by===remote.actor.id&&!old?.unavailableProjectIds?.includes(project.id)
+      &&(!snapshotBase.projectIds.has(project.id)||snapshotBase.registrationIds.has(project.id)||newOpeningProjects.has(project.id)))freshProjects.add(project.id);
+    }
+   }
+   // Keep progress made during this request even after its queue was drained.
+   // The next fresh snapshot can still apply normal removal/access checks.
+   const pending=new Set([...(old?.queue.map(c=>c.projectId)??[]),...freshProjects]);
+   const registrations=new Set([...(old?.queue.filter(change=>change.action==='register').map(change=>change.projectId)??[]),...freshProjects]);
    const unavailableProjectIds=['Indoor Sales','Outdoor Sales'].includes(remote.actor.role)?[...pending].filter(id=>!remoteProjects.has(id)&&(!registrations.has(id)||old?.unavailableProjectIds?.includes(id))):[];
    return {...remote,unavailableProjectIds,archivedProjects:old?.archivedProjects??[],measurementReports:[...(remote.measurementReports??[]).filter(r=>!pending.has(r.project_id)).map(r=>retainMeasurementReport(r,old?.measurementReports??[])),...(old?.measurementReports??[]).filter(r=>pending.has(r.project_id))],followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remoteProjects.has(id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id)).map(p=>remoteProjects.has(p.id)?withCurrentProjectAccess(p,remoteProjects.get(p.id)!):p)??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)).map(o=>retainSkylightCapture(o,old?.openings??[])),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
   },'snapshot');
-  setFieldUser(remote.actor.id);return state;
+  checkAccount();setFieldUser(remote.actor.id);context.generation=accountGeneration;context.downloaded=true;lastSnapshot={actorId:remote.actor.id,downloadedAt:Date.now()};return state;
  })();
- try{return await initializing;}finally{initializing=null;}
+ const pending=initializing;
+ try{return await pending;}finally{if(initializing===pending){initializing=null;initializationContext=null;}}
 }
 async function stateForWrite(expectedActorId?:string){
  let state=await readFieldState();
@@ -72,17 +117,25 @@ export async function syncFieldChanges(){
   if(!(await readStoredFieldState(id))?.queue.length)return;
   // Verify the currently signed-in account before sending any retained work.
   const session=await fetch('/api/offline?session=1',{cache:'no-store',signal:AbortSignal.timeout(8000)}).catch(()=>null);
+  if(activeFieldUser()!==id)return;
   if(!session){connection(false);return;}
   connection(true);
   if(!session.ok){if([401,403].includes(session.status))setFieldUser(null);return;}
-  const identity=await session.json();if(identity.actor.id!==id){setFieldUser(null);return;}
+  const identity=await session.json();if(activeFieldUser()!==id)return;if(identity.actor.id!==id){setFieldUser(null);return;}
   await updateFieldState(id,s=>{if(!s)throw new Error('Offline account unavailable.');return {...s,actor:identity.actor};});
   const failed=new Set<string>();
-  for(const change of (await readStoredFieldState(id))?.queue??[]){
+  const attempted=new Set<string>();
+  while(navigator.onLine){
    if(activeFieldUser()!==id)return;
-   if(failed.has(change.projectId))continue;
+   const current=await readStoredFieldState(id);
+   if(activeFieldUser()!==id)return;
+   // New openings can arrive while registration is being acknowledged. Drain
+   // the current queue in order without retrying conflicts during this run.
+   const change=current?.queue.find(change=>!attempted.has(change.id)&&!failed.has(change.projectId));
+   if(!change)return;
+   attempted.add(change.id);
    if(['follow-up','ready','assign-measurements','request-openings'].includes(change.action)&&!canAccessCRM(identity.actor.role)){await updateFieldState(id,s=>({...s!,queue:s!.queue.map(c=>c.id===change.id?{...c,error:'CRM access is limited to Indoor Sales and company leadership.'}:c)}));failed.add(change.projectId);continue;}
-   const current=await readStoredFieldState(id);const project=current?.projects.find(p=>p.id===change.projectId);
+   const project=current?.projects.find(p=>p.id===change.projectId);
    if(!current||!canAccessProjectBranch(current.actor,project?.branch)){failed.add(change.projectId);continue;}
    let response:Response;
    try{response=await fetch('/api/offline',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(20000),body:JSON.stringify({...change,expectedUpdatedAt:project?.serverUpdatedAt??project?.updated_at})});}catch{connection(false);return;}
@@ -106,7 +159,7 @@ export async function syncFieldChanges(){
      });
      failed.add(change.projectId);continue;
     }
-    if([401,403].includes(response.status)){setFieldUser(null);return;}
+    if([401,403].includes(response.status)){if(activeFieldUser()===id)setFieldUser(null);return;}
     await updateFieldState(id,s=>({...s!,...(response.status===404&&['Indoor Sales','Outdoor Sales'].includes(s!.actor.role)?{unavailableProjectIds:[...new Set([...(s!.unavailableProjectIds??[]),change.projectId])]}:{}),queue:s!.queue.map(c=>c.id===change.id?{...c,error:result?.error??'Unable to sync. Your work is still saved on this device.'}:c)}));
     failed.add(change.projectId);continue;
    }

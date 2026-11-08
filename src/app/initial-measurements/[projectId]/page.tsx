@@ -6,5 +6,6 @@ export default async function InitialMeasurementsPage({params}:{params:Promise<{
   const auth = await requireRole(["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager", "Outdoor Sales"]);
   if (!auth.ok) redirect("/unauthorized");
   const {projectId} = await params;
-  return <RegistrationShell role={auth.role} mobileOutdoor={auth.mobileOutdoor}><InitialMeasurements projectId={projectId} role={auth.role} actor={{id:auth.user.id,role:auth.role,name:auth.profile?.full_name??auth.profile?.username??'Employee',outdoorTeamMemberIds:auth.outdoorTeamMemberIds}} /></RegistrationShell>;
+  const branch=auth.profile?.branch;
+  return <RegistrationShell role={auth.role} mobileOutdoor={auth.mobileOutdoor}><InitialMeasurements projectId={projectId} role={auth.role} actor={{id:auth.user.id,role:auth.role,name:auth.profile?.full_name??auth.profile?.username??'Employee',branch:auth.role!=='Outdoor Sales'&&(branch==='Karkh'||branch==='Rasafa')?branch:null,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}} /></RegistrationShell>;
 }

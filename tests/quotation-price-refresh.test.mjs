@@ -190,7 +190,7 @@ function quotationRateFixture(options={}) {
 }
 const saveBody=systemRate=>({action:'save',revision:4,choices:[{openingId:'opening',systemId:'system',glassId:'glass',extras:[],systemRate}],additionalItems:[{id:'door',quantity:2}]});
 
-for(const rate of [240000,275000,300000,300001,305000,470000])test(`Indoor Sales can save a quotation-only system rate of ${rate} IQD`,async()=>{
+for(const rate of [265000,275000,300000,300001,305000,470000])test(`Indoor Sales can save a quotation-only system rate of ${rate} IQD`,async()=>{
  const x=quotationRateFixture();
  x.unrelated.contract={quotation:quotation()};
  const before=structuredClone({catalog:x.tables.product_price_settings,stored:x.stored,unrelated:x.unrelated,openings:x.tables.openings});
@@ -243,10 +243,11 @@ test('a 470000-IQD rate changes only the selected opening while catalog and save
  assert.deepEqual({catalog:x.tables.product_price_settings,stored:x.stored,unrelated:x.unrelated,openings:x.tables.openings},before,'The mocked save and refresh must not alter existing quotation/contract snapshots or catalog entries');
 });
 
-for(const rate of [239999,275000.5,'275000',null,true,{},Number.MAX_SAFE_INTEGER,Number.MAX_SAFE_INTEGER+1])test(`quotation save rejects invalid system rate ${JSON.stringify(rate)} before writing`,async()=>{
+for(const rate of [239999,240000,264999,275000.5,'275000',null,true,{},Number.MAX_SAFE_INTEGER,Number.MAX_SAFE_INTEGER+1])test(`quotation save rejects invalid system rate ${JSON.stringify(rate)} before writing`,async()=>{
  const x=quotationRateFixture(),before=structuredClone(x.tables);
  const result=await x.post(saveBody(rate));
  assert.equal(result.status,400);
+ if(typeof rate==='number'&&Number.isSafeInteger(rate)&&rate<265000)assert.match(result.body.error,/at least 265,000 IQD/);
  assert.equal(x.calls.length,0);
  assert.deepEqual(x.tables,before);
 });

@@ -36,7 +36,7 @@ export function quotationRateGroups(openings:MeasuredOpening[],choices:OpeningCh
 export function applyQuotationGroupRate(groupId:QuotationRateGroupId,rate:number,openings:MeasuredOpening[],choices:OpeningChoice[],additionalItems:AdditionalChoice[],catalog:CatalogItem[]):{choices:OpeningChoice[];additionalItems:AdditionalChoice[]}{
  const group=quotationRateGroups(openings,choices,additionalItems,catalog).find(group=>group.id===groupId);
  if(!group)throw new Error('Choose a valid quotation rate group.');
- if(!Number.isSafeInteger(rate)||rate<group.minimum)throw new Error(groupId==='curtain-wall'?'Enter a Curtain Wall rate of at least 240,000 IQD, using whole IQD.':'Enter an Alumex system rate of at least 240,000 IQD, using whole IQD.');
+ if(!Number.isSafeInteger(rate)||rate<group.minimum)throw new Error(`Enter ${groupId==='curtain-wall'?'a Curtain Wall':'an Alumex system'} rate of at least ${group.minimum.toLocaleString('en-US')} IQD, using whole IQD.`);
  const openingIds=new Set(group.openingIds),additionalItemIds=new Set(group.additionalItemIds);
  return {
   choices:choices.map(choice=>openingIds.has(choice.openingId)?{...choice,systemRate:rate}:choice),

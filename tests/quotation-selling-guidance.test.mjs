@@ -33,8 +33,8 @@ const quote=(openings,choices=openings.map(item=>choice(item.id)),products=catal
 for(const [area,minimum,belowBand] of [
  [0.5,278000,'red'],[3,278000,'red'],
  [3.0001,265000,'orange'],[3.9999,265000,'orange'],
- [4,250000,'yellow'],[5.9999,250000,'yellow'],
- [6,240000,'red'],[12,240000,'red'],
+ [4,265000,'yellow'],[5.9999,265000,'yellow'],
+ [6,265000,'red'],[12,265000,'red'],
 ])test(`${area} sqm becomes green at exactly ${minimum} IQD per sqm`,()=>{
  assert.equal(openingMinimumSellingRate(area),minimum);
  assert.equal(openingSellingBand(area,minimum-1),belowBand);
@@ -47,7 +47,7 @@ test('invalid measured areas and selling rates never show green',()=>{
  for(const rate of [0,-1,NaN,Infinity,-Infinity])assert.equal(openingSellingBand(6,rate),'red',`Invalid selling rate ${rate}`);
 });
 
-for(const [opening_type,minimum] of [['Window',260000],['Door',305000]])test(`hinged ${opening_type} uses ${minimum} IQD per sqm regardless of size`,()=>{
+for(const [opening_type,minimum] of [['Window',265000],['Door',305000]])test(`hinged ${opening_type} uses ${minimum} IQD per sqm regardless of size`,()=>{
  for(const area of [0.5,3,3.0001,4,6,12]){
   const hinged=opening('hinged',area,1,opening_type,'Hinged');
   assert.equal(openingMinimumSellingRate(area,hinged),minimum,`${area} sqm`);
@@ -85,7 +85,7 @@ test('the initial quotation keeps catalog prices and returns separate, nonmutati
  const saved=structuredClone(initial);
  assert.ok(initial.lines.every(line=>line.system.rate===240000));
  assert.ok(initial.lines.every(line=>!Object.hasOwn(line.system,'rateSource')));
- assert.deepEqual(quotationSellingSuggestion(initial,catalog),{rate:4201500/16.5,openingCount:4,allGreen:false,canApply:true,billableArea:16.5,systemTotal:4201500,openingRates:[{openingId:'small',rate:278000},{openingId:'medium',rate:265000},{openingId:'larger',rate:250000},{openingId:'large',rate:240000}]});
+ assert.deepEqual(quotationSellingSuggestion(initial,catalog),{rate:4411500/16.5,openingCount:4,allGreen:false,canApply:true,billableArea:16.5,systemTotal:4411500,openingRates:[{openingId:'small',rate:278000},{openingId:'medium',rate:265000},{openingId:'larger',rate:265000},{openingId:'large',rate:265000}]});
  assert.deepEqual(initial,saved);
  assert.deepEqual({openings,choices,catalog},before);
  assert.equal(quote([opening('another-quotation',4)]).lines[0].system.rate,240000);
@@ -98,26 +98,26 @@ test('guidance uses each physical opening size and quantity rather than accumula
  assert.deepEqual(quotationSellingSuggestion(small,catalog),{rate:278000,openingCount:10,allGreen:false,canApply:true,billableArea:10,systemTotal:2780000,openingRates:[{openingId:'small',rate:278000}]});
  const large=quote([opening('large',6,7)]);
  assert.equal(large.lines[0].area,42);
- assert.deepEqual(quotationSellingSuggestion(large,catalog),{rate:240000,openingCount:7,allGreen:true,canApply:true,billableArea:42,systemTotal:10080000,openingRates:[{openingId:'large',rate:240000}]});
+ assert.deepEqual(quotationSellingSuggestion(large,catalog),{rate:265000,openingCount:7,allGreen:false,canApply:true,billableArea:42,systemTotal:11130000,openingRates:[{openingId:'large',rate:265000}]});
 });
 
-test('two 3-sqm windows and one 6-sqm window produce an overall rate of exactly 259000 IQD',()=>{
+test('two 3-sqm windows and one 6-sqm window produce an overall rate of exactly 271500 IQD',()=>{
  const initial=quote([opening('small-one',3),opening('small-two',3),opening('large',6)]);
- assert.deepEqual(quotationSellingSuggestion(initial,catalog),{rate:259000,openingCount:3,allGreen:false,canApply:true,billableArea:12,systemTotal:3108000,openingRates:[{openingId:'small-one',rate:278000},{openingId:'small-two',rate:278000},{openingId:'large',rate:240000}]});
+ assert.deepEqual(quotationSellingSuggestion(initial,catalog),{rate:271500,openingCount:3,allGreen:false,canApply:true,billableArea:12,systemTotal:3258000,openingRates:[{openingId:'small-one',rate:278000},{openingId:'small-two',rate:278000},{openingId:'large',rate:265000}]});
 });
 
 test('the overall sqm recommendation weights each opening target by billed area and repeated quantities',()=>{
  const initial=quote([opening('small',3),opening('many-large',6,100)]);
- assert.deepEqual(quotationSellingSuggestion(initial,catalog),{rate:144834000/603,openingCount:101,allGreen:false,canApply:true,billableArea:603,systemTotal:144834000,openingRates:[{openingId:'small',rate:278000},{openingId:'many-large',rate:240000}]});
+ assert.deepEqual(quotationSellingSuggestion(initial,catalog),{rate:159834000/603,openingCount:101,allGreen:false,canApply:true,billableArea:603,systemTotal:159834000,openingRates:[{openingId:'small',rate:278000},{openingId:'many-large',rate:265000}]});
  const withoutSmall=quote([opening('medium',3.5),opening('large',8,100)]);
- assert.deepEqual(quotationSellingSuggestion(withoutSmall,catalog),{rate:192927500/803.5,openingCount:101,allGreen:false,canApply:true,billableArea:803.5,systemTotal:192927500,openingRates:[{openingId:'medium',rate:265000},{openingId:'large',rate:240000}]});
+ assert.deepEqual(quotationSellingSuggestion(withoutSmall,catalog),{rate:212927500/803.5,openingCount:101,allGreen:false,canApply:true,billableArea:803.5,systemTotal:212927500,openingRates:[{openingId:'medium',rate:265000},{openingId:'large',rate:265000}]});
 });
 
 test('the overall denominator preserves saved billed quantities, including historical window minimums',()=>{
  const historical=quote([opening('small',0.5,2),opening('large',6)]);
  historical.lines[0].system.quantity=1;
  historical.lines[0].system.total=240000;
- assert.deepEqual(quotationSellingSuggestion(historical,catalog),{rate:1718000/7,openingCount:3,allGreen:false,canApply:true,billableArea:7,systemTotal:1718000,openingRates:[{openingId:'small',rate:278000},{openingId:'large',rate:240000}]});
+ assert.deepEqual(quotationSellingSuggestion(historical,catalog),{rate:1868000/7,openingCount:3,allGreen:false,canApply:true,billableArea:7,systemTotal:1868000,openingRates:[{openingId:'small',rate:278000},{openingId:'large',rate:265000}]});
 });
 
 test('glass, add-ons and standalone charges cannot make an underpriced opening green',()=>{
@@ -131,12 +131,13 @@ test('glass, add-ons and standalone charges cannot make an underpriced opening g
 
 test('each eligible saved rate must meet its own size minimum before all openings are green',()=>{
  const openings=[opening('small',3),opening('medium',3.5),opening('larger',4),opening('large',6)];
- const minima=[278000,265000,250000,240000];
+ const minima=[278000,265000,265000,265000];
  const selections=openings.map((item,index)=>({...choice(item.id),systemRate:minima[index]}));
  const individuallyGreen=quote(openings,selections);
- assert.deepEqual(quotationSellingSuggestion(individuallyGreen,catalog),{rate:4201500/16.5,openingCount:4,allGreen:true,canApply:true,billableArea:16.5,systemTotal:4201500,openingRates:[{openingId:'small',rate:278000},{openingId:'medium',rate:265000},{openingId:'larger',rate:250000},{openingId:'large',rate:240000}]});
+ assert.deepEqual(quotationSellingSuggestion(individuallyGreen,catalog),{rate:4411500/16.5,openingCount:4,allGreen:true,canApply:true,billableArea:16.5,systemTotal:4411500,openingRates:[{openingId:'small',rate:278000},{openingId:'medium',rate:265000},{openingId:'larger',rate:265000},{openingId:'large',rate:265000}]});
  for(let index=0;index<3;index++){
-  const underpriced=quote(openings,selections.map((selection,i)=>i===index?{...selection,systemRate:selection.systemRate-1}:selection));
+  const underpriced=structuredClone(individuallyGreen);
+  underpriced.lines[index].system.rate--; // Historical rates remain readable below the current input floor.
   assert.equal(quotationSellingSuggestion(underpriced,catalog).allGreen,false,`${openings[index].id} is below its minimum`);
  }
 });
@@ -145,17 +146,17 @@ test('applying each suggested target through explicit choices survives saving an
  const openings=[opening('small',0.5,3),opening('medium',3.5),opening('hinged-window',0.5,2,'Window','Hinged'),opening('hinged-door',6,2,'Door','Hinged')];
  const initial=quote(openings);
  const suggestion=quotationSellingSuggestion(initial,catalog);
- const expectedRates=[{openingId:'small',rate:278000},{openingId:'medium',rate:265000},{openingId:'hinged-window',rate:260000},{openingId:'hinged-door',rate:305000}];
- assert.deepEqual(suggestion,{rate:5941500/20.5,openingCount:8,allGreen:false,canApply:true,billableArea:20.5,systemTotal:5941500,openingRates:expectedRates});
+ const expectedRates=[{openingId:'small',rate:278000},{openingId:'medium',rate:265000},{openingId:'hinged-window',rate:265000},{openingId:'hinged-door',rate:305000}];
+ assert.deepEqual(suggestion,{rate:5951500/20.5,openingCount:8,allGreen:false,canApply:true,billableArea:20.5,systemTotal:5951500,openingRates:expectedRates});
  const adjusted=quote(openings,suggestion.openingRates.map(({openingId,rate})=>({...choice(openingId),systemRate:rate})));
  const changedCatalog=catalog.map(item=>({...item,unit_price:item.unit_price+10000}));
  const before=structuredClone({initial,adjusted,catalog,changedCatalog});
  const restored=JSON.parse(JSON.stringify(adjusted));
  const refreshed=repriceQuotation(restored,changedCatalog,'refresher');
  for(const result of [adjusted,restored,refreshed]){
-  assert.deepEqual(result.lines.map(line=>line.system.rate),[278000,265000,260000,305000]);
+  assert.deepEqual(result.lines.map(line=>line.system.rate),[278000,265000,265000,305000]);
   assert.ok(result.lines.every(line=>line.system.rateSource==='quotation'));
-  assert.deepEqual(quotationSellingSuggestion(result,changedCatalog),{rate:5941500/20.5,openingCount:8,allGreen:true,canApply:true,billableArea:20.5,systemTotal:5941500,openingRates:expectedRates});
+  assert.deepEqual(quotationSellingSuggestion(result,changedCatalog),{rate:5951500/20.5,openingCount:8,allGreen:true,canApply:true,billableArea:20.5,systemTotal:5951500,openingRates:expectedRates});
  }
  assert.deepEqual(refreshed.lines.map(line=>line.system.quantity),[3,3.5,2,12]);
  assert.deepEqual({initial,adjusted,catalog,changedCatalog},before);
@@ -164,13 +165,13 @@ test('applying each suggested target through explicit choices survives saving an
 test('fractional blended averages are display values and do not replace per-opening rates or rounded monetary totals',()=>{
  const openings=[opening('small',3),opening('large',6.123456)];
  const suggestion=quotationSellingSuggestion(quote(openings),catalog);
- assert.equal(suggestion.systemTotal,2303629);
+ assert.equal(suggestion.systemTotal,2456716);
  assert.equal(suggestion.billableArea,3+6.123456);
- assert.equal(suggestion.rate,2303629/(3+6.123456));
+ assert.equal(suggestion.rate,2456716/(3+6.123456));
  assert.equal(Number.isInteger(suggestion.rate),false);
  const adjusted=quote(openings,suggestion.openingRates.map(({openingId,rate})=>({...choice(openingId),systemRate:rate})));
- assert.deepEqual(adjusted.lines.map(line=>line.system.rate),[278000,240000]);
- assert.deepEqual(adjusted.lines.map(line=>line.system.total),[834000,1469629]);
+ assert.deepEqual(adjusted.lines.map(line=>line.system.rate),[278000,265000]);
+ assert.deepEqual(adjusted.lines.map(line=>line.system.total),[834000,1622716]);
  assert.equal(adjusted.total,suggestion.systemTotal);
  assert.throws(()=>quote(openings,openings.map(item=>({...choice(item.id),systemRate:suggestion.rate}))));
 });
@@ -210,10 +211,11 @@ test('guidance rejects unsafe suggested totals without imposing a business ceili
 });
 
 test('the all-green check compares hinged openings with their type target even when their size tier is already green',()=>{
- for(const [opening_type,rate] of [['Window',260000],['Door',305000]]){
+ for(const [opening_type,rate] of [['Window',265000],['Door',305000]]){
   const measured=opening('hinged',6,1,opening_type,'Hinged');
-  const underpriced=quote([measured],[{...choice('hinged'),systemRate:rate-1}]);
   const green=quote([measured],[{...choice('hinged'),systemRate:rate}]);
+  const underpriced=structuredClone(green);
+  underpriced.lines[0].system.rate--; // Guidance also evaluates historical, below-floor rates.
   assert.equal(quotationSellingSuggestion(underpriced,catalog).allGreen,false,opening_type);
   assert.equal(quotationSellingSuggestion(green,catalog).allGreen,true,opening_type);
  }
@@ -222,10 +224,10 @@ test('the all-green check compares hinged openings with their type target even w
 test('only eligible Alumex Window and Door systems contribute to the recommendation and physical count',()=>{
  const openings=[opening('door',4,2,'Door'),opening('foreign',1,8),opening('standalone-door',1,9,'Door'),opening('curtain',1,10,'Curtain Wall'),opening('louver',1,11,'Louver')];
  const initial=quote(openings,[choice('door'),choice('foreign','other-system'),choice('standalone-door','standalone'),choice('curtain','curtain'),choice('louver','louver')]);
- assert.deepEqual(quotationSellingSuggestion(initial,catalog),{rate:250000,openingCount:2,allGreen:false,canApply:true,billableArea:8,systemTotal:2000000,openingRates:[{openingId:'door',rate:250000}]});
+ assert.deepEqual(quotationSellingSuggestion(initial,catalog),{rate:265000,openingCount:2,allGreen:false,canApply:true,billableArea:8,systemTotal:2120000,openingRates:[{openingId:'door',rate:265000}]});
  const renamed=structuredClone(initial);
  renamed.lines[1].system.name='Alumex System';
- assert.deepEqual(quotationSellingSuggestion(renamed,catalog),{rate:250000,openingCount:2,allGreen:false,canApply:true,billableArea:8,systemTotal:2000000,openingRates:[{openingId:'door',rate:250000}]},'A saved display name cannot bypass the corresponding catalog product');
+ assert.deepEqual(quotationSellingSuggestion(renamed,catalog),{rate:265000,openingCount:2,allGreen:false,canApply:true,billableArea:8,systemTotal:2120000,openingRates:[{openingId:'door',rate:265000}]},'A saved display name cannot bypass the corresponding catalog product');
 });
 
 test('inactive, missing, renamed and non-system catalog products are excluded from saved-quotation guidance',()=>{
@@ -288,8 +290,8 @@ test('initial quotations use distinct hinged catalog prices without overrides an
  assert.ok(initial.lines.every(line=>!Object.hasOwn(line.system,'rateSource')));
  assert.equal(initial.total,5230000);
  assert.deepEqual(quotationSellingSuggestion(initial,hingedCatalog),{
-  rate:272900,openingCount:8,allGreen:false,canApply:true,billableArea:20,systemTotal:5458000,
-  openingRates:[{openingId:'hinged-window',rate:260000},{openingId:'hinged-door',rate:305000},{openingId:'sliding-window',rate:278000},{openingId:'sliding-door',rate:240000}],
+  rate:280900,openingCount:8,allGreen:false,canApply:true,billableArea:20,systemTotal:5618000,
+  openingRates:[{openingId:'hinged-window',rate:265000},{openingId:'hinged-door',rate:305000},{openingId:'sliding-window',rate:278000},{openingId:'sliding-door',rate:265000}],
  });
  assert.deepEqual({openings,selections,catalog:hingedCatalog},before);
  const refreshed=repriceQuotation(initial,hingedCatalog,'refresher');

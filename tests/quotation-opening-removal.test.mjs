@@ -36,7 +36,7 @@ const openings = ids.slice(0, 3).map((id, index) => ({
   quantity: index === 1 ? 2 : 1, opening_type: 'Window', opening_direction: 'Sliding',
 }));
 const choices = openings.map((opening, index) => ({
-  openingId: opening.id, systemId: 'system', systemRate: [250000, 300000, 470000][index], glassId: 'glass',
+  openingId: opening.id, systemId: 'system', systemRate: [265000, 300000, 470000][index], glassId: 'glass',
   extras: [{ id: 'closer', quantity: index === 1 ? 2 : 1 }],
 }));
 const original = () => pricing.priceQuotation(openings, choices, catalog, 'original-author');

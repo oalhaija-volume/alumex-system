@@ -122,9 +122,9 @@ test('the full quotation discount includes manual motors once and retains their 
 
 test('client blending treats motors as accessories and preserves their full amount separately',()=>{
  const second={...opening,id:'second',width:200,height:200,quantity:1,has_roller_shutter:false};
- const saved=priceQuotation([opening,second],[{...choice,systemRate:278000},{openingId:'second',systemId:'system',systemRate:240000,extras:[]}],catalog,'indoor-sales');
+ const saved=priceQuotation([opening,second],[{...choice,systemRate:278000},{openingId:'second',systemId:'system',systemRate:265000,extras:[]}],catalog,'indoor-sales');
  const blended=quotationClientPricing(saved);
- assert.equal(blended.systemTotal,1794000);
+ assert.equal(blended.systemTotal,1894000);
  assert.equal(blended.billableArea,7);
  assert.equal(blended.openings[0].openingTotal-blended.openings[0].systemAmount,195000);
  assert.equal(blended.openings.reduce((sum,line)=>sum+line.openingTotal,0),saved.total);

@@ -21,7 +21,7 @@ const catalog: CatalogItem[] = [
   { id: 'glass', name: 'Double Glass', category: 'glass_option', unit: 'sqm', unit_price: 10000, is_active: true },
   { id: 'handle', name: 'Handle', category: 'addon', unit: 'item', unit_price: 5000, is_active: true },
 ];
-const choices: OpeningChoice[] = openings.map((opening, index) => ({ openingId: opening.id, systemId: 'system', systemRate: [245000, 260000, 280000][index], glassId: index === 1 ? 'glass' : '', extras: [{ id: 'handle', quantity: index + 1 }] }));
+const choices: OpeningChoice[] = openings.map((opening, index) => ({ openingId: opening.id, systemId: 'system', systemRate: [265000, 270000, 280000][index], glassId: index === 1 ? 'glass' : '', extras: [{ id: 'handle', quantity: index + 1 }] }));
 const project = { id: projectId, project_name: 'Quotation removal fixture', project_number: 'PRJ-REMOVE', address: 'Baghdad', branch: 'Karkh', sales_status: 'quotation_in_progress', structure_readiness: 'ready', created_by: actor.id, registeredBy: actor.name, created_at: '2026-11-04T08:00:00Z', updated_at: '2026-11-04T08:00:00Z' };
 
 test.beforeAll(async () => {
@@ -103,19 +103,19 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: removing existing o
   await edit().click();
   await remove(0).click();
   await expect(card(0)).toHaveCount(0);
-  await expect(rate(1)).toHaveValue('260000'); await expect(rate(2)).toHaveValue('280000');
+  await expect(rate(1)).toHaveValue('270000'); await expect(rate(2)).toHaveValue('280000');
   await rate(1).fill('265000');
   const changed = choices.map((choice, index) => index === 1 ? { ...choice, systemRate: 265000 } : choice);
   await expect(total()).toHaveText(money(expected([1, 2], changed)));
   await restore(0).click();
-  await expect(rate(0)).toHaveValue('245000'); await expect(rate(1)).toHaveValue('265000');
+  await expect(rate(0)).toHaveValue('265000'); await expect(rate(1)).toHaveValue('265000');
   await remove(1).click();
   await expect(rate(2)).toHaveValue('280000');
   await expect(total()).toHaveText(money(expected([0, 2], changed)));
   await cancel().click();
   await expect(edit()).toBeVisible(); expect(posts).toHaveLength(0); expect(saved).toEqual(initial);
 
-  await edit().click(); await expect(rate(1)).toHaveValue('260000');
+  await edit().click(); await expect(rate(1)).toHaveValue('270000');
   await remove(1).click(); await expect(total()).toHaveText(money(expected([0, 2])));
   await page.screenshot({ path: test.info().outputPath(`${locale}-opening-removed.png`), fullPage: true });
   await save().click();

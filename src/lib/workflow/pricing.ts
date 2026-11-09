@@ -29,7 +29,7 @@ export function applyQuotationDiscount(snapshot:QuoteSnapshot,discountPercent:un
  return quotation;
 }
 export const money = (n:number) => new Intl.NumberFormat('en-IQ',{maximumFractionDigits:0}).format(n)+' IQD';
-export const QUOTATION_SYSTEM_RATE_MIN = 240_000;
+export const QUOTATION_SYSTEM_RATE_MIN = 265_000;
 export const CURTAIN_WALL_ARCH_PRICE = 150_000;
 export const CURTAIN_WALL_ARCH_ID = 'curtain-wall-arch';
 const curtainWallArchReview = 'Review the curtain wall arch in Edit quotation before updating prices.';
@@ -72,13 +72,13 @@ export function openingAreaBand(area:number):'red'|'orange'|'yellow'|'green' {
 export function openingMinimumSellingRate(area:number,opening?:OpeningSellingDetails) {
  if(!Number.isFinite(area)||area<=0)throw new Error('Complete all opening measurements first.');
  if(opening?.opening_direction==='Hinged'){
-  if(opening.opening_type==='Window')return 260_000;
-  if(opening.opening_type==='Door')return 305_000;
+  if(opening.opening_type==='Window')return Math.max(260_000,QUOTATION_SYSTEM_RATE_MIN);
+  if(opening.opening_type==='Door')return Math.max(305_000,QUOTATION_SYSTEM_RATE_MIN);
  }
- if(area<=3)return 278_000;
- if(area<4)return 265_000;
- if(area<6)return 250_000;
- return 240_000;
+ if(area<=3)return Math.max(278_000,QUOTATION_SYSTEM_RATE_MIN);
+ if(area<4)return Math.max(265_000,QUOTATION_SYSTEM_RATE_MIN);
+ if(area<6)return Math.max(250_000,QUOTATION_SYSTEM_RATE_MIN);
+ return Math.max(240_000,QUOTATION_SYSTEM_RATE_MIN);
 }
 export function openingSellingBand(area:number,rate:number,opening?:OpeningSellingDetails):ReturnType<typeof openingAreaBand> {
  if(!Number.isFinite(area)||area<=0||!Number.isFinite(rate)||rate<=0)return 'red';
@@ -173,7 +173,7 @@ function catalogCharge(id:string,quantity:number,catalog:CatalogItem[]):Charge {
 function quotationSystemCharge(charge:Charge,product:CatalogItem|undefined,rate:unknown):Charge {
  const curtain=isQuotationCurtainRateEditable(product);
  if(!isQuotationSystemRateEditable(product)&&!curtain)throw new Error('Quotation-specific rates are available only for active Alumex systems or Curtain Wall priced per m².');
- if(typeof rate!=='number'||!Number.isSafeInteger(rate)||rate<QUOTATION_SYSTEM_RATE_MIN)throw new Error(curtain?'Enter a Curtain Wall rate of at least 240,000 IQD, using whole IQD.':'Enter an Alumex system rate of at least 240,000 IQD, using whole IQD.');
+ if(typeof rate!=='number'||!Number.isSafeInteger(rate)||rate<QUOTATION_SYSTEM_RATE_MIN)throw new Error(`Enter ${curtain?'a Curtain Wall':'an Alumex system'} rate of at least ${QUOTATION_SYSTEM_RATE_MIN.toLocaleString('en-US')} IQD, using whole IQD.`);
  const total=Math.round(charge.quantity*rate);
  if(!Number.isSafeInteger(total)||total<=0)throw new Error(`Invalid amount for ${charge.name}.`);
  return {...charge,rate,total,rateSource:'quotation'};

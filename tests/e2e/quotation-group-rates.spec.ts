@@ -33,8 +33,8 @@ const catalog: CatalogItem[] = [
   { id: 'pushout', name: 'Curtain Wall Pushout', category: 'addon', unit: 'item', unit_price: 30000, is_active: true },
 ];
 const choices: OpeningChoice[] = [
-  { openingId: 'sliding', systemId: 'alumex', systemRate: 250000, glassId: 'glass', extras: [{ id: 'handle', quantity: 2 }, { id: 'bars', quantity: 1.5 }] },
-  { openingId: 'removed-sliding', systemId: 'alumex', systemRate: 260000, glassId: '', extras: [] },
+  { openingId: 'sliding', systemId: 'alumex', systemRate: 270000, glassId: 'glass', extras: [{ id: 'handle', quantity: 2 }, { id: 'bars', quantity: 1.5 }] },
+  { openingId: 'removed-sliding', systemId: 'alumex', systemRate: 280000, glassId: '', extras: [] },
   { openingId: 'hinged', systemId: 'alumex', systemRate: 275000, glassId: 'glass', extras: [{ id: 'handle', quantity: 3 }] },
   { openingId: 'door', systemId: 'alumex', systemRate: 310000, glassId: 'glass', extras: [{ id: 'handle', quantity: 1 }] },
   { openingId: 'louver', systemId: 'louver-system', glassId: '', extras: [] },
@@ -124,7 +124,7 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   const remove = () => page.getByRole('button', { name: term('Remove opening {number} from quotation', { number: 2 }), exact: true });
   const restore = () => page.getByRole('button', { name: term('Restore opening {number}', { number: 2 }), exact: true });
   const withoutRemoved = openings.filter(opening => opening.id !== 'removed-sliding');
-  const draftChoices = (sliding = 250000, hinged = 275000, curtain?: number) => choices.filter(choice => choice.openingId !== 'removed-sliding').map(choice => ({ ...choice, ...(choice.openingId === 'sliding' ? { systemRate: sliding } : choice.openingId === 'hinged' ? { systemRate: hinged } : choice.openingId === 'curtain' && curtain !== undefined ? { systemRate: curtain } : {}) }));
+  const draftChoices = (sliding = 270000, hinged = 275000, curtain?: number) => choices.filter(choice => choice.openingId !== 'removed-sliding').map(choice => ({ ...choice, ...(choice.openingId === 'sliding' ? { systemRate: sliding } : choice.openingId === 'hinged' ? { systemRate: hinged } : choice.openingId === 'curtain' && curtain !== undefined ? { systemRate: curtain } : {}) }));
   const draftItems = (curtain?: number): AdditionalChoice[] => additional.map(item => ({ ...item, ...(item.id === 'curtain-wall' && curtain !== undefined ? { unitRate: curtain } : {}) }));
   const expected = (sliding: number, hinged: number, curtain?: number, discount = 0) => priceQuotation(withoutRemoved, draftChoices(sliding, hinged, curtain), catalog, actor.id, draftItems(curtain), discount);
 
@@ -142,14 +142,16 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   const curtainApply = apply('Apply curtain wall price');
   await slidingInput.fill(''); await hingedInput.fill(''); await curtainInput.fill('');
   for (const [input, applyButton] of [[slidingInput, slidingApply], [hingedInput, hingedApply], [curtainInput, curtainApply]]) {
-    await expect(input).toHaveAttribute('min', '240000');
+    await expect(input).toHaveAttribute('min', '265000');
     await expect(input).toHaveAttribute('step', '1');
-    await input.fill('239999');
-    await expect(input).toHaveAttribute('aria-invalid', 'true');
-    await expect(applyButton).toBeDisabled();
-    await expect(save()).toBeDisabled();
-    expect(posts).toHaveLength(0);
-    await input.fill('240000');
+    for (const rate of ['240000', '264999']) {
+      await input.fill(rate);
+      await expect(input).toHaveAttribute('aria-invalid', 'true');
+      await expect(applyButton).toBeDisabled();
+      await expect(save()).toBeDisabled();
+      expect(posts).toHaveLength(0);
+    }
+    await input.fill('265000');
     await expect(input).toHaveAttribute('aria-invalid', 'false');
     await expect(applyButton).toBeEnabled();
     await expect(save()).toBeDisabled();
@@ -157,25 +159,27 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
     await expect(save()).toBeEnabled();
     expect(posts).toHaveLength(0);
   }
-  await expect(openingRate('sliding')).toHaveValue('240000');
-  await expect(openingRate('hinged')).toHaveValue('240000');
+  await expect(openingRate('sliding')).toHaveAttribute('min', '265000');
+  await expect(openingRate('hinged')).toHaveAttribute('min', '265000');
+  await expect(openingRate('sliding')).toHaveValue('265000');
+  await expect(openingRate('hinged')).toHaveValue('265000');
   const measuredCurtainRate = card('curtain').getByRole('spinbutton', { name: term('Curtain Wall rate (IQD / m²)'), exact: true });
   const standaloneCurtainRate = page.getByRole('spinbutton', { name: term('Curtain Wall service rate (IQD / m²)'), exact: true });
-  await expect(measuredCurtainRate).toHaveAttribute('min', '240000');
-  await expect(standaloneCurtainRate).toHaveAttribute('min', '240000');
-  await expect(measuredCurtainRate).toHaveValue('240000');
-  await expect(standaloneCurtainRate).toHaveValue('240000');
-  await group().screenshot({ path: test.info().outputPath(`${locale}-all-groups-minimum-240000.png`) });
+  await expect(measuredCurtainRate).toHaveAttribute('min', '265000');
+  await expect(standaloneCurtainRate).toHaveAttribute('min', '265000');
+  await expect(measuredCurtainRate).toHaveValue('265000');
+  await expect(standaloneCurtainRate).toHaveValue('265000');
+  await group().screenshot({ path: test.info().outputPath(`${locale}-all-groups-minimum-265000.png`) });
   await cancel().click();
   await expect(edit()).toBeVisible(); expect(posts).toHaveLength(0); expect(saved).toEqual(initial);
   await edit().click();
   await slidingInput.fill(''); await hingedInput.fill(''); await curtainInput.fill('');
   await expect(slidingApply).toBeDisabled(); await expect(hingedApply).toBeDisabled(); await expect(curtainApply).toBeDisabled();
-  for (const value of ['239999', '240000.5', '-1', '']) {
+  for (const value of ['240000', '264999', '265000.5', '-1', '']) {
     await slidingInput.fill(value); await expect(slidingApply).toBeDisabled();
     if (value) await expect(save()).toBeDisabled(); else await expect(save()).toBeEnabled();
   }
-  for (const value of ['239999', '240000.5', '0', '1.5', '']) {
+  for (const value of ['240000', '264999', '265000.5', '0', '1.5', '']) {
     await curtainInput.fill(value); await expect(curtainApply).toBeDisabled();
     if (value) await expect(save()).toBeDisabled(); else await expect(save()).toBeEnabled();
   }
@@ -195,8 +199,8 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   await cancel().click();
   await expect(edit()).toBeVisible(); expect(posts).toHaveLength(0);
   await edit().click();
-  await expect(openingRate('sliding')).toHaveValue('250000');
-  await expect(openingRate('removed-sliding')).toHaveValue('260000');
+  await expect(openingRate('sliding')).toHaveValue('270000');
+  await expect(openingRate('removed-sliding')).toHaveValue('280000');
   await remove().click();
   await slidingInput.fill('300000'); await expect(save()).toBeDisabled();
   await slidingApply.click(); await expect(save()).toBeEnabled();
@@ -212,7 +216,7 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   await curtainApply.click(); await expect(save()).toBeEnabled();
   await expect(total()).toHaveText(money(expected(300000, 330000, 275000).total));
   await restore().click();
-  await expect(openingRate('removed-sliding')).toHaveValue('260000');
+  await expect(openingRate('removed-sliding')).toHaveValue('280000');
   await remove().click();
   await page.getByRole('checkbox', { name: term('Apply 5% discount'), exact: true }).check();
   await expect(total()).toHaveText(money(expected(300000, 330000, 275000, 5).total));

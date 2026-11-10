@@ -1502,6 +1502,7 @@ export type Database = {
       };
     };
     Functions: {
+      rename_project_client: { Args: { p_project: string; p_actor: string; p_client_name: string; p_expected_client_name: string }; Returns: Json };
       deliver_due_follow_up_notifications: { Args: Record<PropertyKey, never>; Returns: number };
       register_sales_project: { Args: { p_actor: string; p_payload: Json }; Returns: Json };
       reactivate_client_project: { Args: { p_project: string; p_actor: string; p_note: string; p_expected_updated_at: string }; Returns: Json };

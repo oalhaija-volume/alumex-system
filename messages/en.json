@@ -1278,6 +1278,16 @@
     "generating": "Generating..."
   },
   "terms": {
+    "Client name": "Client name",
+    "Edit client name": "Edit client name",
+    "Client name updated.": "Client name updated.",
+    "This updates the client record for all linked projects.": "This updates the client record for all linked projects.",
+    "Enter a client name of 1 to 150 characters.": "Enter a client name of 1 to 150 characters.",
+    "Only Indoor Sales can change client names.": "Only Indoor Sales can change client names.",
+    "Reload the projects before changing the client name.": "Reload the projects before changing the client name.",
+    "This client changed on another device. Reload the projects before changing its name.": "This client changed on another device. Reload the projects before changing its name.",
+    "Connect to the internet before changing the client name.": "Connect to the internet before changing the client name.",
+    "Client name editing is not available yet. Please contact Admin.": "Client name editing is not available yet. Please contact Admin.",
     "Project filters": "Project filters",
     "Measurement type": "Measurement type",
     "Name, project number, phone or address": "Name, project number, phone or address",

@@ -1278,6 +1278,16 @@
     "generating": "جاري الإنشاء..."
   },
   "terms": {
+    "Client name": "اسم العميل",
+    "Edit client name": "تعديل اسم العميل",
+    "Client name updated.": "تم تحديث اسم العميل.",
+    "This updates the client record for all linked projects.": "سيتم تحديث سجل العميل لجميع المشاريع المرتبطة به.",
+    "Enter a client name of 1 to 150 characters.": "أدخل اسم عميل يتكون من 1 إلى 150 حرفاً.",
+    "Only Indoor Sales can change client names.": "يمكن للمبيعات الداخلية فقط تعديل أسماء العملاء.",
+    "Reload the projects before changing the client name.": "أعد تحميل المشاريع قبل تعديل اسم العميل.",
+    "This client changed on another device. Reload the projects before changing its name.": "تم تعديل هذا العميل على جهاز آخر. أعد تحميل المشاريع قبل تعديل اسمه.",
+    "Connect to the internet before changing the client name.": "اتصل بالإنترنت قبل تعديل اسم العميل.",
+    "Client name editing is not available yet. Please contact Admin.": "تعديل اسم العميل غير متاح حالياً. يرجى التواصل مع المسؤول.",
     "Project filters": "تصفية المشاريع",
     "Measurement type": "نوع القياسات",
     "Name, project number, phone or address": "الاسم أو رقم المشروع أو الهاتف أو العنوان",

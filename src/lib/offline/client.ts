@@ -24,10 +24,18 @@ export function retainSkylightCapture<T extends RegistrationOpening & {projectId
  return {...opening,...(opening.hasSkylightCapture&&previous?.skylight?{skylight:previous.skylight}:{}),...(opening.hasCurtainWallCapture&&previous?.curtainWall?{curtainWall:previous.curtainWall}:{})};
 }
 export function isDeviceWorkspace(){return typeof window!=='undefined'&&window.location?.pathname==='/offline';}
+export async function updateSavedClientName(actorId:string,projectId:string,clientId:string|undefined,clientName:string){
+ if(activeFieldUser()!==actorId||!await readStoredFieldState(actorId))return;
+ await updateFieldState(actorId,state=>{
+  if(!state)throw new Error('Offline account unavailable.');
+  return {...state,projects:state.projects.map(project=>project.id===projectId||(clientId&&project.client_id===clientId)?{...project,client_name:clientName}:project)};
+ });
+}
 // Keep unsynced content, but refresh the current assignment before allowing a
 // second local edit. A pending rename or opening must not retain a former team.
 function withCurrentProjectAccess(local:FieldProject,remote:FieldProject):FieldProject {
  return {...local,branch:remote.branch,governorate:remote.governorate,project_log_only:remote.project_log_only,
+  ...('client_name' in remote?{client_name:remote.client_name,client_id:remote.client_id}:{}),
   ...('assigned_outdoor_sales_id' in remote?{assigned_outdoor_sales_id:remote.assigned_outdoor_sales_id}:{}),
   ...('assignedOutdoorSales' in remote?{assignedOutdoorSales:remote.assignedOutdoorSales}:{}),
   ...('assignedToYou' in remote?{assignedToYou:remote.assignedToYou}:{}),

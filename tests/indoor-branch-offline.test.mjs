@@ -112,6 +112,62 @@ for (const branch of ['Karkh', 'Rasafa']) {
   });
 }
 
+function governorateSnapshot(branch){
+  const project={...projects[0],id:'governorate-project',branch:'Governorates',governorate:'البصرة'};
+  return {
+    actor:{...actor,branch},projects:[project],
+    openings:[{...openings[0],projectId:project.id}],
+    queue:[{...queue[0],projectId:project.id}],
+    measurementReports:[{...measurementReports[0],project_id:project.id}],
+    followUpHistories:{[project.id]:followUpHistories[projects[0].id]},
+    archivedProjects:[{...archivedProjects[0],project:{...project,id:'archived-governorate'},projectId:'archived-governorate'}],
+  };
+}
+
+for(const branch of ['Karkh','Rasafa'])test(`${branch} cached Governorates access filters projects, saved work, media and direct URLs`,async()=>{
+  const snapshot=governorateSnapshot(branch),x=setup(snapshot);
+  const before=structuredClone(x.raw);
+  const view=await x.store.readFieldState();
+  const allowed=branch==='Karkh';
+  for(const key of ['projects','openings','queue','measurementReports','archivedProjects']){
+    assert.equal(view[key].length,allowed?1:0,key);
+  }
+  assert.deepEqual(Object.keys(view.followUpHistories),allowed?['governorate-project']:[]);
+  assert.equal((await (await x.client.fieldFetch('/api/workspace')).json()).projects.length,allowed?1:0);
+  assert.equal((await x.client.fieldFetch('/api/initial-measurements/governorate-project')).status,allowed?200:404);
+  assert.deepEqual(x.raw,before,'Access filtering retains inaccessible work in storage');
+  if(allowed){
+    await x.client.saveFieldChange('rename-project','governorate-project',{projectName:'Updated Governorates project'});
+    assert.equal(x.raw.projects[0].project_name,'Updated Governorates project');
+    assert.equal(x.raw.queue.length,2);
+  }else{
+    await assert.rejects(x.client.saveFieldChange('rename-project','governorate-project',{projectName:'Forbidden'}),/not available/);
+    await assert.rejects(x.client.retryReviewedProject('governorate-project','new-version'),/not available/);
+    await assert.rejects(x.client.keepReviewedServerVersion({project:snapshot.projects[0],openings:[],measurementReports:[]}),/not available/);
+    assert.deepEqual(x.raw,before);
+  }
+});
+
+test('a cached Governorates change is not sent after its Indoor employee moves to Rasafa',async()=>{
+  const x=setup(governorateSnapshot('Karkh'));
+  const before=structuredClone(x.raw);
+  navigator.onLine=true;
+  let posted=0;
+  globalThis.fetch=async(url,init)=>{
+    if(init?.method){posted++;return Response.json({project:x.raw.projects[0]});}
+    return Response.json({actor:{...actor,branch:'Rasafa'}});
+  };
+  await x.client.syncFieldChanges();
+  assert.equal(posted,0);
+  assert.equal(x.raw.actor.branch,'Rasafa');
+  assert.deepEqual(x.raw.queue,before.queue);
+  assert.deepEqual(x.raw.openings,before.openings);
+  assert.deepEqual(x.raw.measurementReports,before.measurementReports);
+  const view=await x.store.readFieldState();
+  for(const key of ['projects','queue','openings','measurementReports','archivedProjects'])assert.deepEqual(view[key],[]);
+  assert.deepEqual(view.followUpHistories,{});
+});
+
 test('missing or invalid Indoor Sales branches fail closed, including old snapshots with unmarked projects', async () => {
   for (const branch of [null, undefined, '', 'karkh', 'Other']) {
     const x = setup({ actor: { ...actor, branch } });

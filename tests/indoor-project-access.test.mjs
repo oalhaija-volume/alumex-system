@@ -6,9 +6,9 @@ import ts from 'typescript';
 const actorId = '11111111-1111-4111-8111-111111111111';
 const otherId = '22222222-2222-4222-8222-222222222222';
 const operationId = '33333333-3333-4333-8333-333333333333';
-const projects = ['Karkh', 'Rasafa', null].map((branch, index) => ({
+const projects = ['Karkh', 'Rasafa', null, 'Governorates'].map((branch, index) => ({
   id: `${index + 4}${'4'.repeat(7)}-4444-4444-8444-444444444444`,
-  branch, project_name: `${branch ?? 'Unassigned'} project`, project_number: `PRJ-${index}`,
+  branch, governorate: branch === 'Governorates' ? 'البصرة' : null, project_name: `${branch ?? 'Unassigned'} project`, project_number: `PRJ-${index}`,
   client_id: `client-${index}`, created_by: otherId, assigned_outdoor_sales_id: actorId,
   follow_up_owner_id: actorId, structure_readiness: 'ready', sales_status: 'new_lead',
   archived_at: null, created_at: '2026-10-20T08:00:00Z', updated_at: '2026-10-20T08:00:00Z',
@@ -129,7 +129,7 @@ for (const branch of ['Karkh', 'Rasafa', null, 'unknown']) {
       const x = fixture({ branch });
       const response = await x.load(`src/app/api/${path}/route`).GET(request());
       assert.equal(response.status, 200);
-      const allowed = projects.filter(p => p.branch === branch && ['Karkh', 'Rasafa'].includes(branch));
+      const allowed = projects.filter(p => ['Karkh', 'Rasafa'].includes(branch) && (p.branch === branch || branch === 'Karkh' && p.branch === 'Governorates'));
       assert.deepEqual(response.body.projects.map(p => p.id), allowed.map(p => p.id));
       for (const read of x.reads) {
         if (['openings', 'measurement_completion_reports'].includes(read.table)) {
@@ -160,7 +160,7 @@ for (const role of ['Admin', 'Sales Director', 'CEO', 'Company Owner', 'Sales Ma
 for (const branch of ['Karkh', 'Rasafa', null]) {
   test(`shared project access and measurements enforce ${branch ?? 'unassigned'} branch even for creator or assignee`, async () => {
     for (const project of projects) {
-      const own = branch !== null && project.branch === branch;
+      const own = branch !== null && (project.branch === branch || branch === 'Karkh' && project.branch === 'Governorates');
       for (const scope of [false, true, 'commercial']) {
         const x = fixture({ branch, projectRows: [{ ...project, created_by: actorId }] });
         const result = await x.load('src/lib/workflow/access').salesProject(project.id, scope);
@@ -214,6 +214,21 @@ test('workspace and quotation mutations cannot bypass branch access', async () =
   }
 });
 
+test('Rasafa cannot read or mutate Governorates projects even as creator, assignee and follow-up owner',async()=>{
+  const governorate={...projects[3],created_by:actorId,assigned_outdoor_sales_id:actorId,follow_up_owner_id:actorId};
+  const x=fixture({branch:'Rasafa',projectRows:[governorate]});
+  for(const path of ['sales-flow/[projectId]','measurement-reports/[projectId]','projects/[projectId]/follow-ups']){
+    assertHidden(await x.load(`src/app/api/${path}/route`).GET(request(),context(governorate.id)));
+  }
+  for(const action of ['ready','follow-up','cancel-project','reactivate-project']){
+    assertHidden(await x.load('src/app/api/workspace/route').PATCH(request({projectId:governorate.id,action})));
+  }
+  assertHidden(await x.load('src/app/api/sales-flow/[projectId]/route').POST(request({action:'save'}),context(governorate.id)));
+  assertHidden(await x.load('src/app/api/projects/[projectId]/client/route').PATCH(request({clientName:'Changed',expectedClientName:'Original'}),context(governorate.id)));
+  assert.equal(x.writes.length+x.rpcCalls.length,0);
+  assert.ok(x.reads.every(read=>read.table==='projects'));
+});
+
 test('Outdoor Sales still needs project creation or assignment regardless of branch', async () => {
   const projectRows = projects.map(project => ({ ...project, assigned_outdoor_sales_id: otherId }));
   for (const path of ['dashboard', 'workspace', 'offline']) {
@@ -231,7 +246,7 @@ for (const action of ['finish', 'register']) {
       for (const project of projects) {
         const x = fixture({ branch });
         const response = await x.load('src/app/api/offline/route').POST(request(offlineChange(project.id, action)));
-        if (branch !== null && project.branch === branch) {
+        if (branch !== null && (project.branch === branch || branch === 'Karkh' && project.branch === 'Governorates')) {
           assert.equal(response.status, 200);
           assert.equal(x.rpcCalls.length, 1);
         } else {
@@ -251,12 +266,13 @@ test('offline preflight database failures do not send writes or disclose project
   assert.equal(JSON.stringify(response.body).includes('Private database details'), false);
 });
 
-for (const deletedBranch of ['Karkh', 'Rasafa', null]) {
-  test(`deleted project disclosure is limited to the same branch: ${deletedBranch ?? 'unassigned'}`, async () => {
-    const x = fixture({ projectRows: [], deletedBranch, rpcError: { message: 'Project is not available to this employee' } });
+for (const branch of ['Karkh','Rasafa']) for (const deletedBranch of ['Karkh', 'Rasafa', 'Governorates', null]) {
+  test(`deleted project disclosure for ${branch} respects the access scope of ${deletedBranch ?? 'unassigned'} projects`, async () => {
+    const x = fixture({ branch, projectRows: [], deletedBranch, rpcError: { message: 'Project is not available to this employee' } });
     const response = await x.load('src/app/api/offline/route').POST(request(offlineChange(projects[0].id)));
-    assert.equal(response.status, deletedBranch === 'Karkh' ? 410 : 409);
-    assert.equal(response.body.code, deletedBranch === 'Karkh' ? 'project_deleted' : undefined);
+    const allowed=deletedBranch===branch||branch==='Karkh'&&deletedBranch==='Governorates';
+    assert.equal(response.status, allowed ? 410 : 409);
+    assert.equal(response.body.code, allowed ? 'project_deleted' : undefined);
   });
 }
 

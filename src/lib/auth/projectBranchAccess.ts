@@ -1,16 +1,23 @@
 type ProjectBranchActor = { role: string; branch?: string | null };
 
-// Indoor Sales must belong to an active sales branch. Governorate projects
-// are shared by both teams; Baghdad projects remain limited to their branch.
+// Indoor Sales must have a sales branch. Karkh handles Governorates projects.
 export function canAccessProjectBranch(
   actor: ProjectBranchActor,
   projectBranch: string | null | undefined,
 ): boolean {
   if (actor.role !== "Indoor Sales") return true;
-  return (actor.branch === "Karkh" || actor.branch === "Rasafa")
-    && (projectBranch === actor.branch || projectBranch === "Governorates");
+  return indoorProjectBranches(actor.branch).includes(projectBranch ?? "");
 }
 
 export function indoorProjectBranches(branch: string | null | undefined): string[] {
-  return branch === "Karkh" || branch === "Rasafa" ? [branch, "Governorates"] : [];
+  if (branch === "Karkh") return ["Karkh", "Governorates"];
+  return branch === "Rasafa" ? ["Rasafa"] : [];
+}
+
+export function canOwnProjectFollowUp(
+  employee: { role?: string; branch?: string | null },
+  projectBranch: string | null | undefined,
+): boolean {
+  return projectBranch !== "Governorates" || employee.role === "Sales Manager"
+    || (employee.role === "Indoor Sales" && employee.branch === "Karkh");
 }

@@ -40,7 +40,8 @@ for (const endpoint of ['workspace', 'offline']) {
         or(value) { filters.push(value); return this; },
         then(resolve) {
           if (table === 'field_sync_receipts') return Promise.resolve({data:[],error:null}).then(resolve);
-          const key = table === 'profiles' ? fields.startsWith('full_name') ? 'actor' : fields.endsWith(',role') ? 'directory' : 'people' : table;
+          const key = table === 'profiles' ? fields.startsWith('full_name') ? 'actor' : fields.split(',').includes('role') ? 'directory' : 'people' : table;
+          if(key==='directory')assert.deepEqual(fields.split(','),['id','full_name','username','role','branch']);
           return new Promise(done => started.set(key, data => done({ data, error: null }))).then(resolve);
         },
       };
@@ -51,7 +52,12 @@ for (const endpoint of ['workspace', 'offline']) {
     assert.deepEqual([...started.keys()].sort(), (endpoint === 'offline' ? ['actor', 'directory', 'projects'] : ['directory', 'projects']).sort());
     assert.deepEqual(filters, ['created_by.eq.employee,assigned_outdoor_sales_id.eq.employee,legacy_outdoor_sales_id.eq.employee']);
     started.get('projects')([project]);
-    started.get('directory')([{ id: actor.id, full_name: 'Employee', role: actor.role }]);
+    started.get('directory')([
+      {id:actor.id,full_name:'Employee',role:actor.role},
+      {id:'karkh-owner',full_name:'Karkh employee',role:'Indoor Sales',branch:'Karkh'},
+      {id:'rasafa-owner',full_name:'Rasafa employee',role:'Indoor Sales',branch:'Rasafa'},
+      {id:'manager-owner',full_name:'Sales manager',role:'Sales Manager',branch:'Rasafa'},
+    ]);
     started.get('actor')?.({ full_name: 'Employee', branch: 'Karkh' });
     await tick();
     // Contacts, employee names, and measurements must all start before any finishes.
@@ -68,6 +74,11 @@ for (const endpoint of ['workspace', 'offline']) {
     assert.equal(result.body.projects[0].registeredBy, 'Employee');
     assert.equal(result.body.projects[0].phone, '07700000000');
     assert.equal(result.body.projects[0].assignedToYou, true);
+    assert.deepEqual(result.body.indoorSales,[
+      {id:'karkh-owner',name:'Karkh employee',role:'Indoor Sales',branch:'Karkh'},
+      {id:'rasafa-owner',name:'Rasafa employee',role:'Indoor Sales',branch:'Rasafa'},
+      {id:'manager-owner',name:'Sales manager',role:'Sales Manager',branch:'Rasafa'},
+    ],'The downloaded owner directory retains actual roles and branches for project-specific eligibility');
   });
 
   test(`${endpoint} does not start data reads before authorization`, async () => {

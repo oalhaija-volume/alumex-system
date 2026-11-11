@@ -33,7 +33,7 @@ for (const role of roles.appRoles) test(`${role} lands on an authorized dashboar
         },
         is(column, value) { assert.equal(column, 'archived_at'); assert.equal(value, null); return this; },
         order() { return this; },
-        in(column, values) { assert.equal(column, 'branch'); assert.deepEqual(values, ['Rasafa', 'Governorates']); branchScoped = true; return this; },
+        in(column, values) { assert.equal(column, 'branch'); assert.deepEqual(values, ['Rasafa']); branchScoped = true; return this; },
         or(filter) { assert.equal(filter, 'created_by.eq.employee,assigned_outdoor_sales_id.eq.employee'); scoped = true; return this; },
         then(resolve) { resolve({ data: [], error: null }); },
       };

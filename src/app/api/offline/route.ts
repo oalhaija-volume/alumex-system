@@ -10,7 +10,7 @@ import { requireRole } from '@/lib/auth/adminServer';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeFollowUp,normalizeMeasurementAssignment } from '@/lib/workflow/followUps';
 import { canAccessCRM } from '@/lib/auth/permissions';
-import { canAccessProjectBranch } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, indoorProjectBranches } from '@/lib/auth/projectBranchAccess';
 import { salesRoles } from '@/lib/workflow/access';
 import { normalizeProjectName } from '@/lib/workflow/projectName';
 import { isOutdoorAssignmentMember, outdoorAssignmentIds } from '@/lib/auth/outdoorTeams';
@@ -28,7 +28,7 @@ export async function GET(request:Request){
   if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
   return NextResponse.json({actor:actorFromProfile(profile.data)},{headers:{'Cache-Control':'no-store'}});
  }
- const [profile,projects,directory]=await Promise.all([profileQuery,loadWorkspaceProjects(admin,{id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}),admin.from('profiles').select('id,full_name,username,role').in('role',['Indoor Sales', 'Sales Manager','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name')]);
+ const [profile,projects,directory]=await Promise.all([profileQuery,loadWorkspaceProjects(admin,{id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}),admin.from('profiles').select('id,full_name,username,role,branch').in('role',['Indoor Sales', 'Sales Manager','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name')]);
  if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
  const actor=actorFromProfile(profile.data);
  if(projects.error)return NextResponse.json({error:'Unable to download projects.'},{status:500});
@@ -47,7 +47,7 @@ export async function GET(request:Request){
  if(attempts.error)return NextResponse.json({error:'Unable to load visit history.'},{status:500});
  if(directory.error||people.error)return NextResponse.json({error:'Unable to load employee assignments.'},{status:500});
  if(openings.error||clients.error||reports.error)return NextResponse.json({error:'Unable to download measurements.'},{status:500});
- const indoorSales=directory.data.filter(p=>(p.role === 'Indoor Sales' || p.role === 'Sales Manager')).map(p=>({id:p.id,name:p.full_name??p.username??'Employee'}));
+ const indoorSales=directory.data.filter(p=>(p.role === 'Indoor Sales' || p.role === 'Sales Manager')).map(p=>({id:p.id,name:p.full_name??p.username??'Employee',role:p.role,branch:p.branch}));
  const outdoorSales=directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'}));
  const employees=new Map((people.data??[]).map(p=>[p.id,p]));
  const contacts=new Map(clients.data.map(c=>[c.id,c]));
@@ -117,7 +117,7 @@ export async function POST(request:Request){
   // Confirm deletion and the employee's former access before disclosing it.
   let deletion=admin.from('audit_events').select('id').eq('action','project_deleted').eq('entity_type','project').eq('entity_id',body.projectId);
   if(!canAccessCRM(auth.role))deletion=deletion.or([`previous_value->>created_by.eq.${auth.user.id}`,...outdoorAssignmentIds({id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}).map(id=>`previous_value->>assigned_outdoor_sales_id.eq.${id}`)].join(','));
-  if(auth.role==='Indoor Sales')deletion=['Karkh','Rasafa'].includes(auth.profile?.branch??'')?deletion.in('previous_value->>branch',[auth.profile!.branch!,'Governorates']):deletion.eq('previous_value->>branch','');
+  if(auth.role==='Indoor Sales'){const branches=indoorProjectBranches(auth.profile?.branch);deletion=branches.length?deletion.in('previous_value->>branch',branches):deletion.eq('previous_value->>branch','');}
   const archived=await deletion.limit(1).maybeSingle();
   if(!archived.error&&archived.data)return NextResponse.json({code:'project_deleted',error:'This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.'},{status:410,headers:{'Cache-Control':'no-store'}});
  }

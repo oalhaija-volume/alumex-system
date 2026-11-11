@@ -32,13 +32,14 @@ const projects = [
 for (const branch of ['Karkh', 'Rasafa', null, undefined, 'Governorates', 'invalid']) {
   test(`Indoor Sales ${branch ?? 'without branch'} receives only its eligible Baghdad and governorate projects`, async () => {
     const actor = { id: 'indoor', role: 'Indoor Sales', branch };
-    const expected = ['Karkh', 'Rasafa'].includes(branch) ? [branch.toLowerCase(), 'basra', 'najaf'] : [];
+    const expected = branch === 'Karkh' ? ['karkh', 'basra', 'najaf'] : branch === 'Rasafa' ? ['rasafa'] : [];
+    assert.deepEqual(access.indoorProjectBranches(branch), branch === 'Karkh' ? ['Karkh', 'Governorates'] : branch === 'Rasafa' ? ['Rasafa'] : []);
     assert.deepEqual(projects.filter(project => access.canAccessProjectBranch(actor, project.branch)).map(project => project.id), expected);
     const admin = fixture();
     const result = await history.loadWorkspaceProjects(admin, actor);
     assert.equal(result.error, null);
     assert.deepEqual(result.data.map(project => project.id), expected);
-    assert.deepEqual(result.data.filter(project => project.branch === 'Governorates').map(project => project.governorate), expected.length ? ['البصرة', 'النجف'] : []);
+    assert.deepEqual(result.data.filter(project => project.branch === 'Governorates').map(project => project.governorate), branch === 'Karkh' ? ['البصرة', 'النجف'] : []);
     assert.ok(admin.selected.includes('governorate'));
     assert.deepEqual(admin.tables, ['projects']);
   });
@@ -65,7 +66,7 @@ function fixture() {
 
 const response = { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } };
 for (const branch of ['Karkh', 'Rasafa', null, 'Governorates']) {
-  test(`dashboard applies shared governorate scope for ${branch ?? 'unassigned'} Indoor Sales`, async () => {
+  test(`dashboard applies Karkh-only governorate scope for ${branch ?? 'unassigned'} Indoor Sales`, async () => {
     const admin = fixture();
     const route = load('app/api/dashboard/route.ts', {
       'next/server': response,
@@ -74,7 +75,7 @@ for (const branch of ['Karkh', 'Rasafa', null, 'Governorates']) {
     });
     const result = await route.GET();
     assert.equal(result.status, 200);
-    const expected = ['Karkh', 'Rasafa'].includes(branch) ? [branch.toLowerCase(), 'basra', 'najaf'] : [];
+    const expected = branch === 'Karkh' ? ['karkh', 'basra', 'najaf'] : branch === 'Rasafa' ? ['rasafa'] : [];
     assert.deepEqual(result.body.projects.map(project => project.id), expected);
   });
 }
@@ -88,7 +89,7 @@ for (const branch of ['Karkh', 'Rasafa', null]) {
       '@/lib/supabase/admin': { createAdminClient: () => ({ from: () => ({ select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: projects[2], error: null }) }) }) },
     });
     const result = await branchAccess.salesProject('basra', 'commercial');
-    if (branch) {
+    if (branch === 'Karkh') {
       assert.equal(result.response, undefined);
       assert.equal(result.project.governorate, 'البصرة');
     } else assert.equal(result.response.status, 404);

@@ -77,6 +77,90 @@ test('correcting a queued follow-up preserves other pending notes and uses a fre
  assert.notEqual(x.state.queue[1].id,first.id);assert.equal(x.state.queue[1].payload.followUpType,'whatsapp');assert.deepEqual(x.state.queue[2].payload,last.payload);assert.equal(x.state.queue[2].id,last.id);assert.equal(x.state.projects[0].project_notes,'Second note');
 });
 
+function governorateFollowUpFixture(){
+ const manager={id:'22222222-2222-4222-8222-222222222222',name:'Sales manager',role:'Sales Manager',branch:'Rasafa'};
+ const rasafa={id:'33333333-3333-4333-8333-333333333333',name:'Rasafa employee',role:'Indoor Sales',branch:'Rasafa'};
+ const legacy={id:'44444444-4444-4444-8444-444444444444',name:'Legacy employee'};
+ const project={id:projectId,branch:'Governorates',governorate:'البصرة',project_log_only:false,created_by:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-11-11T08:00:00Z',project_notes:'Original note'};
+ const values={nextFollowUp:'2026-11-12T07:00:00Z',note:'Governorates contact',followUpType:'call',followUpDetail:'',followUpOwnerId:actor.id};
+ const pending={id:'55555555-5555-4555-8555-555555555555',userId:actor.id,projectId,action:'follow-up',payload:values,recordedAt:'2026-11-11T08:00:00Z',error:'Review server version'};
+ const unrelated={id:'66666666-6666-4666-8666-666666666666',userId:actor.id,projectId:'another-project',action:'follow-up',payload:{...values,note:'Other saved note'},recordedAt:'2026-11-11T08:00:00Z',error:'Unrelated conflict'};
+ return {manager,rasafa,legacy,project,values,pending,unrelated,indoorSales:[{...actor},manager,rasafa,legacy]};
+}
+
+test('Governorates local follow-ups accept Karkh or Sales Manager owners and retain existing work',async()=>{
+ const fixture=governorateFollowUpFixture();
+ for(const owner of [actor,fixture.manager]){
+  const x=setup({projects:[fixture.project],indoorSales:fixture.indoorSales,queue:[fixture.unrelated],openings:[{id:'saved-opening',projectId,width:120}]});
+  const before=structuredClone(x.state);
+  await x.client.saveFieldChange('follow-up',projectId,{...fixture.values,followUpOwnerId:owner.id});
+  assert.deepEqual(x.state.queue[0],before.queue[0]);
+  assert.equal(x.state.queue.length,2);
+  assert.equal(x.state.queue[1].payload.followUpOwnerId,owner.id);
+  assert.equal(x.state.projects[0].follow_up_owner_id,owner.id);
+  assert.deepEqual(x.state.openings,before.openings);
+ }
+});
+
+test('Governorates local saves reject Rasafa and metadata-free owners without changing the queue or project',async()=>{
+ const fixture=governorateFollowUpFixture();
+ for(const owner of [fixture.rasafa,fixture.legacy]){
+  const x=setup({projects:[fixture.project],indoorSales:fixture.indoorSales,queue:[fixture.pending,fixture.unrelated]});
+  const before=structuredClone(x.state);
+  await assert.rejects(x.client.saveFieldChange('follow-up',projectId,{...fixture.values,followUpOwnerId:owner.id}),/Karkh|Indoor Sales|follow-up/i);
+  assert.deepEqual(x.state,before);
+ }
+});
+
+test('reviewed Governorates follow-ups validate owner corrections before changing operation IDs or conflict notes',async()=>{
+ const fixture=governorateFollowUpFixture();
+ const x=setup({projects:[fixture.project],indoorSales:fixture.indoorSales,queue:[fixture.pending,fixture.unrelated]});
+ const before=structuredClone(x.state);
+ for(const owner of [fixture.rasafa,fixture.legacy]){
+  await assert.rejects(x.client.retryReviewedProject(projectId,'fresh-server-version',{changeId:fixture.pending.id,values:{...fixture.values,followUpOwnerId:owner.id}}),/Karkh|Indoor Sales|follow-up/i);
+  assert.deepEqual(x.state,before);
+ }
+ await x.client.retryReviewedProject(projectId,'fresh-server-version',{changeId:fixture.pending.id,values:{...fixture.values,followUpOwnerId:fixture.manager.id}});
+ assert.equal(x.state.queue.length,2);
+ assert.notEqual(x.state.queue[0].id,fixture.pending.id);
+ assert.equal(x.state.queue[0].payload.followUpOwnerId,fixture.manager.id);
+ assert.deepEqual(x.state.queue[1],before.queue[1]);
+ assert.equal(x.state.projects[0].serverUpdatedAt,'fresh-server-version');
+ assert.equal(x.state.projects[0].follow_up_owner_id,fixture.manager.id);
+});
+
+test('online workspace reads upgrade a legacy owner directory before a Governorates follow-up is saved',async()=>{
+ const fixture=governorateFollowUpFixture();
+ const legacyDirectory=fixture.indoorSales.map(({id,name})=>({id,name}));
+ const x=setup({projects:[fixture.project],indoorSales:legacyDirectory});
+ await assert.rejects(x.client.saveFieldChange('follow-up',projectId,fixture.values),/Governorates follow-up/);
+ assert.equal(x.state.queue.length,0);
+ const before=structuredClone(x.state);
+ window.location={pathname:'/projects'};
+ navigator.onLine=true;
+ let requests=0;
+ globalThis.fetch=async(url,init)=>{
+  assert.equal(url,'/api/workspace');
+  assert.equal(init?.method,undefined);
+  requests++;
+  return Response.json({actor:{...actor},projects:[fixture.project],indoorSales:fixture.indoorSales});
+ };
+ const response=await x.client.fieldFetch('/api/workspace');
+ assert.equal(response.status,200);
+ const workspace=await response.json();
+ assert.deepEqual(x.state.indoorSales,fixture.indoorSales);
+ assert.deepEqual(x.state.projects,before.projects);
+ assert.deepEqual(x.state.queue,before.queue);
+ const selected=workspace.indoorSales.find(employee=>employee.role==='Indoor Sales'&&employee.branch==='Karkh');
+ assert.equal(selected.id,actor.id);
+ navigator.onLine=false;
+ await x.client.saveFieldChange('follow-up',projectId,{...fixture.values,followUpOwnerId:selected.id});
+ assert.equal(x.state.queue.length,1);
+ assert.equal(x.state.queue[0].payload.followUpOwnerId,selected.id);
+ assert.equal(x.state.projects[0].follow_up_owner_id,selected.id);
+ assert.equal(requests,1,'The refreshed cached directory supports the local save without another network request');
+});
+
 
 test('restricted employees cannot queue CRM updates or readiness changes on a cached device',async()=>{
  const originalRole=actor.role;
@@ -843,6 +927,31 @@ test('a delayed snapshot cannot reactivate its employee after sign-out or an acc
    assert.equal(x.store.activeFieldUser(),destination);
   }
  });
+});
+
+test('a delayed workspace directory refresh cannot alter either account after an employee switch',async t=>{
+ const x=backgroundSnapshots(t),otherId='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+ const fixture=governorateFollowUpFixture();
+ x.addAccount(otherId);
+ await x.store.updateFieldState(actor.id,state=>({...state,projects:[fixture.project],indoorSales:fixture.indoorSales.map(({id,name})=>({id,name}))}));
+ const originalBefore=structuredClone(x.accounts.get(actor.id));
+ const otherBefore=structuredClone(x.accounts.get(otherId));
+ window.location.pathname='/projects';
+ let release,signalStarted;
+ const started=new Promise(resolve=>{signalStarted=resolve;});
+ globalThis.fetch=async url=>{
+  assert.equal(url,'/api/workspace');
+  signalStarted();
+  return new Promise(resolve=>{release=()=>resolve(Response.json({actor:{...actor},projects:[fixture.project],indoorSales:fixture.indoorSales}));});
+ };
+ const reading=x.client.fieldFetch('/api/workspace');
+ await started;
+ x.store.setFieldUser(otherId);
+ release();
+ assert.equal((await reading).status,200);
+ assert.equal(x.store.activeFieldUser(),otherId);
+ assert.deepEqual(x.accounts.get(actor.id),originalBefore);
+ assert.deepEqual(x.accounts.get(otherId),otherBefore);
 });
 
 test('late synchronization authorization failures cannot sign out a newer employee',async t=>{

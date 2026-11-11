@@ -32,7 +32,7 @@ test('Indoor Sales can rename clients only through an accessible branch', () => 
   for (const branch of ['Karkh', 'Rasafa']) {
     const actor = { id: actorId, role: 'Indoor Sales', branch };
     assert.equal(canRenameClient({ ...project, branch }, actor), true);
-    assert.equal(canRenameClient({ ...project, branch: 'Governorates' }, actor), true);
+    assert.equal(canRenameClient({ ...project, branch: 'Governorates' }, actor), branch === 'Karkh');
     assert.equal(canRenameClient({ ...project, branch: branch === 'Karkh' ? 'Rasafa' : 'Karkh' }, actor), false);
     assert.equal(canRenameClient({ ...project, branch: null }, actor), false);
     assert.equal(canRenameClient({ ...project, branch, project_log_only: true }, actor), false);
@@ -94,10 +94,11 @@ test('client rename uses the authenticated actor and sends only the client-name 
   }]);
 });
 
-test('client rename permits Indoor shared Governorates and Sales Manager projects', async () => {
+test('client rename permits Karkh Governorates and Sales Manager projects', async () => {
   for (const options of [
     { currentProject: { ...project, branch: 'Governorates' } },
     { role: 'Sales Manager', currentProject: { ...project, branch: 'Rasafa' } },
+    { role: 'Sales Manager', branch: 'Rasafa', currentProject: { ...project, branch: 'Governorates' } },
   ]) {
     const x = endpoint(options);
     assert.equal((await x.patch(rename)).status, 200);
@@ -109,6 +110,7 @@ test('client rename denies other roles and inaccessible branches before any writ
   for (const options of [
     { role: 'Outdoor Sales' }, { role: 'Admin' }, { role: 'CEO' },
     { currentProject: { ...project, branch: 'Rasafa' } },
+    { branch: 'Rasafa', currentProject: { ...project, branch: 'Governorates' } },
     { currentProject: { ...project, branch: null } },
     { currentProject: { ...project, project_log_only: true } },
     { branch: null },

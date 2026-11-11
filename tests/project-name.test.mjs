@@ -53,7 +53,7 @@ test('Indoor Sales can rename accessible project titles without owning the proje
   for (const branch of ['Karkh','Rasafa']) {
     const indoor = { ...actor, role: 'Indoor Sales', branch };
     assert.equal(canRenameProject({ ...project, created_by: 'outdoor', branch }, indoor), true);
-    assert.equal(canRenameProject({ ...project, branch: 'Governorates' }, indoor), true);
+    assert.equal(canRenameProject({ ...project, branch: 'Governorates' }, indoor), branch === 'Karkh');
     assert.equal(canRenameProject({ ...project, branch: branch === 'Karkh' ? 'Rasafa' : 'Karkh' }, indoor), false);
     assert.equal(canRenameProject({ ...project, branch, project_log_only: true }, indoor), false);
     assert.equal(canRenameProject({ ...project, branch: null }, indoor), false);
@@ -105,7 +105,7 @@ function endpoint(path, { role = actor.role, branch = 'Karkh', currentProject = 
 const request = body => ({ json: async () => body });
 const rename = { action: 'rename-project', projectId, projectName: '  New project  ', expectedUpdatedAt: updatedAt };
 
-for(const path of ['workspace','offline'])test(`${path} permits Indoor project titles in its branch and shared Governorates`,async()=>{
+for(const path of ['workspace','offline'])test(`${path} permits Karkh project titles in its branch and Governorates`,async()=>{
   for(const branch of ['Karkh','Governorates']){
     const x=endpoint(path,{role:'Indoor Sales',currentProject:{...project,created_by:'outdoor-creator',branch}});
     const response=path==='workspace'?await x.api.PATCH(request({...rename,clientName:'Must stay unchanged'})):await x.api.POST(request(savedRename));
@@ -117,6 +117,13 @@ for(const path of ['workspace','offline'])test(`${path} permits Indoor project t
     assert.equal(x.calls[0].args.p_expected_updated_at,updatedAt);
     assert.deepEqual(x.calls[0].args.p_payload,{projectName:path==='workspace'?'New project':'Saved project'});
   }
+});
+
+for(const path of ['workspace','offline'])test(`${path} denies Rasafa Indoor project title changes in Governorates before any RPC`,async()=>{
+  const x=endpoint(path,{role:'Indoor Sales',branch:'Rasafa',currentProject:{...project,created_by:actor.id,assigned_outdoor_sales_id:actor.id,branch:'Governorates'}});
+  const response=path==='workspace'?await x.api.PATCH(request(rename)):await x.api.POST(request(savedRename));
+  assert.equal(response.status,path==='workspace'?403:404);
+  assert.equal(x.calls.length,0);
 });
 
 for(const path of ['workspace','offline'])test(`${path} refuses Indoor title changes outside its branch`,async()=>{

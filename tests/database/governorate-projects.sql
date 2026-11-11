@@ -116,8 +116,12 @@ begin
   for index in 1..3 loop
     branch_value := case index when 1 then 'Karkh' when 2 then 'Rasafa' else null end;
     insert into public.clients(id,client_name,created_by) values(private_clients[index],'Private branch fixture',outdoor_id);
-    insert into public.projects(id,client_id,project_number,project_name,created_by,owner_id,branch,structure_readiness,sales_status)
-      values(private_ids[index],private_clients[index],'VERIFY-GOV-'||private_ids[index],'Private branch fixture',legacy_creator,legacy_creator,branch_value,'ready','new_lead');
+    -- The installed private-opening policy requires creator/engineer access in
+    -- addition to branch access. Give each private fixture its own branch's
+    -- engineer instead of broadening production opening permissions for QA.
+    insert into public.projects(id,client_id,project_number,project_name,created_by,owner_id,sales_engineer_id,branch,structure_readiness,sales_status)
+      values(private_ids[index],private_clients[index],'VERIFY-GOV-'||private_ids[index],'Private branch fixture',legacy_creator,legacy_creator,
+        case index when 1 then karkh_id when 2 then rasafa_id end,branch_value,'ready','new_lead');
     insert into public.openings(project_id,opening_code,floor,room,width,height,quantity,opening_type,opening_direction,site_readiness,created_by)
       values(private_ids[index],'PRIVATE-GOV-1','Ground','Office',100,100,1,'Window','Sliding','ready',outdoor_id);
   end loop;
@@ -126,10 +130,10 @@ begin
       values(shared_client,'VERIFY-INVALID-GOV-'||gen_random_uuid(),'Invalid null branch fixture',legacy_creator,null,'البصرة');
     raise exception using errcode='ZX001',message='A null branch accepted a governorate through SQL three-valued logic';
   exception when check_violation then null; end;
-  assert (select count(*)=3 from public.notifications n where n.entity_id=shared_id
-    and n.event_type='project_follow_up_assigned' and n.recipient_id in (karkh_id,rasafa_id,manager_id)),
-    'Unclaimed Governorates projects must notify both Indoor branches and Sales Manager';
-  assert not exists(select 1 from public.notifications n where n.entity_id=shared_id and n.recipient_id=unassigned_id);
+  assert (select count(*)=2 from public.notifications n where n.entity_id=shared_id
+    and n.event_type='project_follow_up_assigned' and n.recipient_id in (karkh_id,manager_id)),
+    'Unclaimed Governorates projects must notify Karkh Indoor Sales and Sales Manager';
+  assert not exists(select 1 from public.notifications n where n.entity_id=shared_id and n.recipient_id in (rasafa_id,unassigned_id));
 
   foreach test_actor_id in array array[karkh_id,rasafa_id,unassigned_id] loop
     perform set_config('request.jwt.claim.sub',test_actor_id::text,true);
@@ -143,13 +147,24 @@ begin
       assert not exists(select 1 from public.clients c where c.id=shared_client);
       assert not exists(select 1 from public.openings o where o.project_id=any(array_append(private_ids,shared_id))),
         'An unassigned Indoor employee cannot read shared or private openings';
+    elsif test_actor_id=rasafa_id then
+      assert cardinality(visible_ids)=1 and private_ids[2]=any(visible_ids),
+        'Rasafa Indoor Sales must see its private branch without Governorates';
+      assert not public.can_view_sales_project(shared_id) and not public.can_access_indoor_project_branch(shared_id);
+      assert not exists(select 1 from public.openings o where o.project_id=shared_id);
+      assert exists(select 1 from public.openings o where o.project_id=private_ids[2]),
+        'Rasafa retains private opening access when assigned as its sales engineer';
+      assert not exists(select 1 from public.project_workflow_events e where e.project_id=shared_id);
+      assert not exists(select 1 from public.clients c where c.id=shared_client);
+      assert not exists(select 1 from public.documents d where d.id=shared_document);
+      assert not exists(select 1 from public.notifications n where n.entity_id=shared_id and n.recipient_id=test_actor_id);
     else
       assert cardinality(visible_ids)=2 and shared_id=any(visible_ids),
-        'Each Indoor team sees its private branch plus shared Governorates';
-      assert (case when test_actor_id=karkh_id then private_ids[1] else private_ids[2] end)=any(visible_ids);
+        'Karkh Indoor Sales sees its private branch plus Governorates';
+      assert private_ids[1]=any(visible_ids);
       assert public.can_view_sales_project(shared_id) and public.can_access_indoor_project_branch(shared_id);
       assert exists(select 1 from public.openings o where o.project_id=shared_id),
-        'Both assigned Indoor teams can read a Governorates opening schedule';
+        'Karkh Indoor Sales can read a Governorates opening schedule';
       assert not exists(select 1 from public.openings o
         where o.project_id in (case when test_actor_id=karkh_id then private_ids[2] else private_ids[1] end,private_ids[3])),
         'Shared opening access must not expose the other branch or unmarked projects';
@@ -163,7 +178,7 @@ begin
 
   perform set_config('request.jwt.claim.sub','',true);
   perform set_config('request.jwt.claims','{"role":"service_role"}',true);
-  foreach test_actor_id in array array[karkh_id,rasafa_id] loop
+  foreach test_actor_id in array array[karkh_id,manager_id] loop
     perform public.require_indoor_project_branch(shared_id,test_actor_id);
     select p.updated_at into updated_stamp from public.projects p where p.id=shared_id;
     result := public.sync_field_change(gen_random_uuid(),test_actor_id,shared_id,'follow-up',
@@ -178,11 +193,21 @@ begin
     set local role authenticated;
     perform public.deliver_due_follow_up_notifications();
     assert exists(select 1 from public.notifications n where n.entity_id=shared_id and n.recipient_id=test_actor_id and n.event_type='follow_up_due' and n.read_at is null),
-      'Either branch owner can receive due reminders for shared projects';
+      'Eligible Karkh and Sales Manager owners receive due Governorates reminders';
     reset role;
     perform set_config('request.jwt.claim.sub','',true);
     perform set_config('request.jwt.claims','{"role":"service_role"}',true);
   end loop;
+  begin
+    perform public.require_indoor_project_branch(shared_id,rasafa_id);
+    raise exception using errcode='ZX001',message='Rasafa Indoor RPC actor gained Governorates access';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform public.sync_field_change(gen_random_uuid(),rasafa_id,shared_id,'follow-up',
+      jsonb_build_object('note','Forbidden Governorates follow-up','nextFollowUp',now()+interval '1 day',
+        'followUpType','call','followUpOwnerId',karkh_id),now(),updated_stamp);
+    raise exception using errcode='ZX001',message='Rasafa Indoor sync changed a Governorates project';
+  exception when insufficient_privilege then null; end;
   begin
     perform public.require_indoor_project_branch(shared_id,unassigned_id);
     raise exception using errcode='ZX001',message='Unassigned Indoor RPC actor gained shared access';
@@ -209,7 +234,7 @@ begin
   assert not has_function_privilege('authenticated','public.sync_field_change(uuid,uuid,uuid,text,jsonb,timestamptz,timestamptz)','execute');
   assert not has_function_privilege('authenticated','public.require_indoor_project_branch(uuid,uuid)','execute');
   assert not has_function_privilege('authenticated','public.sales_notification_recipients(uuid)','execute');
-  raise notice 'PASS: 12 governorates, validation, retries, online/offline intake, employee branches, shared RLS/RPC access, private isolation, notifications and immutable locations';
+  raise notice 'PASS: 12 governorates, validation, retries, online/offline intake, Karkh-only Indoor RLS/RPC access, Sales Manager access, private isolation, notifications and immutable locations';
 end;
 $test$;
 rollback;

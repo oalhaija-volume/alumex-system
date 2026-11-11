@@ -2,8 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-function load(path,deps={}){const output=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',output)(name=>{if(name==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts',{});if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts');if(name==='@/lib/measurements/visitHistory')return load('../src/lib/measurements/visitHistory.ts');if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');assert.ok(name in deps,name);return deps[name];},exports);return exports;}
+import * as React from 'react';
+import * as jsxRuntime from 'react/jsx-runtime';
+import {renderToStaticMarkup} from 'react-dom/server';
+function load(path,deps={}){const output=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;const exports={};new Function('require','exports',output)(name=>{if(name==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts',{});if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts');if(name==='@/lib/measurements/visitHistory')return load('../src/lib/measurements/visitHistory.ts');if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');assert.ok(name in deps,name);return deps[name];},exports);return exports;}
 const followUps=load('../src/lib/workflow/followUps.ts');
+const branchAccess=load('../src/lib/auth/projectBranchAccess.ts');
 const stages=load('../src/lib/workflow/stages.ts');
 const tasks=load('../src/lib/workflow/salesTasks.ts',{'./stages':stages});
 const indoor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',role:'Indoor Sales',name:'Indoor'};
@@ -14,6 +18,55 @@ test('scheduling requires a contact type, valid owner and date, and a descriptio
  assert.deepEqual(followUps.normalizeFollowUp(schedule),{...schedule,nextFollowUp:'2026-10-08T07:00:00.000Z',followUpDetail:''});
  for(const patch of [{followUpType:''},{followUpType:'invented'},{followUpOwnerId:''},{followUpOwnerId:'not-a-uuid'},{nextFollowUp:'invalid'},{followUpType:'other',followUpDetail:''},{followUpType:'other',followUpDetail:'x'.repeat(121)},{note:'x'.repeat(2001)}])assert.throws(()=>followUps.normalizeFollowUp({...schedule,...patch}));
  assert.equal(followUps.normalizeFollowUp({...schedule,followUpType:'other',followUpDetail:'  Video call  '}).followUpDetail,'Video call');
+});
+
+test('Governorates follow-up owners require Karkh Indoor Sales or an actual Sales Manager',()=>{
+ for(const [employee,eligible] of [
+  [{role:'Indoor Sales',branch:'Karkh'},true],
+  [{role:'Indoor Sales',branch:'Rasafa'},false],
+  [{role:'Indoor Sales',branch:null},false],
+  [{role:'Indoor Sales'},false],
+  [{role:'Sales Manager',branch:'Rasafa'},true],
+  [{role:'Sales Manager'},true],
+  [{role:'Admin',branch:'Karkh'},false],
+  [{branch:'Karkh'},false],
+  [{},false],
+ ]){
+  assert.equal(branchAccess.canOwnProjectFollowUp(employee,'Governorates'),eligible,JSON.stringify(employee));
+  for(const branch of ['Karkh','Rasafa',null,undefined])assert.equal(branchAccess.canOwnProjectFollowUp(employee,branch),true,'Other project branches retain existing owner eligibility');
+ }
+});
+
+test('the Governorates owner dropdown excludes stale Rasafa and metadata-free entries and clears their selection',()=>{
+ const directory=[
+  {id:indoor.id,name:'Karkh employee',role:'Indoor Sales',branch:'Karkh'},
+  {id:'22222222-2222-4222-8222-222222222222',name:'Rasafa employee',role:'Indoor Sales',branch:'Rasafa'},
+  {id:'33333333-3333-4333-8333-333333333333',name:'Sales manager',role:'Sales Manager',branch:'Rasafa'},
+  {id:'44444444-4444-4444-8444-444444444444',name:'Legacy employee'},
+ ];
+ const {FollowUpFields}=load('../src/components/workflow/FollowUpFields.tsx',{
+  react:React,'react/jsx-runtime':jsxRuntime,
+  '@/components/i18n/I18nProvider':{useI18n:()=>({term:value=>value})},
+  '@/lib/workflow/followUps':followUps,'./ui':{field:'field'},
+ });
+ const ownerSelect=(branch,owner)=>{
+  const markup=renderToStaticMarkup(React.createElement(FollowUpFields,{project:{...base,branch,follow_up_owner_id:owner},actor:{...indoor,branch:'Karkh'},indoorSales:directory}));
+  const select=markup.match(/<select\b[^>]*name="followUpOwnerId"[^>]*>([\s\S]*?)<\/select>/);
+  assert.ok(select);
+  return [...select[1].matchAll(/<option\b([^>]*)>/g)].map(([,attributes])=>({value:attributes.match(/value="([^"]*)"/)[1],selected:/\bselected(?:=|\s|$)/.test(attributes)}));
+ };
+ for(const staleOwner of [directory[1].id,directory[3].id]){
+  const options=ownerSelect('Governorates',staleOwner);
+  assert.deepEqual(options.map(option=>option.value),['',directory[0].id,directory[2].id]);
+  assert.deepEqual(options.filter(option=>option.selected).map(option=>option.value),['']);
+ }
+ const eligible=ownerSelect('Governorates',directory[2].id);
+ assert.deepEqual(eligible.filter(option=>option.selected).map(option=>option.value),[directory[2].id]);
+ for(const branch of ['Karkh','Rasafa']){
+  const options=ownerSelect(branch,directory[1].id);
+  assert.deepEqual(options.map(option=>option.value),['',...directory.map(employee=>employee.id)]);
+  assert.deepEqual(options.filter(option=>option.selected).map(option=>option.value),[directory[1].id]);
+ }
 });
 test('reminders become due exactly at the scheduled instant and stay assigned to Indoor Sales',()=>{
  const time=Date.parse(base.next_follow_up_at);

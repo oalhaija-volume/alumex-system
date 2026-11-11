@@ -8,7 +8,7 @@ import { canCancelProject, normalizeClientCancellation, canDelayMeasurements, ca
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
 import { normalizeLegacyOutdoorSalesId } from '@/lib/intake/legacyOutdoorSales';
 import { canAccessCRM } from '@/lib/auth/permissions';
-import { canAccessProjectBranch } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, canOwnProjectFollowUp } from '@/lib/auth/projectBranchAccess';
 import { isOutdoorAssignmentMember } from '@/lib/auth/outdoorTeams';
 import { canAccessFieldProject, visibleFieldState } from './projectAccess';
 import { normalizeFollowUp,type FollowUpInput } from '@/lib/workflow/followUps';
@@ -283,6 +283,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if(action==='follow-up'){
     const owner=s.indoorSales?.find(e=>e.id===payload.followUpOwnerId);
     if(!owner)throw new Error('Choose an Indoor Sales employee from the list. Connect online to refresh employees.');
+    if(!canOwnProjectFollowUp(owner,p.branch))throw new Error('Governorates follow-up must be assigned to Karkh Indoor Sales or a Sales Manager.');
     p={...p,next_follow_up_at:String(payload.nextFollowUp),project_notes:String(payload.note??''),follow_up_type:String(payload.followUpType),follow_up_detail:String(payload.followUpDetail),follow_up_owner_id:owner.id,followUpOwner:owner.name};
    }
    if(['delay-measurements','assign-measurements','ready','request-openings','resume-measurements','finish'].includes(action)){
@@ -335,7 +336,7 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
       if(!old)throw new Error('Offline account unavailable.');
       const registrations=new Set(old.queue.filter(change=>change.action==='register').map(change=>change.projectId));
       const unavailableProjectIds=['Indoor Sales','Outdoor Sales'].includes(workspace.actor.role)?old.projects.filter(project=>!remoteProjects.has(project.id)&&(!registrations.has(project.id)||old.unavailableProjectIds?.includes(project.id))).map(project=>project.id):[];
-      return {...old,actor:workspace.actor,unavailableProjectIds,projects:old.projects.map(project=>remoteProjects.has(project.id)?withCurrentProjectAccess(project,remoteProjects.get(project.id)!):project)};
+      return {...old,actor:workspace.actor,indoorSales:workspace.indoorSales,unavailableProjectIds,projects:old.projects.map(project=>remoteProjects.has(project.id)?withCurrentProjectAccess(project,remoteProjects.get(project.id)!):project)};
      });
     }
     if(s && url!=='/api/workspace' && data.project && data.openings && activeFieldUser()===s.actor.id)await updateFieldState(s.actor.id,old=>{
@@ -383,7 +384,7 @@ export async function reviewServerProject(projectId:string){
  const data=await response.json() as FieldState;if(data.actor.id!==activeFieldUser())throw new Error('Sign in with the employee who saved this work.');
  const snapshot=data.projects.find(p=>p.id===projectId&&canAccessProjectBranch(data.actor,p.branch));
  const project=snapshot&&canAccessFieldProject({...data,unavailableProjectIds:[]},snapshot)?snapshot:undefined;
- await updateFieldState(data.actor.id,s=>{if(!s)throw new Error('Offline account unavailable.');return {...s,actor:data.actor,unavailableProjectIds:snapshot?(s.unavailableProjectIds??[]).filter(id=>id!==projectId):[...new Set([...(s.unavailableProjectIds??[]),projectId])],projects:s.projects.map(p=>p.id===projectId&&snapshot?withCurrentProjectAccess(p,snapshot):p)};});
+ await updateFieldState(data.actor.id,s=>{if(!s)throw new Error('Offline account unavailable.');return {...s,actor:data.actor,indoorSales:data.indoorSales??s.indoorSales,unavailableProjectIds:snapshot?(s.unavailableProjectIds??[]).filter(id=>id!==projectId):[...new Set([...(s.unavailableProjectIds??[]),projectId])],projects:s.projects.map(p=>p.id===projectId&&snapshot?withCurrentProjectAccess(p,snapshot):p)};});
  if(!project)throw new Error('Project no longer available. Your saved work remains on this device.');
  return {project,openings:data.openings.filter(o=>o.projectId===projectId),measurementReports:(data.measurementReports??[]).filter(r=>r.project_id===projectId)};
 }
@@ -394,7 +395,11 @@ export async function retryReviewedProject(projectId:string,updatedAt:string,cor
   if(!s)throw new Error('Offline account unavailable.');
   if(!canAccessFieldProject(s,s.projects.find(p=>p.id===projectId)))throw new Error('Project is not available to this employee.');
   if(corrected&&!canAccessCRM(s.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');
-  if(corrected&&!s.indoorSales?.some(e=>e.id===corrected.followUpOwnerId))throw new Error('Choose an Indoor Sales employee from the list. Connect online to refresh employees.');
+  if(corrected){
+   const owner=s.indoorSales?.find(e=>e.id===corrected.followUpOwnerId);
+   if(!owner)throw new Error('Choose an Indoor Sales employee from the list. Connect online to refresh employees.');
+   if(!canOwnProjectFollowUp(owner,s.projects.find(p=>p.id===projectId)?.branch))throw new Error('Governorates follow-up must be assigned to Karkh Indoor Sales or a Sales Manager.');
+  }
   const queue=s.queue.map(c=>c.projectId===projectId?{...c,error:undefined,...(corrected&&c.id===correction?.changeId&&c.action==='follow-up'?{id:crypto.randomUUID(),payload:corrected}:{})}:c);
   const latest=queue.filter(c=>c.projectId===projectId&&c.action==='follow-up').at(-1)?.payload;
   return {...s,queue,projects:s.projects.map(p=>p.id===projectId?{...p,serverUpdatedAt:updatedAt,...(corrected&&latest?{next_follow_up_at:String(latest.nextFollowUp),project_notes:String(latest.note??''),follow_up_type:String(latest.followUpType??''),follow_up_detail:String(latest.followUpDetail??''),follow_up_owner_id:String(latest.followUpOwnerId??''),followUpOwner:s.indoorSales?.find(e=>e.id===latest.followUpOwnerId)?.name??null}:{})}:p)};

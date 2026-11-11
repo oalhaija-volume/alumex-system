@@ -29,7 +29,9 @@ export function applyQuotationDiscount(snapshot:QuoteSnapshot,discountPercent:un
  return quotation;
 }
 export const money = (n:number) => new Intl.NumberFormat('en-IQ',{maximumFractionDigits:0}).format(n)+' IQD';
-export const QUOTATION_SYSTEM_RATE_MIN = 265_000;
+export const QUOTATION_SYSTEM_RATE_MIN = 250_000;
+// Recommended selling targets are separate from the sales override minimum.
+const SELLING_GUIDANCE_RATE_MIN = 265_000;
 export const CURTAIN_WALL_ARCH_PRICE = 150_000;
 export const CURTAIN_WALL_ARCH_ID = 'curtain-wall-arch';
 const curtainWallArchReview = 'Review the curtain wall arch in Edit quotation before updating prices.';
@@ -71,14 +73,15 @@ export function openingAreaBand(area:number):'red'|'orange'|'yellow'|'green' {
 }
 export function openingMinimumSellingRate(area:number,opening?:OpeningSellingDetails) {
  if(!Number.isFinite(area)||area<=0)throw new Error('Complete all opening measurements first.');
+ const minimum=Math.max(SELLING_GUIDANCE_RATE_MIN,QUOTATION_SYSTEM_RATE_MIN);
  if(opening?.opening_direction==='Hinged'){
-  if(opening.opening_type==='Window')return Math.max(260_000,QUOTATION_SYSTEM_RATE_MIN);
-  if(opening.opening_type==='Door')return Math.max(305_000,QUOTATION_SYSTEM_RATE_MIN);
+  if(opening.opening_type==='Window')return Math.max(260_000,minimum);
+  if(opening.opening_type==='Door')return Math.max(305_000,minimum);
  }
- if(area<=3)return Math.max(278_000,QUOTATION_SYSTEM_RATE_MIN);
- if(area<4)return Math.max(265_000,QUOTATION_SYSTEM_RATE_MIN);
- if(area<6)return Math.max(250_000,QUOTATION_SYSTEM_RATE_MIN);
- return Math.max(240_000,QUOTATION_SYSTEM_RATE_MIN);
+ if(area<=3)return Math.max(278_000,minimum);
+ if(area<4)return Math.max(265_000,minimum);
+ if(area<6)return Math.max(250_000,minimum);
+ return Math.max(240_000,minimum);
 }
 export function openingSellingBand(area:number,rate:number,opening?:OpeningSellingDetails):ReturnType<typeof openingAreaBand> {
  if(!Number.isFinite(area)||area<=0||!Number.isFinite(rate)||rate<=0)return 'red';

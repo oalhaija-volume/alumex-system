@@ -90,6 +90,7 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: discounts stay in s
   const save = () => page.getByRole('button', { name: term('Save revised quotation'), exact: true });
   const documentTotal = () => page.locator('.document-total strong');
   const noDiscountControls = async () => {
+    await expect(page.getByRole('heading', { name: term('Quotation discount'), exact: true })).toHaveCount(0);
     await expect(page.getByRole('checkbox', { name: term('Apply 5% discount'), exact: true })).toHaveCount(0);
     await expect(page.getByRole('region', { name: term('Quotation discount'), exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: term('Save discount'), exact: true })).toHaveCount(0);
@@ -113,6 +114,7 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: discounts stay in s
   expect(saved).toEqual(legacy);
   await page.getByRole('button', { name: term('Generate contract'), exact: true }).click();
   await expect(page.getByRole('link', { name: term('Open contract →'), exact: true })).toBeVisible();
+  await noDiscountControls();
   expect(saved).toEqual(legacy);
   await edit().click(); await noDiscountControls();
   await expect(page.getByText(term(removalNotice), { exact: true })).toBeVisible();

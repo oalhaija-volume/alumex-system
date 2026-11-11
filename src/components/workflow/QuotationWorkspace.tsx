@@ -82,14 +82,6 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const discountChanged=QUOTATION_DISCOUNTS_ENABLED&&discountPercent!==(flow?.quotation.discount?.percent??0);
  let discountPreview:QuoteSnapshot|undefined;
  if(flow&&canUpdatePrices&&!editing){try{discountPreview=applyQuotationDiscount(flow.quotation,discountPercent);}catch{/* Invalid saved amounts cannot be discounted. */}}
- function discountOption(quotation?:QuoteSnapshot){
-  if(!QUOTATION_DISCOUNTS_ENABLED)return null;
-  return <>
-   <label className="flex min-h-11 items-center gap-3 text-sm font-semibold"><input type="checkbox" aria-label={term('Apply 5% discount')} aria-describedby="quotation-discount-help" disabled={busy} checked={discountPercent===5} onChange={event=>{setDiscountPercent(event.target.checked?5:0);setApproved(false);}}/>{term('Apply 5% discount')}</label>
-   <p id="quotation-discount-help" className="text-xs leading-5 text-slate-600">{term('5% applies to the full quotation subtotal.')}</p>
-   {quotation&&<dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3"><div><dt className="text-slate-600">{term('Subtotal')}</dt><dd className="mt-1 font-semibold">{formatMoney(quotation.discount?.subtotal??quotation.total)}</dd></div><div><dt className="text-slate-600">{term('Discount (5%)')}</dt><dd className="mt-1 font-semibold">−{formatMoney(quotation.discount?.amount??0)}</dd></div><div><dt className="text-slate-600">{term('Final total')}</dt><dd className="mt-1 font-semibold text-blue-900">{formatMoney(quotation.total)}</dd></div></dl>}
-  </>;
- }
  const sellingQuote=editing?draftQuotation:discountPreview??flow?.quotation;
  const sellingSuggestion=flow&&sellingQuote&&!archived&&!needsRevision&&canEdit&&!pricePreview?quotationSellingSuggestion(sellingQuote,catalog):null;
  const targetRates=new Map(sellingSuggestion?.openingRates.map(opening=>[opening.openingId,opening.rate]));
@@ -291,7 +283,6 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
    </section>}
    <StandaloneItems recordedAreas={recordedFacadeAreas(measured)} focusRequest={productPickerRequest} items={additionalItems} catalog={catalog} onChange={setAdditionalItems}/>
    <div id={`quotation-save-${projectId}`} tabIndex={-1} role="region" aria-label={term('Save quotation')} className={`${card} scroll-mt-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700`}>
-    {QUOTATION_DISCOUNTS_ENABLED&&<div className="mb-5 border-b border-slate-200 pb-5">{discountOption(draftQuotation)}</div>}
     <div className="flex flex-wrap justify-between gap-3"><div><p className="text-sm font-semibold">{flow?term("Revised total"):term("Quotation total")}</p>{flow&&<p className="mt-1 text-xs text-slate-500">{term("Currently saved:")} {formatMoney(flow.quotation.total)}</p>}</div><p className="text-xl font-semibold" aria-label={term("Draft total")}>{draftTotal===undefined?term("Complete selections"):formatMoney(draftTotal)}</p></div>
     {pricingError&&<p role="status" className="mt-3 text-sm text-amber-800">{errorMessage(pricingError)}</p>}
     {hasUnappliedGroupRates&&<p role="status" className="mt-3 text-sm text-amber-800">{term('Apply the group prices or clear those fields before saving.')}</p>}
@@ -305,14 +296,6 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <label className="min-w-0 text-sm">{term("Quotation version")}<select disabled={busy||!!pricePreview} aria-label={term("Quotation version")} value={viewVersion} onChange={e=>{setViewVersion(e.target.value);setApproved(false);setDiscountPercent(QUOTATION_DISCOUNTS_ENABLED?flow.quotation.discount?.percent??0:0);setReplaceContract(false);}} className={field}><option value="current">{term('Revision {number} · Current',{number:formatNumber(flow.quotation.version??1)})}</option>{data.history?.map(h=><option key={h.version} value={h.version}>{term('Revision {number} · Superseded',{number:formatNumber(h.version)})}</option>)}</select></label>
     {canEdit?<div className="flex flex-wrap gap-3"><button disabled={busy||!!pricePreview} className={button} onClick={()=>{clearActionError();setEditing(true);setViewVersion('current');setApproved(false);}}>{term("Edit quotation")}</button>{canUpdatePrices&&<button disabled={busy||!!pricePreview||discountChanged} className={secondary} onClick={()=>void updatePrices()}>{term(previewLoading?'Loading prices…':'Update prices')}</button>}</div>:waiting?null:<p className="text-sm text-slate-600">{term("Signed contract · Quotation locked")}</p>}
    </div>}
-   {QUOTATION_DISCOUNTS_ENABLED&&!editing&&!archived&&canUpdatePrices&&!pricePreview&&<section aria-label={term('Quotation discount')} className={`${card} mb-5 print:hidden`}>
-    <h2 className="mb-2 font-semibold">{term('Quotation discount')}</h2>
-    {discountOption(discountPreview)}
-    <p className="mt-4 text-xs leading-5 text-slate-600">{term('Saving this discount creates a new quotation revision and resets approval.')}</p>
-    {discountChanged&&<p role="status" className="mt-2 text-sm text-amber-800">{term('Discount preview: opening colors reflect the selected discount. Amounts below remain the saved quotation until you save.')}</p>}
-    {flow.stage==='contract'&&<label className="mt-4 flex items-start gap-3 rounded-md bg-amber-50 p-4 text-sm leading-6 text-amber-900"><input type="checkbox" disabled={busy} checked={replaceContract} onChange={event=>setReplaceContract(event.target.checked)} className="mt-1"/>{term('Replace the unsigned contract. The previous document will be kept in history, and the revised quotation must be approved before a new contract can be generated.')}</label>}
-    <button type="button" disabled={busy||!discountPreview||!discountChanged||(flow.stage==='contract'&&!replaceContract)} className={`${button} mt-4`} onClick={()=>void act('set-discount')}>{term(busy?'Saving discount…':'Save discount')}</button>
-   </section>}
    {sellingSuggestion&&suggestedPricing&&<div className={suggestionHidden?'mb-5 print:hidden':'mb-5 rounded-lg border border-green-200 bg-green-50 p-4 sm:p-5 print:hidden'}>
     <div className="flex flex-wrap items-center justify-between gap-3">
      {!suggestionHidden&&<h2 className="font-semibold text-slate-900">{term('Suggested average system rate')}</h2>}

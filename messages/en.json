@@ -2904,7 +2904,22 @@
     "Save a quotation before updating its prices.": "Save a quotation before updating its prices.",
     "Confirm that you want to update prices for this quotation.": "Confirm that you want to update prices for this quotation.",
     "Catalog prices changed. Preview the updated prices again before saving.": "Catalog prices changed. Preview the updated prices again before saving.",
-    "A catalog unit changed. Use Edit quotation to review the affected items before updating prices.": "A catalog unit changed. Use Edit quotation to review the affected items before updating prices."
+    "A catalog unit changed. Use Edit quotation to review the affected items before updating prices.": "A catalog unit changed. Use Edit quotation to review the affected items before updating prices.",
+    "Aluminum sections": "Aluminum sections",
+    "Add aluminum section": "Add aluminum section",
+    "Add a section with its price per m² for window and door quotations.": "Add a section with its price per m² for window and door quotations.",
+    "Section name": "Section name",
+    "Price (IQD / m²)": "Price (IQD / m²)",
+    "Add section": "Add section",
+    "Cancel": "Cancel",
+    "Adding…": "Adding…",
+    "Aluminum section added. It is now available in new quotations.": "Aluminum section added. It is now available in new quotations.",
+    "Enter an aluminum section name between 1 and 100 characters.": "Enter an aluminum section name between 1 and 100 characters.",
+    "Enter a positive price up to 10,000,000,000 IQD.": "Enter a positive price up to 10,000,000,000 IQD.",
+    "Choose an aluminum section name that is not reserved for another catalog product.": "Choose an aluminum section name that is not reserved for another catalog product.",
+    "An item with this name already exists in the catalog.": "An item with this name already exists in the catalog.",
+    "Unable to check existing catalog sections. Try again.": "Unable to check existing catalog sections. Try again.",
+    "Unable to add the aluminum section. Try again.": "Unable to add the aluminum section. Try again."
   },
   "registration": {
     "title": "New client & project",

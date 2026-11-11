@@ -2904,7 +2904,22 @@
     "Save a quotation before updating its prices.": "احفظ عرض سعر قبل تحديث أسعاره.",
     "Confirm that you want to update prices for this quotation.": "أكد رغبتك في تحديث أسعار عرض السعر هذا.",
     "Catalog prices changed. Preview the updated prices again before saving.": "تغيّرت أسعار الدليل. عاين الأسعار المحدّثة مجدداً قبل الحفظ.",
-    "A catalog unit changed. Use Edit quotation to review the affected items before updating prices.": "تغيّرت وحدة أحد أصناف الدليل. استخدم تعديل عرض السعر لمراجعة الأصناف المتأثرة قبل تحديث الأسعار."
+    "A catalog unit changed. Use Edit quotation to review the affected items before updating prices.": "تغيّرت وحدة أحد أصناف الدليل. استخدم تعديل عرض السعر لمراجعة الأصناف المتأثرة قبل تحديث الأسعار.",
+    "Aluminum sections": "قطاعات الألمنيوم",
+    "Add aluminum section": "إضافة قطاع ألمنيوم",
+    "Add a section with its price per m² for window and door quotations.": "أضف قطاعاً وسعره للمتر المربع لاستخدامه في عروض أسعار الشبابيك والأبواب.",
+    "Section name": "اسم القطاع",
+    "Price (IQD / m²)": "السعر (د.ع / م²)",
+    "Add section": "إضافة القطاع",
+    "Cancel": "إلغاء",
+    "Adding…": "جارٍ الإضافة…",
+    "Aluminum section added. It is now available in new quotations.": "تمت إضافة قطاع الألمنيوم وأصبح متاحاً في عروض الأسعار الجديدة.",
+    "Enter an aluminum section name between 1 and 100 characters.": "أدخل اسماً لقطاع الألمنيوم يتكون من 1 إلى 100 حرف.",
+    "Enter a positive price up to 10,000,000,000 IQD.": "أدخل سعراً موجباً لا يتجاوز 10,000,000,000 دينار عراقي.",
+    "Choose an aluminum section name that is not reserved for another catalog product.": "اختر اسماً لقطاع الألمنيوم غير محجوز لمنتج آخر في الدليل.",
+    "An item with this name already exists in the catalog.": "يوجد منتج بهذا الاسم في دليل الأسعار.",
+    "Unable to check existing catalog sections. Try again.": "تعذر التحقق من القطاعات الموجودة في الدليل. حاول مرة أخرى.",
+    "Unable to add the aluminum section. Try again.": "تعذرت إضافة قطاع الألمنيوم. حاول مرة أخرى."
   },
   "registration": {
     "title": "عميل ومشروع جديد",

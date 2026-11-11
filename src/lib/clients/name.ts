@@ -5,7 +5,7 @@ export function canRenameClient(
   actor: { role: string; branch?: string | null },
 ) {
   return !project.project_log_only
-    && (actor.role === 'Indoor Sales' || actor.role === 'Sales Manager')
+    && (actor.role === 'Admin' || actor.role === 'Indoor Sales' || actor.role === 'Sales Manager')
     && canAccessProjectBranch(actor, project.branch);
 }
 

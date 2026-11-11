@@ -7,7 +7,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ pr
   const access = await salesProject(projectId, true);
   if (access.response) return access.response;
   if (!canRenameClient(access.project, { role: access.auth.role, branch: access.auth.profile?.branch })) {
-    return NextResponse.json({ error: 'Only Indoor Sales can change client names.' }, { status: 403 });
+    return NextResponse.json({ error: 'Only Admin, Indoor Sales and Sales Managers can change client names.' }, { status: 403 });
   }
   const body = await request.json().catch(() => null);
   let payload;

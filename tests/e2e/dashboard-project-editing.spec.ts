@@ -180,13 +180,19 @@ for (const locale of ['en', 'ar'] as const) {
     expect(errors).toEqual([]);
   });
 
-  test(`${locale}: Indoor Sales edits the shared client name and preserves dashboard state`, async ({ page }, testInfo) => {
-    const { state, target, details, projects, errors, writes, failures } = await dashboard(page, locale, 'Indoor Sales');
+  for (const role of ['Indoor Sales', 'Admin']) test(`${locale}: ${role} edits the shared client name and preserves dashboard state`, async ({ page }, testInfo) => {
+    const { state, target, details, projects, errors, writes, failures } = await dashboard(page, locale, role);
+    const before = structuredClone(state.projects);
     const tr = (value: string) => term(locale, value), messages = locale === 'ar' ? arMessages : enMessages;
     const filters = await combineFilters(page, locale);
     await expect(projects.locator('article')).toHaveCount(1);
-    await expect(target.getByRole('button', { name: tr('Edit project name'), exact: true })).toBeVisible();
-    await expect(target.getByRole('button', { name: tr('Change Indoor Sales'), exact: true })).toHaveCount(0);
+    if (role === 'Admin') {
+      await expect(target.getByRole('button', { name: tr('Edit project name'), exact: true })).toHaveCount(0);
+      await expect(target.getByRole('button', { name: tr('Change Indoor Sales'), exact: true })).toBeVisible();
+    } else {
+      await expect(target.getByRole('button', { name: tr('Edit project name'), exact: true })).toBeVisible();
+      await expect(target.getByRole('button', { name: tr('Change Indoor Sales'), exact: true })).toHaveCount(0);
+    }
     const edit = target.getByRole('button', { name: tr('Edit client name'), exact: true });
     await edit.click();
     const form = target.getByRole('form', { name: tr('Edit client name'), exact: true });
@@ -219,8 +225,9 @@ for (const locale of ['en', 'ar'] as const) {
     await expect(second.getByText(proposed, { exact: true })).toBeVisible();
     await expect(target.getByRole('heading')).toHaveText('Residence المنصور');
     expect(state.projects.map(project => project.project_name)).toEqual(['Residence المنصور', 'Second site موقع ثان', 'Basra site موقع البصرة']);
+    expect(state.projects).toEqual([{ ...before[0], client_name: proposed }, { ...before[1], client_name: proposed }, before[2]]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await target.screenshot({ path: testInfo.outputPath(`client-name-${locale}.png`) });
+    await target.screenshot({ path: testInfo.outputPath(`client-name-${role.replaceAll(' ', '-')}-${locale}.png`) });
     expect(errors).toEqual([]);
   });
 
@@ -229,7 +236,7 @@ for (const locale of ['en', 'ar'] as const) {
     const before = structuredClone(state.projects[0]);
     const tr = (value: string) => term(locale, value), messages = locale === 'ar' ? arMessages : enMessages;
     const filters = await combineFilters(page, locale);
-    await expect(target.getByRole('button', { name: tr('Edit client name'), exact: true })).toHaveCount(0);
+    await expect(target.getByRole('button', { name: tr('Edit client name'), exact: true })).toBeVisible();
     await expect(target.getByRole('button', { name: tr('Edit project name'), exact: true })).toHaveCount(0);
     const edit = target.getByRole('button', { name: tr('Change Indoor Sales'), exact: true });
     await edit.click();

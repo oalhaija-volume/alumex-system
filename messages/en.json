@@ -1279,6 +1279,7 @@
   },
   "terms": {
     "Filters": "Filters",
+    "Only Admin, Indoor Sales and Sales Managers can change client names.": "Only Admin, Indoor Sales and Sales Managers can change client names.",
     "Only Indoor Sales and Sales Managers can change project names.": "Only Indoor Sales and Sales Managers can change project names.",
     "Change Indoor Sales": "Change Indoor Sales",
     "Responsible Indoor Sales updated.": "Responsible Indoor Sales updated.",

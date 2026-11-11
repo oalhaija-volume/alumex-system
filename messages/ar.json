@@ -1279,6 +1279,7 @@
   },
   "terms": {
     "Filters": "عوامل التصفية",
+    "Only Admin, Indoor Sales and Sales Managers can change client names.": "يمكن فقط للمسؤول والمبيعات الداخلية ومديري المبيعات تعديل أسماء العملاء.",
     "Only Indoor Sales and Sales Managers can change project names.": "يمكن فقط للمبيعات الداخلية ومديري المبيعات تعديل أسماء المشاريع.",
     "Change Indoor Sales": "تغيير موظف المبيعات الداخلية",
     "Responsible Indoor Sales updated.": "تم تحديث موظف المبيعات الداخلية المسؤول.",

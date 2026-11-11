@@ -108,7 +108,7 @@ test('Projects updates every visible project linked to the renamed client', asyn
   expect(errors).toEqual([]); expect(unexpected).toEqual([]);
 });
 
-for (const locale of ['en', 'ar'] as const) test(`${locale}: Indoor Sales changes the client name with validation and conflict protection`, async ({ page, context, request }) => {
+for (const locale of ['en', 'ar'] as const) for (const role of ['Indoor Sales', 'Admin']) test(`${locale}: ${role} changes the client name with validation and conflict protection`, async ({ page, context, request }) => {
   const messages = JSON.parse(readFileSync(resolve(`messages/${locale}.json`), 'utf8'));
   const term = (value: string) => messages.terms[value] ?? value;
   const login = await request.get('/login');
@@ -140,7 +140,7 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: Indoor Sales change
     if (url.pathname.startsWith('/api/') || !['GET', 'HEAD', 'OPTIONS'].includes(req.method())) { unexpected.push(req.method() + ' ' + url.pathname); return route.fulfill({ status: 405, json: { error: 'Unexpected API request' } }); }
     return route.continue();
   });
-  await page.goto('/qa/client-name');
+  await page.goto(`/qa/client-name?role=${encodeURIComponent(role)}`);
   await expect(page).toHaveTitle(messages.app.title);
   const edit = () => page.getByRole('button', { name: term('Edit client name'), exact: true });
   const form = () => page.getByRole('form', { name: term('Edit client name'), exact: true });
@@ -191,7 +191,7 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: Indoor Sales change
   expect(attempts).toHaveLength(3);
   await cancel().click();
   await assertEditorHidden(page, '/qa/client-name?role=Outdoor%20Sales', term('Edit client name'));
-  await assertEditorHidden(page, '/qa/client-name?role=Admin', term('Edit client name'));
+  await assertEditorHidden(page, '/qa/client-name?role=CEO', term('Edit client name'));
   expect(errors).toEqual([]); expect(unexpected).toEqual([]);
 });
 

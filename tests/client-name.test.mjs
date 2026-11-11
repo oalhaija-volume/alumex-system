@@ -39,8 +39,16 @@ test('Indoor Sales can rename clients only through an accessible branch', () => 
   }
   assert.equal(canRenameClient(project, { role: 'Indoor Sales', branch: null }), false);
   assert.equal(canRenameClient({ ...project, branch: 'Rasafa' }, { role: 'Sales Manager' }), true);
-  for (const role of ['Outdoor Sales', 'Admin', 'CEO', 'Sales Director', 'Company Owner', 'HR']) {
+  for (const role of ['Outdoor Sales', 'CEO', 'Sales Director', 'Company Owner', 'HR']) {
     assert.equal(canRenameClient(project, { role, branch: 'Karkh' }), false, role);
+  }
+});
+
+test('Admin can edit client names across branches while read-only project logs stay protected', () => {
+  const { canRenameClient } = modules()('lib/clients/name');
+  for (const branch of ['Karkh', 'Rasafa', 'Governorates', null]) {
+    assert.equal(canRenameClient({ ...project, branch }, { role: 'Admin', branch: null }), true);
+    assert.equal(canRenameClient({ ...project, branch, project_log_only: true }, { role: 'Admin' }), false);
   }
 });
 
@@ -106,9 +114,22 @@ test('client rename permits Karkh Governorates and Sales Manager projects', asyn
   }
 });
 
+test('Admin saves a client name using its own identity without changing project titles or other fields', async () => {
+  for (const branch of ['Karkh', 'Rasafa', 'Governorates', null]) {
+    const x = endpoint({ role: 'Admin', branch: null, currentProject: { ...project, branch } });
+    const response = await x.patch({ ...rename, actorId: 'forged', projectName: 'Preserve project title', role: 'Indoor Sales' });
+    assert.equal(response.status, 200);
+    assert.deepEqual(x.calls, [{
+      name: 'rename_project_client',
+      args: { p_project: projectId, p_actor: actorId, p_client_name: 'Reviewed client', p_expected_client_name: rename.expectedClientName },
+    }]);
+  }
+});
+
 test('client rename denies other roles and inaccessible branches before any write', async () => {
   for (const options of [
-    { role: 'Outdoor Sales' }, { role: 'Admin' }, { role: 'CEO' },
+    { role: 'Outdoor Sales' }, { role: 'CEO' }, { role: 'Sales Director' }, { role: 'Company Owner' },
+    { role: 'Admin', currentProject: { ...project, project_log_only: true } },
     { currentProject: { ...project, branch: 'Rasafa' } },
     { branch: 'Rasafa', currentProject: { ...project, branch: 'Governorates' } },
     { currentProject: { ...project, branch: null } },

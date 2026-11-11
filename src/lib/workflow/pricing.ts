@@ -30,6 +30,8 @@ export function applyQuotationDiscount(snapshot:QuoteSnapshot,discountPercent:un
 }
 export const money = (n:number) => new Intl.NumberFormat('en-IQ',{maximumFractionDigits:0}).format(n)+' IQD';
 export const QUOTATION_SYSTEM_RATE_MIN = 250_000;
+// Pause new discount choices while retaining calculations for saved documents.
+export const QUOTATION_DISCOUNTS_ENABLED = false;
 // Recommended selling targets are separate from the sales override minimum.
 const SELLING_GUIDANCE_RATE_MIN = 265_000;
 export const CURTAIN_WALL_ARCH_PRICE = 150_000;

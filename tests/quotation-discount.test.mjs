@@ -27,7 +27,7 @@ function moduleLoader(dependencies={}) {
  };
 }
 const load=moduleLoader();
-const {applyQuotationDiscount,discountedSystemRate,openingSellingBand,priceQuotation,repriceQuotation,quotationPriceKey,quotationSellingSuggestion}=load('src/lib/workflow/pricing');
+const {applyQuotationDiscount,discountedSystemRate,openingSellingBand,priceQuotation,repriceQuotation,quotationPriceKey,quotationSellingSuggestion,QUOTATION_DISCOUNTS_ENABLED}=load('src/lib/workflow/pricing');
 const {quotationClientPricing}=load('src/lib/quotations/clientPricing');
 const product=(id,name,category,unit,unit_price)=>({id,name,category,unit,unit_price,is_active:true});
 const catalog=[
@@ -244,7 +244,7 @@ function fixture({role='Indoor Sales',branch='Karkh',projectBranch='Karkh',stage
  const saved=quotation(discountPercent);
  const stored={project_id:projectId,revision:4,stage,quotation:saved,contract:stage==='contract'?{quotation:structuredClone(saved)}:null,evidence:null,signed_at:signedAt};
  const unrelated={project_id:'other-project',revision:6,stage:'approved',quotation:quotation(),contract:null,signed_at:null};
- const tables={projects:[project],sales_workflows:missingFlow?[unrelated]:[stored,unrelated],product_price_settings:structuredClone(catalog),openings:[{...structuredClone(opening),project_id:projectId}],profiles:[{id:actorId,branch}],clients:[{id:'client',name:'Client',mobile:'07700000000'}]};
+ const tables={projects:[project],sales_workflows:missingFlow?[unrelated]:[stored,unrelated],product_price_settings:structuredClone(catalog),openings:[{...structuredClone(opening),project_id:projectId}],profiles:[{id:actorId,branch}],clients:[{id:'client',name:'Client',mobile:'07700000000'}],quotation_revisions:[{project_id:projectId,version:3,quotation:quotation(5),contract:null,previous_stage:'approved',superseded_at:'2026-11-11T08:00:00Z'}]};
  const admin={from(table){
   const predicates=[];
   const result=single=>{const rows=tables[table].filter(row=>predicates.every(predicate=>predicate(row)));reads.push({table,rows});return {data:single?rows[0]??null:rows,error:null};};
@@ -258,15 +258,21 @@ function fixture({role='Indoor Sales',branch='Karkh',projectBranch='Karkh',stage
   '@/lib/contracts/uploadedTerms':{uploadedContractTerms:()=>[]},
  })('src/app/api/sales-flow/[projectId]/route');
  const post=body=>route.POST(new Request(`http://localhost:3003/api/sales-flow/${projectId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),{params:Promise.resolve({projectId})});
- return {calls,reads,tables,stored,unrelated,post};
+ const get=()=>route.GET(new Request(`http://localhost:3003/api/sales-flow/${projectId}`),{params:Promise.resolve({projectId})});
+ return {calls,reads,tables,stored,unrelated,post,get};
 }
 const saveBody={action:'save',revision:4,choices:[choice],additionalItems:additional};
 const setDiscountBody={action:'set-discount',revision:4,discountPercent:5};
 
-test('the save API calculates the five-percent discount and ignores forged monetary metadata',async()=>{
+test('active quotation discounts are temporarily disabled while historical discount calculations remain available',()=>{
+ assert.equal(QUOTATION_DISCOUNTS_ENABLED,false);
+ assert.equal(quotation(5).discount.percent,5);
+});
+
+test('the save API uses gross prices and ignores forged monetary and discount metadata',async()=>{
  const x=fixture();
  const before=structuredClone({tables:x.tables,stored:x.stored,unrelated:x.unrelated});
- const response=await x.post({...saveBody,discountPercent:5,total:1,subtotal:1,discount:{percent:100,subtotal:1,amount:1},preparedBy:'forged'});
+ const response=await x.post({...saveBody,discountPercent:0,total:1,subtotal:1,discount:{percent:5,subtotal:1,amount:1},preparedBy:'forged'});
  assert.equal(response.status,200);
  assert.equal(x.calls.length,1);
  const {name,args}=x.calls[0];
@@ -274,8 +280,8 @@ test('the save API calculates the five-percent discount and ignores forged monet
  assert.equal(args.p_action,'save');
  assert.equal(args.p_revision,4);
  assert.equal(args.p_actor,actorId);
- assert.deepEqual(args.p_payload.discount,{percent:5,subtotal:1614000,amount:80700});
- assert.equal(args.p_payload.total,1533300);
+ assert.equal(Object.hasOwn(args.p_payload,'discount'),false);
+ assert.equal(args.p_payload.total,1614000);
  assert.equal(args.p_payload.preparedBy,actorId);
  assert.deepEqual({tables:x.tables,stored:x.stored,unrelated:x.unrelated},before);
 });
@@ -283,7 +289,7 @@ test('the save API calculates the five-percent discount and ignores forged monet
 test('the save API creates one fixed-price shutter and motor per opening and ignores forged quantities and charges',async()=>{
  const x=fixture();
  const selection={...choice,extras:choice.extras.map(extra=>extra.id==='shutter'?{...extra,quantity:99,motorPrice:125000,total:1,rate:1}:extra)};
- const response=await x.post({...saveBody,choices:[selection],discountPercent:5,total:1,lines:[{extras:[{id:'forged-motor',motorFor:'shutter',rate:1,quantity:99,total:1}]}],motorPrice:1});
+ const response=await x.post({...saveBody,choices:[selection],discountPercent:0,total:1,lines:[{extras:[{id:'forged-motor',motorFor:'shutter',rate:1,quantity:99,total:1}]}],motorPrice:1});
  assert.equal(response.status,200);
  assert.equal(x.calls.length,1);
  const quotation=x.calls[0].args.p_payload;
@@ -292,24 +298,24 @@ test('the save API creates one fixed-price shutter and motor per opening and ign
  assert.deepEqual(motor,{id:'roller-shutter-motor:shutter',name:'Roller shutter motor',unit:'item',rate:125000,quantity:2,total:250000,motorFor:'shutter'});
  assert.equal(quotation.lines[0].extras.filter(extra=>extra.motorFor).length,1);
  assert.equal(quotation.lines[0].total,850000);
- assert.deepEqual(quotation.discount,{percent:5,subtotal:1664000,amount:83200});
- assert.equal(quotation.total,1580800);
+ assert.equal(Object.hasOwn(quotation,'discount'),false);
+ assert.equal(quotation.total,1664000);
  assert.equal(quotation.preparedBy,actorId);
 });
 
 test('the save API keeps shutter and motor prices fixed across different opening areas',async()=>{
  const shutters=[],motors=[];
- for(const [width,height,lineTotal,subtotal,discountAmount,total] of [[50,100,850000,1664000,83200,1580800],[200,300,3450000,4264000,213200,4050800]]){
+ for(const [width,height,lineTotal,total] of [[50,100,850000,1664000],[200,300,3450000,4264000]]){
   const x=fixture();
   Object.assign(x.tables.openings[0],{width,height});
   const selection={...choice,extras:choice.extras.map(extra=>extra.id==='shutter'?{...extra,quantity:99,motorPrice:125000}:extra)};
-  const response=await x.post({...saveBody,choices:[selection],discountPercent:5});
+  const response=await x.post({...saveBody,choices:[selection],discountPercent:0});
   assert.equal(response.status,200);
   const quotation=x.calls[0].args.p_payload;
   shutters.push(quotation.lines[0].extras.find(extra=>extra.id==='shutter'));
   motors.push(quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter'));
   assert.equal(quotation.lines[0].total,lineTotal);
-  assert.deepEqual(quotation.discount,{percent:5,subtotal,amount:discountAmount});
+  assert.equal(Object.hasOwn(quotation,'discount'),false);
   assert.equal(quotation.total,total);
  }
  assert.deepEqual(shutters[0],shutters[1],'Shutter price and count depend on physical openings, never their area');
@@ -352,49 +358,56 @@ test('the save API rejects manual motor prices on other add-ons and forged stand
  }
 });
 
-test('omitting the save discount preserves the saved preference and explicit zero removes it',async()=>{
+test('omitting the save discount or setting zero creates a gross revision of a legacy discounted quotation',async()=>{
  const x=fixture({discountPercent:5});
+ const before=structuredClone(x.tables);
  assert.equal((await x.post(saveBody)).status,200);
- assert.equal(x.calls[0].args.p_payload.discount.percent,5);
- assert.equal(x.calls[0].args.p_payload.total,1533300);
+ assert.equal(Object.hasOwn(x.calls[0].args.p_payload,'discount'),false);
+ assert.equal(x.calls[0].args.p_payload.total,1614000);
  x.calls.length=0;
  assert.equal((await x.post({...saveBody,discountPercent:0})).status,200);
  assert.equal(Object.hasOwn(x.calls[0].args.p_payload,'discount'),false);
  assert.equal(x.calls[0].args.p_payload.total,1614000);
+ assert.deepEqual(x.tables,before,'Saved historical quotation and revision snapshots remain unchanged');
 });
 
-test('set-discount changes only the discount on saved charges and invokes the existing revision save transaction',async()=>{
+test('stale clients cannot create discounted saves or price refreshes through any active API action',async()=>{
+ for(const action of ['save','preview-prices','update-prices']){
+  const x=fixture({discountPercent:5});
+  const before=structuredClone(x.tables);
+  const response=await x.post({...saveBody,action,discountPercent:5,confirmed:true,priceKey:'stale-client-key'});
+  assert.equal(response.status,403,action);
+  assert.equal(response.body.error,'Quotation discounts are temporarily unavailable.');
+  assert.equal(x.calls.length,0);
+  assert.ok(!x.reads.some(read=>read.table==='product_price_settings'||read.table==='openings'),'The disabled policy is checked before repricing');
+  assert.deepEqual(x.tables,before);
+ }
+});
+
+test('set-discount rejects forged revisions without reading pricing or modifying saved charges',async()=>{
  const x=fixture();
  x.tables.product_price_settings.forEach(item=>{item.unit_price=0;item.is_active=false;});
  const before=structuredClone({tables:x.tables,stored:x.stored,unrelated:x.unrelated});
  const response=await x.post({...setDiscountBody,choices:[],additionalItems:[],newOpenings:[{id:'forged'}],total:1,discount:{percent:100}});
- assert.equal(response.status,200);
- assert.equal(x.calls.length,1);
- const {args}=x.calls[0];
- assert.equal(args.p_action,'save');
- assert.equal(args.p_revision,4);
- assert.equal(args.p_actor,actorId);
- assert.deepEqual(args.p_payload.lines,x.stored.quotation.lines);
- assert.deepEqual(args.p_payload.additionalItems,x.stored.quotation.additionalItems);
- assert.deepEqual(args.p_payload.discount,{percent:5,subtotal:1614000,amount:80700});
- assert.equal(args.p_payload.total,1533300);
- assert.ok(!x.reads.some(read=>read.table==='product_price_settings'||read.table==='openings'),'Discount-only revisions must not change rates or quantities through repricing');
+ assert.equal(response.status,403);
+ assert.equal(response.body.error,'Quotation discounts are temporarily unavailable.');
+ assert.equal(x.calls.length,0);
+ assert.ok(!x.reads.some(read=>read.table==='product_price_settings'||read.table==='openings'));
  assert.deepEqual({tables:x.tables,stored:x.stored,unrelated:x.unrelated},before);
 });
 
-test('set-discount can remove five percent without changing saved specifications',async()=>{
+test('set-discount is disabled even when a legacy quotation requests zero percent',async()=>{
  const x=fixture({discountPercent:5});
- assert.equal((await x.post({...setDiscountBody,discountPercent:0})).status,200);
- assert.equal(Object.hasOwn(x.calls[0].args.p_payload,'discount'),false);
- assert.equal(x.calls[0].args.p_payload.total,1614000);
- assert.deepEqual(x.calls[0].args.p_payload.lines,x.stored.quotation.lines);
+ const before=structuredClone(x.tables);
+ assert.equal((await x.post({...setDiscountBody,discountPercent:0})).status,403);
+ assert.equal(x.calls.length,0);
+ assert.deepEqual(x.tables,before);
 });
 
-for(const role of ['Indoor Sales','Sales Manager','Admin','Sales Director','CEO','Company Owner'])test(`${role} may save a fixed five-percent quotation discount`,async()=>{
+for(const role of ['Indoor Sales','Sales Manager','Admin','Sales Director','CEO','Company Owner'])test(`${role} cannot create a five-percent discount while discounts are disabled`,async()=>{
  const x=fixture({role});
- assert.equal((await x.post(setDiscountBody)).status,200);
- assert.equal(x.calls.length,1);
- assert.equal(x.calls[0].args.p_payload.discount.percent,5);
+ for(const body of [setDiscountBody,{...saveBody,discountPercent:5}])assert.equal((await x.post(body)).status,403);
+ assert.equal(x.calls.length,0);
 });
 
 for(const role of ['Outdoor Sales','HR','Operations Manager'])test(`${role} cannot change quotation discounts`,async()=>{
@@ -411,11 +424,11 @@ for(const branch of ['Rasafa',null])test(`Indoor Sales branch ${branch} cannot d
  assert.ok(!x.reads.some(read=>read.table==='sales_workflows'));
 });
 
-test('discount API validation rejects unsupported values and requires an explicit preference for set-discount',async()=>{
+test('set-discount rejects every preference while saves still validate malformed percentages',async()=>{
  for(const discountPercent of [undefined,null,'5',true,-5,2,5.5,10,100,{},[]]){
   const x=fixture();
   const response=await x.post({...setDiscountBody,discountPercent});
-  assert.equal(response.status,400,`${JSON.stringify(discountPercent)} set-discount`);
+  assert.equal(response.status,403,`${JSON.stringify(discountPercent)} set-discount`);
   assert.equal(x.calls.length,0);
  }
  for(const discountPercent of [null,'5',true,-5,2,5.5,10,100,{},[]]){
@@ -440,31 +453,76 @@ for(const patch of [{stage:'signed',signedAt:'2026-10-23T08:00:00Z'},{stage:'quo
  assert.equal(x.calls.length,0);
 });
 
-test('an approved quotation discount creates a new save and an unsigned contract requires replacement confirmation',async()=>{
+test('approved quotations and unsigned contracts cannot add a discount even with replacement confirmation',async()=>{
  const approved=fixture({stage:'approved',status:'quotation_approved'});
- assert.equal((await approved.post(setDiscountBody)).status,200);
- assert.equal(approved.calls[0].args.p_action,'save','The existing transaction archives the old approval and resets the revised quotation');
+ assert.equal((await approved.post(setDiscountBody)).status,403);
+ assert.equal(approved.calls.length,0);
  const contract=fixture({stage:'contract',status:'contract_generated'});
  const before=structuredClone(contract.stored);
- assert.equal((await contract.post(setDiscountBody)).status,400);
+ assert.equal((await contract.post(setDiscountBody)).status,403);
  assert.equal(contract.calls.length,0);
- assert.equal((await contract.post({...setDiscountBody,replaceUnsignedContract:true})).status,200);
- assert.equal(contract.calls[0].args.p_action,'save');
+ assert.equal((await contract.post({...setDiscountBody,replaceUnsignedContract:true})).status,403);
+ assert.equal(contract.calls.length,0);
  assert.deepEqual(contract.stored,before);
 });
 
-test('price-preview and refresh preserve the saved five-percent discount and server-generated preview key',async()=>{
+test('price-preview and confirmed refresh create gross revisions while preserving legacy discounted history',async()=>{
  const x=fixture({discountPercent:5});
  x.tables.product_price_settings.forEach(item=>{item.unit_price*=2;});
+ const before=structuredClone(x.tables);
  const preview=await x.post({action:'preview-prices',revision:4,discountPercent:0});
  assert.equal(preview.status,200);
  assert.equal(x.calls.length,0);
- assert.deepEqual(preview.body.quotation.discount,{percent:5,subtotal:3028000,amount:151400});
- assert.equal(preview.body.quotation.total,2876600);
+ assert.equal(Object.hasOwn(preview.body.quotation,'discount'),false);
+ assert.equal(preview.body.quotation.total,3028000);
  assert.deepEqual(preview.body.quotation.lines[0].extras.find(extra=>extra.id==='shutter'),{id:'shutter',name:'Roller Shutter - Foam',unit:'item',rate:60000,quantity:2,total:120000});
  assert.deepEqual(preview.body.quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter'),x.stored.quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter'));
- assert.equal((await x.post({action:'update-prices',revision:4,priceKey:preview.body.priceKey,confirmed:true,discountPercent:0,choices:[{...choice,extras:[{id:'shutter',quantity:1,motorPrice:1}]}],motorPrice:1,total:1})).status,200);
- assert.deepEqual(x.calls[0].args.p_payload.discount,preview.body.quotation.discount);
- assert.equal(x.calls[0].args.p_payload.total,2876600);
+ assert.equal((await x.post({action:'update-prices',revision:4,priceKey:preview.body.priceKey})).status,400,'Updating prices still requires confirmation');
+ const legacyKey=quotationPriceKey(repriceQuotation(x.stored.quotation,x.tables.product_price_settings,actorId));
+ assert.equal((await x.post({action:'update-prices',revision:4,priceKey:legacyKey,confirmed:true})).status,409,'A discounted preview key cannot approve a new gross revision');
+ assert.equal(x.calls.length,0);
+ assert.equal((await x.post({action:'update-prices',revision:4,priceKey:preview.body.priceKey,confirmed:true,choices:[{...choice,extras:[{id:'shutter',quantity:1,motorPrice:1}]}],motorPrice:1,total:1})).status,200);
+ assert.equal(Object.hasOwn(x.calls[0].args.p_payload,'discount'),false);
+ assert.equal(x.calls[0].args.p_payload.total,3028000);
  assert.deepEqual(x.calls[0].args.p_payload.lines[0].extras.find(extra=>extra.motorFor==='shutter'),x.stored.quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter'));
+ assert.deepEqual(x.tables,before);
+});
+
+test('disabling discounts preserves the 250000-IQD manual rate minimum on gross saves',async()=>{
+ const accepted=fixture({discountPercent:5});
+ assert.equal((await accepted.post({...saveBody,choices:[{...choice,systemRate:250000}]})).status,200);
+ const saved=accepted.calls[0].args.p_payload;
+ assert.equal(saved.lines[0].system.rate,250000);
+ assert.equal(saved.total,1634000);
+ assert.equal(Object.hasOwn(saved,'discount'),false);
+ const rejected=fixture();
+ const response=await rejected.post({...saveBody,choices:[{...choice,systemRate:249999}]});
+ assert.equal(response.status,400);
+ assert.match(response.body.error,/at least 250,000 IQD/);
+ assert.equal(rejected.calls.length,0);
+});
+
+test('historical discounted quotations remain readable, approvable, contractable and signable',async()=>{
+ const read=fixture({discountPercent:5});
+ const before=structuredClone(read.tables);
+ const response=await read.get();
+ assert.equal(response.status,200);
+ assert.equal(response.body.flow.quotation.discount.percent,5);
+ assert.equal(response.body.flow.quotation.total,1533300);
+ assert.equal(response.body.history[0].quotation.discount.percent,5);
+ assert.equal(read.calls.length,0);
+ assert.deepEqual(read.tables,before);
+ for(const [options,body] of [
+  [{},{action:'approve',revision:4,confirmed:true}],
+  [{stage:'approved',status:'quotation_approved'},{action:'contract',revision:4,template:'residential'}],
+  [{stage:'contract',status:'contract_generated'},{action:'sign',revision:4,method:'hard_copy',signer:'Client signer',consent:true}],
+ ]){
+  const x=fixture({...options,discountPercent:5});
+  const savedBefore=structuredClone(x.tables);
+  const result=await x.post(body);
+  assert.equal(result.status,200,body.action);
+  assert.equal(x.calls.length,1);
+  assert.equal(x.calls[0].args.p_action,body.action);
+  assert.deepEqual(x.tables,savedBefore,'Existing quotation discounts and archived revisions remain intact');
+ }
 });

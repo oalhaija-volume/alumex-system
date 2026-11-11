@@ -153,15 +153,15 @@ function apiFixture(){
 
 test('sales-flow save and price refresh persist server-priced project accessories and a Pushout piece count',async()=>{
  const fixture=apiFixture();
- const result=await fixture.post({action:'save',revision:0,choices:[choice],additionalItems:[...addons,{id:'pushout',quantity:2,rate:1,total:1}],discountPercent:5,total:1});
+ const result=await fixture.post({action:'save',revision:0,choices:[choice],additionalItems:[...addons,{id:'pushout',quantity:2,rate:1,total:1}],discountPercent:0,total:1});
  assert.equal(result.status,200);
  assert.equal(fixture.writes.length,1);
  const saved=fixture.writes[0].args.p_payload,before=structuredClone(saved);
  assert.equal(fixture.writes[0].name,'advance_sales_flow');
  assert.equal(byId(saved.additionalItems).pushout.total,1500000);
  assert.deepEqual(saved.additionalItems.slice(0,4).map(item=>item.quantity),[3,2,2.5,7.25]);
- assert.deepEqual(saved.discount,{percent:5,subtotal:7862000,amount:393100});
- assert.equal(saved.total,7468900);
+ assert.equal(Object.hasOwn(saved,'discount'),false);
+ assert.equal(saved.total,7862000);
  fixture.state.catalog=fixture.state.catalog.map(item=>item.id==='closer'?{...item,unit_price:70000}:item);
  const preview=await fixture.post({action:'preview-prices',revision:1});
  assert.equal(preview.status,200);
@@ -171,7 +171,7 @@ test('sales-flow save and price refresh persist server-priced project accessorie
  const updated=await fixture.post({action:'update-prices',revision:1,confirmed:true,priceKey:preview.body.priceKey});
  assert.equal(updated.status,200);
  assert.equal(fixture.writes.length,2);
- assert.equal(fixture.writes[1].args.p_payload.total,7497400);
+ assert.equal(fixture.writes[1].args.p_payload.total,7892000);
  assert.deepEqual(saved,before,'Refresh keeps the previous quotation snapshot intact');
 });
 

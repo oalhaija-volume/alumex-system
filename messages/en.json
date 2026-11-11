@@ -1278,6 +1278,8 @@
     "generating": "Generating..."
   },
   "terms": {
+    "Quotation discounts are temporarily unavailable.": "Quotation discounts are temporarily unavailable.",
+    "This saved quotation includes a 5% discount. Saving a revision will remove the discount.": "This saved quotation includes a 5% discount. Saving a revision will remove the discount.",
     "Client name": "Client name",
     "Edit client name": "Edit client name",
     "Client name updated.": "Client name updated.",

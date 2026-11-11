@@ -134,6 +134,8 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   await expect(page).toHaveURL(`http://localhost:3003/quotation/${projectId}`);
   await expect(page).toHaveTitle(messages.app.title);
   await expect(edit()).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: term('Apply 5% discount'), exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: term('Quotation discount'), exact: true })).toHaveCount(0);
   await expect(group()).toHaveCount(0);
   await edit().click();
   await expect(group()).toBeVisible();
@@ -233,17 +235,17 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   await restore().click();
   await expect(openingRate('removed-sliding')).toHaveValue('280000');
   await remove().click();
-  await page.getByRole('checkbox', { name: term('Apply 5% discount'), exact: true }).check();
-  await expect(total()).toHaveText(money(expected(300000, 330000, 275000, 5).total));
+  await expect(page.getByRole('checkbox', { name: term('Apply 5% discount'), exact: true })).toHaveCount(0);
+  await expect(total()).toHaveText(money(expected(300000, 330000, 275000).total));
   expect(posts).toHaveLength(0); expect(saved).toEqual(initial); expect(catalog).toEqual(originalCatalog);
   await group().screenshot({ path: test.info().outputPath(`${locale}-group-prices.png`) });
   await save().click();
   await expect(edit()).toBeVisible(); expect(posts).toHaveLength(1);
   expect(posts[0].excludedOpeningIds).toEqual(['removed-sliding']);
-  expect(posts[0].discountPercent).toBe(5);
+  expect(posts[0].discountPercent).toBe(0);
   expect(posts[0].additionalItems.find(item => item.id === 'curtain-wall')).toHaveProperty('unitRate', 275000);
-  expect(saved.total).toBe(expected(300000, 330000, 275000, 5).total);
-  expect(saved.discount?.amount).toBe(Math.round(saved.discount!.subtotal / 20));
+  expect(saved.total).toBe(expected(300000, 330000, 275000).total);
+  expect(saved.discount).toBeUndefined();
   for (const line of saved.lines) {
     const previous = initial.lines.find(original => original.opening.id === line.opening.id)!;
     expect(line.opening).toEqual(previous.opening);
@@ -280,12 +282,13 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   await expect(edit()).toBeVisible(); expect(posts).toHaveLength(3);
   for (const id of ['sliding', 'hinged', 'curtain']) expect(saved.lines.find(line => line.opening.id === id)!.system.rate).toBe(250000);
   expect(saved.additionalItems!.find(item => item.id === 'curtain-wall')!.rate).toBe(250000);
-  expect(saved.total).toBe(expected(250000, 250000, 250000, 5).total);
+  expect(saved.total).toBe(expected(250000, 250000, 250000).total);
   await page.reload(); await edit().click();
   for (const input of [openingRate('sliding'), openingRate('hinged'), measuredCurtainRate, standaloneCurtainRate]) await expect(input).toHaveValue('250000');
   await expect(save()).toBeEnabled();
   await group().screenshot({ path: test.info().outputPath(`${locale}-saved-minimum-250000.png`) });
   await cancel().click(); expect(posts).toHaveLength(3); expect(catalog).toEqual(originalCatalog);
+  expect(posts.every(post => post.discountPercent === 0)).toBe(true);
   await expect(page.locator('nextjs-portal')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]); expect(unexpected).toEqual([]);

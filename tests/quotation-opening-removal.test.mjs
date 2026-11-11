@@ -261,8 +261,8 @@ test('price-update and discount API actions keep saved exclusions even when a re
   assert.equal(x.calls.length, 0);
   assert.equal((await x.post({ action: 'update-prices', revision: 4, priceKey: preview.body.priceKey, confirmed: true, excludedOpeningIds: [] })).status, 200);
   assert.deepEqual(x.calls[0].args.p_payload.excludedOpeningIds, [ids[1]]);
-  assert.equal((await x.post({ action: 'set-discount', revision: 4, discountPercent: 5, excludedOpeningIds: [] })).status, 200);
-  assert.deepEqual(x.calls[1].args.p_payload.excludedOpeningIds, [ids[1]]);
-  assert.deepEqual(x.calls[1].args.p_payload.lines.map(line => line.opening.id), [ids[0], ids[2]]);
+  assert.equal((await x.post({ action: 'set-discount', revision: 4, discountPercent: 5, excludedOpeningIds: [] })).status, 403);
+  assert.equal(x.calls.length, 1, 'A blocked discount must not write a new revision or change excluded openings');
+  assert.deepEqual(x.calls[0].args.p_payload.lines.map(line => line.opening.id), [ids[0], ids[2]]);
   assert.deepEqual(x.stored, before);
 });

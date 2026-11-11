@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { uploadedContractTerms } from '@/lib/contracts/uploadedTerms';
 import { salesProject } from '@/lib/workflow/access';
-import { applyQuotationDiscount, priceQuotation, repriceQuotation, quotationPriceKey, type CatalogItem, type OpeningChoice, type AdditionalChoice } from '@/lib/workflow/pricing';
+import { applyQuotationDiscount, priceQuotation, repriceQuotation, quotationPriceKey, QUOTATION_DISCOUNTS_ENABLED, type CatalogItem, type OpeningChoice, type AdditionalChoice } from '@/lib/workflow/pricing';
 import { normalizeExcludedOpeningIds, quotationOpenings } from '@/lib/workflow/quotationOpenings';
 import type { Json } from '@/lib/supabase/database.types';
 import type { SalesFlow } from '@/lib/workflow/types';
@@ -45,6 +45,7 @@ export async function POST(request:Request,context:Context){
  const action=body.action;const revision=body.revision;
  if(project.additional_openings_state==='requested'||(project.additional_openings_state==='submitted'&&action!=='save'))return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.'},{status:409});
  if(!['save','approve','contract','sign','preview-prices','update-prices','set-discount','change-contract-template'].includes(String(action))||!Number.isInteger(revision)||revision!==(flow?.revision??0))return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
+ if(!QUOTATION_DISCOUNTS_ENABLED&&(action==='set-discount'||['save','preview-prices','update-prices'].includes(String(action))&&body.discountPercent===5))return NextResponse.json({error:'Quotation discounts are temporarily unavailable.'},{status:403});
  let payload:Json={};let uploadedPath:string|null=null;
  try{
   if(action==='change-contract-template'){
@@ -71,7 +72,8 @@ export async function POST(request:Request,context:Context){
    if(action==='update-prices'&&flow.stage==='contract'&&body.replaceUnsignedContract!==true)throw new Error('Confirm that this revision replaces the unsigned contract and requires new client approval.');
    const catalog=await admin.from('product_price_settings').select('id,name:product_name,category,unit,unit_price,is_active').eq('is_active',true);
    if(catalog.error)throw new Error('Unable to load pricing.');
-   const quotation=repriceQuotation(flow.quotation,catalog.data as CatalogItem[],auth.user.id);
+   const repriced=repriceQuotation(flow.quotation,catalog.data as CatalogItem[],auth.user.id);
+   const quotation=QUOTATION_DISCOUNTS_ENABLED?repriced:applyQuotationDiscount(repriced,0);
    const priceKey=quotationPriceKey(quotation);
    if(action==='preview-prices')return NextResponse.json({quotation,priceKey,revision:flow.revision},{headers:{'Cache-Control':'private, no-store'}});
    if(body.priceKey!==priceKey)return NextResponse.json({error:'Catalog prices changed. Preview the updated prices again before saving.'},{status:409});
@@ -88,7 +90,7 @@ export async function POST(request:Request,context:Context){
    const excludedOpeningIds=normalizeExcludedOpeningIds(openings.data??[],body.excludedOpeningIds===undefined?flow?.quotation.excludedOpeningIds??[]:body.excludedOpeningIds);
    const excluded=new Set(excludedOpeningIds);
    const measured=allMeasured.filter(opening=>!excluded.has(opening.id));
-   const discountPercent=body.discountPercent===undefined?flow?.quotation.discount?.percent??0:body.discountPercent;
+   const discountPercent=body.discountPercent===undefined?(QUOTATION_DISCOUNTS_ENABLED?flow?.quotation.discount?.percent??0:0):body.discountPercent;
    payload={...priceQuotation(measured,body.choices as OpeningChoice[],catalog.data as CatalogItem[],auth.user.id,(body.additionalItems??[]) as AdditionalChoice[],discountPercent),...(excludedOpeningIds.length?{excludedOpeningIds}:{}),branch:project.branch,governorate:project.governorate??null} as unknown as Json;
   }
   if(action==='approve' && body.confirmed!==true)throw new Error('Confirm that the client approved this quotation.');

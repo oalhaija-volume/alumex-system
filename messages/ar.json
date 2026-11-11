@@ -1278,6 +1278,8 @@
     "generating": "جاري الإنشاء..."
   },
   "terms": {
+    "Quotation discounts are temporarily unavailable.": "خصومات عروض الأسعار غير متاحة حالياً.",
+    "This saved quotation includes a 5% discount. Saving a revision will remove the discount.": "يتضمن عرض السعر المحفوظ خصماً بنسبة 5%. سيؤدي حفظ نسخة معدلة إلى إزالة الخصم.",
     "Client name": "اسم العميل",
     "Edit client name": "تعديل اسم العميل",
     "Client name updated.": "تم تحديث اسم العميل.",

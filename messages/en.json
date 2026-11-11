@@ -1278,6 +1278,13 @@
     "generating": "Generating..."
   },
   "terms": {
+    "Applied to draft": "Applied to draft",
+    "Price not applied yet. Click Apply to all.": "Price not applied yet. Click Apply to all.",
+    "Applied {rate} IQD / m² to {count} items. Save the quotation to keep this price.": "Applied {rate} IQD / m² to {count} items. Save the quotation to keep this price.",
+    "Draft quotation total": "Draft quotation total",
+    "Group prices draft total": "Group prices draft total",
+    "Review and save quotation": "Review and save quotation",
+    "Save quotation": "Save quotation",
     "Quotation discounts are temporarily unavailable.": "Quotation discounts are temporarily unavailable.",
     "This saved quotation includes a 5% discount. Saving a revision will remove the discount.": "This saved quotation includes a 5% discount. Saving a revision will remove the discount.",
     "Client name": "Client name",

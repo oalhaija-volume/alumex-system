@@ -48,6 +48,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const activeChoices=choices.filter(choice=>openings.some(opening=>opening.id===choice.openingId));
  const [additionalItems,setAdditionalItems]=useState<AdditionalChoice[]>(()=>flow?quotationAdditionalChoices(flow.quotation):[]);
  const [groupRateInputs,setGroupRateInputs]=useState<Partial<Record<QuotationRateGroupId,string>>>({});
+ const [appliedGroupRates,setAppliedGroupRates]=useState<Partial<Record<QuotationRateGroupId,{rate:number;members:string}>>>({});
  const rateGroups=quotationRateGroups(openings,choices,additionalItems,catalog);
  const hasUnappliedGroupRates=rateGroups.some(group=>group.count>0&&(groupRateInputs[group.id]?.trim()??'')!=='');
  const [discountPercent,setDiscountPercent]=useState<0|5>(QUOTATION_DISCOUNTS_ENABLED?flow?.quotation.discount?.percent??0:0);
@@ -105,15 +106,28 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   setSuggestionHidden(hidden);
   try{window.localStorage.setItem(suggestionPreferenceKey,hidden?'1':'0');}catch{/* The toggle still works when browser storage is unavailable. */}
  }
- function edit(openingId:string,patch:Partial<OpeningChoice>){setChoices(rows=>rows.map(choice=>choice.openingId===openingId?{...choice,...patch}:choice));}
+ function edit(openingId:string,patch:Partial<OpeningChoice>){
+  if(patch.systemId!==undefined){
+   const group=rateGroups.find(group=>group.openingIds.includes(openingId));
+   if(group)setAppliedGroupRates(groups=>{const next={...groups};delete next[group.id];return next;});
+  }
+  setChoices(rows=>rows.map(choice=>choice.openingId===openingId?{...choice,...patch}:choice));
+ }
  function applyGroupRate(groupId:QuotationRateGroupId,value:string){
-  if(busy||!canEdit||!value.trim())return;
+  const group=rateGroups.find(group=>group.id===groupId);
+  if(busy||!canEdit||!value.trim()||!group?.count)return;
   try{
    const updated=applyQuotationGroupRate(groupId,Number(value),openings,choices,additionalItems,catalog);
    setChoices(updated.choices);setAdditionalItems(updated.additionalItems);
    setGroupRateInputs(inputs=>{const next={...inputs};delete next[groupId];return next;});
+   setAppliedGroupRates(groups=>({...groups,[groupId]:{rate:Number(value),members:JSON.stringify([group.openingIds,group.additionalItemIds])}}));
    setApproved(false);setError('');clearActionError();
   }catch(cause){setError((cause as Error).message);}
+ }
+ function reviewQuotation(){
+  const section=document.getElementById(`quotation-save-${projectId}`);
+  section?.scrollIntoView({block:'start'});
+  section?.focus({preventScroll:true});
  }
  function removeOpening(opening:MeasuredOpening){
   if(busy)return;
@@ -188,15 +202,22 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
      const applyLabel=group.id==='sliding'?'Apply sliding windows price':group.id==='hinged'?'Apply hinged windows price':'Apply curtain wall price';
      const value=groupRateInputs[group.id]??(group.rate===undefined?'':String(group.rate));
      const invalid=value!==''&&(!Number.isSafeInteger(Number(value))||Number(value)<group.minimum);
+     const pending=(groupRateInputs[group.id]?.trim()??'')!=='';
+     const applied=groupRateInputs[group.id]===undefined&&appliedGroupRates[group.id]?.rate===group.rate
+      &&appliedGroupRates[group.id]?.members===JSON.stringify([group.openingIds,group.additionalItemIds]);
      return <div key={group.id} className="min-w-0 rounded-md border border-slate-200 bg-slate-50 p-4">
       <label className="block text-sm font-medium" htmlFor={`quotation-group-rate-${group.id}`}>{term(label)}</label>
       <p className="mt-2 text-xs text-slate-600">{group.count?term('{count} quotation items',{count:formatNumber(group.count)}):term('No matching items')}</p>
-      <input id={`quotation-group-rate-${group.id}`} aria-label={term(label)} aria-describedby={`quotation-group-rate-help-${group.id}`} aria-invalid={invalid} type="number" inputMode="numeric" min={group.minimum} step={1} disabled={!group.count} value={value} placeholder={term(group.count?'Different prices':'No matching items')} onChange={event=>setGroupRateInputs(inputs=>({...inputs,[group.id]:event.target.value}))} className={field}/>
+      <input id={`quotation-group-rate-${group.id}`} aria-label={term(label)} aria-describedby={`quotation-group-rate-help-${group.id}`} aria-invalid={invalid} type="number" inputMode="numeric" min={group.minimum} step={1} disabled={!group.count} value={value} placeholder={term(group.count?'Different prices':'No matching items')} onChange={event=>setGroupRateInputs(inputs=>({...inputs,[group.id]:event.target.value}))} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();if(!invalid)applyGroupRate(group.id,value);}}} className={field}/>
       <p id={`quotation-group-rate-help-${group.id}`} className="mt-2 text-xs leading-5 text-slate-600">{term('Minimum {minimum} IQD / m² · whole IQD',{minimum:formatNumber(group.minimum)})}</p>
-      <button type="button" aria-label={term(applyLabel)} disabled={!group.count||value===''||invalid} onClick={()=>applyGroupRate(group.id,value)} className={`${secondary} mt-3 w-full bg-white`}>{term('Apply to all')}</button>
+      <button type="button" aria-label={term(applyLabel)} disabled={!group.count||!value.trim()||invalid} onClick={()=>applyGroupRate(group.id,value)} className={`mt-3 min-h-12 w-full rounded-md border px-4 py-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 ${applied?'border-green-300 bg-green-50 text-green-900 hover:bg-green-100 active:bg-green-200':'border-blue-600 bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'}`}>{term(applied?'Applied to draft':'Apply to all')}</button>
+      {pending?<p role="status" className="mt-2 text-xs leading-5 text-amber-800">{term('Price not applied yet. Click Apply to all.')}</p>:applied?<p role="status" className="mt-2 text-xs leading-5 text-green-800">{term('Applied {rate} IQD / m² to {count} items. Save the quotation to keep this price.',{rate:formatNumber(group.rate!),count:formatNumber(group.count)})}</p>:null}
      </div>;
     })}</div>
-    <p className="text-xs leading-5 text-slate-600">{term('Group prices apply to this quotation only. Save the revised quotation to keep these changes.')}</p>
+    <div className="flex flex-col gap-4 rounded-md border border-blue-100 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+     <div className="min-w-0"><p className="text-sm font-medium text-slate-700">{term('Draft quotation total')}</p><p aria-label={term('Group prices draft total')} className="mt-1 break-words text-xl font-semibold text-slate-950">{draftTotal===undefined?term('Complete selections'):formatMoney(draftTotal)}</p><p className="mt-2 max-w-xl text-xs leading-5 text-slate-600">{term('Group prices apply to this quotation only. Save the revised quotation to keep these changes.')}</p></div>
+     <button type="button" onClick={reviewQuotation} className={`${button} shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700`}>{term('Review and save quotation')}</button>
+    </div>
    </section>
    {!!openings.length&&<OpeningSellingLegend discountPercent={discountPercent}/>}
    {openings.map(opening=>{
@@ -269,7 +290,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     {['new_lead','ready_for_quotation'].includes(data.project.sales_status??'')&&!data.project.additional_openings_state&&<Link href={`/initial-measurements/${projectId}`} className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-blue-700 underline print:hidden">{term('Review measurements')}</Link>}
    </section>}
    <StandaloneItems recordedAreas={recordedFacadeAreas(measured)} focusRequest={productPickerRequest} items={additionalItems} catalog={catalog} onChange={setAdditionalItems}/>
-   <div className={card}>
+   <div id={`quotation-save-${projectId}`} tabIndex={-1} role="region" aria-label={term('Save quotation')} className={`${card} scroll-mt-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700`}>
     {QUOTATION_DISCOUNTS_ENABLED&&<div className="mb-5 border-b border-slate-200 pb-5">{discountOption(draftQuotation)}</div>}
     <div className="flex flex-wrap justify-between gap-3"><div><p className="text-sm font-semibold">{flow?term("Revised total"):term("Quotation total")}</p>{flow&&<p className="mt-1 text-xs text-slate-500">{term("Currently saved:")} {formatMoney(flow.quotation.total)}</p>}</div><p className="text-xl font-semibold" aria-label={term("Draft total")}>{draftTotal===undefined?term("Complete selections"):formatMoney(draftTotal)}</p></div>
     {pricingError&&<p role="status" className="mt-3 text-sm text-amber-800">{errorMessage(pricingError)}</p>}

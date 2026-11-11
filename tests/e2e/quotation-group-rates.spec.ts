@@ -23,6 +23,7 @@ const openings: MeasuredOpening[] = [
 ];
 const catalog: CatalogItem[] = [
   { id: 'alumex', name: 'Alumex System', category: 'aluminum_system', unit: 'sqm', unit_price: 250000, is_active: true },
+  { id: 'alumex-alternate', name: 'Alumex Alternate System', category: 'aluminum_system', unit: 'sqm', unit_price: 250000, is_active: true },
   { id: 'other', name: 'Other System', category: 'aluminum_system', unit: 'sqm', unit_price: 290000, is_active: true },
   { id: 'curtain-wall', name: 'Curtain Wall', category: 'facade_service', unit: 'sqm', unit_price: 100000, is_active: true },
   { id: 'louver-system', name: 'Louver', category: 'opening_product', unit: 'sqm', unit_price: 80000, is_active: true },
@@ -120,6 +121,12 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   const group = () => page.getByRole('region', { name: term('Group prices'), exact: true });
   const groupRate = (name: string) => group().getByRole('spinbutton', { name: term(name), exact: true });
   const apply = (name: string) => group().getByRole('button', { name: term(name), exact: true });
+  const groupTotal = () => group().getByLabel(term('Group prices draft total'), { exact: true });
+  const appliedStatus = (rate: number, count: number) => term('Applied {rate} IQD / m² to {count} items. Save the quotation to keep this price.', {
+    rate: new Intl.NumberFormat(locale === 'ar' ? 'ar-IQ' : 'en-GB', { numberingSystem: 'latn', maximumFractionDigits: 4 }).format(rate),
+    count,
+  });
+  const pendingStatus = term('Price not applied yet. Click Apply to all.');
   const total = () => page.getByLabel(term('Draft total'), { exact: true });
   const save = () => page.getByRole('button', { name: term('Save revised quotation'), exact: true });
   const cancel = () => page.getByRole('button', { name: term('Cancel changes'), exact: true });
@@ -146,8 +153,16 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   const slidingApply = apply('Apply sliding windows price');
   const hingedApply = apply('Apply hinged windows price');
   const curtainApply = apply('Apply curtain wall price');
+  const slidingCard = slidingInput.locator('..');
+  await expect(groupTotal()).toHaveText(money(initial.total));
+  await expect(hingedApply).toHaveText(term('Apply to all'));
+  await hingedApply.click();
+  await expect(hingedApply).toHaveText(term('Applied to draft'));
+  await expect(hingedInput.locator('..').getByRole('status')).toHaveText(appliedStatus(275000, 1));
+  await expect(groupTotal()).toHaveText(money(initial.total));
+  expect(posts).toHaveLength(0);
   await slidingInput.fill(''); await hingedInput.fill(''); await curtainInput.fill('');
-  for (const [input, applyButton] of [[slidingInput, slidingApply], [hingedInput, hingedApply], [curtainInput, curtainApply]]) {
+  for (const [index, [input, applyButton]] of [[slidingInput, slidingApply], [hingedInput, hingedApply], [curtainInput, curtainApply]].entries()) {
     await expect(input).toHaveAttribute('min', '250000');
     await expect(input).toHaveAttribute('step', '1');
     for (const rate of ['240000', '249999', '250000.5']) {
@@ -160,11 +175,55 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
     await input.fill('250000');
     await expect(input).toHaveAttribute('aria-invalid', 'false');
     await expect(applyButton).toBeEnabled();
+    await expect(applyButton).toBeVisible();
+    await expect(applyButton).toHaveText(term('Apply to all'));
+    await expect(input.locator('..').getByRole('status')).toHaveText(pendingStatus);
+    const pendingBackground = await applyButton.evaluate(element => getComputedStyle(element).backgroundColor);
+    expect(pendingBackground).not.toBe('rgb(255, 255, 255)');
+    expect(pendingBackground).not.toBe('rgba(0, 0, 0, 0)');
+    await expect(applyButton).toHaveCSS('color', 'rgb(255, 255, 255)');
     await expect(save()).toBeDisabled();
     await applyButton.click();
+    await expect(applyButton).toBeFocused();
+    await expect(applyButton).toBeVisible();
+    await expect(applyButton).toHaveText(term('Applied to draft'));
+    await expect(input.locator('..').getByRole('status')).toHaveText(appliedStatus(250000, [2, 1, 2][index]));
+    const appliedColors = await applyButton.evaluate(element => ({ background: getComputedStyle(element).backgroundColor, foreground: getComputedStyle(element).color }));
+    expect(appliedColors.background).not.toBe(pendingBackground);
+    expect(appliedColors.foreground).not.toBe('rgb(255, 255, 255)');
+    await expect(groupTotal()).toHaveText((await total().textContent())!);
     await expect(save()).toBeEnabled();
     expect(posts).toHaveLength(0);
   }
+  await openingRate('sliding').fill('260000');
+  await expect(slidingApply).toHaveText(term('Apply to all'));
+  await expect(slidingCard.getByRole('status')).toHaveCount(0);
+  await openingRate('sliding').fill('250000');
+  await expect(slidingApply).toHaveText(term('Applied to draft'));
+  await remove().click();
+  await expect(slidingApply).toHaveText(term('Apply to all'));
+  await expect(slidingCard.getByRole('status')).toHaveCount(0);
+  await restore().click();
+  await slidingInput.fill('260000');
+  await expect(slidingCard.getByRole('status')).toHaveText(pendingStatus);
+  await slidingInput.press('Enter');
+  await expect(openingRate('sliding')).toHaveValue('260000');
+  await expect(openingRate('removed-sliding')).toHaveValue('260000');
+  await expect(slidingCard.getByRole('status')).toHaveText(appliedStatus(260000, 2));
+  await slidingInput.fill('250000'); await slidingInput.press('Enter');
+  await expect(slidingCard.getByRole('status')).toHaveText(appliedStatus(250000, 2));
+  await group().getByRole('button', { name: term('Review and save quotation'), exact: true }).click();
+  await expect(page.getByRole('region', { name: term('Save quotation'), exact: true })).toBeFocused();
+  await expect(save()).toBeInViewport();
+  expect(posts).toHaveLength(0);
+  const slidingSystem = card('sliding').getByRole('combobox', { name: term('System / product'), exact: true });
+  await slidingSystem.selectOption('alumex-alternate');
+  await expect(openingRate('sliding')).toHaveValue('250000');
+  await expect(slidingApply).toHaveText(term('Apply to all'));
+  await expect(slidingCard.getByRole('status')).toHaveCount(0);
+  await slidingSystem.selectOption('alumex');
+  await slidingApply.click();
+  await expect(slidingCard.getByRole('status')).toHaveText(appliedStatus(250000, 2));
   await expect(openingRate('sliding')).toHaveAttribute('min', '250000');
   await expect(openingRate('hinged')).toHaveAttribute('min', '250000');
   await expect(openingRate('sliding')).toHaveValue('250000');

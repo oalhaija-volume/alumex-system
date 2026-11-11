@@ -1278,6 +1278,13 @@
     "generating": "جاري الإنشاء..."
   },
   "terms": {
+    "Applied to draft": "تم التطبيق على المسودة",
+    "Price not applied yet. Click Apply to all.": "لم يُطبّق السعر بعد. اضغط «تطبيق على الكل».",
+    "Applied {rate} IQD / m² to {count} items. Save the quotation to keep this price.": "تم تطبيق سعر {rate} د.ع / م² على {count} بند. احفظ عرض السعر لتثبيت هذا السعر.",
+    "Draft quotation total": "إجمالي مسودة عرض السعر",
+    "Group prices draft total": "إجمالي المسودة بعد أسعار المجموعات",
+    "Review and save quotation": "مراجعة وحفظ عرض السعر",
+    "Save quotation": "حفظ عرض السعر",
     "Quotation discounts are temporarily unavailable.": "خصومات عروض الأسعار غير متاحة حالياً.",
     "This saved quotation includes a 5% discount. Saving a revision will remove the discount.": "يتضمن عرض السعر المحفوظ خصماً بنسبة 5%. سيؤدي حفظ نسخة معدلة إلى إزالة الخصم.",
     "Client name": "اسم العميل",

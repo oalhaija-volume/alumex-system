@@ -12,7 +12,7 @@ const output = resolve('artifacts/overdue-followups-20261111');
 const localHeadless = resolve('artifacts/mini-crm-review-20261015/browser/chrome-headless-shell-mac-arm64/chrome-headless-shell');
 // Keep these tests on the live API transport, including narrow/mobile viewports.
 // Offline pending saves intentionally have different cross-tab semantics.
-test.use({ userAgent: devices['Desktop Chrome'].userAgent, video: 'off', launchOptions: { executablePath: existsSync(localHeadless) ? localHeadless : undefined } });
+test.use({ userAgent: devices['Desktop Chrome'].userAgent, timezoneId: 'Asia/Baghdad', video: 'off', launchOptions: { executablePath: existsSync(localHeadless) ? localHeadless : undefined } });
 const now = '2026-11-11T09:00:00.000Z';
 const upcoming = '2026-11-12T09:00:00.000Z';
 const actor = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Indoor employee', role: 'Indoor Sales', branch: 'Karkh' as const };

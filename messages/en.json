@@ -1278,6 +1278,9 @@
     "generating": "Generating..."
   },
   "terms": {
+    "Hinged doors (IQD / m²)": "Hinged doors (IQD / m²)",
+    "Apply hinged doors price": "Apply hinged doors price",
+    "Sliding prices apply to Alumex windows. Hinged window and door prices are set separately. Curtain Wall includes measured walls and its facade service.": "Sliding prices apply to Alumex windows. Hinged window and door prices are set separately. Curtain Wall includes measured walls and its facade service.",
     "Applied to draft": "Applied to draft",
     "Price not applied yet. Click Apply to all.": "Price not applied yet. Click Apply to all.",
     "Applied {rate} IQD / m² to {count} items. Save the quotation to keep this price.": "Applied {rate} IQD / m² to {count} items. Save the quotation to keep this price.",

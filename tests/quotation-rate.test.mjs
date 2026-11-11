@@ -55,6 +55,24 @@ test('sales overrides below the selling recommendation remain valid for large an
  }
 });
 
+test('hinged-door rates accept the shared manual minimum while keeping the separate door recommendation',()=>{
+ const measured={...opening,opening_type:'Door',opening_direction:'Hinged',quantity:3};
+ assert.throws(()=>quote(249999,catalog,measured),/at least 250,000 IQD/);
+ for(const rate of [250000,250001,305000]){
+  const result=quote(rate,catalog,measured);
+  const before=structuredClone(result);
+  assert.equal(result.lines[0].system.quantity,1.5);
+  assert.equal(result.lines[0].system.total,Math.round(rate*1.5));
+  const suggestion=quotationSellingSuggestion(result,catalog);
+  assert.equal(suggestion.rate,305000);
+  assert.equal(suggestion.allGreen,rate>=305000);
+  const refreshed=repriceQuotation(result,catalog.map(item=>({...item,unit_price:item.unit_price*2})),'refresher');
+  assert.equal(refreshed.lines[0].system.rate,rate);
+  assert.equal(refreshed.total,result.total);
+  assert.deepEqual(result,before);
+ }
+});
+
 test('omitting a rate preserves catalog pricing and adds no override marker, including legacy catalog rates',()=>{
  const legacyCatalog=catalog.map(item=>item.id==='system'?{...item,unit_price:100000}:item);
  const implicit=priceQuotation([opening],[choice],legacyCatalog,'indoor-sales');

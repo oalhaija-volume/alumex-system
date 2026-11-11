@@ -1278,6 +1278,9 @@
     "generating": "جاري الإنشاء..."
   },
   "terms": {
+    "Hinged doors (IQD / m²)": "سعر الأبواب المفصلية (د.ع / م²)",
+    "Apply hinged doors price": "تطبيق سعر الأبواب المفصلية على الكل",
+    "Sliding prices apply to Alumex windows. Hinged window and door prices are set separately. Curtain Wall includes measured walls and its facade service.": "تُطبق أسعار السلايد على شبابيك ألومكس. تُحدد أسعار الشبابيك المفصلية والأبواب المفصلية بشكل منفصل. يشمل سعر الكيرتن الفتحات المقاسة وخدمة الواجهة الخاصة به.",
     "Applied to draft": "تم التطبيق على المسودة",
     "Price not applied yet. Click Apply to all.": "لم يُطبّق السعر بعد. اضغط «تطبيق على الكل».",
     "Applied {rate} IQD / m² to {count} items. Save the quotation to keep this price.": "تم تطبيق سعر {rate} د.ع / م² على {count} بند. احفظ عرض السعر لتثبيت هذا السعر.",

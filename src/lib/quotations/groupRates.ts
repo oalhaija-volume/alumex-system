@@ -1,13 +1,13 @@
 import { normalizeCatalogItem } from '@/lib/workflow/catalogRules';
 import { isQuotationCurtainRateEditable, isQuotationSystemRateEditable, QUOTATION_SYSTEM_RATE_MIN, type AdditionalChoice, type CatalogItem, type MeasuredOpening, type OpeningChoice } from '@/lib/workflow/pricing';
 
-export type QuotationRateGroupId='sliding'|'hinged'|'curtain-wall';
+export type QuotationRateGroupId='sliding'|'hinged'|'hinged-door'|'curtain-wall';
 export type QuotationRateGroup={id:QuotationRateGroupId;openingIds:string[];additionalItemIds:string[];count:number;rate?:number;minimum:number};
 
 export function quotationRateGroups(openings:MeasuredOpening[],choices:OpeningChoice[],additionalItems:AdditionalChoice[],catalog:CatalogItem[]):QuotationRateGroup[]{
  const products=new Map(catalog.map(product=>[product.id,normalizeCatalogItem(product)]));
  const selections=new Map(choices.map(choice=>[choice.openingId,choice]));
- const groups:QuotationRateGroup[]=['sliding','hinged','curtain-wall'].map(id=>({id:id as QuotationRateGroupId,openingIds:[],additionalItemIds:[],count:0,minimum:QUOTATION_SYSTEM_RATE_MIN}));
+ const groups:QuotationRateGroup[]=['sliding','hinged','hinged-door','curtain-wall'].map(id=>({id:id as QuotationRateGroupId,openingIds:[],additionalItemIds:[],count:0,minimum:QUOTATION_SYSTEM_RATE_MIN}));
  const rates=new Map<QuotationRateGroupId,number[]>();
  function add(group:QuotationRateGroup,rate:number){group.count++;const values=rates.get(group.id)??[];values.push(rate);rates.set(group.id,values);}
  for(const opening of openings){
@@ -15,7 +15,8 @@ export function quotationRateGroups(openings:MeasuredOpening[],choices:OpeningCh
   if(!choice||!product)continue;
   const group=opening.opening_type==='Window'&&isQuotationSystemRateEditable(product)
    ?opening.opening_direction==='Sliding'?groups[0]:opening.opening_direction==='Hinged'?groups[1]:undefined
-   :opening.opening_type==='Curtain Wall'&&isQuotationCurtainRateEditable(product)?groups[2]:undefined;
+   :opening.opening_type==='Door'&&opening.opening_direction==='Hinged'&&isQuotationSystemRateEditable(product)?groups[2]
+   :opening.opening_type==='Curtain Wall'&&isQuotationCurtainRateEditable(product)?groups[3]:undefined;
   if(!group)continue;
   group.openingIds.push(opening.id);
   add(group,choice.systemRate===undefined?Number(product.unit_price):choice.systemRate);
@@ -23,8 +24,8 @@ export function quotationRateGroups(openings:MeasuredOpening[],choices:OpeningCh
  for(const item of additionalItems){
   const product=products.get(item.id);
   if(!product||!isQuotationCurtainRateEditable(product))continue;
-  groups[2].additionalItemIds.push(item.id);
-  add(groups[2],item.unitRate===undefined?Number(product.unit_price):item.unitRate);
+  groups[3].additionalItemIds.push(item.id);
+  add(groups[3],item.unitRate===undefined?Number(product.unit_price):item.unitRate);
  }
  for(const group of groups){
   const values=rates.get(group.id);

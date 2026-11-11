@@ -188,10 +188,10 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <p>{term("Catalog rates apply unless you set an Alumex system rate for this quotation. Review the new total before saving.")}</p>
    </div>
    <section aria-label={term('Group prices')} className={`${card} space-y-4`}>
-    <div><h2 className="font-semibold">{term('Group prices')}</h2><p className="mt-2 text-sm leading-6 text-slate-600">{term('Set one rate for all matching items in this quotation. Glass, accessories and quantities stay the same.')}</p><p className="mt-1 text-xs leading-5 text-slate-600">{term('Sliding and hinged prices apply to Alumex windows. Curtain Wall includes measured walls and its facade service.')}</p></div>
-    <div className="grid gap-5 lg:grid-cols-3">{rateGroups.map(group=>{
-     const label=group.id==='sliding'?'Sliding windows (IQD / m²)':group.id==='hinged'?'Hinged windows (IQD / m²)':'Curtain Wall (IQD / m²)';
-     const applyLabel=group.id==='sliding'?'Apply sliding windows price':group.id==='hinged'?'Apply hinged windows price':'Apply curtain wall price';
+    <div><h2 className="font-semibold">{term('Group prices')}</h2><p className="mt-2 text-sm leading-6 text-slate-600">{term('Set one rate for all matching items in this quotation. Glass, accessories and quantities stay the same.')}</p><p className="mt-1 text-xs leading-5 text-slate-600">{term('Sliding prices apply to Alumex windows. Hinged window and door prices are set separately. Curtain Wall includes measured walls and its facade service.')}</p></div>
+    <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">{rateGroups.map(group=>{
+     const label=group.id==='sliding'?'Sliding windows (IQD / m²)':group.id==='hinged'?'Hinged windows (IQD / m²)':group.id==='hinged-door'?'Hinged doors (IQD / m²)':'Curtain Wall (IQD / m²)';
+     const applyLabel=group.id==='sliding'?'Apply sliding windows price':group.id==='hinged'?'Apply hinged windows price':group.id==='hinged-door'?'Apply hinged doors price':'Apply curtain wall price';
      const value=groupRateInputs[group.id]??(group.rate===undefined?'':String(group.rate));
      const invalid=value!==''&&(!Number.isSafeInteger(Number(value))||Number(value)<group.minimum);
      const pending=(groupRateInputs[group.id]?.trim()??'')!=='';

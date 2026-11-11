@@ -1278,6 +1278,18 @@
     "generating": "Generating..."
   },
   "terms": {
+    "Filters": "Filters",
+    "Only Indoor Sales and Sales Managers can change project names.": "Only Indoor Sales and Sales Managers can change project names.",
+    "Change Indoor Sales": "Change Indoor Sales",
+    "Responsible Indoor Sales updated.": "Responsible Indoor Sales updated.",
+    "The follow-up date and notes stay the same.": "The follow-up date and notes stay the same.",
+    "No eligible Indoor Sales employees. Connect online to refresh the employee list.": "No eligible Indoor Sales employees. Connect online to refresh the employee list.",
+    "Connect to the internet before changing Indoor Sales.": "Connect to the internet before changing Indoor Sales.",
+    "Only company leadership can change the responsible Indoor Sales employee.": "Only company leadership can change the responsible Indoor Sales employee.",
+    "Reload the project before changing Indoor Sales.": "Reload the project before changing Indoor Sales.",
+    "Choose an active Indoor Sales employee from this project’s branch.": "Choose an active Indoor Sales employee from this project’s branch.",
+    "Unable to change Indoor Sales. Reload the project and try again.": "Unable to change Indoor Sales. Reload the project and try again.",
+    "This project changed on another device. Reload before changing Indoor Sales.": "This project changed on another device. Reload before changing Indoor Sales.",
     "Governorates follow-up must be assigned to Karkh Indoor Sales or a Sales Manager.": "Governorates follow-up must be assigned to Karkh Indoor Sales or a Sales Manager.",
     "No Karkh Indoor Sales employees available. Connect online to refresh the employee list.": "No Karkh Indoor Sales employees available. Connect online to refresh the employee list.",
     "Hinged doors (IQD / m²)": "Hinged doors (IQD / m²)",

@@ -12,7 +12,7 @@ for (const role of ['Admin', 'Indoor Sales', 'Sales Manager', 'Outdoor Sales']) 
       ['Last year by Ali', '2025-10-02T09:00:00Z', 'creator-b', 'Ali'],
     ].map(([project_name, created_at, created_by, registeredBy], index) => ({
       id: `bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb${index}`, project_number: `PRJ-FILTER-${index}`, project_name,
-      created_at, created_by, registeredBy, updated_at: created_at, structure_readiness: 'ready', sales_status: 'new_lead',
+      created_at, created_by, registeredBy, updated_at: created_at, branch: actor.branch, structure_readiness: 'ready', sales_status: 'new_lead',
       assigned_outdoor_sales_id: actor.id, assignedOutdoorSales: actor.name, address: 'Baghdad', phone: null,
       next_follow_up_at: null, project_notes: null,
     }));
@@ -38,6 +38,9 @@ for (const role of ['Admin', 'Indoor Sales', 'Sales Manager', 'Outdoor Sales']) 
       window.dispatchEvent(new Event('field-change'));
     }, state);
     const filters = page.getByRole('region', { name: locale === 'en' ? 'Project filters' : 'تصفية المشاريع', exact: true });
+    await expect(filters).toBeVisible();
+    const filterDisclosure = filters.locator('summary');
+    if (await filterDisclosure.count()) await filterDisclosure.click();
     // Labels come from the same translated controls in every dashboard.
     const month = page.getByRole('combobox', { name: locale === 'en' ? 'Created month' : 'شهر الإنشاء', exact: true });
     const creator = page.getByRole('combobox', { name: locale === 'en' ? 'Created by' : 'تم الإنشاء بواسطة', exact: true });
@@ -62,7 +65,7 @@ for (const role of ['Admin', 'Indoor Sales', 'Sales Manager', 'Outdoor Sales']) 
       await page.setViewportSize({ width, height: 1000 });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
-    if (role === 'Indoor Sales') await filters.screenshot({ path: `artifacts/dashboard-filters-20261019/filters-${locale}.png` });
+    if (role === 'Indoor Sales') await filters.screenshot({ path: `artifacts/dashboard-ui-20261111/registration-filters-${locale}.png` });
     expect(errors).toEqual([]);
   });
 }

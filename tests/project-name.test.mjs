@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 
-const actor = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Outdoor employee', role: 'Outdoor Sales' };
+const actor = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Indoor employee', role: 'Indoor Sales', branch: 'Karkh' };
+const outdoor = { ...actor, name: 'Outdoor employee', role: 'Outdoor Sales', branch: null };
 const projectId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const operationId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const updatedAt = '2026-11-04T09:00:00.000Z';
@@ -11,6 +12,7 @@ const project = {
   id: projectId, project_name: 'Original project', project_number: 'PRJ-NAME',
   created_by: actor.id, assigned_outdoor_sales_id: 'another-employee',
   structure_readiness: 'ready', sales_status: 'quotation_approved',
+  branch: 'Karkh',
   updated_at: updatedAt, serverUpdatedAt: updatedAt, project_notes: 'Keep this note',
 };
 
@@ -34,18 +36,18 @@ function modules(dependencies = {}) {
   return path => load(new URL(`../src/${path}.ts`, import.meta.url));
 }
 
-test('Outdoor Sales keeps creator-only rename access and unrelated roles stay denied', () => {
+test('Outdoor Sales cannot rename created, assigned or historical project names', () => {
   const { canRenameProject } = modules()('lib/workflow/projectName');
-  assert.equal(canRenameProject(project, actor), true);
-  assert.equal(canRenameProject({ ...project, created_by: 'indoor', assigned_outdoor_sales_id: actor.id }, actor), false);
+  assert.equal(canRenameProject(project, outdoor), false);
+  assert.equal(canRenameProject({ ...project, created_by: 'indoor', assigned_outdoor_sales_id: outdoor.id }, outdoor), false);
   for (const role of ['Admin', 'CEO', 'Sales Director', 'Company Owner', 'HR']) {
-    assert.equal(canRenameProject(project, { ...actor, role }), false, role);
+    assert.equal(canRenameProject(project, { ...outdoor, role }), false, role);
   }
   for (const inaccessible of [
     { ...project, created_by: 'indoor', assigned_outdoor_sales_id: 'other' },
     { ...project, created_by: 'indoor', assigned_outdoor_sales_id: 'other', legacy_outdoor_sales_id: actor.id },
     { ...project, project_log_only: true },
-  ]) assert.equal(canRenameProject(inaccessible, actor), false);
+  ]) assert.equal(canRenameProject(inaccessible, outdoor), false);
 });
 
 test('Indoor Sales can rename accessible project titles without owning the project', () => {
@@ -58,7 +60,7 @@ test('Indoor Sales can rename accessible project titles without owning the proje
     assert.equal(canRenameProject({ ...project, branch, project_log_only: true }, indoor), false);
     assert.equal(canRenameProject({ ...project, branch: null }, indoor), false);
   }
-  assert.equal(canRenameProject({ ...project, branch: 'Karkh' }, { ...actor, role: 'Indoor Sales' }), false);
+  assert.equal(canRenameProject({ ...project, branch: 'Karkh' }, { ...actor, role: 'Indoor Sales', branch: null }), false);
   assert.equal(canRenameProject({ ...project, branch: 'Rasafa' }, { ...actor, role: 'Sales Manager' }), true);
 });
 
@@ -179,14 +181,27 @@ test('other workspace actions keep the existing CRM authorization scope', async 
   assert.equal(x.calls.length, 0);
 });
 
-for (const role of ['Admin', 'CEO', 'HR']) test(`desktop rename refuses ${role}`, async () => {
+for (const role of ['Outdoor Sales', 'Admin', 'CEO', 'HR']) test(`desktop rename refuses ${role}`, async () => {
   const x = endpoint('workspace', { role });
   assert.equal((await x.api.PATCH(request(rename))).status, 403);
   assert.equal(x.calls.length, 0);
 });
 
-test('desktop rename refuses another employee’s project and malformed names or versions', async () => {
-  const foreign = endpoint('workspace', { currentProject: { ...project, created_by: 'other', assigned_outdoor_sales_id: 'other' } });
+for (const path of ['workspace', 'offline']) test(`${path} rejects Outdoor project creators and assigned employees without calling SQL`, async () => {
+  for (const currentProject of [
+    project,
+    { ...project, created_by: 'another-creator', assigned_outdoor_sales_id: outdoor.id },
+  ]) {
+    const x = endpoint(path, { role: outdoor.role, currentProject });
+    const response = path === 'workspace' ? await x.api.PATCH(request(rename)) : await x.api.POST(request(savedRename));
+    assert.equal(response.status, 403);
+    assert.match(response.body.error, /Indoor Sales/);
+    assert.deepEqual(x.calls, []);
+  }
+});
+
+test('desktop rename refuses Outdoor access to another employee’s project and malformed names or versions', async () => {
+  const foreign = endpoint('workspace', { role: 'Outdoor Sales', currentProject: { ...project, created_by: 'other', assigned_outdoor_sales_id: 'other' } });
   assert.equal((await foreign.api.PATCH(request(rename))).status, 403);
   assert.equal(foreign.calls.length, 0);
   for (const patch of [{ projectName: '' }, { projectName: 123 }, { projectName: 'x'.repeat(151) }, { expectedUpdatedAt: undefined }, { expectedUpdatedAt: 'invalid' }]) {
@@ -224,6 +239,7 @@ test('offline rename rejects a different account, unrelated roles and invalid na
   for (const [options, change, expectedStatus] of [
     [{}, { ...savedRename, userId: 'forged' }, 400],
     [{ role: 'Admin' }, savedRename, 403],
+    [{ role: 'Outdoor Sales' }, savedRename, 403],
     [{ role: 'HR' }, savedRename, 403],
     [{}, { ...savedRename, payload: { projectName: '  ' } }, 400],
     [{}, { ...savedRename, payload: { projectName: 'x'.repeat(151) } }, 400],
@@ -241,7 +257,7 @@ for (const path of ['workspace', 'offline']) test(`${path} rename requires authe
   assert.equal(x.calls.length, 0);
 });
 
-function device(t, { employee = actor, currentProject = project } = {}) {
+function device(t, { employee = actor, currentProject = project, initialQueue = [] } = {}) {
   const previous = new Map(['window', 'navigator', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   t.after(() => {
     for (const [key, descriptor] of previous) {
@@ -249,7 +265,7 @@ function device(t, { employee = actor, currentProject = project } = {}) {
       else Reflect.deleteProperty(globalThis, key);
     }
   });
-  let state = { actor: employee, projects: [structuredClone(currentProject)], openings: [{ id: 'opening', projectId, width: 100 }], queue: [], syncedAt: null };
+  let state = { actor: employee, projects: [structuredClone(currentProject)], openings: [{ id: 'opening', projectId, width: 100 }], queue: structuredClone(initialQueue), syncedAt: null };
   let active = employee.id;
   globalThis.window = { location: { pathname: '/offline' }, dispatchEvent() {} };
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
@@ -265,8 +281,34 @@ function device(t, { employee = actor, currentProject = project } = {}) {
     },
   };
   const client = modules({ './store': store, './device': { isOfflineDevice: () => true } })('lib/offline/client');
-  return { client, get state() { return structuredClone(state); } };
+  return { client, get state() { return structuredClone(state); }, get active() { return active; } };
 }
+
+test('retained Outdoor rename work is blocked before replay while its queue, local data and account survive', async t => {
+  const x = device(t, {
+    employee: outdoor,
+    currentProject: { ...project, project_name: 'Previously queued name', pending: true },
+    initialQueue: [savedRename],
+  });
+  const before = x.state;
+  const writes = [];
+  globalThis.fetch = async (url, init) => {
+    if (init?.method) {
+      writes.push({ url, init });
+      throw new Error('Outdoor rename must not be sent to the server');
+    }
+    return Response.json({ actor: outdoor });
+  };
+  navigator.onLine = true;
+  await x.client.syncFieldChanges();
+  assert.deepEqual(writes, []);
+  assert.equal(x.active, outdoor.id);
+  assert.deepEqual(x.state.projects, before.projects);
+  assert.deepEqual(x.state.openings, before.openings);
+  assert.equal(x.state.queue.length, 1);
+  assert.deepEqual({ ...x.state.queue[0], error: undefined }, { ...before.queue[0], error: undefined });
+  assert.match(x.state.queue[0].error, /Only Indoor Sales and Sales Managers/);
+});
 
 test('offline rename is durable immediately and preserves measurements, stage, notes and the server version', async t => {
   const x = device(t);
@@ -284,7 +326,9 @@ test('offline rename is durable immediately and preserves measurements, stage, n
 
 test('offline rename queues no changes for unrelated, read-only, invalid or wrong-role requests', async t => {
   for (const options of [
-    { currentProject: { ...project, created_by: 'other', assigned_outdoor_sales_id: 'other' } },
+    { employee: outdoor },
+    { employee: outdoor, currentProject: { ...project, created_by: 'other', assigned_outdoor_sales_id: outdoor.id } },
+    { employee: outdoor, currentProject: { ...project, created_by: 'other', assigned_outdoor_sales_id: 'other' } },
     { currentProject: { ...project, project_log_only: true } },
     { employee: { ...actor, role: 'Indoor Sales', branch: 'Karkh' }, currentProject: { ...project, branch: 'Rasafa' } },
   ]) {
@@ -315,7 +359,7 @@ test('a new offline registration can be renamed before sync and uses the registr
   const id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
   const registration = {
     client: { clientName: 'Original client name', mobile: '07700000000', clientType: 'individual' },
-    project: { branch: 'Governorates', governorate: 'البصرة', buildingType: 'villa_house', address: 'Basra', locationLatitude: 30.5, locationLongitude: 47.8, structureReadiness: 'ready' },
+    project: { assignedOutdoorSalesId: actor.id, buildingType: 'villa_house', address: 'Basra', locationLatitude: 30.5, locationLongitude: 47.8, structureReadiness: 'ready' },
   };
   await x.client.saveFieldChange('register', id, registration, actor.id);
   const saved = x.state.projects.find(item => item.id === id);

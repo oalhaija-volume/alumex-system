@@ -37,6 +37,10 @@ test.beforeAll(async ({}, testInfo) => {
   const baseline = Boolean(testInfo.project.metadata.baseline);
   writeFileSync(resolve(output, 'reschedule-entry.tsx'), `import React from 'react';import {createRoot} from 'react-dom/client';import {I18nProvider} from '@/components/i18n/I18nProvider';import {ProjectWorkspace} from '@/components/workflow/ProjectWorkspace';import {SalesDashboard} from '@/components/workflow/SalesDashboard';createRoot(document.getElementById('root')!).render(<I18nProvider>{location.pathname==='/dashboard'?<SalesDashboard/>:<ProjectWorkspace followUps/>}</I18nProvider>);`);
   writeFileSync(resolve(output, 'reschedule-typescript-loader.cjs'), `const ts=require('typescript');module.exports=function(source){return ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true,removeComments:true}}).outputText;};`);
+  // This transport regression fixture bundles outside Next's font/CSS loaders.
+  // Real dashboard styling and font loading are covered by the dashboard UI tests.
+  writeFileSync(resolve(output, 'reschedule-font-stub.cjs'), `module.exports={Noto_Sans_Arabic:function(){return {variable:''};}};`);
+  writeFileSync(resolve(output, 'reschedule-css-module-loader.cjs'), `module.exports=function(source){const names=[...source.matchAll(/\\.([a-zA-Z_][\\w-]*)/g)].map(match=>match[1]);return 'export default '+JSON.stringify(Object.fromEntries(names.map(name=>[name,name])))+';';};`);
   if (baseline) writeFileSync(resolve(output, 'baseline-ui.tsx'), execFileSync('git', ['show', '3e153584bfb410d54444e4245e0cc1d1cabe6e2b:src/components/workflow/ui.tsx'], { encoding: 'utf8' }));
   const require = createRequire(resolve('package.json'));
   const { webpack } = require('next/dist/compiled/webpack/webpack');
@@ -45,8 +49,12 @@ test.beforeAll(async ({}, testInfo) => {
     mode: 'production', target: 'web', context: process.cwd(), devtool: false,
     entry: resolve(output, 'reschedule-entry.tsx'), output: { path: output, filename: baseline ? 'reschedule-baseline.bundle.js' : 'reschedule.bundle.js' },
     resolve: { extensions: ['.tsx', '.ts', '.js', '.json'], alias: { '@': resolve('src') } },
-    module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: [resolve(output, 'reschedule-typescript-loader.cjs')] }] },
+    module: { rules: [
+      { test: /\.tsx?$/, exclude: /node_modules/, use: [resolve(output, 'reschedule-typescript-loader.cjs')] },
+      { test: /\.module\.css$/, use: [resolve(output, 'reschedule-css-module-loader.cjs')] },
+    ] },
     plugins: [new webpack.DefinePlugin({ 'process.env': JSON.stringify({ NODE_ENV: 'production' }) }),
+      new webpack.NormalModuleReplacementPlugin(/^next\/font\/google$/, resolve(output, 'reschedule-font-stub.cjs')),
       ...(baseline ? [new webpack.NormalModuleReplacementPlugin(/(?:^|\/)ui(?:\.tsx)?$/, (resource: { context: string; request: string }) => {
         if (resource.context.includes('/src/components/workflow')) resource.request = resolve(output, 'baseline-ui.tsx');
       })] : [])],

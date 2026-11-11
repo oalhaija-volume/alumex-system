@@ -4,7 +4,8 @@ import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDel
 import { useI18n } from '@/components/i18n/I18nProvider';
 import { ProjectFollowUps } from './ProjectFollowUps';
 import { LeadershipDashboard, dashboardTones, dashboardStageTone } from './LeadershipDashboard';
-import { deleteOnlineProject } from '@/lib/offline/client';
+import { deleteOnlineProject, updateSavedClientName, updateSavedIndoorSales } from '@/lib/offline/client';
+import { notifyWorkspaceChanged } from '@/lib/workflow/workspaceEvents';
 import { canAccessCRM } from '@/lib/auth/permissions';
 import { DashboardProjectFilters } from './DashboardProjectFilters';
 import { matchesProjectSearch } from '@/lib/dashboard/projectSearch';
@@ -34,7 +35,15 @@ export function SalesDashboard(){
    await reload();
   }catch(cause){setError(cause instanceof Error?cause.message:'Unable to delete project.');}finally{setBusy('');}
  }
- if(data && canAccessCRM(data.actor.role)) return <LeadershipDashboard data={data} error={error} now={now} notice={notice} busy={busy} onDelete={data.actor.role==='Admin'?remove:undefined}/>;
+ if(data && canAccessCRM(data.actor.role)) return <LeadershipDashboard data={data} error={error} now={now} notice={notice} busy={busy} onDelete={data.actor.role==='Admin'?remove:undefined} onProjectSaved={reload} onClientNameSaved={async(project,clientName)=>{
+  setData(current=>current&&current.actor.id===data.actor.id?{...current,projects:current.projects.map(row=>row.id===project.id||(project.client_id&&row.client_id===project.client_id)?{...row,client_name:clientName}:row)}:current);
+  await updateSavedClientName(data.actor.id,project.id,project.client_id,clientName).catch(()=>{/* A later device refresh can recover a successful server save. */});
+  notifyWorkspaceChanged();
+ }} onIndoorSalesSaved={async assignment=>{
+  setData(current=>current&&current.actor.id===data.actor.id?{...current,projects:current.projects.map(project=>project.id===assignment.id&&!project.pending&&Date.parse(project.updated_at)<=Date.parse(assignment.updated_at)?{...project,...assignment}:project)}:current);
+  await updateSavedIndoorSales(data.actor.id,assignment).catch(()=>{/* A later device refresh can recover a successful server save. */});
+  notifyWorkspaceChanged();
+ }}/>;
  return <Workspace title={term(data?.actor?.role==='Outdoor Sales'?"My sales dashboard":"Dashboard")} description={term(outdoor?"Your assigned sites and initial measurement tasks.":"Your projects, measurement tasks and follow-up reminders.")}><Notice error={error}/><div className="mb-7 flex flex-wrap gap-3"><Link href="/intake" className={button}>{term("New client & project")}</Link>{canAccessCRM(data?.actor.role)&&<Link href="/mini-crm" className="min-h-12 rounded-md border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700">{term("Open CRM follow-ups")}</Link>}</div>{loading?<p>{term("Loading project stages…")}</p>:<>
  <DashboardProjectFilters registration={registration} search={search} onSearch={setSearch} filter={stage} onFilter={setStage} onClear={()=>{setStage('all');setDue('all');setSearch('');registration.reset();}} count={selected.length} total={data?.projects.length??0}>{crm&&<label className="text-sm">{term("Follow-up priority")}<select aria-label={term("Follow-up priority")} value={due} onChange={e=>setDue(e.target.value)} className={field}><option value="all">{term("All projects in this stage")}</option><option value="overdue">{term("Overdue follow-ups")}</option><option value="unscheduled">{term("Needs a follow-up date")}</option></select></label>}</DashboardProjectFilters>
  {data&&<SalesTaskPanel data={{...data,projects}} now={now}/>}

@@ -82,7 +82,7 @@ test('shared measurement visibility does not grant another employee’s project-
   const shared = fixture().project;
   assert.deepEqual(measurementTasks([shared], actor).map(project => project.id), [projectId]);
   assert.equal(canRenameProject(shared, actor), false);
-  assert.equal(canRenameProject({ ...shared, created_by: actorId }, actor), true);
+  assert.equal(canRenameProject({ ...shared, created_by: actorId }, actor), false);
   assert.equal(canEditOpeningEntry({ createdBy: teammateId }, actor), false);
   assert.equal(canEditOpeningEntry({ createdBy: actorId }, actor), true);
   assert.equal(canEditOpeningEntry({}, actor), false, 'Old entries without an author must not be attributed to the assignee');
@@ -147,15 +147,15 @@ for (const role of ['Indoor Sales', 'Sales Manager', 'Admin']) test(`${role} ret
   assert.equal(x.calls.length, 1);
 });
 
-test('a shared assignee cannot rename a project by forging the creator, while the real creator can rename it', async () => {
-  for (const [projectCreator, status] of [[teammateId, 403], [actorId, 200]]) {
+test('neither a shared Outdoor assignee nor its real creator can rename a project', async () => {
+  for (const projectCreator of [teammateId, actorId]) {
     const x = fixture({ projectCreator });
     const response = await x.load('app/api/workspace/route').PATCH(request({
       projectId, action: 'rename-project', projectName: 'Reviewed project', expectedUpdatedAt: version,
       created_by: actorId, original_creator_id: actorId, outdoorTeamMemberIds: [actorId, teammateId],
     }));
-    assert.equal(response.status, status);
-    assert.equal(x.calls.length, status === 200 ? 1 : 0);
+    assert.equal(response.status, 403);
+    assert.equal(x.calls.length, 0);
   }
 });
 

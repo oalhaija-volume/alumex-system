@@ -12,7 +12,7 @@ export function canRenameProject(project: Project, actor: OutdoorTeamActor & { b
   if(project.project_log_only)return false;
   if(actor.role==='Indoor Sales')return canAccessProjectBranch(actor,project.branch);
   if(actor.role==='Sales Manager')return true;
-  return actor.role === 'Outdoor Sales' && project.created_by === actor.id;
+  return false;
 }
 
 export function normalizeProjectName(input: Record<string, unknown>) {

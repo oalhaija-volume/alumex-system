@@ -103,7 +103,7 @@ test('a teammate can reopen, edit their own entries and finish shared measuremen
   await x.client.saveFieldChange('reopen', projectId, {});
   await x.client.saveFieldChange('edit-opening', projectId, { previous: opening, opening: { ...opening, width: 125 } });
   await x.client.saveFieldChange('finish', projectId, {});
-  await assert.rejects(x.client.saveFieldChange('rename-project', projectId, { projectName: 'Renamed shared site', expectedUpdatedAt: project.updated_at }), /registered|created/);
+  await assert.rejects(x.client.saveFieldChange('rename-project', projectId, { projectName: 'Renamed shared site', expectedUpdatedAt: project.updated_at }), /Indoor Sales/);
   assert.deepEqual(x.raw.queue.map(c => c.action), ['reopen', 'edit-opening', 'finish']);
   assert.equal(x.raw.openings[0].width, 125);
   assert.equal(x.raw.projects[0].sales_status, 'ready_for_quotation');

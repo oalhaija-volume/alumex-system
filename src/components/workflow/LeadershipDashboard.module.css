@@ -1,0 +1,30 @@
+.dashboard:lang(ar) {
+  font-family: var(--font-dashboard-arabic), var(--font-geist-sans), Arial, sans-serif;
+  line-height: 1.7;
+}
+
+.dashboard:lang(ar) :is(h1, h2, h3) {
+  letter-spacing: normal;
+}
+
+.coverage > summary {
+  list-style: none;
+}
+
+.coverage > summary::-webkit-details-marker {
+  display: none;
+}
+
+.coverage[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.coverage[open] .coverageChevron {
+  transform: rotate(180deg);
+}
+
+.coverageContent > section {
+  margin-bottom: 0;
+  border: 0;
+  border-radius: 0;
+}

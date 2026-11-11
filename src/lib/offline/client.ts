@@ -31,6 +31,18 @@ export async function updateSavedClientName(actorId:string,projectId:string,clie
   return {...state,projects:state.projects.map(project=>project.id===projectId||(clientId&&project.client_id===clientId)?{...project,client_name:clientName}:project)};
  });
 }
+export async function updateSavedIndoorSales(actorId:string,assignment:Pick<FieldProject,'id'|'updated_at'|'follow_up_owner_id'|'followUpOwner'>){
+ if(activeFieldUser()!==actorId||!await readStoredFieldState(actorId))return;
+ await updateFieldState(actorId,state=>{
+  if(!state)throw new Error('Offline account unavailable.');
+  return {...state,projects:state.projects.map(project=>{
+   if(project.id!==assignment.id||project.pending||state.queue.some(change=>change.projectId===project.id))return project;
+   // A response must not rebase queued work or replace a newer server snapshot.
+   if(Date.parse(project.serverUpdatedAt??project.updated_at)>Date.parse(assignment.updated_at))return project;
+   return {...project,...assignment,serverUpdatedAt:assignment.updated_at};
+  })};
+ });
+}
 // Keep unsynced content, but refresh the current assignment before allowing a
 // second local edit. A pending rename or opening must not retain a former team.
 function withCurrentProjectAccess(local:FieldProject,remote:FieldProject):FieldProject {
@@ -144,6 +156,10 @@ export async function syncFieldChanges(){
    attempted.add(change.id);
    if(['follow-up','ready','assign-measurements','request-openings'].includes(change.action)&&!canAccessCRM(identity.actor.role)){await updateFieldState(id,s=>({...s!,queue:s!.queue.map(c=>c.id===change.id?{...c,error:'CRM access is limited to Indoor Sales and company leadership.'}:c)}));failed.add(change.projectId);continue;}
    const project=current?.projects.find(p=>p.id===change.projectId);
+   if(change.action==='rename-project'&&(!project||!canRenameProject(project,identity.actor))){
+    await updateFieldState(id,s=>({...s!,queue:s!.queue.map(c=>c.id===change.id?{...c,error:'Only Indoor Sales and Sales Managers can change project names.'}:c)}));
+    failed.add(change.projectId);continue;
+   }
    if(!current||!canAccessProjectBranch(current.actor,project?.branch)){failed.add(change.projectId);continue;}
    let response:Response;
    try{response=await fetch('/api/offline',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(20000),body:JSON.stringify({...change,expectedUpdatedAt:project?.serverUpdatedAt??project?.updated_at})});}catch{connection(false);return;}
@@ -211,7 +227,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if(!canAccessFieldProject(s,p))throw new Error('Project is not available to this employee.');
    if(!p)throw new Error('Open this project online once before working on it offline.');
    if(action==='rename-project'){
-    if(!canRenameProject(p,s.actor))throw new Error('Only the employee who registered this project can change its name.');
+    if(!canRenameProject(p,s.actor))throw new Error('Only Indoor Sales and Sales Managers can change project names.');
     if(payload.expectedUpdatedAt!==undefined&&payload.expectedUpdatedAt!==p.updated_at)throw new Error('This project changed on another device. Reload the project before changing its name.');
     const renamed=normalizeProjectName(payload);change.payload=renamed;
     p={...p,project_name:renamed.projectName};

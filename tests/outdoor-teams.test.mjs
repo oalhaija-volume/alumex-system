@@ -147,7 +147,7 @@ test('the team policy shares assignees reciprocally without sharing teammate-cre
     const teammate = teamIds(employee).find(id => id !== employee.id);
     assert.equal(policy.canAccessOutdoorProject({ created_by: teammate, assigned_outdoor_sales_id: null }, actor), false);
     assert.equal(policy.canAccessOutdoorProject({ created_by: employee.id, assigned_outdoor_sales_id: null }, actor), true);
-    assert.equal(canRenameProject({ created_by: employee.id, assigned_outdoor_sales_id: null }, actor), true);
+    assert.equal(canRenameProject({ created_by: employee.id, assigned_outdoor_sales_id: null }, actor), false);
     assert.equal(canRenameProject({ ...allowed[0], project_log_only: true }, actor), false);
     assert.deepEqual(policy.outdoorAssignmentIds({ ...actor, outdoorTeamMemberIds: [...actor.outdoorTeamMemberIds, employee.id] }).toSorted(), teamIds(employee).toSorted());
     const filter = policy.outdoorProjectFilter(actor);

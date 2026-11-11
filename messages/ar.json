@@ -1278,6 +1278,18 @@
     "generating": "جاري الإنشاء..."
   },
   "terms": {
+    "Filters": "عوامل التصفية",
+    "Only Indoor Sales and Sales Managers can change project names.": "يمكن فقط للمبيعات الداخلية ومديري المبيعات تعديل أسماء المشاريع.",
+    "Change Indoor Sales": "تغيير موظف المبيعات الداخلية",
+    "Responsible Indoor Sales updated.": "تم تحديث موظف المبيعات الداخلية المسؤول.",
+    "The follow-up date and notes stay the same.": "يبقى موعد المتابعة والملاحظات كما هما.",
+    "No eligible Indoor Sales employees. Connect online to refresh the employee list.": "لا يوجد موظفو مبيعات داخلية مؤهلون. اتصل بالإنترنت لتحديث قائمة الموظفين.",
+    "Connect to the internet before changing Indoor Sales.": "اتصل بالإنترنت قبل تغيير موظف المبيعات الداخلية.",
+    "Only company leadership can change the responsible Indoor Sales employee.": "يمكن لإدارة الشركة فقط تغيير موظف المبيعات الداخلية المسؤول.",
+    "Reload the project before changing Indoor Sales.": "أعد تحميل المشروع قبل تغيير موظف المبيعات الداخلية.",
+    "Choose an active Indoor Sales employee from this project’s branch.": "اختر موظف مبيعات داخلية نشطاً من فرع هذا المشروع.",
+    "Unable to change Indoor Sales. Reload the project and try again.": "تعذر تغيير موظف المبيعات الداخلية. أعد تحميل المشروع وحاول مرة أخرى.",
+    "This project changed on another device. Reload before changing Indoor Sales.": "تم تعديل هذا المشروع على جهاز آخر. أعد تحميله قبل تغيير موظف المبيعات الداخلية.",
     "Governorates follow-up must be assigned to Karkh Indoor Sales or a Sales Manager.": "يجب إسناد متابعة مشاريع المحافظات إلى المبيعات الداخلية في الكرخ أو مدير المبيعات.",
     "No Karkh Indoor Sales employees available. Connect online to refresh the employee list.": "لا يوجد موظفو مبيعات داخلية متاحون في الكرخ. اتصل بالإنترنت لتحديث قائمة الموظفين.",
     "Hinged doors (IQD / m²)": "سعر الأبواب المفصلية (د.ع / م²)",

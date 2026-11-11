@@ -2,71 +2,79 @@
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { fieldFetch,isDeviceWorkspace } from '@/lib/offline/client';
 import type { FieldChangeDetail } from '@/lib/offline/store';
-import { useEffect,useState } from 'react';
+import { createResourceLoader } from '@/lib/workflow/resourceLoader';
+import { notifyWorkspaceChanged,subscribeWorkspaceChanges } from '@/lib/workflow/workspaceEvents';
+import { useCallback,useEffect,useRef,useState } from 'react';
 export const field='mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100';
 export const button='min-h-12 rounded-md bg-blue-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50 hover:bg-blue-700';
 export const secondary='min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50';
 export const card='rounded-lg border border-slate-200 bg-white p-5 sm:p-7';
 export async function api<T>(url:string,init?:RequestInit):Promise<T>{
- const response=await (url==='/api/workspace'?fieldFetch:fetch)(url,{cache:'no-store',...init});const data=await response.json();if(!response.ok)throw new Error(data.error??'Unable to complete request.');return data;
+ const response=await (url==='/api/workspace'?fieldFetch:fetch)(url,{cache:'no-store',...init});const data=await response.json();if(!response.ok)throw new Error(data.error??'Unable to complete request.');
+ if(url==='/api/workspace'&&init?.method?.toUpperCase()==='PATCH')notifyWorkspaceChanged(data?.pending!==true);
+ return data;
 }
 export function useResource<T>(url:string){
  const [data,setData]=useState<T|null>(null);
  const [error,setError]=useState('');
  const [loading,setLoading]=useState(true);
+ const reloadResource=useRef<(()=>Promise<void>)|null>(null);
  useEffect(()=>{
-  const controller=new AbortController();
-  let version=0;
   let timer:ReturnType<typeof setTimeout>;
-  let inFlight=false;
   let pendingForce=false;
   let actorId:string|null=null;
-  async function refresh(force=false){
-   if(inFlight&&!force)return;
-   const current=++version;
-   inFlight=true;
-   try{
-    const result=await api<T>(url,{signal:controller.signal});
-    if(!controller.signal.aborted&&current===version){
+  const loader=createResourceLoader<T>({
+   load:signal=>api<T>(url,{signal}),
+   onData:result=>{
      setData(result);
      setError('');
      if(result&&typeof result==='object'&&'actor' in result){
       const actor=result.actor;
       if(actor&&typeof actor==='object'&&'id' in actor&&typeof actor.id==='string')actorId=actor.id;
      }
-    }
-   }catch(e){
-    if(!controller.signal.aborted&&current===version)setError((e as Error).message);
-   }finally{
-    if(current===version){inFlight=false;if(!controller.signal.aborted)setLoading(false);}
-   }
+   },
+   onError:cause=>setError(cause instanceof Error?cause.message:'Unable to complete request.'),
+   onSettled:()=>setLoading(false),
+  });
+  async function reload(){
+   clearTimeout(timer);pendingForce=false;
+   await loader.refresh(true,true);
   }
+  reloadResource.current=reload;
   function changed(event?:Event){
    const detail=(event as CustomEvent<FieldChangeDetail>|undefined)?.detail;
    // Online pages poll their API; the device workspace renders its refreshed snapshot.
    if(detail?.source==='snapshot'&&!isDeviceWorkspace())return;
    if(detail?.source==='account'){
-    if(detail.userId===actorId||(!actorId&&inFlight&&detail.userId))return;
+    if(actorId!==null&&detail.userId===actorId)return;
     actorId=null;
-    version++;
-    inFlight=false;
     setData(null);
    }
    // Real local edits must supersede a request that started before the edit.
    pendingForce ||= event?.type==='field-change';
+   if(pendingForce)loader.invalidate();
    clearTimeout(timer);
-   timer=setTimeout(()=>{const force=pendingForce;pendingForce=false;void refresh(force);},150);
+   timer=setTimeout(()=>{const force=pendingForce;pendingForce=false;void loader.refresh(force);},150);
   }
-  void refresh();
+  function workspaceChanged(){
+   // Invalidate immediately, before the debounce, so an older poll cannot
+   // restore the previous overdue date while the new read is being scheduled.
+   loader.invalidate();pendingForce=true;
+   clearTimeout(timer);
+   timer=setTimeout(()=>{pendingForce=false;void loader.refresh(true);},150);
+  }
+  void loader.refresh();
   const live=url==='/api/workspace'||url==='/api/dashboard'||url==='/api/outdoor-sales-coverage';
   const interval=live?setInterval(()=>{if(document.visibilityState==='visible')changed();},30000):undefined;
   if(live){window.addEventListener('field-change',changed);window.addEventListener('focus',changed);}
+  const unsubscribe=live?subscribeWorkspaceChanges(workspaceChanged):()=>{};
   return()=>{
-   controller.abort();clearTimeout(timer);clearInterval(interval);
+   loader.dispose();clearTimeout(timer);clearInterval(interval);unsubscribe();
+   if(reloadResource.current===reload)reloadResource.current=null;
    window.removeEventListener('field-change',changed);window.removeEventListener('focus',changed);
   };
  },[url]);
- async function reload(){setData(await api<T>(url));}
+ const reload=useCallback(async()=>{await reloadResource.current?.();},[]);
  return {data,setData,error,setError,loading,reload};
 }
 export function Workspace({title,description,children,action}:{title:string;description:string;children:React.ReactNode;action?:React.ReactNode}){const {term}=useI18n();return <section className="sales-document mx-auto max-w-5xl px-5 py-9 sm:px-8 sm:py-12 print:max-w-none print:p-0">{action?<header className="flex items-start justify-between gap-3 print:hidden"><h1 className="min-w-0 text-2xl font-semibold tracking-tight">{term(title)}</h1>{action}</header>:<h1 className="text-3xl font-semibold tracking-tight print:hidden">{term(title)}</h1>}<p className="mt-3 mb-8 text-sm leading-6 text-slate-500 print:hidden">{term(description)}</p>{children}</section>;}

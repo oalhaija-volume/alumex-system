@@ -14,11 +14,15 @@ import Link from 'next/link';
 import { stageDetails,projectLink } from '@/lib/workflow/stages';
 import { deleteOnlineProject, updateSavedClientName } from '@/lib/offline/client';
 import { useState } from 'react';
+import { useOutdoorSalesProjectFilters } from './useOutdoorSalesProjectFilters';
+import { OutdoorSalesProjectFilter } from './OutdoorSalesProjectFilter';
+import { projectOutdoorSalesOrigin } from '@/lib/dashboard/outdoorProjectFilters';
 import { api,button,card,Notice,useResource,useNow,Workspace } from './ui';
 type Project=FieldProject;
 export function ProjectWorkspace({followUps=false,canDelete=false}:{followUps?:boolean;canDelete?:boolean}){
  const { term,formatDateTime } = useI18n();
  const {data,setData,error,setError,loading,reload}=useResource<SalesWorkspaceData>('/api/workspace');const [busy,setBusy]=useState('');const [notice,setNotice]=useState('');const now=useNow();
+ const outdoorFilter=useOutdoorSalesProjectFilters(data?.projects??[],data?.outdoorSales);
  async function update(p:Project,action:string,form?:HTMLFormElement){setBusy(p.id);setError('');setNotice('');const values=form?(['cancel-project','reactivate-project'].includes(action)?{note:new FormData(form).get('note'),confirmed:true,expectedUpdatedAt:p.updated_at}:action==='follow-up'?followUpFormValues(form):{assignedOutdoorSalesId:new FormData(form).get('assignedOutdoorSalesId')}):{};try{const result=await api<{pending?:boolean}>('/api/workspace',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId:p.id,action,...values})});await reload();setNotice(action==='reactivate-project'?'Project reactivated.':action==='cancel-project'?'Project marked cancelled by client.':action==='ready'||action==='assign-measurements'||action==='request-openings'?result.pending?'Measurement assignment saved on this device. The employee will be notified after sync.':'Measurements assigned. The employee will see the task in their mobile workspace.':'Follow-up saved.');}catch(e){setError((e as Error).message);}finally{setBusy('');}}
  async function remove(p:Project){
   if(!window.confirm(term('Delete {number} — {name}?\n\nThis permanently removes its measurements, follow-ups, quotation and contract. The client record is kept. This cannot be undone.',{number:p.project_number,name:p.project_name})))return;
@@ -27,12 +31,13 @@ export function ProjectWorkspace({followUps=false,canDelete=false}:{followUps?:b
  }
  if(followUps&&!loading&&!canAccessCRM(data?.actor.role))return <Notice error="CRM access is limited to Indoor Sales and company leadership."/>;
  if(followUps)return <MiniCRM data={data} error={error} notice={notice} loading={loading} busy={busy} now={now} canDelete={canDelete} onUpdate={update} onDelete={remove}/>;
- const projects=data?.projects??[];
+ const projects=outdoorFilter.filteredProjects;
  return <Workspace title="Projects" description="Every client project, its current step, and the employee who registered it.">
   <Notice error={error}/>
   {notice&&<p role="status" className="mb-5 text-green-700">{term(notice)}</p>}
   <Link href="/intake" className={`${button} mb-6 inline-block`}>{term("New client & project")}</Link>
-  {loading?<p>{term("Loading projects…")}</p>:!projects.length?<div className={card}>{term("No projects yet. Start by registering a client.")}</div>:<div className="space-y-4">{projects.map(p=><article key={p.id} id={`project-${p.id}`} className={`${card} scroll-mt-5`}>
+  {!loading&&<OutdoorSalesProjectFilter filter={outdoorFilter}/>}
+  {loading?<p>{term("Loading projects…")}</p>:!projects.length?<div className={card}>{term(data?.projects.length?"No projects match this view.":"No projects yet. Start by registering a client.")}</div>:<div className="space-y-4">{projects.map(p=>{const broughtInBy=projectOutdoorSalesOrigin(p,data?.outdoorSales);return <article key={p.id} id={`project-${p.id}`} className={`${card} scroll-mt-5`}>
    <div className="flex flex-wrap justify-between gap-4"><div><p className="text-xs font-semibold text-blue-600">{term(p.project_number)}{p.pending?` · ${term('Saved on device')}`:''}</p><h2 className="mt-2 text-xl font-semibold">{p.project_name}</h2><p className="mt-2 text-sm text-slate-600">{p.address}</p>{p.governorate&&<p className="mt-1 text-sm font-medium text-slate-700">{term('Governorates')} · <bdi>{p.governorate}</bdi></p>}</div><span className="h-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-medium">{term(stageDetails(p).label)}</span></div>
    {data&&<ProjectNameEditor project={p} actor={data.actor} onSaved={reload}/>}
    {data&&<ClientNameEditor project={p} actor={data.actor} onSaved={async clientName=>{
@@ -43,7 +48,8 @@ export function ProjectWorkspace({followUps=false,canDelete=false}:{followUps?:b
    {canReactivateProject(p,data?.actor.role)&&<ReactivateProject busy={!!busy||!!p.pending} onSubmit={form=>void update(p,'reactivate-project',form)}/>}
    {p.readiness_note&&<p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-700"><span className="font-semibold">{term('Reason not ready for measurement')}: </span><span dir="auto">{p.readiness_note}</span></p>}
    {p.phone&&<a dir="ltr" href={`tel:${p.phone}`} className="mt-3 inline-block text-sm font-medium text-blue-600">{p.phone}</a>}
-   <p className="mt-4 text-xs text-slate-500">{term("Created by")} {p.registeredBy==='Employee'?term('Employee'):p.registeredBy}{p.original_creator_role?` (${term(p.original_creator_role)})`:""} · <time dateTime={p.created_at} dir="ltr">{formatDateTime(p.created_at)}</time></p>
+   <p className="mt-4 text-xs text-slate-500">{term("Created by")} {p.registeredBy==='Employee'?term('Employee'):p.registeredBy}{p.original_creator_role?` (${term(p.original_creator_role)})`:""} · {term('Registered on')}: <time dateTime={p.created_at} dir="ltr">{formatDateTime(p.created_at)}</time></p>
+   {broughtInBy&&<p className="mt-2 break-words text-sm text-slate-700">{term('Brought in by')}: <bdi className="font-semibold">{broughtInBy.name==='Employee'?term('Employee'):broughtInBy.name}</bdi></p>}
    {p.legacy_outdoor_sales_id&&<p className="mt-2 break-words text-sm text-red-800">{term('Original Outdoor Sales owner')}: <bdi className="font-semibold">{p.legacyOutdoorSalesOwner??term('Employee')}</bdi></p>}
    <p className="mt-2 text-sm text-slate-600">{term('Outdoor Sales')}: {p.assignedOutdoorSales??term("Not assigned")}</p>
    {p.assignedToYou&&<p className="mt-3 rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800">{term('Assigned to you')} · {term(stageDetails(p).action)}</p>}
@@ -51,6 +57,6 @@ export function ProjectWorkspace({followUps=false,canDelete=false}:{followUps?:b
    <div className="mt-3 flex flex-wrap gap-5">{canAccessCRM(data?.actor.role)&&<Link href={`/projects/${p.id}/follow-ups`} className="inline-block min-h-11 py-2 text-sm font-semibold text-blue-600">{term("View follow-up history →")}</Link>}</div>
    {canDelete&&<div className="mt-4 border-t border-slate-100 pt-3"><button type="button" disabled={!!busy||p.pending} onClick={()=>void remove(p)} className="min-h-11 rounded-md px-3 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">{busy===p.id?term("Please wait…"):term("Delete project")}</button>{p.pending&&<span className="block text-xs text-slate-500">{term("Sync saved changes before deleting.")}</span>}</div>}
    {canAccessCRM(data?.actor.role)&&<ProjectFollowUps projectId={p.id}/>}
-  </article>)}</div>}
+  </article>;})}</div>}
  </Workspace>;
 }

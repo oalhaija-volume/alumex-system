@@ -204,13 +204,13 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: dashboard layout, c
     `/projects#project-${state.projects[9].id}`, `/projects/${state.projects[10].id}/follow-ups`,
   ];
   for (let index = 0; index < expectedRoutes.length; index++) {
-    await expect(projects.locator('article').nth(index).getByRole('heading').getByRole('link')).toHaveAttribute('href', expectedRoutes[index]);
+    await expect(projects.getByRole('article', { name: state.projects[index].project_name, exact: true }).getByRole('heading').getByRole('link')).toHaveAttribute('href', expectedRoutes[index]);
   }
   const target = projects.getByRole('article', { name: targetName, exact: true });
   await target.screenshot({ path: `${artifactDir}/${testInfo.project.name}-${locale}-project.png` });
   await expect(target.getByRole('link', { name: tr('Follow up'), exact: true })).toHaveAttribute('href', `/mini-crm#project-${state.projects[4].id}`);
   await expect(target.getByRole('button', { name: tr('Delete project'), exact: true })).toBeEnabled();
-  await expect(projects.locator('article').nth(2).getByRole('button', { name: tr('Delete project'), exact: true })).toBeDisabled();
+  await expect(projects.getByRole('article', { name: state.projects[2].project_name, exact: true }).getByRole('button', { name: tr('Delete project'), exact: true })).toBeDisabled();
   page.once('dialog', dialog => void dialog.dismiss());
   await target.getByRole('button', { name: tr('Delete project'), exact: true }).click();
   expect(mutations).toEqual([]);
@@ -306,11 +306,11 @@ for (const role of ['CEO', 'Indoor Sales']) test(`${role}: leadership coverage a
     await expect.poll(() => coverageReads.length).toBeGreaterThan(0);
     await coverage.locator('summary').click();
     await expect(page.locator('#outdoor-sales-coverage-title')).toBeVisible();
-    await expect(projects.locator('article').nth(7).getByRole('heading').getByRole('link')).toHaveAttribute('href', '/operations');
+    await expect(projects.getByRole('article', { name: state.projects[7].project_name, exact: true }).getByRole('heading').getByRole('link')).toHaveAttribute('href', '/operations');
   } else {
     await expect(coverage).toHaveCount(0);
     expect(coverageReads).toEqual([]);
-    await expect(projects.locator('article').nth(7).getByRole('heading').getByRole('link')).toHaveAttribute('href', `/contract/${state.projects[7].id}`);
+    await expect(projects.getByRole('article', { name: state.projects[7].project_name, exact: true }).getByRole('heading').getByRole('link')).toHaveAttribute('href', `/contract/${state.projects[7].id}`);
   }
   expect(errors).toEqual([]);
   expect(mutations).toEqual([]);

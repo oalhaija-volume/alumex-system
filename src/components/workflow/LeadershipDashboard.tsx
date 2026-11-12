@@ -1,5 +1,8 @@
 "use client";
 import { useProjectRegistrationFilters } from './useProjectRegistrationFilters';
+import { useOutdoorSalesProjectFilters } from './useOutdoorSalesProjectFilters';
+import { OutdoorSalesProjectFilter } from './OutdoorSalesProjectFilter';
+import { projectOutdoorSalesOrigin } from '@/lib/dashboard/outdoorProjectFilters';
 import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDelayNotice';
 
 import { DashboardProjectFilters } from './DashboardProjectFilters';
@@ -77,6 +80,7 @@ function ProjectRow({ project, data, leadership, overdue, busy, onDelete, onProj
   const tone = dashboardTones[dashboardStageTone[currentStage]];
   const action = actionFor(project, leadership);
   const outdoor = project.assignedOutdoorSales ?? (!project.assigned_outdoor_sales_id && (project.original_creator_role === 'Outdoor Sales' || data.outdoorSales?.some(employee => employee.id === project.created_by)) ? project.registeredBy : null);
+  const broughtInBy = projectOutdoorSalesOrigin(project, data.outdoorSales);
   const panelId = `project-panel-${project.id}`;
   const compactControl = 'inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 text-sm! font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700';
 
@@ -101,6 +105,8 @@ function ProjectRow({ project, data, leadership, overdue, busy, onDelete, onProj
       </div>
       <div className="mt-4 grid gap-3 border-t border-slate-100 pt-3">
         <dl className="grid min-w-0 gap-x-5 gap-y-2 text-sm leading-6 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="min-w-0 break-words"><dt className="inline text-slate-500">{term('Registered on')}: </dt><dd className="inline font-medium text-slate-800"><time dateTime={project.created_at} dir="ltr">{formatDateTime(project.created_at)}</time></dd></div>
+          {broughtInBy && <div className="min-w-0 break-words [overflow-wrap:anywhere]"><dt className="inline text-slate-500">{term('Brought in by')}: </dt><dd className="inline font-medium text-slate-800"><bdi>{broughtInBy.name === 'Employee' ? term('Employee') : broughtInBy.name}</bdi></dd></div>}
           {needsSalesFollowUp(project) && <div className={`min-w-0 break-words ${overdue ? 'rounded bg-rose-50 px-1.5 text-rose-800' : 'text-slate-600'}`}><dt className="inline">{term(overdue ? 'Overdue follow-up' : 'Next follow-up')}: </dt><dd className={`inline font-semibold tabular-nums ${overdue ? '' : 'text-slate-900'}`}>{project.next_follow_up_at ? <time dateTime={project.next_follow_up_at}>{formatDateTime(project.next_follow_up_at)}</time> : term('Follow-up date not set')}</dd></div>}
           <div className="min-w-0 break-words [overflow-wrap:anywhere]"><dt className="inline text-slate-500">{term('Created by')}: </dt><dd className="inline font-medium text-slate-800"><bdi>{project.registeredBy === 'Employee' ? term('Employee') : project.registeredBy}</bdi></dd></div>
           {project.legacy_outdoor_sales_id&&<div className="min-w-0 break-words text-red-800 [overflow-wrap:anywhere]"><dt className="inline">{term('Original Outdoor Sales owner')}: </dt><dd className="inline font-semibold"><bdi>{project.legacyOutdoorSalesOwner??term('Employee')}</bdi></dd></div>}
@@ -149,7 +155,8 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
   const [scope, setScope] = useState<Scope>('all');
   const [search, setSearch] = useState('');
   const registration = useProjectRegistrationFilters(data.projects);
-  const projects = registration.filteredProjects;
+  const outdoorFilter = useOutdoorSalesProjectFilters(data.projects, data.outdoorSales, registration.filteredProjects);
+  const projects = outdoorFilter.filteredProjects;
   const overdue = (project: FieldProject) => needsSalesFollowUp(project) && !!project.next_follow_up_at && Date.parse(project.next_follow_up_at) < now;
   const inOperations = (project: FieldProject) => ['handoff', 'operations'].includes(projectStage(project));
   const summary: { scope: Scope; label: string; count: number; tone: keyof typeof dashboardTones }[] = [
@@ -164,7 +171,7 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
     return matchesScope && (stage === 'all' || projectStage(project) === stage)
       && matchesProjectSearch(project, search);
   });
-  function reset() { setStage('all'); setScope('all'); setSearch(''); registration.reset(); }
+  function reset() { setStage('all'); setScope('all'); setSearch(''); registration.reset(); outdoorFilter.reset(); }
 
   return <section lang={locale} className={`${dashboardArabic.variable} ${styles.dashboard} mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8`}>
     <header className="mb-5 flex flex-wrap items-start justify-between gap-4">
@@ -190,6 +197,7 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
     </details>}
 
     <div className="mt-4">
+      <OutdoorSalesProjectFilter filter={outdoorFilter}/>
       <DashboardProjectFilters collapsible registration={registration} search={search} onSearch={setSearch} filter={stage} onFilter={value => setStage(value as ProjectStage | 'all')} onClear={reset} count={selected.length} total={data.projects.length}>
         <label className="text-sm font-medium text-slate-700">{term('Project priority')}<select value={scope} onChange={event => setScope(event.target.value as Scope)} className={field}>
           <option value="all">{term('All projects in this stage')}</option><option value="sales">{term('Awaiting sales action')}</option><option value="overdue">{term('Overdue follow-ups')}</option><option value="unscheduled">{term('Needs a follow-up date')}</option><option value="operations">{term('Signed / Operations')}</option>
@@ -212,7 +220,7 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
     </section>
 
     <section aria-label={term('Projects')} className="mt-6">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold text-slate-950">{term(stage === 'all' ? 'All projects' : projectStages.find(item => item.id === stage)?.label)} <span className="font-normal text-slate-500">· {formatNumber(selected.length)}</span></h2>{(stage !== 'all' || scope !== 'all' || search || registration.month || registration.creator) && <button type="button" onClick={reset} className="min-h-11 text-sm font-semibold text-blue-700">{term('Clear filters')}</button>}</div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold text-slate-950">{term(stage === 'all' ? 'All projects' : projectStages.find(item => item.id === stage)?.label)} <span className="font-normal text-slate-500">· {formatNumber(selected.length)}</span></h2>{(stage !== 'all' || scope !== 'all' || search || registration.month || registration.creator || outdoorFilter.salesperson) && <button type="button" onClick={reset} className="min-h-11 text-sm font-semibold text-blue-700">{term('Clear filters')}</button>}</div>
       {!selected.length ? <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center"><p className="text-sm text-slate-600">{term('No projects match this view.')}</p><button type="button" onClick={reset} className="mt-3 min-h-11 text-sm font-semibold text-blue-700">{term('Show all projects')}</button></div> : <div className="grid grid-cols-1 gap-3">
         {selected.map(project => <ProjectRow key={project.id} project={project} data={data} leadership={leadership} overdue={overdue(project)} busy={busy} onDelete={onDelete} onProjectSaved={onProjectSaved} onClientNameSaved={onClientNameSaved} onIndoorSalesSaved={onIndoorSalesSaved}/>)}
       </div>}

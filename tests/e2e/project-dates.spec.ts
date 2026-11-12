@@ -4,7 +4,7 @@ import type { FieldState } from '../../src/lib/offline/types';
 test.use({ serviceWorkers: 'block' });
 const creator = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Ehab', role: 'Outdoor Sales' };
 const project = {
-  id: '11111111-1111-4111-8111-111111111111', project_name: 'Creation date sample', project_number: 'PRJ-DATE',
+  id: '11111111-1111-4111-8111-111111111111', project_name: 'Creation date sample', project_number: 'PRJ-DATE', branch: 'Karkh' as const,
   created_by: creator.id, registeredBy: creator.name, original_creator_role: creator.role,
   created_at: '2026-12-31T21:05:00Z', updated_at: '2027-01-04T12:00:00Z',
   assigned_outdoor_sales_id: creator.id, assignedOutdoorSales: creator.name, assignedToYou: true,
@@ -44,12 +44,11 @@ for (const locale of ['en', 'ar']) {
   ]) test(`${locale}: ${role} ${path} retains creator and numeric creation date`, async ({ page }, testInfo) => {
     await setup(page, role, path, locale);
     if (path === '/mini-crm') await page.getByRole('button', { name: locale === 'en' ? 'Follow up' : 'متابعة', exact: true }).click();
-    if (role === 'Admin') await page.getByText(locale === 'en' ? 'Project details' : 'تفاصيل المشروع', { exact: true }).click();
     const created = page.locator(`time[datetime="${project.created_at}"]`).first();
     await expect(created).toBeVisible();
     await expect(created).toHaveText('01/01/2027, 00:05');
     await expect(created).toHaveAttribute('dir', 'ltr');
-    await expect(created.locator('..')).toContainText('Ehab');
+    await expect(role === 'Admin' ? created.locator('xpath=ancestor::article') : created.locator('..')).toContainText('Ehab');
     await expect(created).not.toContainText('04/01/2027');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (path.startsWith('/initial-measurements')) await page.screenshot({ path: `artifacts/project-dates/creator-${testInfo.project.name}-${locale}.png`, fullPage: true });

@@ -29,14 +29,14 @@ const choice={openingId:'window',systemId:'system',extras:[]};
 const quote=(systemRate,products=catalog,measured=opening,selection=choice)=>priceQuotation([measured],[{...selection,systemRate}],products,'indoor-sales');
 
 test('only available square-metre Alumex systems expose quotation-specific rates',()=>{
- assert.equal(QUOTATION_SYSTEM_RATE_MIN,250000);
+ assert.equal(QUOTATION_SYSTEM_RATE_MIN,240000);
  for(const name of ['Alumex','Alumex System',' Alumex Sliding Window ','ALUMEX Thermal Break','Alumex-System'])assert.equal(isQuotationSystemRateEditable({...catalog[0],name}),true,name);
  for(const patch of [{name:'Another System'},{name:'Alumextra System'},{name:'Premium Alumex System'},{name:'Alumex_System'},{name:'Skylight'},{category:'opening_product'},{category:'standalone_product'},{unit:'item'},{unit:'meter'},{unit:'project'},{is_active:false}])assert.equal(isQuotationSystemRateEditable({...catalog[0],...patch}),false,JSON.stringify(patch));
  assert.equal(isQuotationSystemRateEditable(undefined),false);
  assert.equal(isQuotationSystemRateEditable(null),false);
 });
 
-for(const rate of [250000,250001,264999,265000,265001,270000,299999,300000,300001,305000,305001,470000,1000000,Number.MAX_SAFE_INTEGER])test(`an explicit ${rate} IQD quotation rate is applied and marked without changing the catalog`,()=>{
+for(const rate of [240000,240001,249999,250000,250001,264999,265000,265001,270000,299999,300000,300001,305000,305001,470000,1000000,Number.MAX_SAFE_INTEGER])test(`an explicit ${rate} IQD quotation rate is applied and marked without changing the catalog`,()=>{
  const before=structuredClone(catalog);
  const result=quote(rate);
  assert.deepEqual(result.lines[0].system,{id:'system',name:'Alumex System',unit:'sqm',rate,quantity:1,total:rate,rateSource:'quotation'});
@@ -45,7 +45,7 @@ for(const rate of [250000,250001,264999,265000,265001,270000,299999,300000,30000
 });
 
 test('sales overrides below the selling recommendation remain valid for large and hinged windows',()=>{
- for(const patch of [{width:200,height:400},{opening_direction:'Hinged'}])for(const rate of [250000,264999]){
+ for(const patch of [{width:200,height:400},{opening_direction:'Hinged'}])for(const rate of [240000,249999,250000,264999]){
   const result=quote(rate,catalog,{...opening,...patch});
   assert.equal(result.lines[0].system.rate,rate);
   const recommendation=quotationSellingSuggestion(result,catalog);
@@ -57,8 +57,8 @@ test('sales overrides below the selling recommendation remain valid for large an
 
 test('hinged-door rates accept the shared manual minimum while keeping the separate door recommendation',()=>{
  const measured={...opening,opening_type:'Door',opening_direction:'Hinged',quantity:3};
- assert.throws(()=>quote(249999,catalog,measured),/at least 250,000 IQD/);
- for(const rate of [250000,250001,305000]){
+ assert.throws(()=>quote(239999,catalog,measured),/at least 240,000 IQD/);
+ for(const rate of [240000,240001,249999,250000,305000]){
   const result=quote(rate,catalog,measured);
   const before=structuredClone(result);
   assert.equal(result.lines[0].system.quantity,1.5);
@@ -85,8 +85,8 @@ test('omitting a rate preserves catalog pricing and adds no override marker, inc
  assert.equal(priceQuotation([opening],[choice],foreign,'indoor-sales').total,100000);
 });
 
-for(const [label,rate] of [['former minimum',240000],['below minimum',249999],['unsafe integer',Number.MAX_SAFE_INTEGER+1],['extreme finite rate',1e20],['fractional IQD',470000.5],['NaN',NaN],['positive infinity',Infinity],['negative infinity',-Infinity],['zero',0],['negative',-240000],['numeric string','470000'],['null',null],['boolean',true],['object',{}],['array',[470000]]])test(`rejects ${label} quotation rates instead of coercing them`,()=>{
- assert.throws(()=>quote(rate),/at least 250,000 IQD, using whole IQD/);
+for(const [label,rate] of [['below minimum',239999],['unsafe integer',Number.MAX_SAFE_INTEGER+1],['extreme finite rate',1e20],['fractional IQD',470000.5],['NaN',NaN],['positive infinity',Infinity],['negative infinity',-Infinity],['zero',0],['negative',-240000],['numeric string','470000'],['null',null],['boolean',true],['object',{}],['array',[470000]]])test(`rejects ${label} quotation rates instead of coercing them`,()=>{
+ assert.throws(()=>quote(rate),/at least 240,000 IQD, using whole IQD/);
 });
 
 for(const patch of [{name:'Other System'},{name:'Alumextra System'},{category:'opening_product'},{unit:'item'},{unit:'meter'},{unit:'project'},{is_active:false}])test(`a forged rate cannot override an ineligible product ${JSON.stringify(patch)}`,()=>{
@@ -193,7 +193,7 @@ test('an explicit catalog-equal quotation rate stays fixed while an identical un
 });
 
 test('refresh rejects malformed saved overrides and leaves the saved quotation unchanged',()=>{
- for(const rate of [240000,249999,Number.MAX_SAFE_INTEGER+1,470000.5,NaN,Infinity,'470000',null]){
+ for(const rate of [1,239999,Number.MAX_SAFE_INTEGER+1,470000.5,NaN,Infinity,'470000',null]){
   const saved=quote(270000);
   saved.lines[0].system.rate=rate;
   const before=structuredClone(saved);

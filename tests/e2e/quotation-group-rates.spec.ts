@@ -171,16 +171,19 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   await expect(group().getByText(term('Sliding prices apply to Alumex windows. Hinged window and door prices are set separately. Curtain Wall includes measured walls and its facade service.'), { exact: true })).toBeVisible();
   await slidingInput.fill(''); await hingedInput.fill(''); await hingedDoorInput.fill(''); await curtainInput.fill('');
   for (const [index, [input, applyButton]] of [[slidingInput, slidingApply], [hingedInput, hingedApply], [hingedDoorInput, hingedDoorApply], [curtainInput, curtainApply]].entries()) {
-    await expect(input).toHaveAttribute('min', '250000');
+    await expect(input).toHaveAttribute('min', '240000');
     await expect(input).toHaveAttribute('step', '1');
-    for (const rate of ['240000', '249999', '250000.5']) {
+    for (const rate of ['239000', '239999', '240000.5']) {
       await input.fill(rate);
       await expect(input).toHaveAttribute('aria-invalid', 'true');
       await expect(applyButton).toBeDisabled();
       await expect(save()).toBeDisabled();
       expect(posts).toHaveLength(0);
     }
-    await input.fill('250000');
+    await input.fill('249999');
+    await expect(input).toHaveAttribute('aria-invalid', 'false');
+    await expect(applyButton).toBeEnabled();
+    await input.fill('240000');
     await expect(input).toHaveAttribute('aria-invalid', 'false');
     await expect(applyButton).toBeEnabled();
     await expect(applyButton).toBeVisible();
@@ -195,7 +198,7 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
     await expect(applyButton).toBeFocused();
     await expect(applyButton).toBeVisible();
     await expect(applyButton).toHaveText(term('Applied to draft'));
-    await expect(input.locator('..').getByRole('status')).toHaveText(appliedStatus(250000, [2, 1, 1, 2][index]));
+    await expect(input.locator('..').getByRole('status')).toHaveText(appliedStatus(240000, [2, 1, 1, 2][index]));
     const appliedColors = await applyButton.evaluate(element => ({ background: getComputedStyle(element).backgroundColor, foreground: getComputedStyle(element).color }));
     expect(appliedColors.background).not.toBe(pendingBackground);
     expect(appliedColors.foreground).not.toBe('rgb(255, 255, 255)');
@@ -206,7 +209,7 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   await openingRate('sliding').fill('260000');
   await expect(slidingApply).toHaveText(term('Apply to all'));
   await expect(slidingCard.getByRole('status')).toHaveCount(0);
-  await openingRate('sliding').fill('250000');
+  await openingRate('sliding').fill('240000');
   await expect(slidingApply).toHaveText(term('Applied to draft'));
   await remove().click();
   await expect(slidingApply).toHaveText(term('Apply to all'));
@@ -218,8 +221,8 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   await expect(openingRate('sliding')).toHaveValue('260000');
   await expect(openingRate('removed-sliding')).toHaveValue('260000');
   await expect(slidingCard.getByRole('status')).toHaveText(appliedStatus(260000, 2));
-  await slidingInput.fill('250000'); await slidingInput.press('Enter');
-  await expect(slidingCard.getByRole('status')).toHaveText(appliedStatus(250000, 2));
+  await slidingInput.fill('240000'); await slidingInput.press('Enter');
+  await expect(slidingCard.getByRole('status')).toHaveText(appliedStatus(240000, 2));
   await group().getByRole('button', { name: term('Review and save quotation'), exact: true }).click();
   await expect(page.getByRole('region', { name: term('Save quotation'), exact: true })).toBeFocused();
   await expect(save()).toBeInViewport();
@@ -230,42 +233,47 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   await expect(slidingApply).toHaveText(term('Apply to all'));
   await expect(slidingCard.getByRole('status')).toHaveCount(0);
   await slidingSystem.selectOption('alumex');
-  await slidingApply.click();
-  await expect(slidingCard.getByRole('status')).toHaveText(appliedStatus(250000, 2));
-  await expect(openingRate('sliding')).toHaveAttribute('min', '250000');
-  await expect(openingRate('hinged')).toHaveAttribute('min', '250000');
-  await expect(openingRate('hinged-door')).toHaveAttribute('min', '250000');
   await expect(openingRate('sliding')).toHaveValue('250000');
-  await expect(openingRate('hinged')).toHaveValue('250000');
-  await expect(openingRate('hinged-door')).toHaveValue('250000');
+  await slidingInput.fill('240000');
+  await slidingApply.click();
+  await expect(slidingCard.getByRole('status')).toHaveText(appliedStatus(240000, 2));
+  await expect(openingRate('sliding')).toHaveAttribute('min', '240000');
+  await expect(openingRate('hinged')).toHaveAttribute('min', '240000');
+  await expect(openingRate('hinged-door')).toHaveAttribute('min', '240000');
+  await expect(openingRate('sliding')).toHaveValue('240000');
+  await expect(openingRate('hinged')).toHaveValue('240000');
+  await expect(openingRate('hinged-door')).toHaveValue('240000');
   const measuredCurtainRate = card('curtain').getByRole('spinbutton', { name: term('Curtain Wall rate (IQD / m²)'), exact: true });
   const standaloneCurtainRate = page.getByRole('spinbutton', { name: term('Curtain Wall service rate (IQD / m²)'), exact: true });
-  await expect(measuredCurtainRate).toHaveAttribute('min', '250000');
-  await expect(standaloneCurtainRate).toHaveAttribute('min', '250000');
-  await expect(measuredCurtainRate).toHaveValue('250000');
-  await expect(standaloneCurtainRate).toHaveValue('250000');
+  await expect(measuredCurtainRate).toHaveAttribute('min', '240000');
+  await expect(standaloneCurtainRate).toHaveAttribute('min', '240000');
+  await expect(measuredCurtainRate).toHaveValue('240000');
+  await expect(standaloneCurtainRate).toHaveValue('240000');
   for (const input of [openingRate('sliding'), openingRate('hinged'), openingRate('hinged-door'), measuredCurtainRate, standaloneCurtainRate]) {
-    for (const rate of ['240000', '249999', '250000.5']) {
+    for (const rate of ['239000', '239999', '240000.5']) {
       await input.fill(rate);
       await expect(input).toHaveAttribute('aria-invalid', 'true');
       await expect(save()).toBeDisabled();
       expect(posts).toHaveLength(0);
     }
-    await input.fill('250000');
+    await input.fill('249999');
+    await expect(input).toHaveAttribute('aria-invalid', 'false');
+    await expect(save()).toBeEnabled();
+    await input.fill('240000');
     await expect(input).toHaveAttribute('aria-invalid', 'false');
     await expect(save()).toBeEnabled();
   }
-  await group().screenshot({ path: test.info().outputPath(`${locale}-all-groups-minimum-250000.png`) });
+  await group().screenshot({ path: test.info().outputPath(`${locale}-all-groups-minimum-240000.png`) });
   await cancel().click();
   await expect(edit()).toBeVisible(); expect(posts).toHaveLength(0); expect(saved).toEqual(initial);
   await edit().click();
   await slidingInput.fill(''); await hingedInput.fill(''); await hingedDoorInput.fill(''); await curtainInput.fill('');
   await expect(slidingApply).toBeDisabled(); await expect(hingedApply).toBeDisabled(); await expect(hingedDoorApply).toBeDisabled(); await expect(curtainApply).toBeDisabled();
-  for (const value of ['240000', '249999', '250000.5', '-1', '']) {
+  for (const value of ['239000', '239999', '240000.5', '-1', '']) {
     await slidingInput.fill(value); await expect(slidingApply).toBeDisabled();
     if (value) await expect(save()).toBeDisabled(); else await expect(save()).toBeEnabled();
   }
-  for (const value of ['240000', '249999', '250000.5', '0', '1.5', '']) {
+  for (const value of ['239000', '239999', '240000.5', '0', '1.5', '']) {
     await curtainInput.fill(value); await expect(curtainApply).toBeDisabled();
     if (value) await expect(save()).toBeDisabled(); else await expect(save()).toBeEnabled();
   }
@@ -363,17 +371,17 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: group rates edit on
   expect(posts).toHaveLength(2); expect(catalog).toEqual(originalCatalog);
   signed = false; await page.reload(); await edit().click();
   for (const [input, applyButton] of [[slidingInput, slidingApply], [hingedInput, hingedApply], [hingedDoorInput, hingedDoorApply], [curtainInput, curtainApply]]) {
-    await input.fill('250000'); await applyButton.click();
+    await input.fill('240000'); await applyButton.click();
   }
   await expect(save()).toBeEnabled(); await save().click();
   await expect(edit()).toBeVisible(); expect(posts).toHaveLength(3);
-  for (const id of ['sliding', 'hinged', 'hinged-door', 'curtain']) expect(saved.lines.find(line => line.opening.id === id)!.system.rate).toBe(250000);
-  expect(saved.additionalItems!.find(item => item.id === 'curtain-wall')!.rate).toBe(250000);
-  expect(saved.total).toBe(expected(250000, 250000, 250000, 250000).total);
+  for (const id of ['sliding', 'hinged', 'hinged-door', 'curtain']) expect(saved.lines.find(line => line.opening.id === id)!.system.rate).toBe(240000);
+  expect(saved.additionalItems!.find(item => item.id === 'curtain-wall')!.rate).toBe(240000);
+  expect(saved.total).toBe(expected(240000, 240000, 240000, 240000).total);
   await page.reload(); await edit().click();
-  for (const input of [openingRate('sliding'), openingRate('hinged'), openingRate('hinged-door'), measuredCurtainRate, standaloneCurtainRate]) await expect(input).toHaveValue('250000');
+  for (const input of [openingRate('sliding'), openingRate('hinged'), openingRate('hinged-door'), measuredCurtainRate, standaloneCurtainRate]) await expect(input).toHaveValue('240000');
   await expect(save()).toBeEnabled();
-  await group().screenshot({ path: test.info().outputPath(`${locale}-saved-minimum-250000.png`) });
+  await group().screenshot({ path: test.info().outputPath(`${locale}-saved-minimum-240000.png`) });
   await cancel().click(); expect(posts).toHaveLength(3); expect(catalog).toEqual(originalCatalog);
   expect(posts.every(post => post.discountPercent === 0)).toBe(true);
   await expect(page.locator('nextjs-portal')).toHaveCount(0);

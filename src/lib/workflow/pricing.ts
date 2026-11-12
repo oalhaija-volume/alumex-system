@@ -29,7 +29,7 @@ export function applyQuotationDiscount(snapshot:QuoteSnapshot,discountPercent:un
  return quotation;
 }
 export const money = (n:number) => new Intl.NumberFormat('en-IQ',{maximumFractionDigits:0}).format(n)+' IQD';
-export const QUOTATION_SYSTEM_RATE_MIN = 250_000;
+export const QUOTATION_SYSTEM_RATE_MIN = 240_000;
 // Pause new discount choices while retaining calculations for saved documents.
 export const QUOTATION_DISCOUNTS_ENABLED = false;
 // Recommended selling targets are separate from the sales override minimum.

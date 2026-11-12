@@ -488,17 +488,19 @@ test('price-preview and confirmed refresh create gross revisions while preservin
  assert.deepEqual(x.tables,before);
 });
 
-test('disabling discounts preserves the 250000-IQD manual rate minimum on gross saves',async()=>{
- const accepted=fixture({discountPercent:5});
- assert.equal((await accepted.post({...saveBody,choices:[{...choice,systemRate:250000}]})).status,200);
- const saved=accepted.calls[0].args.p_payload;
- assert.equal(saved.lines[0].system.rate,250000);
- assert.equal(saved.total,1634000);
- assert.equal(Object.hasOwn(saved,'discount'),false);
+test('gross saves accept the 240000-IQD manual minimum and rates below the previous minimum',async()=>{
+ for(const rate of [240000,240001,249999,250000]){
+  const accepted=fixture({discountPercent:5});
+  assert.equal((await accepted.post({...saveBody,choices:[{...choice,systemRate:rate}]})).status,200);
+  const saved=accepted.calls[0].args.p_payload;
+  assert.equal(saved.lines[0].system.rate,rate);
+  assert.equal(saved.total,1134000+rate*2);
+  assert.equal(Object.hasOwn(saved,'discount'),false);
+ }
  const rejected=fixture();
- const response=await rejected.post({...saveBody,choices:[{...choice,systemRate:249999}]});
+ const response=await rejected.post({...saveBody,choices:[{...choice,systemRate:239999}]});
  assert.equal(response.status,400);
- assert.match(response.body.error,/at least 250,000 IQD/);
+ assert.match(response.body.error,/at least 240,000 IQD/);
  assert.equal(rejected.calls.length,0);
 });
 

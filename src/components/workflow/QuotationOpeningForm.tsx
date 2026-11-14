@@ -12,13 +12,13 @@ export function QuotationOpeningForm({onAdd,onCancel}:{onAdd:(opening:Registrati
  function add(event:React.FormEvent<HTMLFormElement>) {
   event.preventDefault();
   const form=new FormData(event.currentTarget);
-  const opening=normalizeRegistrationOpening({id:crypto.randomUUID(),floor:form.get('floor'),room,otherRoom:form.get('otherRoom'),structuralType:structure,openingType:form.get('movement'),hasArch:['Window','Door'].includes(structure)?form.get('hasArch')==='true':false,width:Number(form.get('width')),height:Number(form.get('height'))});
+  const opening=normalizeRegistrationOpening({id:crypto.randomUUID(),floor:form.get('floor'),room,otherRoom:form.get('otherRoom'),structuralType:structure,openingType:form.get('movement'),hasArch:['Window','Door'].includes(structure)?form.get('hasArch')==='true':false,width:Number(form.get('width')),height:Number(form.get('height')),quantity:Number(form.get('quantity'))});
   if(!opening){setError('Complete the floor, room, dimensions and opening types.');return;}
   onAdd(opening);
  }
  return <form onSubmit={add} className={`${card} space-y-5 border-blue-300`} aria-label={term("New opening")}>
   <h2 className="text-lg font-semibold">{term("Add an opening")}</h2>
-  <p className="text-sm text-slate-500">{term("Register each opening separately. It will be saved with this quotation revision.")}</p>
+  <p id="quotation-opening-quantity-help" className="text-sm text-slate-500">{term("Use one entry for openings with the same dimensions, type, floor and room. Record different openings separately.")}</p>
   <Notice error={error}/>
   <div className="grid gap-4 sm:grid-cols-2">
    <label className="text-sm">{term("Floor")}<input name="floor" required maxLength={100} placeholder={term("Ground, 1, 2…")} className={field}/></label>
@@ -31,6 +31,7 @@ export function QuotationOpeningForm({onAdd,onCancel}:{onAdd:(opening:Registrati
    {['Window','Door'].includes(structure)&&<label className="text-sm">{term('Opening arch')}<select required name="hasArch" key={structure} defaultValue="" className={field}><option value="">{term('Choose arch option')}</option><option value="true">{term('Arch')}</option><option value="false">{term('No arch')}</option></select></label>}
    <label className="text-sm">{term("Width (cm)")}<input name="width" required type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" className={field}/></label>
    <label className="text-sm">{term("Height (cm)")}<input name="height" required type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" className={field}/></label>
+   <label className="text-sm">{term("Number of identical openings")}<input name="quantity" required type="number" inputMode="numeric" min={1} max={10000} step={1} defaultValue={1} aria-describedby="quotation-opening-quantity-help" className={field}/></label>
   </div>
   <div className="flex flex-wrap gap-3"><button className={button}>{term("Add to quotation draft")}</button><button type="button" className={secondary} onClick={onCancel}>{term("Cancel opening")}</button></div>
  </form>;

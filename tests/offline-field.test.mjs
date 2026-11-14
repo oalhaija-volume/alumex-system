@@ -2,9 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
+const actualDate = Date;
+test.beforeEach(context => {
+ if (Date === actualDate) context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-14T08:00:00Z') });
+});
 function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/measurements/openingOwnership')return load('../src/lib/measurements/openingOwnership.ts',{});if(n==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(n==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts');if(n==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts');if(n==='./projectAccess')return load('../src/lib/offline/projectAccess.ts');if(n==='@/lib/location/coordinates')return load('../src/lib/location/coordinates.ts');if(n==='./device')return deps[n]??{isOfflineDevice:()=>true};if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/projectBranch'||n==='./projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(n==='@/lib/intake/outdoorRotation')return load('../src/lib/intake/outdoorRotation.ts');if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/legacyOutdoorSales')return load('../src/lib/intake/legacyOutdoorSales.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
 const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Employee',role:'Indoor Sales',branch:'Karkh'};
-// Registration fixtures use the employee office; legacy rotation seeds do not change access.
+// Employee office identifies Baghdad or Najaf; the calendar selects a Baghdad area.
 function outdoorActorForCurrentBranch(branch) {
  return {...actor,role:'Outdoor Sales',branch,outdoorRotationStartBranch:branch==='Najaf'?null:branch};
 }
@@ -628,13 +632,14 @@ test('unconfirmed missing-project errors never archive or discard saved work',as
  }
 });
 
-test('Outdoor Sales must choose a project branch and it survives local reads and synchronization',async()=>{
+test('Outdoor Sales must choose a project branch and it survives local reads and synchronization',async context=>{
  for(const branch of [undefined,null,'','wrong',3]){
   const x=setup({actor:{...actor,role:'Outdoor Sales',branch:null}});
   await assert.rejects(x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch}}),/project branch/);
   assert.equal(x.state.queue.length,0);assert.equal(x.state.projects.length,0);
  }
  for(const branch of ['Karkh','Rasafa','Najaf']){
+  context.mock.timers.setTime(Date.parse(branch==='Rasafa'?'2026-11-20T08:00:00Z':'2026-11-14T08:00:00Z'));
   const outdoor=outdoorActorForCurrentBranch(branch);const x=setup({actor:outdoor});
   await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch}});
   assert.equal(x.state.projects[0].branch,branch);assert.equal(x.state.queue[0].payload.project.branch,branch);
@@ -670,13 +675,14 @@ test('shared governorate registrations validate before saving and survive offlin
  await x.client.syncFieldChanges();assert.equal(x.state.queue.length,0);assert.equal(x.state.projects[0].governorate,'البصرة');assert.equal(x.state.actor.branch,'Karkh');
 });
 
-test('Outdoor Sales cannot queue another office and denied registrations leave saved work intact',async()=>{
+test('Outdoor Sales cannot queue another office and denied registrations leave saved work intact',async context=>{
  for(const allowed of ['Karkh','Rasafa','Najaf']){
+  context.mock.timers.setTime(Date.parse(allowed==='Rasafa'?'2026-11-20T08:00:00Z':'2026-11-14T08:00:00Z'));
   const x=setup({actor:outdoorActorForCurrentBranch(allowed)});
   await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch:allowed}});
   const before=structuredClone(x.state);
   const otherBranch=allowed==='Karkh'?'Rasafa':'Karkh';
-  await assert.rejects(x.client.saveFieldChange('register','eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',{...payload,project:{...payload.project,branch:otherBranch}}),/project from your branch/);
+  await assert.rejects(x.client.saveFieldChange('register','eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',{...payload,project:{...payload.project,branch:otherBranch}}),/project from your branch|assigned branch/);
   assert.deepEqual(x.state,before);
  }
 });

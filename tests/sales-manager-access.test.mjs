@@ -11,6 +11,8 @@ function load(path, dependencies = {}) {
   new Function('require', 'exports', js)(name => {
     if (name === '@/lib/auth/projectBranchAccess') return load('../src/lib/auth/projectBranchAccess.ts');
     if (name === '@/lib/intake/legacyOutdoorSales') return load('../src/lib/intake/legacyOutdoorSales.ts');
+    if (name === '@/lib/intake/outdoorRotation') return load('../src/lib/intake/outdoorRotation.ts');
+    if (name.startsWith('.') && !(name in dependencies)) return load(new URL(`${name}.ts`, new URL(path, import.meta.url)));
     assert.ok(name in dependencies, name);
     return dependencies[name];
   }, exports);

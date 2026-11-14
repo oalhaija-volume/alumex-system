@@ -13,7 +13,8 @@ export async function getIntakeEmployeeState(auth: Extract<RoleCheck, { ok: true
   const admin = createAdminClient();
   let directoryQuery = admin.from('profiles').select('id,full_name,username,branch')
     .eq('role', 'Outdoor Sales').eq('is_active', true).eq('status', 'Active').order('full_name');
-  if (!hasGlobalProjectAccess(auth.role)) directoryQuery = directoryQuery.eq('branch', auth.profile?.branch ?? '');
+  if (!hasGlobalProjectAccess(auth.role)) directoryQuery = auth.profile?.branch === 'Karkh' || auth.profile?.branch === 'Rasafa'
+    ? directoryQuery.in('branch', ['Karkh', 'Rasafa']) : directoryQuery.eq('branch', auth.profile?.branch ?? '');
   const [profile, directory] = await Promise.all([
     admin.from('profiles').select('branch,outdoor_rotation_start_branch').eq('id', auth.user.id).single(),
     auth.role === 'Outdoor Sales' ? { data: [], error: null } : directoryQuery,
@@ -27,6 +28,8 @@ export async function getIntakeEmployeeState(auth: Extract<RoleCheck, { ok: true
       branch: profile.data.branch,
       outdoorRotationStartBranch: auth.role === 'Outdoor Sales' ? profile.data.outdoor_rotation_start_branch : null,
     },
-    outdoorSales: directory.data.filter(employee => hasGlobalProjectAccess(auth.role) || employee.branch === profile.data.branch).map(employee => ({ id: employee.id, name: employee.full_name ?? employee.username ?? 'Employee', branch: employee.branch })),
+    outdoorSales: directory.data.filter(employee => hasGlobalProjectAccess(auth.role) || employee.branch === profile.data.branch
+      || ((profile.data.branch === 'Karkh' || profile.data.branch === 'Rasafa') && (employee.branch === 'Karkh' || employee.branch === 'Rasafa')))
+      .map(employee => ({ id: employee.id, name: employee.full_name ?? employee.username ?? 'Employee', branch: employee.branch })),
   };
 }

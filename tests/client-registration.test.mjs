@@ -3,12 +3,20 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 
+// Keep registration validation deterministic in the second half of Baghdad's
+// month; the rotation-specific suite checks calendar transitions separately.
+class RegistrationDate extends Date {
+  constructor(...args) { super(...(args.length ? args : ['2026-11-20T09:00:00Z'])); }
+}
+
 function loadModule(path, dependencies) {
   const source = ts.transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', source)((name) => {if(name==='@/lib/auth/outdoorTeams')return loadModule('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return loadModule('../src/lib/workflow/projectName.ts',{});if(name==='@/lib/measurements/visitHistory')return loadModule('../src/lib/measurements/visitHistory.ts',{});if(name==='@/lib/auth/projectBranchAccess')return loadModule('../src/lib/auth/projectBranchAccess.ts',{});
+  new Function('require', 'exports', 'Date', source)((name) => {if(name==='@/lib/auth/outdoorTeams')return loadModule('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return loadModule('../src/lib/workflow/projectName.ts',{});if(name==='@/lib/measurements/visitHistory')return loadModule('../src/lib/measurements/visitHistory.ts',{});if(name==='@/lib/auth/projectBranchAccess')return loadModule('../src/lib/auth/projectBranchAccess.ts',{});
+    if(name==='@/lib/intake/outdoorRotation')return loadModule('../src/lib/intake/outdoorRotation.ts',{});
+    if(name.startsWith('.'))return loadModule(new URL(`${name}.ts`,new URL(path,import.meta.url)),dependencies);
     if(name==='@/lib/measurements/completion')return loadModule('../src/lib/measurements/completion.ts',{});if(name==='@/lib/measurements/measurementDelay')return loadModule('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':loadModule('../src/lib/auth/permissions.ts',{})});
     if(name==='@/lib/intake/projectBranch')return loadModule('../src/lib/intake/projectBranch.ts',{});if(name==='@/lib/intake/buildingType')return loadModule('../src/lib/intake/buildingType.ts',{});
     if(name==='@/lib/intake/readinessNote')return loadModule('../src/lib/intake/readinessNote.ts',{});if(name==='@/lib/intake/legacyOutdoorSales')return loadModule('../src/lib/intake/legacyOutdoorSales.ts',{});
@@ -19,13 +27,15 @@ function loadModule(path, dependencies) {
         return {...admin, from(table) {
           // Registrations have no existing project; permission boundaries use real route tests elsewhere.
           if (table === 'projects') return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null})};
+          // No completed receipt exists in these new-registration fixtures.
+          if (table === 'field_sync_receipts') return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null})};
           return from(table);
         }};
       }};
     }
     if (!(name in dependencies)) throw new Error(`Unexpected dependency: ${name}`);
     return dependencies[name];
-  }, exports);
+  }, exports, RegistrationDate);
   return exports;
 }
 
@@ -241,7 +251,7 @@ for(const role of ['Outdoor Sales','Indoor Sales','Sales Manager'])for(const bra
   '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,profile:{branch},user:{id}})},
   '@/lib/supabase/admin':{createAdminClient:()=>({
    rpc:async()=>({data:null,error:{message:'Project is not available to this employee'}}),
-   from(table){if(table==='projects')return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null})};assert.equal(table,'audit_events');return {select(value){assert.equal(value,'id');return this;},eq(key,value){filters.push([key,value]);return this;},in(key,value){filters.push([key,value]);return this;},or(value){filters.push(['or',value]);return this;},limit(){return this;},maybeSingle:async()=>({data:deleted?{id:'audit'}:null,error:null})};},
+   from(table){if(table==='projects')return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null})};assert.equal(table,'audit_events');return {select(value){assert.equal(value,'id,previous_value');return this;},eq(key,value){filters.push([key,value]);return this;},in(key,value){filters.push([key,value]);return this;},or(value){filters.push(['or',value]);return this;},limit(){return this;},maybeSingle:async()=>({data:deleted?{id:'audit',previous_value:{branch,created_by:id}}:null,error:null})};},
   })},
   '@/lib/auth/permissions':loadModule('../src/lib/auth/permissions.ts',{}),
   '@/lib/workflow/followUps':{},'@/lib/workflow/access':{salesRoles:[role]},
@@ -253,12 +263,12 @@ for(const role of ['Outdoor Sales','Indoor Sales','Sales Manager'])for(const bra
  assert.ok(filters.some(([key,value])=>key==='action'&&value==='project_deleted'));
  assert.equal(filters.some(([key])=>key==='or'),role==='Outdoor Sales');
  if(role==='Indoor Sales')assert.deepEqual(filters.find(([key])=>key==='previous_value->>branch')[1],branch==='Karkh'?['Karkh','Governorates']:['Rasafa']);
- if(role==='Outdoor Sales')assert.equal(filters.find(([key])=>key==='or')[1],`previous_value->>created_by.eq.${id},and(previous_value->>branch.in.(Karkh,Governorates),or(previous_value->>assigned_outdoor_sales_id.eq.${id}))`);
+ if(role==='Outdoor Sales')assert.equal(filters.find(([key])=>key==='or')[1],`previous_value->>created_by.eq.${id},and(previous_value->>branch.in.(Karkh,Rasafa,Governorates),or(previous_value->>assigned_outdoor_sales_id.eq.${id}))`);
 });
 
 for(const endpoint of ['sales-intake','offline'])for(const branch of [undefined,null,'','wrong',7,'Karkh','Rasafa','Najaf'])test(`${endpoint} validates project branch ${String(branch)}`,async()=>{
  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',writes=[];
- const valid=['Karkh','Rasafa','Najaf'].includes(branch)||branch===undefined;
+ const valid=['Rasafa','Najaf'].includes(branch)||branch===undefined;
  const route=loadModule(`../src/app/api/${endpoint}/route.ts`,{
   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
   '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',profile:{branch:['Karkh','Rasafa','Najaf'].includes(branch)?branch:'Rasafa'},user:{id}})},
@@ -272,7 +282,7 @@ for(const endpoint of ['sales-intake','offline'])for(const branch of [undefined,
  const body=endpoint==='offline'?{id,userId:id,projectId:id,action:'register',recordedAt:new Date().toISOString(),payload}:payload;
  const response=await route.POST({json:async()=>body});assert.equal(response.status,valid?(endpoint==='offline'?undefined:201):400);
  if(valid){const saved=writes.find(w=>w.table==='rpc').value;assert.equal(saved.branch,branch===undefined&&endpoint==='sales-intake'?'Rasafa':branch);if(branch===undefined&&endpoint==='offline')assert.equal(Object.hasOwn(saved,'branch'),false,'Preserve legacy receipt fingerprints');}
- else{assert.equal(writes.length,0);assert.match(response.body.error,/project branch/);}
+ else{assert.equal(writes.length,0);assert.match(response.body.error,/project branch|assigned branch/);}
 });
 
 for(const endpoint of ['sales-intake','offline'])test(`${endpoint} requires a listed governorate for shared projects and excludes stale governorates elsewhere`,async()=>{
@@ -326,7 +336,7 @@ for (const endpoint of ['sales-intake','offline']) for (const role of ['Admin','
   const payload={client:{clientType:'individual',clientName:'Branch fixture',mobile:'07000000000'},project:{branch,...(branch==='Governorates'?{governorate:'البصرة'}:{}),buildingType:'villa_house',structureReadiness:'ready',locationLatitude:33.3,locationLongitude:44.4,...(['Indoor Sales','Sales Manager'].includes(role)?{assignedOutdoorSalesId:id}:{})}};
   const body=endpoint==='offline'?{id,userId:id,projectId:id,action:'register',recordedAt:new Date().toISOString(),payload}:payload;
   const response=await route.POST({json:async()=>body});
-  const allowed=globalRole||branch==='Najaf'||role==='Outdoor Sales'&&branch==='Governorates';
+  const allowed=globalRole||branch==='Najaf';
   assert.equal(response.status,allowed?(endpoint==='offline'?200:201):400);
   assert.equal(writes.length,allowed?1:0,'An out-of-office registration must not reach the database write');
   if(allowed)assert.equal(writes[0].args.p_payload.project.branch,branch);

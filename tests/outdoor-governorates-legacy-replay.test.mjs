@@ -31,7 +31,7 @@ function fixture(options = {}) {
             data: records.find(record => filters.every(([key, value]) => record[key] === value)) ?? null,
             error: options.receiptError ?? null,
           };
-          return { data: { id: projectId, branch: 'Governorates', created_by: actorId, assigned_outdoor_sales_id: actorId }, error: null };
+          return { data: options.noProject ? null : { id: projectId, branch: 'Governorates', governorate: saved.governorate, created_by: actorId, assigned_outdoor_sales_id: actorId }, error: null };
         },
       };
     },
@@ -47,7 +47,7 @@ function fixture(options = {}) {
     'next/server': { NextResponse: { json: (body, init) => ({ body, status: init?.status ?? 200 }) } },
     '@/lib/auth/adminServer': { requireRole: async () => options.denied
       ? { ok: false, status: 403, error: 'Account is inactive.' }
-      : { ok: true, role: 'Outdoor Sales', user: { id: actorId }, profile: { branch: options.branch ?? 'Rasafa' }, outdoorTeamMemberIds: [actorId] } },
+      : { ok: true, role: 'Outdoor Sales', user: { id: actorId }, profile: { branch: options.branch ?? 'Najaf' }, outdoorTeamMemberIds: [actorId] } },
     '@/lib/supabase/admin': { createAdminClient: () => admin },
     '@/lib/supabase/config': { hasSupabaseServiceRoleKey: () => true },
   };
@@ -82,7 +82,7 @@ function request(project = {}) {
   };
 }
 
-for (const branch of ['Karkh', 'Rasafa', 'Najaf']) test(`${branch} can acknowledge an existing retired-province registration receipt`, async () => {
+for (const branch of ['Najaf']) test(`${branch} can acknowledge an existing retired-province registration receipt`, async () => {
   const x = fixture({ branch }), response = await x.post(request());
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, { project: saved });
@@ -99,6 +99,14 @@ for (const branch of ['Karkh', 'Rasafa', 'Najaf']) test(`${branch} can acknowled
   assert.equal(x.createdProjects, 0);
 });
 
+for (const branch of ['Karkh', 'Rasafa']) test(`${branch} cannot acknowledge a Najaf receipt even when they created the legacy project`, async () => {
+  const x = fixture({ branch }), response = await x.post(request());
+  assert.ok([400, 404].includes(response.status));
+  assert.equal(x.calls.length, 0);
+  assert.equal(x.createdProjects, 0);
+  assert.doesNotMatch(JSON.stringify(response.body), /PRJ-LEGACY/);
+});
+
 for (const [name, records] of [
   ['fresh registration', []],
   ['different operation', [{ ...receipt, operation_id: otherId }]],
@@ -108,7 +116,7 @@ for (const [name, records] of [
 ]) test(`retired province rejects ${name} before the synchronization RPC`, async () => {
   const x = fixture({ receipts: records }), response = await x.post(request());
   assert.equal(response.status, 400);
-  assert.match(response.body.error, /governorate/);
+  assert.match(response.body.error, /governorate|project from your branch/);
   assert.equal(x.calls.length, 0);
   assert.equal(x.createdProjects, 0);
 });
@@ -133,10 +141,9 @@ test('an existing operation with a changed payload remains a SQL fingerprint con
 });
 
 test('a saved receipt cannot bypass the current office registration boundary', async () => {
-  const x = fixture(), response = await x.post(request({ branch: 'Najaf' }));
-  assert.equal(response.status, 400);
-  assert.match(response.body.error, /project from your branch/);
-  assert.equal(x.reads.length, 0);
+  const x = fixture({ branch: 'Rasafa' }), response = await x.post(request({ branch: 'Najaf' }));
+  assert.equal(response.status, 404);
+  assert.doesNotMatch(JSON.stringify(response.body), /PRJ-LEGACY/);
   assert.equal(x.calls.length, 0);
 });
 
@@ -151,7 +158,7 @@ test('an inactive account and a forged saved-change account cannot look up recei
 });
 
 test('a listed new province continues to register without a legacy receipt lookup', async () => {
-  const x = fixture({ receipts: [] }), response = await x.post(request({ governorate: 'البصرة' }));
+  const x = fixture({ receipts: [], branch: 'Rasafa', noProject: true }), response = await x.post(request({ governorate: 'البصرة' }));
   assert.equal(response.status, 200);
   assert.equal(x.reads.some(read => read.table === 'field_sync_receipts'), false);
   assert.equal(x.calls.length, 1);

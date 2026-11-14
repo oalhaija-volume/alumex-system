@@ -2,7 +2,7 @@
 import { isOfflineDevice } from "@/lib/offline/device";
 
 import { projectGovernorates, normalizeProjectGovernorate, type ProjectBranch, type ProjectGovernorate } from '@/lib/intake/projectBranch';
-import { outdoorProjectBranches, normalizeOutdoorProjectBranch } from '@/lib/intake/outdoorRotation';
+import { outdoorProjectBranches, normalizeOutdoorProjectBranch, outdoorSalesBranch } from '@/lib/intake/outdoorRotation';
 import { canAccessProjectBranch, hasGlobalProjectAccess } from '@/lib/auth/projectBranchAccess';
 import { buildingTypes,buildingTypeLabels,normalizeBuildingType,type BuildingType } from '@/lib/intake/buildingType';
 import { useMobileOutdoor } from "@/components/workflow/MobileOutdoorContext";
@@ -40,12 +40,15 @@ export function OutdoorIntake({ initialEmployeeState = null,onRegistered }: { in
   const [saved, setSaved] = useState<{projectId:string;pending:boolean;registeredBy:string;createdAt?:string;legacyOutdoorSalesOwner?:string|null}|null>(null);
   const [offline,setOffline]=useState(false);
   const [employeeState,setEmployeeState]=useState<IntakeEmployeeState|null>(initialEmployeeState);
+  const [rotationDate,setRotationDate]=useState(()=>new Date());
   const [assignedOutdoorSalesId,setAssignedOutdoorSalesId]=useState('');
   const [legacyProject,setLegacyProject]=useState(false);
   const [legacyOutdoorSalesId,setLegacyOutdoorSalesId]=useState('');
   const actorRole = employeeState?.actor.role;
   const actorBranch = employeeState?.actor.branch;
-  const allowedProjectBranches = employeeState ? outdoorProjectBranches(employeeState.actor) : [];
+  const currentOutdoorBranch = employeeState ? outdoorSalesBranch(employeeState.actor,rotationDate) : null;
+  const baghdadOutdoor = actorRole==='Outdoor Sales'&&(actorBranch==='Karkh'||actorBranch==='Rasafa');
+  const allowedProjectBranches = employeeState ? outdoorProjectBranches(employeeState.actor,rotationDate) : [];
   const projectOutdoorSales = employeeState?.outdoorSales?.filter(employee => projectBranch && canAccessProjectBranch({role:'Outdoor Sales',branch:employee.branch},projectBranch)) ?? [];
   const canCreditLegacyProject=canAssignLegacyOutdoorSales(actorRole);
   const legacyOwner=legacyProject&&canCreditLegacyProject?projectOutdoorSales.find(employee=>employee.id===legacyOutdoorSalesId):undefined;
@@ -71,13 +74,22 @@ export function OutdoorIntake({ initialEmployeeState = null,onRegistered }: { in
   useEffect(()=>{const update=()=>setOffline(isOfflineDevice()&&!isFieldOnline());const timer=setTimeout(update,0);window.addEventListener('field-connection',update);window.addEventListener('online',update);window.addEventListener('offline',update);return()=>{clearTimeout(timer);window.removeEventListener('field-connection',update);window.removeEventListener('online',update);window.removeEventListener('offline',update);};},[]);
 
   useEffect(()=>{
-    const branches=outdoorProjectBranches({role:actorRole??'',branch:actorBranch});
+    const refresh=()=>setRotationDate(new Date());
+    const visible=()=>{if(document.visibilityState==='visible')refresh();};
+    const timer=window.setInterval(refresh,60000);
+    window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',visible);
+    return()=>{window.clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',visible);};
+  },[]);
+
+  useEffect(()=>{
+    const branches=outdoorProjectBranches({role:actorRole??'',branch:actorBranch},rotationDate);
     const timer=window.setTimeout(()=>setProjectBranch(current=>current&&branches.includes(current)?current:branches.length===1?branches[0]:''),0);
     return()=>window.clearTimeout(timer);
-  },[actorRole,actorBranch]);
+  },[actorRole,actorBranch,currentOutdoorBranch,rotationDate]);
 
   async function submit() {
     if (saving) return;
+    setRotationDate(new Date());
     if (!employeeState) {
       setError('Employee workspace is still loading. Please try again.');
       return;
@@ -185,7 +197,8 @@ export function OutdoorIntake({ initialEmployeeState = null,onRegistered }: { in
         <fieldset aria-describedby="project-branch-assignment">
           <legend className="mb-3 text-sm font-semibold text-slate-900">{term('Project branch')} {term('(required)')}</legend>
           <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
-            <p id="project-branch-assignment">{!employeeState?t('common.loading'):hasGlobalProjectAccess(employeeState.actor.role)?term('Choose the office responsible for this project.'):allowedProjectBranches.length?term('Your branch: {branch}',{branch:term(employeeState.actor.branch)}):term('Ask Admin to assign your branch before creating a project.')}</p>
+            <p id="project-branch-assignment">{!employeeState?t('common.loading'):hasGlobalProjectAccess(employeeState.actor.role)?term('Choose the office responsible for this project.'):baghdadOutdoor&&currentOutdoorBranch?t('registration.branchAssignment',{branch:term(currentOutdoorBranch)}):allowedProjectBranches.length?term('Your branch: {branch}',{branch:term(currentOutdoorBranch??employeeState.actor.branch)}):term('Ask Admin to assign your branch before creating a project.')}</p>
+            {baghdadOutdoor&&<p id="project-branch-rotation" className="mt-1 text-xs text-slate-600">{t('registration.branchRotation')}</p>}
           </div>
           <div className="grid grid-cols-2 gap-2 sm:gap-3">{allowedProjectBranches.map(branch=><label key={branch} className={`flex min-h-16 min-w-0 cursor-pointer flex-col items-start gap-2 rounded-md border p-3 text-sm sm:min-h-14 sm:flex-row sm:items-center sm:gap-3 sm:p-4 ${projectBranch===branch?'border-blue-600 bg-blue-50/60 text-slate-900':'border-slate-300 bg-white text-slate-700'}`}>
             <input required type="radio" name="projectBranch" value={branch} checked={projectBranch===branch} onChange={()=>{setProjectBranch(branch);if(branch!=='Governorates')setProjectGovernorate('');setAssignedOutdoorSalesId('');setLegacyOutdoorSalesId('');setError('');}} className="h-4 w-4 shrink-0 accent-blue-600"/>

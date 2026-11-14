@@ -49,6 +49,7 @@ test.beforeAll(async ({ request }, testInfo) => {
 });
 
 for (const locale of ['en', 'ar'] as const) test(`${locale}: Rasafa Outdoor selects Governorates and its province without Najaf branch access`, async ({ page }, testInfo) => {
+  await page.clock.setFixedTime(new Date('2026-11-14T08:00:00Z'));
   const dictionary = messages[locale];
   const term = (key: string) => (dictionary.terms as Record<string, string>)[key] ?? key;
   const mutations: Record<string, unknown>[] = [], unexpected: string[] = [], errors: string[] = [];
@@ -72,7 +73,7 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: Rasafa Outdoor sele
   await page.goto('/qa/outdoor-governorates');
   const branch = page.locator('input[name="projectBranch"]');
   await expect(branch).toHaveCount(2);
-  expect(await branch.evaluateAll(inputs => inputs.map(input => (input as HTMLInputElement).value))).toEqual(['Rasafa', 'Governorates']);
+  expect(await branch.evaluateAll(inputs => inputs.map(input => (input as HTMLInputElement).value))).toEqual(['Karkh', 'Governorates']);
   await expect(page.getByRole('radio', { name: term('Najaf'), exact: true })).toHaveCount(0);
   await expect(page.locator('#project-governorate')).toHaveCount(0);
   await page.getByRole('radio', { name: term('Governorates'), exact: true }).check();

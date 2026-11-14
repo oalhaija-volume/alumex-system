@@ -7,7 +7,7 @@ import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDel
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { canAccessProjectBranch } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, effectiveProjectBranch } from '@/lib/auth/projectBranchAccess';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import type { FieldProject, SalesWorkspaceData } from '@/lib/offline/types';
 import { followUpTypeLabel } from '@/lib/workflow/followUps';
@@ -170,7 +170,7 @@ function CRMProject({ project, data, now, busy, canDelete, onUpdate, onDelete }:
   const assignmentLabel = canRequest?'Add more openings':'Assign measurements';
   const canAssign = project.sales_status === 'new_lead' && ['site', 'measurements', 'measurement-delayed'].includes(stage.id);
   const indoorCreator = (project.original_creator_role === 'Indoor Sales' || project.original_creator_role === 'Sales Manager') ? data?.indoorSales?.find(employee => employee.id === project.created_by) : undefined;
-  const measurementEmployees = [...(!canRequest && indoorCreator ? [indoorCreator] : []), ...(data?.outdoorSales ?? [])].filter(employee=>canAccessProjectBranch({role:'Outdoor Sales',branch:employee.branch},project.branch));
+  const measurementEmployees = [...(!canRequest && indoorCreator ? [indoorCreator] : []), ...(data?.outdoorSales ?? [])].filter(employee=>canAccessProjectBranch({role:'Outdoor Sales',branch:employee.branch},effectiveProjectBranch(project)));
   const stageTone = cancelled ? 'bg-red-50 text-red-900' : stage.id === 'measurement-delayed' ? 'bg-amber-50 text-amber-900' : ['contract-signature', 'contract-preparation'].includes(stage.id) ? 'bg-indigo-50 text-indigo-800' : stage.id === 'site' ? 'bg-slate-100 text-slate-700' : 'bg-blue-50 text-blue-800';
   return <article id={`project-${project.id}`} aria-labelledby={`project-name-${project.id}`} className="scroll-mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm target:ring-2 target:ring-blue-500">
     <div aria-hidden="true" className={`hidden ${projectColumns} border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-600 lg:grid`}>

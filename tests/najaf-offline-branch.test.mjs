@@ -51,7 +51,9 @@ for (const role of appRoles) test(`${role} cached reads redact foreign office pr
   for (const branch of [...offices, null]) {
     const state = snapshot(role, branch), before = structuredClone(state);
     const expected = state.projects.filter(project => globalRoles.includes(role)
-      || offices.includes(branch) && (project.branch === branch || (branch === 'Karkh' || role === 'Outdoor Sales') && project.branch === 'Governorates'));
+      || offices.includes(branch) && (role === 'Outdoor Sales' && branch !== 'Najaf'
+        ? ['Karkh', 'Rasafa', 'Governorates'].includes(project.branch)
+        : project.branch === branch || branch === 'Karkh' && project.branch === 'Governorates'));
     const ids = expected.map(project => project.id);
     const view = visibleFieldState(state);
     assert.deepEqual(view.projects.map(project => project.id), ids);
@@ -61,7 +63,8 @@ for (const role of appRoles) test(`${role} cached reads redact foreign office pr
     assert.deepEqual(Object.keys(view.followUpHistories), ids);
     assert.deepEqual(view.archivedProjects.map(archive => archive.projectId), ids);
     for (const key of ['outdoorSales', 'indoorSales']) {
-      assert.deepEqual(view[key], state[key].filter(employee => globalRoles.includes(role) || offices.includes(branch) && employee.branch === branch));
+      assert.deepEqual(view[key], state[key].filter(employee => globalRoles.includes(role) || offices.includes(branch)
+        && (key === 'outdoorSales' && branch !== 'Najaf' ? ['Karkh', 'Rasafa'].includes(employee.branch) : employee.branch === branch)));
     }
     for (const project of state.projects) assert.equal(canAccessFieldProject(state, project), ids.includes(project.id));
     assert.equal(canAccessFieldProject(state, undefined), false);
@@ -75,7 +78,7 @@ test('switching an employee to Najaf immediately redacts the old office snapshot
     const before = structuredClone(state);
     state.actor = { ...state.actor, branch: 'Najaf' };
     const view = visibleFieldState(state);
-    const expectedIds = state.projects.filter(project => project.branch === 'Najaf' || role === 'Outdoor Sales' && project.branch === 'Governorates').map(project => project.id);
+    const expectedIds = state.projects.filter(project => project.branch === 'Najaf').map(project => project.id);
     assert.deepEqual(view.projects.map(project => project.id), expectedIds);
     assert.deepEqual(view.queue.map(change => change.projectId), expectedIds);
     assert.deepEqual(view.openings.map(opening => opening.projectId), expectedIds);

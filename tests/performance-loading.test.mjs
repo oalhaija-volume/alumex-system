@@ -11,6 +11,8 @@ function load(path, dependencies = {}) {
   new Function('require', 'exports', source)(name => {if(name==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts',{});if(name==='@/lib/measurements/visitHistory')return load('../src/lib/measurements/visitHistory.ts');if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});
     if(name==='@/lib/intake/projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(name==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts',{});
     if(name==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts',{});if(name==='@/lib/intake/legacyOutdoorSales')return load('../src/lib/intake/legacyOutdoorSales.ts',{});
+    if (name === '@/lib/intake/outdoorRotation') return load('../src/lib/intake/outdoorRotation.ts');
+    if (name.startsWith('.') && !(name in dependencies)) return load(new URL(`${name}.ts`, new URL(path, import.meta.url)));
     assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
     return dependencies[name];
   }, exports);
@@ -35,17 +37,17 @@ for (const endpoint of ['workspace', 'offline']) {
     const directoryBranches = [];
     const admin = { from(table) {
       let fields;
-      const branches = [];
+      const branches = []; let directoryScope = false;
       return {
         select(value) { fields = value; return this; },
         eq(column,value) { if(column==='branch'){branches.push(value);if(table==='profiles')directoryBranches.push(value);}return this; },
         in(column,values) { if(column==='branch')branches.push(...values);return this; }, order() { return this; }, range() { return this; }, single() { return this; },
-        or(value) { filters.push(value); return this; },
+        or(value) { filters.push(value); if(table==='profiles')directoryScope=true; return this; },
         then(resolve) {
           if (table === 'field_sync_receipts') return Promise.resolve({data:[],error:null}).then(resolve);
           const key = table === 'profiles' ? fields.startsWith('full_name') ? 'actor' : fields.split(',').includes('role') ? 'directory' : 'people' : table;
           if(key==='directory')assert.deepEqual(fields.split(','),['id','full_name','username','role','branch']);
-          return new Promise(done => started.set(key, data => done({ data: Array.isArray(data)&&branches.length?data.filter(row=>branches.includes(row.branch)):data, error: null }))).then(resolve);
+          return new Promise(done => started.set(key, data => done({ data: Array.isArray(data)?data.filter(row=>(!branches.length||branches.includes(row.branch))&&(!directoryScope||row.branch==='Karkh'||row.role==='Outdoor Sales'&&['Karkh','Rasafa'].includes(row.branch))):data, error: null }))).then(resolve);
         },
       };
     } };
@@ -53,7 +55,8 @@ for (const endpoint of ['workspace', 'offline']) {
     const response = route.GET(new Request(`http://localhost:3003/api/${endpoint}`));
     await tick();
     assert.deepEqual([...started.keys()].sort(), (endpoint === 'offline' ? ['actor', 'directory', 'projects'] : ['directory', 'projects']).sort());
-    assert.deepEqual(filters, ['created_by.eq.employee,assigned_outdoor_sales_id.eq.employee,legacy_outdoor_sales_id.eq.employee']);
+    assert.ok(filters.includes('created_by.eq.employee,assigned_outdoor_sales_id.eq.employee,legacy_outdoor_sales_id.eq.employee'));
+    assert.ok(filters.some(value => value.includes('Outdoor Sales') && value.includes('Karkh,Rasafa')), 'Both Baghdad outdoor employees remain available for assignment');
     started.get('projects')([project]);
     started.get('directory')([
       {id:actor.id,full_name:'Employee',role:actor.role,branch:'Karkh'},
@@ -82,7 +85,7 @@ for (const endpoint of ['workspace', 'offline']) {
       {id:'karkh-owner',name:'Karkh employee',role:'Indoor Sales',branch:'Karkh'},
       {id:'manager-owner',name:'Sales manager',role:'Sales Manager',branch:'Karkh'},
     ],'The downloaded owner directory retains same-office roles and branches while excluding other offices');
-    assert.deepEqual(directoryBranches,['Karkh']);
+    assert.deepEqual(directoryBranches,[]);
   });
 
   test(`${endpoint} does not start data reads before authorization`, async () => {

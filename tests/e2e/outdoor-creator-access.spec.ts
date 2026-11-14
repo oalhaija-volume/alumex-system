@@ -36,10 +36,11 @@ const state: FieldState = { actor, projects: [...own, ...foreign], outdoorSales:
     createdBy: actor.id, floor: 'GF', room: 'Bedroom', otherRoom: '', width: 1400, height: 1800, quantity: 2, structuralType: 'Window', openingType: 'Sliding' })),
 };
 
-for (const locale of ['en', 'ar'] as const) test(`${locale}: mobile Outdoor sees all own entries and opens foreign-office entries offline`, async ({ page }, testInfo) => {
+for (const locale of ['en', 'ar'] as const) test(`${locale}: mobile Outdoor sees all own Baghdad entries while Najaf stays isolated online and offline`, async ({ page }, testInfo) => {
   const messages = locale === 'ar' ? ar : en;
   const terms = messages.terms as Record<string, string>, tr = (key: string) => terms[key] ?? key;
   const writes: string[] = [], errors: string[] = [];
+  await page.clock.setFixedTime(new Date('2026-11-14T08:00:00Z'));
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(value => {
     localStorage.setItem('alumex_locale', value);
@@ -58,21 +59,20 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: mobile Outdoor sees
   await expect(page.getByRole('heading', { name: tr('My projects'), exact: true })).toBeVisible();
   const records = page.locator('article[id^="project-"]');
   await expect(records).toHaveCount(4);
-  for (const row of own) await expect(page.locator(`#project-${row.id}`).getByRole('heading', { name: row.project_name, exact: true })).toBeVisible();
-  for (const row of foreign) await expect(page.getByRole('heading', { name: row.project_name, exact: true })).toHaveCount(0);
+  for (const row of [...own.filter(row => row.branch !== 'Najaf'), foreign[0]]) await expect(page.locator(`#project-${row.id}`).getByRole('heading', { name: row.project_name, exact: true })).toBeVisible();
+  for (const row of [own[3], foreign[1]]) await expect(page.getByRole('heading', { name: row.project_name, exact: true })).toHaveCount(0);
   await expect(page.getByRole('status').filter({ hasText: tr('Showing {count} of {total} projects').replace('{count}', '4').replace('{total}', '4') })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', locale);
   await expect(page.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath(`${locale}-mobile-own-all-branches.png`), fullPage: true });
 
-  // Reopen the saved snapshot without a network connection, then open both
-  // opposite Baghdad and Najaf records using the real measurement component.
+  // Reopen the saved snapshot offline and retain earlier Baghdad-area work.
   await page.evaluate(() => { sessionStorage.setItem('creator-offline', '1'); window.dispatchEvent(new Event('offline')); });
   await page.reload();
   await expect(records).toHaveCount(4);
   const nav = page.getByRole('navigation', { name: tr('Outdoor Sales workspace'), exact: true });
-  for (const row of own.filter(project => ['Rasafa', 'Najaf'].includes(project.branch!))) {
+  for (const row of own.filter(project => project.branch === 'Rasafa')) {
     await page.locator(`#project-${row.id}`).getByRole('link', { name: tr('Open project'), exact: true }).click();
     await expect(page.getByRole('region', { name: tr('Project record'), exact: true })).toContainText(tr(row.branch!));
     await expect(page.getByRole('form', { name: tr('New opening measurements'), exact: true })).toBeVisible();

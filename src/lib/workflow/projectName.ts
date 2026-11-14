@@ -1,16 +1,17 @@
 import type { OutdoorTeamActor } from '@/lib/auth/outdoorTeams';
-import { canAccessProjectBranch } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, effectiveProjectBranch } from '@/lib/auth/projectBranchAccess';
 
 type Project = {
   created_by: string | null;
   assigned_outdoor_sales_id?: string | null;
   project_log_only?: boolean;
   branch?: string | null;
+  governorate?: string | null;
 };
 
 export function canRenameProject(project: Project, actor: OutdoorTeamActor & { branch?: string | null }) {
   if(project.project_log_only)return false;
-  if(actor.role==='Indoor Sales'||actor.role==='Sales Manager')return canAccessProjectBranch(actor,project.branch);
+  if(actor.role==='Indoor Sales'||actor.role==='Sales Manager')return canAccessProjectBranch(actor,effectiveProjectBranch(project));
   return false;
 }
 

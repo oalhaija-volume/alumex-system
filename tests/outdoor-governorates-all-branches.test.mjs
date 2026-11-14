@@ -29,17 +29,25 @@ function modules(dependencies = {}) {
 }
 const load = modules(), access = load('lib/auth/projectBranchAccess'), rotation = load('lib/intake/outdoorRotation');
 
-for (const branch of offices) test(`${branch} Outdoor can create Governorates while office choices and own-entry reads stay scoped`, () => {
+for (const branch of ['Karkh', 'Rasafa']) test(`${branch} Outdoor can create Governorates while Najaf stays isolated`, () => {
   const actor = employee(branch);
-  assert.deepEqual(rotation.outdoorProjectBranches(actor), [branch, 'Governorates']);
-  assert.deepEqual(access.projectBranchesForActor(actor), [branch, 'Governorates']);
-  assert.equal(rotation.normalizeOutdoorProjectBranch(actor, 'Governorates'), 'Governorates');
+  const date = new Date('2026-11-20T08:00:00Z');
+  assert.deepEqual(rotation.outdoorProjectBranches(actor, date), ['Rasafa', 'Governorates']);
+  assert.deepEqual(access.projectBranchesForActor(actor), ['Karkh', 'Rasafa', 'Governorates']);
+  assert.equal(rotation.normalizeOutdoorProjectBranch(actor, 'Governorates', date), 'Governorates');
   for (const office of offices) {
-    assert.equal(access.canAccessProjectBranch(actor, office), office === branch);
-    assert.equal(access.canAccessProjectRow(actor, { branch: office, created_by: actorId }), true);
-    if (office !== branch) assert.throws(() => rotation.normalizeOutdoorProjectBranch(actor, office));
+    assert.equal(access.canAccessProjectBranch(actor, office), office !== 'Najaf');
+    assert.equal(access.canAccessProjectRow(actor, { branch: office, created_by: actorId }), office !== 'Najaf');
+    if (office !== 'Rasafa') assert.throws(() => rotation.normalizeOutdoorProjectBranch(actor, office, date));
   }
-  assert.equal(access.canAccessProjectRow(actor, { branch: branch === 'Najaf' ? 'Rasafa' : 'Najaf', created_by: otherId }), false);
+  assert.equal(access.canAccessProjectRow(actor, { branch: 'Najaf', created_by: otherId }), false);
+});
+
+test('Najaf Outdoor creation remains within Najaf', () => {
+  const actor = employee('Najaf');
+  assert.deepEqual(rotation.outdoorProjectBranches(actor), ['Najaf']);
+  assert.deepEqual(access.projectBranchesForActor(actor), ['Najaf']);
+  for (const branch of ['Karkh', 'Rasafa', 'Governorates']) assert.throws(() => rotation.normalizeOutdoorProjectBranch(actor, branch));
 });
 
 test('new Governorates geography has eleven choices and rejects geographic Najaf and missing values', () => {
@@ -62,25 +70,27 @@ test('Governorates follow-up remains exclusive to Karkh Indoor Sales and Sales M
   }
 });
 
-for (const branch of offices) test(`${branch} legacy Governorates/Najaf records remain readable with their cached work intact`, () => {
+for (const branch of offices) test(`${branch} legacy Governorates/Najaf records obey Najaf isolation without changing storage`, () => {
   const project = { id: projectId, branch: 'Governorates', governorate: 'النجف', created_by: actorId, assigned_outdoor_sales_id: actorId };
   const state = { actor: employee(branch), projects: [project], queue: [{ id: 'saved-change', projectId, action: 'opening', payload: { note: 'Preserved old entry' } }],
     openings: [{ id: 'saved-opening', projectId, skylight: { photo: 'saved-photo' } }], syncedAt: null };
   const before = structuredClone(state), cache = load('lib/offline/projectAccess');
-  assert.equal(access.canAccessProjectRow(state.actor, project), true);
-  assert.equal(cache.canAccessFieldProject(state, project), true);
+  assert.equal(access.canAccessProjectRow(state.actor, project), branch === 'Najaf');
+  assert.equal(cache.canAccessFieldProject(state, project), branch === 'Najaf');
   const visible = cache.visibleFieldState(state);
-  for (const key of ['projects', 'queue', 'openings']) assert.deepEqual(visible[key], state[key]);
+  for (const key of ['projects', 'queue', 'openings']) assert.deepEqual(visible[key], branch === 'Najaf' ? state[key] : []);
   assert.deepEqual(state, before, 'Removing a new-registration province must not relabel or discard old records');
 });
 
-for (const branch of ['Rasafa', 'Najaf']) test(`${branch} Governorates reads require creator or current self/team assignment`, () => {
+for (const branch of ['Karkh', 'Rasafa']) test(`${branch} Governorates writes require creator or current self/team assignment`, () => {
   const actor = { ...employee(branch), outdoorTeamMemberIds: [actorId, otherId] };
-  const project = { id: projectId, branch: 'Governorates', governorate: 'النجف', created_by: 'unrelated-creator', assigned_outdoor_sales_id: 'unrelated-assignee', project_log_only: true };
-  assert.equal(access.canAccessProjectRow(actor, project), false);
-  assert.equal(access.canAccessProjectRow(actor, { ...project, created_by: actorId }), true);
-  assert.equal(access.canAccessProjectRow(actor, { ...project, assigned_outdoor_sales_id: actorId }), true);
-  assert.equal(access.canAccessProjectRow(actor, { ...project, assigned_outdoor_sales_id: otherId }), true);
+  const project = { id: projectId, branch: 'Governorates', governorate: 'البصرة', created_by: 'unrelated-creator', assigned_outdoor_sales_id: 'unrelated-assignee' };
+  const field = load('lib/offline/projectAccess');
+  const stateFor = row => ({ actor, projects: [row], openings: [], queue: [], syncedAt: null });
+  assert.equal(field.canAccessFieldProject(stateFor(project), project), false);
+  for (const row of [{ ...project, created_by: actorId }, { ...project, assigned_outdoor_sales_id: actorId }, { ...project, assigned_outdoor_sales_id: otherId }]) {
+    assert.equal(field.canAccessFieldProject(stateFor(row), row), true);
+  }
   const state = { actor, projects: [project], openings: [], queue: [], syncedAt: null };
   assert.deepEqual(load('lib/offline/projectAccess').visibleFieldState(state).projects, []);
 });
@@ -105,7 +115,7 @@ function endpoint(path, branch) {
   } };
 }
 
-for (const branch of offices) for (const path of ['sales-intake', 'offline']) {
+for (const branch of ['Karkh', 'Rasafa']) for (const path of ['sales-intake', 'offline']) {
   test(`${path}: ${branch} Outdoor can register every allowed governorate`, async () => {
     const x = endpoint(path, branch);
     for (const governorate of governorates) {
@@ -125,6 +135,12 @@ for (const branch of offices) for (const path of ['sales-intake', 'offline']) {
   });
 }
 
+for (const path of ['sales-intake', 'offline']) test(`${path}: Najaf Outdoor cannot register Governorates`, async () => {
+  const x = endpoint(path, 'Najaf');
+  assert.equal((await x.post('البصرة')).status, 400);
+  assert.deepEqual(x.writes, []);
+});
+
 function offline(t, branch) {
   const descriptors = new Map(['window', 'navigator'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   t.after(() => { for (const [key, descriptor] of descriptors) if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); });
@@ -136,7 +152,7 @@ function offline(t, branch) {
   return { client: modules({ './store': store, './device': { isOfflineDevice: () => true } })('lib/offline/client'), get raw() { return structuredClone(state); } };
 }
 
-for (const branch of offices) test(`${branch} offline client queues allowed Governorates entries and rejects Najaf before a durable change`, async t => {
+for (const branch of ['Karkh', 'Rasafa']) test(`${branch} offline client queues allowed Governorates entries and rejects Najaf before a durable change`, async t => {
   const x = offline(t, branch);
   for (const governorate of governorates) await x.client.saveFieldChange('register', crypto.randomUUID(), payload(governorate), actorId);
   assert.equal(x.raw.projects.length, 11);
@@ -144,5 +160,11 @@ for (const branch of offices) test(`${branch} offline client queues allowed Gove
   assert.ok(x.raw.projects.every(project => project.branch === 'Governorates' && project.created_by === actorId));
   const before = x.raw;
   await assert.rejects(x.client.saveFieldChange('register', crypto.randomUUID(), payload('النجف'), actorId), /Choose the project governorate/);
+  assert.deepEqual(x.raw, before);
+});
+
+test('Najaf offline client rejects Governorates before any durable change', async t => {
+  const x = offline(t, 'Najaf'), before = x.raw;
+  await assert.rejects(x.client.saveFieldChange('register', crypto.randomUUID(), payload('البصرة'), actorId), /project from your branch/);
   assert.deepEqual(x.raw, before);
 });

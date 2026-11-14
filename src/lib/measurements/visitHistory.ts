@@ -27,12 +27,45 @@ export function isHistoricalProject(project: { created_by: string | null; assign
   return actor.role === 'Outdoor Sales' && !canAccessOutdoorProject(project, actor);
 }
 
+// Keep relationship queries below URL and response row limits even when an
+// employee's project history spans many months.
+export async function loadWorkspaceRows<T, E>(
+  ids: string[],
+  load: (batch: string[], offset: number) => PromiseLike<{ data: T[] | null; error: E | null }>,
+): Promise<{ data: T[]; error: E | null }> {
+  const rows: T[] = [];
+  const uniqueIds = [...new Set(ids)];
+  for (let start = 0; start < uniqueIds.length; start += 100) {
+    for (let offset = 0; ; offset += 1000) {
+      const result = await load(uniqueIds.slice(start, start + 100), offset);
+      if (result.error) return { data: [], error: result.error };
+      const page = result.data ?? [];
+      rows.push(...page);
+      if (page.length < 1000) break;
+    }
+  }
+  return { data: rows, error: null };
+}
+
 export async function loadWorkspaceProjects(admin: Admin, actor: Actor) {
-  let query = admin.from('projects').select(workspaceProjectColumns).order('created_at', { ascending: false });
-  if (actor.role === 'Outdoor Sales') query = query.or(outdoorProjectFilter(actor, true));
   const branches = projectBranchesForActor(actor);
-  if (branches !== null && actor.role !== 'Outdoor Sales') query = query.in('branch', branches);
-  const result = await query;
+  const projectPage = (offset: number) => {
+    let query = admin.from('projects').select(workspaceProjectColumns)
+      .order('created_at', { ascending: false }).order('id').range(offset, offset + 999);
+    if (actor.role === 'Outdoor Sales') query = query.or(outdoorProjectFilter(actor, true));
+    // Legacy Governorates rows can still represent Najaf geographically.
+    if (branches !== null && actor.role !== 'Outdoor Sales') query = branches.includes('Najaf')
+      ? query.in('branch', [...branches, 'Governorates']) : query.in('branch', branches);
+    return query;
+  };
+  const result = await projectPage(0);
+  if (result.error || !result.data) return result;
+  for (let offset = 1000; result.data.length === offset; offset += 1000) {
+    const page = await projectPage(offset);
+    if (page.error) return { ...result, data: null, error: page.error };
+    result.data.push(...page.data);
+    if (page.data.length < 1000) break;
+  }
   if (result.data) result.data = result.data.filter(project => canAccessProjectRow(actor, project));
   if (result.error || actor.role !== 'Outdoor Sales') return result;
 

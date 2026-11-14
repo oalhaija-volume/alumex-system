@@ -10,6 +10,8 @@ function load(path, dependencies = {}) {
     if(name==='@/lib/intake/projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(name==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts',{});
     if(name==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts',{});if(name==='@/lib/intake/legacyOutdoorSales')return load('../src/lib/intake/legacyOutdoorSales.ts',{});
   if (name === '@/lib/auth/permissions') return load('../src/lib/auth/permissions.ts');
+    if (name === '@/lib/intake/outdoorRotation') return load('../src/lib/intake/outdoorRotation.ts');
+    if (name.startsWith('.') && !(name in dependencies)) return load(new URL(`${name}.ts`, new URL(path, import.meta.url)));
   assert.ok(name in dependencies, name);
   return dependencies[name];
  }, result);

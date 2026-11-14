@@ -160,7 +160,7 @@ for (const role of ['Admin', 'Sales Director', 'Company Owner']) {
 
 for (const role of ['CEO', 'Sales Manager', 'Outdoor Sales']) {
   test(`${role} sees its office projects while foreign offices stay hidden even for current assignments`, async () => {
-    const allowed = projects.filter(project => project.branch === 'Karkh' || project.branch === 'Governorates');
+    const allowed = projects.filter(project => project.branch === 'Karkh' || project.branch === 'Governorates' || role === 'Outdoor Sales' && project.branch === 'Rasafa');
     for (const path of ['dashboard', 'workspace', 'offline']) {
       const response = await fixture({ role }).load(`src/app/api/${path}/route`).GET(request());
       assert.equal(response.status, 200);
@@ -314,8 +314,8 @@ test('a branch transfer during offline refresh cannot return projects from the f
   assert.ok(response.body.projects.every(project => project.branch === 'Rasafa'));
   assert.deepEqual(response.body.openings, []);
   assert.deepEqual(response.body.measurementReports, []);
-  assert.deepEqual(response.body.outdoorSales, [], 'A refreshed employee office must hide the former office directory');
-  assert.deepEqual(response.body.indoorSales, [], 'Directory access must be allowed by both profile snapshots');
+  assert.deepEqual(response.body.outdoorSales.map(employee => employee.id), [otherId, operationId], 'Both Baghdad Outdoor employees remain available across area changes');
+  assert.deepEqual(response.body.indoorSales.map(employee => employee.id), [actorId], 'The latest verified office controls Indoor assignment choices');
 });
 
 for(const [path,session] of [['workspace',false],['offline',false],['offline',true]]) {
@@ -327,7 +327,7 @@ for(const [path,session] of [['workspace',false],['offline',false],['offline',tr
       assert.equal(response.body.actor.outdoorRotationStartBranch,starter??null);
       assert.equal(response.body.actor.branch,'Karkh','Employee office access stays fixed independently of legacy rotation seeds');
       assert.ok(x.reads.some(read=>read.table==='profiles'&&read.fields.includes('outdoor_rotation_start_branch')));
-      if(!session)assert.deepEqual(response.body.projects.map(project=>project.id),projects.filter(project=>project.branch==='Karkh'||project.branch==='Governorates').map(project=>project.id),'Assignments do not grant access outside the employee office');
+      if(!session)assert.deepEqual(response.body.projects.map(project=>project.id),projects.filter(project=>['Karkh','Rasafa','Governorates'].includes(project.branch)).map(project=>project.id),'Both Baghdad areas remain readable while Najaf stays isolated');
     });
   }
 }

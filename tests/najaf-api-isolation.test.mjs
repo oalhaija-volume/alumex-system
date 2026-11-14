@@ -94,7 +94,9 @@ function fixture(role, branch, overrides = {}) {
 }
 
 const allowedRows = (role, branch) => projectRows.filter(project => globalRoles.includes(role)
-  || offices.includes(branch) && (project.branch === branch || (branch === 'Karkh' || role === 'Outdoor Sales') && project.branch === 'Governorates'));
+  || offices.includes(branch) && (role === 'Outdoor Sales' && branch !== 'Najaf'
+    ? ['Karkh', 'Rasafa', 'Governorates'].includes(project.branch)
+    : project.branch === branch || branch === 'Karkh' && project.branch === 'Governorates'));
 
 const { appRoles } = moduleLoader({})('src/lib/auth/roles');
 

@@ -1,4 +1,4 @@
-import { isHistoricalProject, loadMeasurementAttempts, loadWorkspaceProjects } from '@/lib/measurements/visitHistory';
+import { isHistoricalProject, loadMeasurementAttempts, loadWorkspaceProjects, loadWorkspaceRows } from '@/lib/measurements/visitHistory';
 import { normalizeClientCancellation } from '@/lib/measurements/measurementDelay';
 import { normalizeReactivation } from '@/lib/workflow/reactivation';
 import { NextResponse } from 'next/server';
@@ -14,14 +14,16 @@ export async function GET(){
  const admin=createAdminClient();
  const actor={id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds};
  let directoryQuery=admin.from('profiles').select('id,full_name,username,role,branch').in('role',['Indoor Sales', 'Sales Manager','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name');
- if(!hasGlobalProjectAccess(auth.role))directoryQuery=directoryQuery.eq('branch',auth.profile?.branch??'');
+ if(!hasGlobalProjectAccess(auth.role))directoryQuery=auth.profile?.branch==='Karkh'||auth.profile?.branch==='Rasafa'
+  ?directoryQuery.or(`branch.eq.${auth.profile.branch},and(role.eq."Outdoor Sales",branch.in.(Karkh,Rasafa))`)
+  :directoryQuery.eq('branch',auth.profile?.branch??'');
  const [result,directory]=await Promise.all([loadWorkspaceProjects(admin,actor),directoryQuery]);
  if(result.error)return NextResponse.json({error:'Unable to load projects.'},{status:500});
  const clientIds=[...new Set((result.data??[]).map(p=>p.client_id))];
  const ids=[...new Set([auth.user.id,...(result.data??[]).flatMap(p=>[p.created_by,p.legacy_outdoor_sales_id,p.assigned_outdoor_sales_id,p.follow_up_owner_id,p.measurement_delayed_by,p.client_cancelled_by]).filter((id):id is string=>!!id)])];
  const [clients,profiles,attempts]=await Promise.all([
-  clientIds.length?admin.from('clients').select('id,mobile,client_name').in('id',clientIds):{data:[],error:null},
-  admin.from('profiles').select('id,full_name,username,outdoor_rotation_start_branch').in('id',ids),
+  loadWorkspaceRows(clientIds,batch=>admin.from('clients').select('id,mobile,client_name').in('id',batch)),
+  loadWorkspaceRows(ids,batch=>admin.from('profiles').select('id,full_name,username,outdoor_rotation_start_branch').in('id',batch)),
   loadMeasurementAttempts(admin,(result.data??[]).map(project=>project.id))
  ]);
  if(attempts.error)return NextResponse.json({error:'Unable to load visit history.'},{status:500});

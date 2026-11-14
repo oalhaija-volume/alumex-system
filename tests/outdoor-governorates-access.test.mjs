@@ -33,16 +33,26 @@ const teammateId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const actor = { id: actorId, role: 'Outdoor Sales', branch: 'Rasafa', name: 'Outdoor fixture', outdoorTeamMemberIds: [actorId, teammateId] };
 const governorates = ['البصرة', 'الرمادي', 'صلاح الدين', 'ديالى', 'الحلة', 'كربلاء', 'الديوانية', 'الكوت', 'العمارة', 'الناصرية', 'السماوة'];
 
-for (const branch of ['Karkh', 'Rasafa', 'Najaf']) test(`${branch} Outdoor Sales can register Governorates while other offices stay separate`, () => {
+for (const branch of ['Karkh', 'Rasafa']) test(`${branch} Outdoor Sales can register Governorates while Najaf stays separate`, () => {
   const employee = { ...actor, branch };
-  assert.deepEqual(rotation.outdoorProjectBranches(employee), [branch, 'Governorates']);
-  assert.equal(rotation.outdoorSalesBranch(employee), branch, 'The employee office stays fixed');
-  assert.equal(rotation.normalizeOutdoorProjectBranch(employee, 'Governorates'), 'Governorates');
+  const date = new Date('2026-11-10T08:00:00Z');
+  assert.deepEqual(rotation.outdoorProjectBranches(employee, date), ['Karkh', 'Governorates']);
+  assert.equal(rotation.outdoorSalesBranch(employee, date), 'Karkh', 'Both Baghdad employees follow the same calendar');
+  assert.equal(rotation.normalizeOutdoorProjectBranch(employee, 'Governorates', date), 'Governorates');
   assert.equal(access.canAccessProjectBranch(employee, 'Governorates'), true);
-  for (const forbidden of [...['Karkh', 'Rasafa', 'Najaf'].filter(office => office !== branch), null, '', 'Other']) {
+  for (const forbidden of ['Najaf', null, '', 'Other']) {
     assert.equal(access.canAccessProjectBranch(employee, forbidden), false);
-    assert.throws(() => rotation.normalizeOutdoorProjectBranch(employee, forbidden));
+    assert.throws(() => rotation.normalizeOutdoorProjectBranch(employee, forbidden, date));
   }
+  assert.equal(access.canAccessProjectBranch(employee, 'Rasafa'), true, 'Saved work remains accessible in either Baghdad area');
+  assert.throws(() => rotation.normalizeOutdoorProjectBranch(employee, 'Rasafa', date));
+});
+
+test('Najaf Outdoor cannot create or access other Governorates projects', () => {
+  const employee = { ...actor, branch: 'Najaf' };
+  assert.deepEqual(rotation.outdoorProjectBranches(employee), ['Najaf']);
+  assert.throws(() => rotation.normalizeOutdoorProjectBranch(employee, 'Governorates'));
+  assert.equal(access.canAccessProjectBranch(employee, 'Governorates'), false);
 });
 
 test('Outdoor employees without a valid office cannot register Governorates', () => {
@@ -69,18 +79,18 @@ test('Governorates follow-up remains with Karkh Indoor Sales and Sales Managers'
   assert.equal(access.canOwnProjectFollowUp(actor, 'Governorates'), false);
 });
 
-for (const branch of ['Rasafa', 'Najaf']) test(`${branch} Governorates access preserves creator and team restrictions in cached work`, () => {
+for (const branch of ['Karkh', 'Rasafa']) test(`${branch} Governorates access preserves creator and team restrictions in cached work`, () => {
   const employee = { ...actor, branch };
-  const project = { id: 'own', branch: 'Governorates', governorate: 'النجف', created_by: actorId, assigned_outdoor_sales_id: actorId };
+  const project = { id: 'own', branch: 'Governorates', governorate: 'البصرة', created_by: actorId, assigned_outdoor_sales_id: actorId };
   const own = { ...project };
   const assigned = { ...project, id: 'team', created_by: 'other', assigned_outdoor_sales_id: teammateId };
   const unrelated = { ...project, id: 'unrelated', created_by: 'other', assigned_outdoor_sales_id: 'other' };
-  const foreign = { ...project, id: 'foreign-office', branch: branch === 'Najaf' ? 'Rasafa' : 'Najaf', created_by: 'other' };
-  const historical = { ...unrelated, id: 'historical-unrelated', project_log_only: true };
+  const foreign = { ...project, id: 'foreign-office', branch: 'Najaf', created_by: actorId };
+  const historical = { ...unrelated, id: 'historical-unrelated' };
   const projects = [own, assigned, unrelated, foreign, historical];
   const state = { actor: employee, projects, openings: projects.map(row => ({ id: `opening-${row.id}`, projectId: row.id })), queue: [], syncedAt: null };
   assert.deepEqual(offlineAccess.visibleFieldState(state).projects.map(row => row.id), ['own', 'team']);
-  assert.equal(offlineAccess.visibleFieldState(state).projects[0].governorate, 'النجف', 'Existing geographic Najaf entries remain readable');
+  assert.equal(offlineAccess.visibleFieldState(state).projects[0].governorate, 'البصرة');
   assert.equal(offlineAccess.canAccessFieldProject(state, unrelated), false);
   assert.equal(offlineAccess.canAccessFieldProject(state, foreign), false);
   assert.equal(offlineAccess.canAccessFieldProject(state, historical), false);

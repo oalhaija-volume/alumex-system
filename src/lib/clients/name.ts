@@ -1,12 +1,12 @@
-import { canAccessProjectBranch } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, effectiveProjectBranch } from '@/lib/auth/projectBranchAccess';
 
 export function canRenameClient(
-  project: { branch?: string | null; project_log_only?: boolean },
+  project: { branch?: string | null; governorate?: string | null; project_log_only?: boolean },
   actor: { role: string; branch?: string | null },
 ) {
   return !project.project_log_only
     && (actor.role === 'Admin' || actor.role === 'Indoor Sales' || actor.role === 'Sales Manager')
-    && canAccessProjectBranch(actor, project.branch);
+    && canAccessProjectBranch(actor, effectiveProjectBranch(project));
 }
 
 export function normalizeClientName(input: Record<string, unknown>) {

@@ -27,7 +27,9 @@ const globalRoles = ['Admin', 'Sales Director', 'Company Owner'];
 const offices = ['Karkh', 'Rasafa', 'Najaf'];
 const projectBranches = [...offices, 'Governorates', null, undefined];
 const belongsTo = (office, projectBranch, role) => offices.includes(office)
-  && (office === projectBranch || (office === 'Karkh' || role === 'Outdoor Sales') && projectBranch === 'Governorates');
+  && (role === 'Outdoor Sales' && office !== 'Najaf'
+    ? ['Karkh', 'Rasafa', 'Governorates'].includes(projectBranch)
+    : office === projectBranch || office === 'Karkh' && projectBranch === 'Governorates');
 
 test('only Admin, Sales Director and Company Owner have global project visibility', () => {
   for (const role of appRoles) assert.equal(access.hasGlobalProjectAccess(role), globalRoles.includes(role), role);
@@ -46,7 +48,8 @@ for (const role of appRoles.filter(role => !globalRoles.includes(role))) {
   test(`${role} is restricted to its assigned office including Najaf`, () => {
     for (const branch of offices) {
       const actor = { role, branch };
-      assert.deepEqual(access.projectBranchesForActor(actor), branch === 'Karkh' || role === 'Outdoor Sales' ? [branch, 'Governorates'] : [branch]);
+      assert.deepEqual(access.projectBranchesForActor(actor), role === 'Outdoor Sales' && branch !== 'Najaf'
+        ? ['Karkh', 'Rasafa', 'Governorates'] : branch === 'Karkh' ? [branch, 'Governorates'] : [branch]);
       for (const projectBranch of projectBranches) {
         assert.equal(access.canAccessProjectBranch(actor, projectBranch), belongsTo(branch, projectBranch, role), `${branch} employee / ${projectBranch} project`);
       }
@@ -66,6 +69,21 @@ test('Governorates follow-up stays with Karkh independently of Outdoor registrat
   assert.deepEqual(access.indoorProjectBranches('Rasafa'), ['Rasafa']);
   assert.deepEqual(access.indoorProjectBranches('Najaf'), ['Najaf']);
   assert.deepEqual(access.indoorProjectBranches('Governorates'), []);
+});
+
+test('geographic Najaf is isolated even when stored as a legacy Governorates row', () => {
+  for (const governorate of ['النجف', 'نجف', 'Najaf', '  nAjAf  ']) {
+    const row = { branch: 'Governorates', governorate, created_by: 'creator', assigned_outdoor_sales_id: 'creator' };
+    for (const role of appRoles) for (const branch of offices) {
+      assert.equal(access.canAccessProjectRow({ id: 'creator', role, branch }, row), globalRoles.includes(role) || branch === 'Najaf', `${role}/${branch}/${governorate}`);
+    }
+  }
+});
+
+test('moving Outdoor employees between Baghdad and Najaf cannot preserve access through creator identity', () => {
+  const actor = { id: 'creator', role: 'Outdoor Sales' };
+  for (const branch of ['Karkh', 'Rasafa']) assert.equal(access.canAccessProjectRow({ ...actor, branch }, { branch: 'Najaf', created_by: actor.id }), false);
+  for (const branch of ['Karkh', 'Rasafa', 'Governorates']) assert.equal(access.canAccessProjectRow({ ...actor, branch: 'Najaf' }, { branch, created_by: actor.id }), false);
 });
 
 test('follow-up ownership requires an Indoor Sales or Sales Manager employee from the project office', () => {

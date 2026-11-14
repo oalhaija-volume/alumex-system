@@ -1,5 +1,6 @@
-import { isHistoricalProject, loadMeasurementAttempts, loadWorkspaceProjects } from '@/lib/measurements/visitHistory';
+import { isHistoricalProject, loadMeasurementAttempts, loadWorkspaceProjects, loadWorkspaceRows } from '@/lib/measurements/visitHistory';
 import { normalizeProjectBranch, normalizeProjectGovernorate } from '@/lib/intake/projectBranch';
+import { normalizeOutdoorProjectBranch, outdoorSalesBranch } from '@/lib/intake/outdoorRotation';
 import {normalizeMeasurementCompletion} from '@/lib/measurements/completion';
 import { normalizeBuildingType } from '@/lib/intake/buildingType';
 import { normalizeClientCancellation, normalizeMeasurementDelay } from '@/lib/measurements/measurementDelay';
@@ -10,7 +11,7 @@ import { requireRole } from '@/lib/auth/adminServer';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeFollowUp,normalizeMeasurementAssignment } from '@/lib/workflow/followUps';
 import { canAccessCRM } from '@/lib/auth/permissions';
-import { canAccessProjectBranch, canAccessProjectRow, hasGlobalProjectAccess, projectBranchesForActor } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectRow, effectiveProjectBranch, hasGlobalProjectAccess, projectBranchesForActor } from '@/lib/auth/projectBranchAccess';
 import { salesRoles } from '@/lib/workflow/access';
 import { normalizeProjectName } from '@/lib/workflow/projectName';
 import { isOutdoorAssignmentMember, outdoorAssignmentIds } from '@/lib/auth/outdoorTeams';
@@ -29,7 +30,9 @@ export async function GET(request:Request){
   return NextResponse.json({actor:actorFromProfile(profile.data)},{headers:{'Cache-Control':'no-store'}});
  }
  let directoryQuery=admin.from('profiles').select('id,full_name,username,role,branch').in('role',['Indoor Sales', 'Sales Manager','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name');
- if(!hasGlobalProjectAccess(auth.role))directoryQuery=directoryQuery.eq('branch',auth.profile?.branch??'');
+ if(!hasGlobalProjectAccess(auth.role))directoryQuery=auth.profile?.branch==='Karkh'||auth.profile?.branch==='Rasafa'
+  ?directoryQuery.or(`branch.eq.${auth.profile.branch},and(role.eq."Outdoor Sales",branch.in.(Karkh,Rasafa))`)
+  :directoryQuery.eq('branch',auth.profile?.branch??'');
  const [profile,projects,directory]=await Promise.all([profileQuery,loadWorkspaceProjects(admin,{id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}),directoryQuery]);
  if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
  const actor=actorFromProfile(profile.data);
@@ -37,14 +40,15 @@ export async function GET(request:Request){
  // A branch may have changed between authentication and the profile refresh.
  // Only download projects allowed by both snapshots of the employee profile.
  projects.data=projects.data.filter(project=>canAccessProjectRow(actor,project));
- directory.data=(directory.data??[]).filter(employee=>hasGlobalProjectAccess(actor.role)||employee.branch===actor.branch);
+ directory.data=(directory.data??[]).filter(employee=>hasGlobalProjectAccess(actor.role)||employee.branch===actor.branch
+  ||(employee.role==='Outdoor Sales'&&(actor.branch==='Karkh'||actor.branch==='Rasafa')&&(employee.branch==='Karkh'||employee.branch==='Rasafa')));
  const ids=projects.data.filter(p=>!isHistoricalProject(p,actor)).map(p=>p.id);const clientIds=[...new Set(projects.data.map(p=>p.client_id))];
  const peopleIds=[...new Set(projects.data.flatMap(p=>[p.created_by,p.legacy_outdoor_sales_id,p.assigned_outdoor_sales_id,p.follow_up_owner_id,p.measurement_delayed_by,p.client_cancelled_by]).filter((id):id is string=>!!id))];
  const [people,openings,clients,reports,attempts]=await Promise.all([
-  peopleIds.length?admin.from('profiles').select('id,full_name,username').in('id',peopleIds):{data:[],error:null},
-  ids.length?admin.from('openings').select('id,project_id,created_by,floor,room,width,height,quantity,work_area,facade_number,has_curtain_wall_capture,has_skylight_capture,has_arch,has_roller_shutter,opening_type,opening_direction').in('project_id',ids):{data:[],error:null},
-  clientIds.length?admin.from('clients').select('id,mobile,client_name').in('id',clientIds):{data:[],error:null},
-  ids.length?admin.from('measurement_completion_reports').select('id,project_id,note,has_photo,recorded_by,recorded_by_name,recorded_at').in('project_id',ids):{data:[],error:null},
+  loadWorkspaceRows(peopleIds,batch=>admin.from('profiles').select('id,full_name,username').in('id',batch)),
+  loadWorkspaceRows(ids,(batch,offset)=>admin.from('openings').select('id,project_id,created_by,floor,room,width,height,quantity,work_area,facade_number,has_curtain_wall_capture,has_skylight_capture,has_arch,has_roller_shutter,opening_type,opening_direction').in('project_id',batch).order('id').range(offset,offset+999)),
+  loadWorkspaceRows(clientIds,batch=>admin.from('clients').select('id,mobile,client_name').in('id',batch)),
+  loadWorkspaceRows(ids,(batch,offset)=>admin.from('measurement_completion_reports').select('id,project_id,note,has_photo,recorded_by,recorded_by_name,recorded_at').in('project_id',batch).order('id').range(offset,offset+999)),
   loadMeasurementAttempts(admin,projects.data.map(project=>project.id))
  ]);
  if(attempts.error)return NextResponse.json({error:'Unable to load visit history.'},{status:500});
@@ -77,19 +81,25 @@ export async function POST(request:Request){
   let buildingType;
   try{buildingType=normalizeBuildingType(p.buildingType,auth.role==='Outdoor Sales'&&p.buildingType!==undefined);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   // Retain compatibility with registrations already saved by older installed clients.
+  const actor={id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds};
   let branch;
-  try{branch=normalizeProjectBranch(p.branch===undefined?auth.profile?.branch:p.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
-  if(!canAccessProjectBranch({role:auth.role,branch:auth.profile?.branch},branch))return NextResponse.json({error:'Choose a project from your branch.'},{status:400});
-  let governorate;
-  if(branch==='Governorates'&&p.governorate==='النجف'){
-   // A retired choice may still be in an older device's acknowledged work.
-   // Only an existing receipt can reach SQL, which verifies the exact payload
-   // fingerprint and current project access before returning its saved result.
+  try{branch=normalizeProjectBranch(p.branch===undefined?(outdoorSalesBranch(actor)??auth.profile?.branch):p.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+  const retiredNajaf=branch==='Governorates'&&effectiveProjectBranch({branch,governorate:p.governorate})==='Najaf';
+  // An old receipt cannot grant access across Najaf's geographic boundary.
+  if(retiredNajaf&&!canAccessProjectRow(actor,{branch,governorate:p.governorate,created_by:auth.user.id}))return NextResponse.json({error:'Choose the project governorate.'},{status:400});
+  let creationError:string|null=null;
+  try{normalizeOutdoorProjectBranch(actor,branch);}catch(error){creationError=(error as Error).message;}
+  if(creationError||retiredNajaf){
+   // Only a completed operation can be acknowledged outside today's creation
+   // area. SQL also verifies its original payload and current row access.
    const receipt=await createAdminClient().from('field_sync_receipts').select('operation_id')
     .eq('operation_id',body.id).eq('actor_id',auth.user.id).eq('project_id',body.projectId).eq('action','register').maybeSingle();
    if(receipt.error)return NextResponse.json({error:'Unable to verify the saved registration. Try again when connected.'},{status:503});
-   if(!receipt.data)return NextResponse.json({error:'Choose the project governorate.'},{status:400});
-   governorate='النجف';
+   if(!receipt.data)return NextResponse.json({error:retiredNajaf?'Choose the project governorate.':creationError},{status:400});
+  }
+  let governorate;
+  if(retiredNajaf){
+   governorate=p.governorate;
   }else{
    try{governorate=normalizeProjectGovernorate(branch,p.governorate);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   }
@@ -121,7 +131,7 @@ export async function POST(request:Request){
  const admin=createAdminClient();
  // SQL validates the active actor and creator/branch access before any replay.
  if(!hasGlobalProjectAccess(auth.role)){
-  const project=await admin.from('projects').select('branch,created_by,assigned_outdoor_sales_id').eq('id',body.projectId).maybeSingle();
+  const project=await admin.from('projects').select('branch,governorate,created_by,assigned_outdoor_sales_id').eq('id',body.projectId).maybeSingle();
   if(project.error)return NextResponse.json({error:'Unable to verify project access.'},{status:503});
   if(project.data&&!canAccessProjectRow({id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds},project.data))return NextResponse.json({error:'Project not found.'},{status:404});
  }
@@ -129,17 +139,23 @@ export async function POST(request:Request){
  if(result.error&&['Project is not available to this employee','This project was deleted. Its saved offline work cannot be synced.'].includes(result.error.message)){
   // A missing project may have been deleted while the employee was offline.
   // Confirm deletion and the employee's former access before disclosing it.
-  let deletion=admin.from('audit_events').select('id').eq('action','project_deleted').eq('entity_type','project').eq('entity_id',body.projectId);
+  let deletion=admin.from('audit_events').select('id,previous_value').eq('action','project_deleted').eq('entity_type','project').eq('entity_id',body.projectId);
   const branches=projectBranchesForActor({role:auth.role,branch:auth.profile?.branch});
+  const archiveBranches=branches?.includes('Najaf')?[...branches,'Governorates']:branches;
   if(auth.role==='Outdoor Sales'){
    const ownEntry=`previous_value->>created_by.eq.${auth.user.id}`;
    const assignments=outdoorAssignmentIds({id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}).map(id=>`previous_value->>assigned_outdoor_sales_id.eq.${id}`).join(',');
-   // Ownership survives an office transfer. Assignment-only archives still
-   // require both the employee's branch scope and a current team assignment.
-   deletion=deletion.or(branches?.length?`${ownEntry},and(previous_value->>branch.in.(${branches.join(',')}),or(${assignments}))`:ownEntry);
-  }else if(branches!==null)deletion=branches.length?deletion.in('previous_value->>branch',branches):deletion.eq('previous_value->>branch','');
+   // Candidate archives are rechecked with geography below before disclosing
+   // deletion; creator identity never bypasses Najaf isolation.
+   deletion=deletion.or(archiveBranches?.length?`${ownEntry},and(previous_value->>branch.in.(${archiveBranches.join(',')}),or(${assignments}))`:ownEntry);
+  }else if(archiveBranches!==null)deletion=archiveBranches.length?deletion.in('previous_value->>branch',archiveBranches):deletion.eq('previous_value->>branch','');
   const archived=await deletion.limit(1).maybeSingle();
-  if(!archived.error&&archived.data)return NextResponse.json({code:'project_deleted',error:'This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.'},{status:410,headers:{'Cache-Control':'no-store'}});
+  const previous=archived.data?.previous_value;
+  const actor={id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds};
+  const visibleArchive=hasGlobalProjectAccess(auth.role)||(previous&&typeof previous==='object'&&!Array.isArray(previous)
+   &&canAccessProjectRow(actor,{branch:typeof previous.branch==='string'?previous.branch:null,governorate:typeof previous.governorate==='string'?previous.governorate:null,
+    created_by:typeof previous.created_by==='string'?previous.created_by:null,assigned_outdoor_sales_id:typeof previous.assigned_outdoor_sales_id==='string'?previous.assigned_outdoor_sales_id:null}));
+  if(!archived.error&&archived.data&&visibleArchive)return NextResponse.json({code:'project_deleted',error:'This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.'},{status:410,headers:{'Cache-Control':'no-store'}});
  }
  return result.error?NextResponse.json({error:result.error.message},{status:409}):NextResponse.json({project:result.data},{headers:{'Cache-Control':'no-store'}});
 }

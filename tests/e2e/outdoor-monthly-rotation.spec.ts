@@ -1,20 +1,28 @@
 import {expect,test,type Page} from '@playwright/test';
+import {existsSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {savedFieldState} from './helpers/fieldState';
 import type {FieldActor,FieldChange,FieldState} from '../../src/lib/offline/types';
 
 // Desktop and mobile viewports use a tablet user agent to exercise the field
 // workspace. Every business request is intercepted; no live project is written.
-test.use({serviceWorkers:'block',userAgent:'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile Safari/604.1'});
+// Browser connector tools are unavailable; use the existing repository-local
+// Chromium with mocked business requests and the required port 3003.
+const executablePath=[
+ resolve('.next/cache/qa-client-name/chrome-headless-shell-mac-arm64/chrome-headless-shell'),
+ resolve('artifacts/mini-crm-review-20261015/browser/chrome-headless-shell-mac-arm64/chrome-headless-shell'),
+].find(path=>existsSync(path));
+test.use({serviceWorkers:'block',video:'off',launchOptions:{executablePath},userAgent:'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile Safari/604.1'});
 
 const employees=[
- {name:'Mohammad',outdoorRotationStartBranch:'Karkh'},
- {name:'Ali',outdoorRotationStartBranch:'Karkh'},
- {name:'Ehab',outdoorRotationStartBranch:'Rasafa'},
- {name:'Sajjad',outdoorRotationStartBranch:'Rasafa'},
+ {name:'Mohammad',branch:'Karkh',outdoorRotationStartBranch:'Karkh'},
+ {name:'Ali',branch:'Karkh',outdoorRotationStartBranch:'Karkh'},
+ {name:'Ehab',branch:'Rasafa',outdoorRotationStartBranch:'Rasafa'},
+ {name:'Sajjad',branch:'Rasafa',outdoorRotationStartBranch:'Rasafa'},
 ] as const;
 const actorId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
-async function prepare(page:Page,locale:string,employee:Pick<FieldActor,'name'|'outdoorRotationStartBranch'>,date:string){
+async function prepare(page:Page,locale:string,employee:Pick<FieldActor,'name'|'branch'|'outdoorRotationStartBranch'>,date:string){
  await page.clock.setFixedTime(new Date(date));
  await page.addInitScript(locale=>localStorage.setItem('alumex_locale',locale),locale);
  const state:FieldState={actor:{id:actorId,role:'Outdoor Sales',...employee},projects:[],openings:[],queue:[],syncedAt:null,outdoorSales:[],indoorSales:[]};
@@ -33,7 +41,7 @@ async function prepare(page:Page,locale:string,employee:Pick<FieldActor,'name'|'
  await expect(page).toHaveURL(/\/offline\?path=\/intake$/);
  await expect(page).toHaveTitle(/Alumex|ألومكس/i);
  await expect(page.getByRole('heading',{name:locale==='en'?'New client & project':'عميل ومشروع جديد',exact:true})).toBeVisible();
- await expect(page.locator('input[name="projectBranch"]')).not.toHaveCount(0);
+ if(employee.branch)await expect(page.locator('input[name="projectBranch"]')).not.toHaveCount(0);
  return {posts,errors};
 }
 
@@ -56,7 +64,7 @@ function saveButton(page:Page,locale:string){
 
 for(const locale of ['en','ar'])for(const employee of employees)for(const half of ['first','second'])test(`${locale}: ${employee.name} can register only the assigned Baghdad branch in the ${half} half`,async({page},testInfo)=>{
  const date=half==='first'?'2026-10-10T09:00:00Z':'2026-10-20T09:00:00Z';
- const assigned=half==='first'?employee.outdoorRotationStartBranch:employee.outdoorRotationStartBranch==='Karkh'?'Rasafa':'Karkh';
+ const assigned=half==='first'?'Karkh':'Rasafa';
  const forbidden=assigned==='Karkh'?'Rasafa':'Karkh';
  const {posts,errors}=await prepare(page,locale,employee,date);
  const branches=page.locator('input[name="projectBranch"]');
@@ -87,20 +95,30 @@ for(const locale of ['en','ar'])for(const employee of employees)for(const half o
  expect(errors).toEqual([]);
 });
 
-for(const locale of ['en','ar'])test(`${locale}: an unconfigured employee can still register Governorates`,async({page})=>{
+for(const locale of ['en','ar'])test(`${locale}: an employee without a branch cannot register projects`,async({page})=>{
  const {posts,errors}=await prepare(page,locale,{name:'Unconfigured employee'},'2026-10-20T09:00:00Z');
  const branches=page.locator('input[name="projectBranch"]');
+ await expect(branches).toHaveCount(0);
+ await expect(page.locator('#project-branch-assignment')).toContainText(locale==='en'?'Ask Admin to assign your branch':'اطلب من المسؤول تحديد فرعك');
+ const saved=await savedFieldState(page);
+ expect(saved.queue).toHaveLength(0);
+ expect(posts).toHaveLength(0);
+ expect(errors).toEqual([]);
+});
+
+for(const locale of ['en','ar'])test(`${locale}: Najaf Outdoor stays in Najaf without Governorates during Baghdad rotation`,async({page})=>{
+ const {posts,errors}=await prepare(page,locale,{name:'Najaf employee',branch:'Najaf',outdoorRotationStartBranch:'Rasafa'},'2026-11-20T09:00:00Z');
+ const branches=page.locator('input[name="projectBranch"]');
  await expect(branches).toHaveCount(1);
- await expect(branches).toHaveValue('Governorates');
- await expect(page.locator('#project-branch-assignment')).toContainText(locale==='en'?'ask Admin to set your rotation':'اطلب من المسؤول تحديد تناوبك');
- await branches.check();
- await page.locator('#project-governorate').selectOption('البصرة');
+ await expect(branches).toHaveValue('Najaf');
+ await expect(branches).toBeChecked();
+ await expect(page.locator('#project-governorate')).toHaveCount(0);
+ await expect(page.locator('#project-branch-rotation')).toHaveCount(0);
  await fillOfflineRegistration(page);
  await saveButton(page,locale).click();
  await expect(page.getByRole('heading',{name:locale==='en'?'Registration saved':'تم حفظ التسجيل',exact:true})).toBeVisible();
- const saved=await savedFieldState(page);
- expect(saved.queue[0].payload.project).toMatchObject({branch:'Governorates',governorate:'البصرة'});
- expect(posts).toHaveLength(0);
+ expect((await savedFieldState(page)).queue[0].payload.project).toMatchObject({branch:'Najaf'});
+ expect(posts).toEqual([]);
  expect(errors).toEqual([]);
 });
 

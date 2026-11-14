@@ -12,14 +12,18 @@ export async function GET() {
   // stay in the sales workspace behind its own role and project checks.
   const admin = createAdminClient();
   let query = admin.from('projects')
-    .select('id,branch,project_name,project_number,structure_readiness,sales_status,status,created_at,created_by,assigned_outdoor_sales_id,updated_at,measurement_delayed,client_cancelled_at')
+    .select('id,branch,governorate,project_name,project_number,structure_readiness,sales_status,status,created_at,created_by,assigned_outdoor_sales_id,updated_at,measurement_delayed,client_cancelled_at')
     .is('archived_at', null).order('updated_at', { ascending: false });
   if (auth.role === 'Outdoor Sales') {
     query = query.or(outdoorProjectFilter({id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}));
   }
   const actor = { id: auth.user.id, role: auth.role, branch: auth.profile?.branch, outdoorTeamMemberIds: auth.outdoorTeamMemberIds };
   const branches = projectBranchesForActor(actor);
-  if (branches !== null && auth.role !== 'Outdoor Sales') query = query.in('branch', branches);
+  if (branches !== null && auth.role !== 'Outdoor Sales') {
+    // Historic Najaf projects may still be stored under Governorates. The row
+    // guard below checks their geography before any project data is returned.
+    query = query.in('branch', branches.includes('Najaf') ? [...branches, 'Governorates'] : branches);
+  }
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: 'Unable to load project stages.' }, { status: 500 });
   let projects = (data ?? []).filter(project => canAccessProjectRow(actor, project));

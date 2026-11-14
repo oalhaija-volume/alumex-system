@@ -15,6 +15,8 @@ function load(path, dependencies = {}) {
     if(name==='@/lib/intake/projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(name==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts',{});
     if(name==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts',{});if(name==='@/lib/intake/legacyOutdoorSales')return load('../src/lib/intake/legacyOutdoorSales.ts',{});
     if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');
+    if (name === '@/lib/intake/outdoorRotation') return load('../src/lib/intake/outdoorRotation.ts');
+    if (name.startsWith('.') && !(name in dependencies)) return load(new URL(`${name}.ts`, new URL(path, import.meta.url)));
     assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
     return dependencies[name];
   }, exports);
@@ -94,7 +96,7 @@ for (const role of ['Sales Director', 'CEO', 'Company Owner']) {
       let filters = 0;
       const branchFilters = [];
       const admin = {from: table => ({
-        select(){return this;},eq(){return this;},in(column,values){if(table==='projects'&&column==='branch')branchFilters.push(values);return this;},order(){return this;},range(){return this;},or(){filters++;return this;},
+        select(){return this;},eq(){return this;},in(column,values){if(table==='projects'&&column==='branch')branchFilters.push(values);return this;},order(){return this;},range(){return this;},or(){if(table==='projects')filters++;return this;},
         single:async()=>({data:{full_name:'Leader',branch:'Karkh'}}),
         then(resolve){return Promise.resolve({data:table==='projects'?[{id:projectId,branch:'Karkh',client_id:'client',created_by:'other'},{id:'second-project',branch:'Rasafa',client_id:'client',created_by:'other'}]:[],error:null}).then(resolve);},
       })};

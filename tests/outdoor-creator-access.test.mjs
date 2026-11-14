@@ -38,6 +38,7 @@ function project(index, branch, values = {}) {
     address: 'Fixture address', phone: null, next_follow_up_at: null, project_notes: null, ...values };
 }
 const own = branches.map((branch, index) => project(index + 1, branch));
+const ownBaghdad = own.filter(row => row.branch !== 'Najaf');
 const team = project(5, 'Karkh', { created_by: otherId, assigned_outdoor_sales_id: teammateId });
 const foreignAssigned = project(6, 'Rasafa', { created_by: otherId, assigned_outdoor_sales_id: actorId });
 const foreignTeam = project(7, 'Najaf', { created_by: otherId, assigned_outdoor_sales_id: teammateId });
@@ -47,26 +48,27 @@ const foreignHistory = project(10, 'Rasafa', { created_by: otherId });
 const rows = [...own, team, foreignAssigned, foreignTeam, unrelated, history, foreignHistory];
 const load = modules();
 
-for (const branch of branches) test(`Outdoor creator retains ${branch} entries independently of current assignee`, () => {
+for (const branch of ['Karkh', 'Rasafa', 'Governorates']) test(`Outdoor creator retains ${branch} entries independently of current assignee`, () => {
   const access = load('lib/auth/projectBranchAccess');
   assert.equal(access.canAccessProjectRow(actor, own.find(row => row.branch === branch)), true);
   assert.equal(load('lib/measurements/visitHistory').isHistoricalProject(own.find(row => row.branch === branch), actor), false);
 });
 
-test('creator exception requires an Outdoor actor ID and never expands registration choices', () => {
+test('saved Baghdad entries remain accessible while Najaf and creation choices stay restricted', () => {
   const access = load('lib/auth/projectBranchAccess');
-  assert.deepEqual(access.projectBranchesForActor(actor), ['Karkh', 'Governorates']);
-  assert.deepEqual(load('lib/intake/outdoorRotation').outdoorProjectBranches(actor), ['Karkh', 'Governorates']);
-  assert.equal(access.canAccessProjectBranch(actor, 'Rasafa'), false);
+  const date = new Date('2026-11-14T08:00:00Z');
+  assert.deepEqual(access.projectBranchesForActor(actor), ['Karkh', 'Rasafa', 'Governorates']);
+  assert.deepEqual(load('lib/intake/outdoorRotation').outdoorProjectBranches(actor, date), ['Karkh', 'Governorates']);
+  assert.equal(access.canAccessProjectBranch(actor, 'Rasafa'), true);
   assert.equal(access.canAccessProjectBranch(actor, 'Najaf'), false);
   for (const branch of ['Rasafa', 'Najaf']) {
     const row = own.find(project => project.branch === branch);
     assert.equal(access.canAccessProjectRow({ ...actor, role: 'Indoor Sales' }, row), false);
     assert.equal(access.canAccessProjectRow({ ...actor, role: 'Sales Manager' }, row), false);
-    assert.equal(access.canAccessProjectRow({ role: 'Outdoor Sales', branch: 'Karkh' }, row), false);
-    assert.throws(() => load('lib/intake/outdoorRotation').normalizeOutdoorProjectBranch(actor, branch));
+    assert.throws(() => load('lib/intake/outdoorRotation').normalizeOutdoorProjectBranch(actor, branch, date));
   }
-  for (const row of [foreignAssigned, foreignTeam, foreignHistory]) assert.equal(access.canAccessProjectRow(actor, row), false);
+  for (const row of [own.find(row => row.branch === 'Najaf'), foreignTeam]) assert.equal(access.canAccessProjectRow(actor, row), false);
+  assert.equal(access.canAccessProjectRow(actor, foreignAssigned), true);
 });
 
 test('offline creator entries retain queued work, openings, report media and archives across offices', () => {
@@ -79,15 +81,15 @@ test('offline creator entries retain queued work, openings, report media and arc
     archivedProjects: cached.map(row => ({ projectId: row.id, project: row, openings: [], changes: [], measurementReports: [] })),
   };
   const before = structuredClone(state), access = load('lib/offline/projectAccess');
-  const view = access.visibleFieldState(state), writable = [...own, team].map(row => row.id);
-  assert.deepEqual(view.projects.map(row => row.id), [...writable, history.id]);
+  const view = access.visibleFieldState(state), writable = [...ownBaghdad, team, foreignAssigned].map(row => row.id);
+  assert.deepEqual(view.projects.map(row => row.id), [...writable, history.id, foreignHistory.id]);
   assert.deepEqual(view.openings.map(row => row.projectId), writable);
   assert.deepEqual(view.queue.map(row => row.projectId), writable);
   assert.deepEqual(view.measurementReports.map(row => row.project_id), writable);
   assert.deepEqual(Object.keys(view.followUpHistories), writable);
   assert.deepEqual(view.archivedProjects.map(row => row.projectId), writable);
-  for (const row of own) assert.equal(access.canAccessFieldProject(state, row), true);
-  for (const row of [foreignAssigned, foreignTeam, unrelated, foreignHistory]) assert.equal(access.canAccessFieldProject(state, row), false);
+  for (const row of [...ownBaghdad, foreignAssigned]) assert.equal(access.canAccessFieldProject(state, row), true);
+  for (const row of [own[3], foreignTeam, unrelated, foreignHistory]) assert.equal(access.canAccessFieldProject(state, row), false);
   assert.equal(view.openings.find(row => row.projectId === own[1].id).skylight.photo, `photo-${own[1].id}`);
   assert.deepEqual(state, before, 'Filtering must preserve unsynced raw storage');
   const indoor = access.visibleFieldState({ ...state, actor: { ...actor, role: 'Indoor Sales' } });
@@ -134,29 +136,31 @@ function fixture(role = actor.role) {
   return { admin, load: loadRoute, reads, writes, tables };
 }
 
-for (const path of ['workspace', 'offline', 'dashboard']) test(`${path} API returns own entries in all four branches without foreign assignment leakage`, async () => {
+for (const path of ['workspace', 'offline', 'dashboard']) test(`${path} API returns all own Baghdad entries while isolating Najaf`, async () => {
   const x = fixture();
   const response = await x.load(`app/api/${path}/route`).GET(new Request(`http://localhost:3003/api/${path}`));
   assert.equal(response.status, 200);
-  const expected = [...own, team, ...(path === 'dashboard' ? [] : [history])].map(row => row.id);
+  const expected = [...ownBaghdad, team, foreignAssigned, ...(path === 'dashboard' ? [] : [history, foreignHistory])].map(row => row.id);
   assert.deepEqual(response.body.projects.map(row => row.id), expected);
-  for (const row of own) assert.equal(response.body.projects.find(project => project.id === row.id)?.project_log_only ?? false, false);
+  for (const row of ownBaghdad) assert.equal(response.body.projects.find(project => project.id === row.id)?.project_log_only ?? false, false);
+  assert.equal(response.body.projects.some(row => row.branch === 'Najaf'), false);
   for (const table of ['clients', 'openings', 'measurement_completion_reports']) {
     for (const read of x.reads.filter(read => read.table === table)) assert.ok(read.rows.every(row => table === 'clients' ? expected.some(id => rows.find(project => project.id === id).client_id === row.id) : expected.includes(row.project_id)));
   }
   assert.deepEqual(x.writes, []);
 });
 
-for (const branch of ['Rasafa', 'Najaf']) test(`direct ${branch} measurement and workflow reads allow the creator only`, async () => {
+for (const branch of ['Rasafa', 'Najaf']) test(`direct ${branch} measurement and workflow reads enforce Najaf isolation`, async () => {
   const ownProject = own.find(row => row.branch === branch);
   const denied = branch === 'Rasafa' ? foreignAssigned : foreignTeam;
   for (const row of [ownProject, denied]) {
     const x = fixture();
     const response = await x.load('app/api/initial-measurements/[projectId]/route').GET(new Request(`http://localhost:3003/api/initial-measurements/${row.id}`), { params: Promise.resolve({ projectId: row.id }) });
-    assert.equal(response.status, row === ownProject ? 200 : 404);
-    assert.equal(x.reads.some(read => read.table === 'openings'), row === ownProject);
+    const permitted = branch === 'Rasafa';
+    assert.equal(response.status, permitted ? 200 : 404);
+    assert.equal(x.reads.some(read => read.table === 'openings'), permitted);
     const workflow = await x.load('lib/workflow/access').salesProject(row.id);
-    assert.equal(workflow.response?.status ?? 200, row === ownProject ? 200 : 404);
+    assert.equal(workflow.response?.status ?? 200, permitted ? 200 : 404);
     assert.deepEqual(x.writes, []);
   }
   const indoor = fixture('Indoor Sales');
@@ -164,16 +168,17 @@ for (const branch of ['Rasafa', 'Najaf']) test(`direct ${branch} measurement and
   assert.equal(response.status, 404, 'Creator identity cannot relax Indoor branch rules');
 });
 
-for (const branch of ['Rasafa', 'Najaf']) test(`${branch} queued opening replay remains available to its Outdoor creator`, async () => {
+for (const branch of ['Rasafa', 'Najaf']) test(`${branch} queued opening replay cannot bypass Najaf isolation`, async () => {
   const ownProject = own.find(row => row.branch === branch), denied = branch === 'Rasafa' ? foreignAssigned : foreignTeam;
   for (const row of [ownProject, denied]) {
     const x = fixture();
     const body = { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', userId: actorId, projectId: row.id, action: 'opening', recordedAt: timestamp,
       payload: { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', floor: 'GF', room: 'Bedroom', width: 1200, height: 1400, quantity: 2, structuralType: 'Window', openingType: 'Sliding' } };
     const response = await x.load('app/api/offline/route').POST({ json: async () => body });
-    assert.equal(response.status, row === ownProject ? 200 : 404);
-    assert.equal(x.writes.length, row === ownProject ? 1 : 0);
-    if (row === ownProject) {
+    const permitted = branch === 'Rasafa';
+    assert.equal(response.status, permitted ? 200 : 404);
+    assert.equal(x.writes.length, permitted ? 1 : 0);
+    if (permitted) {
       assert.equal(x.writes[0].input.p_actor, actorId);
       assert.equal(x.writes[0].input.p_project, row.id);
       assert.equal(x.writes[0].input.p_payload.quantity, 2);
@@ -190,7 +195,7 @@ for (const [path, type, column, key] of [
     const capture = { photo: 'private-fixture-photo', note: 'Creator fixture', sections: [] };
     Object.assign(x.tables.openings.find(opening => opening.project_id === row.id), { id: openingId, opening_type: type, [column]: capture });
     const response = await x.load(`app/api/${path}/[projectId]/[openingId]/route`).GET(new Request(`http://localhost:3003/api/${path}/${row.id}/${openingId}`), { params: Promise.resolve({ projectId: row.id, openingId }) });
-    const permitted = row.created_by === actorId;
+    const permitted = row.branch !== 'Najaf';
     assert.equal(response.status, permitted ? 200 : 404);
     if (permitted) assert.deepEqual(response.body[key], capture);
     assert.equal(x.reads.some(read => read.table === 'openings'), permitted);

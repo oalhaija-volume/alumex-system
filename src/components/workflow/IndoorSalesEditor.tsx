@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useI18n } from '@/components/i18n/I18nProvider';
-import { canAccessProjectBranch, canOwnProjectFollowUp } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, canOwnProjectFollowUp, effectiveProjectBranch } from '@/lib/auth/projectBranchAccess';
 import type { FieldProject, SalesWorkspaceData } from '@/lib/offline/types';
 import { canAssignIndoorSales, normalizeIndoorSalesAssignment } from '@/lib/workflow/indoorSalesAssignment';
 import { api, button, field, Notice, secondary } from './ui';
@@ -24,8 +24,8 @@ export function IndoorSalesEditor({ project, data, onSaved }: {
   if (!canAssignIndoorSales(project, data.actor) || project.pending) return null;
   const owners = data.indoorSales.filter(employee =>
     (employee.role === 'Indoor Sales' || employee.role === 'Sales Manager')
-    && canOwnProjectFollowUp(employee, project.branch)
-    && canAccessProjectBranch({ role: employee.role, branch: employee.branch }, project.branch),
+    && canOwnProjectFollowUp(employee, effectiveProjectBranch(project))
+    && canAccessProjectBranch({ role: employee.role, branch: employee.branch }, effectiveProjectBranch(project)),
   );
 
   async function save() {

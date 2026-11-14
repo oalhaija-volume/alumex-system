@@ -39,6 +39,7 @@ for (const branch of ['Karkh', 'Rasafa', 'Najaf'] as const) for (const locale of
     const state = snapshot(branch), dictionary = locale === 'ar' ? ar : en;
     const terms = dictionary.terms as Record<string, string>, tr = (key: string) => terms[key] ?? key;
     const writes: string[] = [], errors: string[] = [];
+    await page.clock.setFixedTime(new Date('2026-11-14T08:00:00Z'));
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(value => localStorage.setItem('alumex_locale', value), locale);
     await context.route('**/api/**', route => {
@@ -69,9 +70,23 @@ for (const branch of ['Karkh', 'Rasafa', 'Najaf'] as const) for (const locale of
     expect(await worker?.evaluate(() => /Android|iPhone|iPad|iPod|Tablet|Silk|Windows Phone/i.test(navigator.userAgent))).toBe(true);
     await page.goto('/offline?path=/intake');
     await expect(page.getByRole('heading', { name: dictionary.registration.title, exact: true })).toBeVisible();
-    expect(await page.locator('input[name="projectBranch"]').evaluateAll(inputs => inputs.map(input => (input as HTMLInputElement).value))).toEqual([branch, 'Governorates']);
+    const expected = branch === 'Najaf' ? ['Najaf'] : ['Karkh', 'Governorates'];
+    expect(await page.locator('input[name="projectBranch"]').evaluateAll(inputs => inputs.map(input => (input as HTMLInputElement).value))).toEqual(expected);
     for (const office of ['Karkh', 'Rasafa', 'Najaf']) {
-      if (office !== branch) await expect(page.getByRole('radio', { name: tr(office), exact: true })).toHaveCount(0);
+      if (!expected.includes(office)) await expect(page.getByRole('radio', { name: tr(office), exact: true })).toHaveCount(0);
+    }
+    if (branch === 'Najaf') {
+      await expect(page.getByRole('radio', { name: tr('Governorates'), exact: true })).toHaveCount(0);
+      await context.setOffline(true);
+      await page.reload();
+      await expect(page.getByRole('heading', { name: dictionary.registration.title, exact: true })).toBeVisible();
+      await expect(page.getByRole('radio', { name: tr('Najaf'), exact: true })).toBeVisible();
+      await expect(page.getByRole('radio', { name: tr('Governorates'), exact: true })).toHaveCount(0);
+      expect((await savedFieldState(page)).queue).toEqual(state.queue);
+      expect((await savedFieldState(page)).openings).toEqual(state.openings);
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+      return;
     }
     await page.getByRole('radio', { name: tr('Governorates'), exact: true }).check();
     const province = page.locator('#project-governorate');

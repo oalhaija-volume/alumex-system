@@ -10,8 +10,8 @@ export function canAccessFieldProject(state: FieldState, project: FieldProject |
   return true;
 }
 
-// Keep each Outdoor creator's entries across offices, including saved work.
-// All other rows retain their branch boundary in every offline view.
+// Keep Baghdad Outdoor entries across the monthly area rotation, while the
+// row guard keeps Najaf isolated in every offline view.
 export function visibleFieldState(state: FieldState): FieldState {
   const outdoor = state.actor.role === 'Outdoor Sales';
   const projects = state.projects.filter(project => canAccessProjectRow(state.actor, project)
@@ -20,10 +20,12 @@ export function visibleFieldState(state: FieldState): FieldState {
   const writableIds = new Set(projects.filter(project => canAccessFieldProject(state, project)).map(project => project.id));
   const visibleEmployee = (employee: { branch?: string | null }) => hasGlobalProjectAccess(state.actor.role)
     || canAccessProjectBranch(state.actor, state.actor.branch) && employee.branch === state.actor.branch;
+  const visibleOutdoorEmployee = (employee: { branch?: string | null }) => visibleEmployee(employee)
+    || ((state.actor.branch === 'Karkh' || state.actor.branch === 'Rasafa') && (employee.branch === 'Karkh' || employee.branch === 'Rasafa'));
   return {
     ...state,
     projects,
-    outdoorSales: state.outdoorSales?.filter(visibleEmployee),
+    outdoorSales: state.outdoorSales?.filter(visibleOutdoorEmployee),
     indoorSales: state.indoorSales?.filter(visibleEmployee),
     openings: state.openings.filter(opening => writableIds.has(opening.projectId)),
     queue: state.queue.filter(change => writableIds.has(change.projectId)),

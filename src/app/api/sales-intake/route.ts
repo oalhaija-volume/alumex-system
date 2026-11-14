@@ -1,4 +1,5 @@
-import { normalizeProjectBranch, normalizeProjectGovernorate } from '@/lib/intake/projectBranch';
+import { normalizeProjectGovernorate } from '@/lib/intake/projectBranch';
+import { normalizeOutdoorProjectBranch, outdoorSalesBranch } from '@/lib/intake/outdoorRotation';
 import { canAccessProjectBranch, hasGlobalProjectAccess } from '@/lib/auth/projectBranchAccess';
 import { normalizeBuildingType } from '@/lib/intake/buildingType';
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
@@ -33,8 +34,8 @@ export async function POST(request: Request) {
   try{buildingType=normalizeBuildingType(body?.project?.buildingType,auth.role==='Outdoor Sales');}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   let branch;
   if(!hasGlobalProjectAccess(auth.role)&&!auth.profile?.branch)return NextResponse.json({error:'Ask Admin to assign your branch before creating a project.'},{status:400});
-  try{branch=normalizeProjectBranch(body?.project?.branch===undefined?auth.profile?.branch:body.project.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
-  if(!canAccessProjectBranch({role:auth.role,branch:auth.profile?.branch},branch))return NextResponse.json({error:'Choose a project from your branch.'},{status:400});
+  const actor={role:auth.role,branch:auth.profile?.branch};
+  try{branch=normalizeOutdoorProjectBranch(actor,body?.project?.branch===undefined?(outdoorSalesBranch(actor)??auth.profile?.branch):body.project.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   let governorate;
   try{governorate=normalizeProjectGovernorate(branch,body?.project?.governorate);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   let legacyOutdoorSalesId;

@@ -28,12 +28,12 @@ for (const role of roles.appRoles) test(`${role} lands on an authorized dashboar
       assert.equal(table, 'projects');
       return {
         select(columns) {
-          assert.deepEqual(columns.split(',').sort(), ['id', 'branch', 'project_name', 'project_number', 'structure_readiness', 'sales_status', 'status', 'created_at', 'created_by', 'assigned_outdoor_sales_id', 'updated_at', 'measurement_delayed', 'client_cancelled_at'].sort());
+          assert.deepEqual(columns.split(',').sort(), ['id', 'branch', 'governorate', 'project_name', 'project_number', 'structure_readiness', 'sales_status', 'status', 'created_at', 'created_by', 'assigned_outdoor_sales_id', 'updated_at', 'measurement_delayed', 'client_cancelled_at'].sort());
           return this;
         },
         is(column, value) { assert.equal(column, 'archived_at'); assert.equal(value, null); return this; },
         order() { return this; },
-        in(column, values) { assert.equal(column, 'branch'); assert.deepEqual(values, role === 'Outdoor Sales' ? ['Rasafa','Governorates'] : ['Rasafa']); branchScoped = true; return this; },
+        in(column, values) { assert.equal(column, 'branch'); assert.deepEqual(values, role === 'Outdoor Sales' ? ['Karkh','Rasafa','Governorates'] : ['Rasafa']); branchScoped = true; return this; },
         or(filter) { assert.equal(filter, 'created_by.eq.employee,assigned_outdoor_sales_id.eq.employee'); scoped = true; return this; },
         then(resolve) { resolve({ data: [], error: null }); },
       };

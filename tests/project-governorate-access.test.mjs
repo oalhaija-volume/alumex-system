@@ -32,14 +32,14 @@ const projects = [
 for (const branch of ['Karkh', 'Rasafa', null, undefined, 'Governorates', 'invalid']) {
   test(`Indoor Sales ${branch ?? 'without branch'} receives only its eligible Baghdad and governorate projects`, async () => {
     const actor = { id: 'indoor', role: 'Indoor Sales', branch };
-    const expected = branch === 'Karkh' ? ['karkh', 'basra', 'najaf'] : branch === 'Rasafa' ? ['rasafa'] : [];
+    const expected = branch === 'Karkh' ? ['karkh', 'basra'] : branch === 'Rasafa' ? ['rasafa'] : [];
     assert.deepEqual(access.indoorProjectBranches(branch), branch === 'Karkh' ? ['Karkh', 'Governorates'] : branch === 'Rasafa' ? ['Rasafa'] : []);
-    assert.deepEqual(projects.filter(project => access.canAccessProjectBranch(actor, project.branch)).map(project => project.id), expected);
+    assert.deepEqual(projects.filter(project => access.canAccessProjectRow(actor, project)).map(project => project.id), expected);
     const admin = fixture();
     const result = await history.loadWorkspaceProjects(admin, actor);
     assert.equal(result.error, null);
     assert.deepEqual(result.data.map(project => project.id), expected);
-    assert.deepEqual(result.data.filter(project => project.branch === 'Governorates').map(project => project.governorate), branch === 'Karkh' ? ['البصرة', 'النجف'] : []);
+    assert.deepEqual(result.data.filter(project => project.branch === 'Governorates').map(project => project.governorate), branch === 'Karkh' ? ['البصرة'] : []);
     assert.ok(admin.selected.includes('governorate'));
     assert.deepEqual(admin.tables, ['projects']);
   });
@@ -51,13 +51,14 @@ function fixture() {
     from(table) {
       result.tables.push(table);
       assert.equal(table, 'projects');
-      const filters = [];
+      const filters = []; let start = 0, end = Infinity;
       return {
         select(columns) { result.selected = columns; return this; },
         order() { return this; },
+        range(from, to) { start = from; end = to; return this; },
         in(key, values) { filters.push(project => values.includes(project[key])); return this; },
         is(key, value) { filters.push(project => project[key] === value); return this; },
-        then(resolve) { return Promise.resolve({ data: projects.filter(project => filters.every(filter => filter(project))), error: null }).then(resolve); },
+        then(resolve) { return Promise.resolve({ data: projects.filter(project => filters.every(filter => filter(project))).slice(start, end + 1), error: null }).then(resolve); },
       };
     },
   };
@@ -75,7 +76,7 @@ for (const branch of ['Karkh', 'Rasafa', null, 'Governorates']) {
     });
     const result = await route.GET();
     assert.equal(result.status, 200);
-    const expected = branch === 'Karkh' ? ['karkh', 'basra', 'najaf'] : branch === 'Rasafa' ? ['rasafa'] : [];
+    const expected = branch === 'Karkh' ? ['karkh', 'basra'] : branch === 'Rasafa' ? ['rasafa'] : [];
     assert.deepEqual(result.body.projects.map(project => project.id), expected);
   });
 }

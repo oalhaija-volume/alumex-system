@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { canAccessProjectBranch, canOwnProjectFollowUp } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, canOwnProjectFollowUp, effectiveProjectBranch } from '@/lib/auth/projectBranchAccess';
 import { salesProject } from '@/lib/workflow/access';
 import { canAssignIndoorSales, normalizeIndoorSalesAssignment } from '@/lib/workflow/indoorSalesAssignment';
 
@@ -28,8 +28,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ pr
   if (owner.error) {
     return NextResponse.json({ error: 'Unable to load employee assignments.' }, { status: 500 });
   }
-  if (!owner.data || !canOwnProjectFollowUp(owner.data, access.project.branch)
-    || !canAccessProjectBranch(owner.data, access.project.branch)) {
+  if (!owner.data || !canOwnProjectFollowUp(owner.data, effectiveProjectBranch(access.project))
+    || !canAccessProjectBranch(owner.data, effectiveProjectBranch(access.project))) {
     return NextResponse.json({ error: 'Choose an active Indoor Sales employee from this project’s branch.' }, { status: 400 });
   }
   // A standalone assignment must not fabricate a follow-up or change its date,

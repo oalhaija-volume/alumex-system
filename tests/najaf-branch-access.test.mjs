@@ -26,8 +26,8 @@ const { appRoles } = load('../src/lib/auth/roles.ts');
 const globalRoles = ['Admin', 'Sales Director', 'Company Owner'];
 const offices = ['Karkh', 'Rasafa', 'Najaf'];
 const projectBranches = [...offices, 'Governorates', null, undefined];
-const belongsTo = (office, projectBranch) => offices.includes(office)
-  && (office === projectBranch || office === 'Karkh' && projectBranch === 'Governorates');
+const belongsTo = (office, projectBranch, role) => offices.includes(office)
+  && (office === projectBranch || (office === 'Karkh' || role === 'Outdoor Sales' && office === 'Rasafa') && projectBranch === 'Governorates');
 
 test('only Admin, Sales Director and Company Owner have global project visibility', () => {
   for (const role of appRoles) assert.equal(access.hasGlobalProjectAccess(role), globalRoles.includes(role), role);
@@ -46,9 +46,9 @@ for (const role of appRoles.filter(role => !globalRoles.includes(role))) {
   test(`${role} is restricted to its assigned office including Najaf`, () => {
     for (const branch of offices) {
       const actor = { role, branch };
-      assert.deepEqual(access.projectBranchesForActor(actor), branch === 'Karkh' ? ['Karkh', 'Governorates'] : [branch]);
+      assert.deepEqual(access.projectBranchesForActor(actor), branch === 'Karkh' || role === 'Outdoor Sales' && branch === 'Rasafa' ? [branch, 'Governorates'] : [branch]);
       for (const projectBranch of projectBranches) {
-        assert.equal(access.canAccessProjectBranch(actor, projectBranch), belongsTo(branch, projectBranch), `${branch} employee / ${projectBranch} project`);
+        assert.equal(access.canAccessProjectBranch(actor, projectBranch), belongsTo(branch, projectBranch, role), `${branch} employee / ${projectBranch} project`);
       }
     }
   });
@@ -61,7 +61,7 @@ for (const role of appRoles.filter(role => !globalRoles.includes(role))) {
   });
 }
 
-test('Governorates remains a Karkh project category and never grants another office visibility', () => {
+test('Governorates follow-up stays with Karkh independently of Outdoor registration access', () => {
   assert.deepEqual(access.indoorProjectBranches('Karkh'), ['Karkh', 'Governorates']);
   assert.deepEqual(access.indoorProjectBranches('Rasafa'), ['Rasafa']);
   assert.deepEqual(access.indoorProjectBranches('Najaf'), ['Najaf']);

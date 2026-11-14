@@ -51,7 +51,7 @@ for (const role of appRoles) test(`${role} cached reads redact foreign office pr
   for (const branch of [...offices, null]) {
     const state = snapshot(role, branch), before = structuredClone(state);
     const expected = state.projects.filter(project => globalRoles.includes(role)
-      || offices.includes(branch) && (project.branch === branch || branch === 'Karkh' && project.branch === 'Governorates'));
+      || offices.includes(branch) && (project.branch === branch || (branch === 'Karkh' || role === 'Outdoor Sales' && branch === 'Rasafa') && project.branch === 'Governorates'));
     const ids = expected.map(project => project.id);
     const view = visibleFieldState(state);
     assert.deepEqual(view.projects.map(project => project.id), ids);

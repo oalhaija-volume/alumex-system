@@ -4,14 +4,14 @@ export function hasGlobalProjectAccess(role: string | null | undefined): boolean
   return role === 'Admin' || role === 'Sales Director' || role === 'Company Owner';
 }
 
-// A governorate is a project location, not a separate employee office.
-// Existing Governorates projects remain with the Karkh office.
+// Karkh handles Governorates follow-up. Outdoor Sales from either Baghdad
+// office can register and measure their own assigned Governorates projects.
 export function canAccessProjectBranch(
   actor: ProjectBranchActor,
   projectBranch: string | null | undefined,
 ): boolean {
-  if (hasGlobalProjectAccess(actor.role)) return true;
-  return indoorProjectBranches(actor.branch).includes(projectBranch ?? "");
+  const branches = projectBranchesForActor(actor);
+  return branches === null || branches.includes(projectBranch ?? "");
 }
 
 export function indoorProjectBranches(branch: string | null | undefined): string[] {
@@ -21,7 +21,9 @@ export function indoorProjectBranches(branch: string | null | undefined): string
 
 // null means unrestricted; an empty array deliberately matches no projects.
 export function projectBranchesForActor(actor: ProjectBranchActor): string[] | null {
-  return hasGlobalProjectAccess(actor.role) ? null : indoorProjectBranches(actor.branch);
+  if (hasGlobalProjectAccess(actor.role)) return null;
+  if (actor.role === 'Outdoor Sales' && actor.branch === 'Rasafa') return ['Rasafa', 'Governorates'];
+  return indoorProjectBranches(actor.branch);
 }
 
 export function canOwnProjectFollowUp(

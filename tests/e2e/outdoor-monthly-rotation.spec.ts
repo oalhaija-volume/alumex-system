@@ -94,12 +94,12 @@ for(const locale of ['en','ar'])test(`${locale}: an unconfigured employee can st
  await expect(branches).toHaveValue('Governorates');
  await expect(page.locator('#project-branch-assignment')).toContainText(locale==='en'?'ask Admin to set your rotation':'اطلب من المسؤول تحديد تناوبك');
  await branches.check();
- await page.locator('#project-governorate').selectOption('النجف');
+ await page.locator('#project-governorate').selectOption('البصرة');
  await fillOfflineRegistration(page);
  await saveButton(page,locale).click();
  await expect(page.getByRole('heading',{name:locale==='en'?'Registration saved':'تم حفظ التسجيل',exact:true})).toBeVisible();
  const saved=await savedFieldState(page);
- expect(saved.queue[0].payload.project).toMatchObject({branch:'Governorates',governorate:'النجف'});
+ expect(saved.queue[0].payload.project).toMatchObject({branch:'Governorates',governorate:'البصرة'});
  expect(posts).toHaveLength(0);
  expect(errors).toEqual([]);
 });

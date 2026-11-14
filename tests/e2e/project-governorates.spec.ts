@@ -6,7 +6,7 @@ import type {FieldActor,FieldChange,FieldState} from '../../src/lib/offline/type
 // Business endpoints are fixtures; these tests never register a live project.
 test.use({serviceWorkers:'block',userAgent:'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile Safari/604.1'});
 const actor:FieldActor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Outdoor employee',role:'Outdoor Sales',outdoorRotationStartBranch:'Karkh'};
-const governorates=['البصرة','الرمادي','صلاح الدين','ديالى','الحلة','كربلاء','النجف','الديوانية','الكوت','العمارة','الناصرية','السماوة'];
+const governorates=['البصرة','الرمادي','صلاح الدين','ديالى','الحلة','كربلاء','الديوانية','الكوت','العمارة','الناصرية','السماوة'];
 
 async function prepare(page:Page,locale:string,employee:FieldActor=actor){
  await page.clock.setFixedTime(new Date('2026-10-10T09:00:00Z'));
@@ -70,7 +70,8 @@ for(const locale of ['en','ar'])for(const online of [true,false])test(`${locale}
  await page.locator('input[name="projectBranch"][value="Governorates"]').check();
  await expect(governorate).toHaveAttribute('required','');
  expect(await governorate.locator('option').allTextContents()).toEqual([locale==='en'?'Choose a governorate':'اختر المحافظة',...governorates]);
- await governorate.selectOption('النجف');
+ await expect(governorate.getByRole('option',{name:'النجف',exact:true})).toHaveCount(0);
+ await governorate.selectOption('البصرة');
  await page.locator('input[name="projectBranch"][value="Karkh"]').check();
  await expect(governorate).toHaveCount(0);
  await page.locator('input[name="projectBranch"][value="Governorates"]').check();

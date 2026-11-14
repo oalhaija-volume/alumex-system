@@ -79,6 +79,8 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: Rasafa Outdoor sele
   const province = page.locator('#project-governorate');
   await expect(province).toBeVisible(); await expect(province).toHaveAttribute('required', '');
   expect(await province.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual(['', ...projectGovernorates]);
+  await expect(province.locator('option')).toHaveCount(12);
+  await expect(province.getByRole('option', { name: 'النجف', exact: true })).toHaveCount(0);
   await expect(province).toHaveValue('');
   await page.getByRole('button', { name: dictionary.registration.save, exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText(term('Choose the project governorate.'));

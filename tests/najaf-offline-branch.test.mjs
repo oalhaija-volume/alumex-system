@@ -51,7 +51,7 @@ for (const role of appRoles) test(`${role} cached reads redact foreign office pr
   for (const branch of [...offices, null]) {
     const state = snapshot(role, branch), before = structuredClone(state);
     const expected = state.projects.filter(project => globalRoles.includes(role)
-      || offices.includes(branch) && (project.branch === branch || (branch === 'Karkh' || role === 'Outdoor Sales' && branch === 'Rasafa') && project.branch === 'Governorates'));
+      || offices.includes(branch) && (project.branch === branch || (branch === 'Karkh' || role === 'Outdoor Sales') && project.branch === 'Governorates'));
     const ids = expected.map(project => project.id);
     const view = visibleFieldState(state);
     assert.deepEqual(view.projects.map(project => project.id), ids);
@@ -75,13 +75,13 @@ test('switching an employee to Najaf immediately redacts the old office snapshot
     const before = structuredClone(state);
     state.actor = { ...state.actor, branch: 'Najaf' };
     const view = visibleFieldState(state);
-    const najaf = state.projects.find(project => project.branch === 'Najaf');
-    assert.deepEqual(view.projects.map(project => project.id), [najaf.id]);
-    assert.deepEqual(view.queue.map(change => change.projectId), [najaf.id]);
-    assert.deepEqual(view.openings.map(opening => opening.projectId), [najaf.id]);
-    assert.deepEqual(view.measurementReports.map(report => report.project_id), [najaf.id]);
-    assert.deepEqual(Object.keys(view.followUpHistories), [najaf.id]);
-    assert.deepEqual(view.archivedProjects.map(archive => archive.projectId), [najaf.id]);
+    const expectedIds = state.projects.filter(project => project.branch === 'Najaf' || role === 'Outdoor Sales' && project.branch === 'Governorates').map(project => project.id);
+    assert.deepEqual(view.projects.map(project => project.id), expectedIds);
+    assert.deepEqual(view.queue.map(change => change.projectId), expectedIds);
+    assert.deepEqual(view.openings.map(opening => opening.projectId), expectedIds);
+    assert.deepEqual(view.measurementReports.map(report => report.project_id), expectedIds);
+    assert.deepEqual(Object.keys(view.followUpHistories), expectedIds);
+    assert.deepEqual(view.archivedProjects.map(archive => archive.projectId), expectedIds);
     assert.ok(view.outdoorSales.every(employee => employee.branch === 'Najaf'));
     assert.ok(view.indoorSales.every(employee => employee.branch === 'Najaf'));
     assert.deepEqual(state.projects, before.projects);
@@ -104,7 +104,7 @@ test('legacy directory entries without office assignments stay hidden until an a
 test('Outdoor Sales team assignments and historical visits cannot expose another creator\'s foreign office entries', () => {
   const state = snapshot('Outdoor Sales', 'Najaf');
   state.actor.outdoorTeamMemberIds = ['teammate'];
-  state.projects = state.projects.map(project => ({ ...project, assigned_outdoor_sales_id: 'teammate', project_log_only: project.branch !== 'Najaf' }));
+  state.projects = state.projects.map(project => ({ ...project, assigned_outdoor_sales_id: project.branch === 'Governorates' ? 'unrelated-employee' : 'teammate', project_log_only: project.branch !== 'Najaf' }));
   const najaf = state.projects.find(project => project.branch === 'Najaf');
   const view = visibleFieldState(state);
   assert.deepEqual(view.projects.map(project => project.id), [najaf.id]);
@@ -116,6 +116,9 @@ test('Outdoor Sales team assignments and historical visits cannot expose another
 test('a same-office Outdoor historical visit remains a read-only log without cached media or writable changes', () => {
   const state = snapshot('Outdoor Sales', 'Najaf');
   const najaf = state.projects.find(project => project.branch === 'Najaf');
+  state.projects = state.projects.map(project => project === najaf ? project
+    : { ...project, assigned_outdoor_sales_id: 'someone-else', project_log_only: true });
+  state.archivedProjects = state.archivedProjects.map(archive => ({ ...archive, project: state.projects.find(project => project.id === archive.projectId) }));
   Object.assign(najaf, { created_by: 'someone-else', assigned_outdoor_sales_id: 'someone-else', project_log_only: true });
   const view = visibleFieldState(state);
   assert.deepEqual(view.projects.map(project => project.id), [najaf.id]);

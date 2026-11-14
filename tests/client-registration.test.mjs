@@ -283,23 +283,26 @@ for(const endpoint of ['sales-intake','offline'])test(`${endpoint} requires a li
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
   '@/lib/location/coordinates':loadModule('../src/lib/location/coordinates.ts',{}),
   '@/lib/auth/permissions':{},'@/lib/workflow/access':{},'@/lib/workflow/followUps':{},'@/lib/measurements/registrationOpening':{},
-  '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{writes.push(args.p_payload.project);return {data:{id}};}})},
+  '@/lib/supabase/admin':{createAdminClient:()=>({
+   from(table){assert.equal(table,'field_sync_receipts');return{select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null})};},
+   rpc:async(name,args)=>{writes.push(args.p_payload.project);return {data:{id}};},
+  })},
  });
  const submit=async(branch,governorate)=>{
   const payload={client:{clientType:'individual',clientName:'Province client',mobile:'07700000000'},project:{branch,governorate,buildingType:'villa_house',structureReadiness:'ready',locationLatitude:33.3,locationLongitude:44.4}};
   return route.POST({json:async()=>endpoint==='offline'?{id,userId:id,projectId:id,action:'register',recordedAt:new Date().toISOString(),payload}:payload});
  };
- const locations=['البصرة','الرمادي','صلاح الدين','ديالى','الحلة','كربلاء','النجف','الديوانية','الكوت','العمارة','الناصرية','السماوة'];
+ const locations=['البصرة','الرمادي','صلاح الدين','ديالى','الحلة','كربلاء','الديوانية','الكوت','العمارة','الناصرية','السماوة'];
  for(const governorate of locations){
   const response=await submit('Governorates',governorate);
   assert.equal(response.status,endpoint==='offline'?undefined:201);
   assert.equal(writes.at(-1).branch,'Governorates');assert.equal(writes.at(-1).governorate,governorate);
  }
- for(const invalid of [undefined,null,'','بغداد',' Basra ',3,{},['البصرة']]){
+ for(const invalid of [undefined,null,'','النجف','بغداد',' Basra ',3,{},['البصرة']]){
   const response=await submit('Governorates',invalid);
   assert.equal(response.status,400);assert.match(response.body.error,/governorate/);
  }
- assert.equal(writes.length,12,'Invalid governorates must never reach the database');
+ assert.equal(writes.length,11,'Invalid governorates must never reach the database');
  for(const branch of ['Karkh','Rasafa']){
   const response=await submit(branch,'البصرة');assert.equal(response.status,endpoint==='offline'?undefined:201);
   assert.equal(writes.at(-1).branch,branch);assert.equal(Object.hasOwn(writes.at(-1),'governorate'),false);
@@ -323,7 +326,7 @@ for (const endpoint of ['sales-intake','offline']) for (const role of ['Admin','
   const payload={client:{clientType:'individual',clientName:'Branch fixture',mobile:'07000000000'},project:{branch,...(branch==='Governorates'?{governorate:'البصرة'}:{}),buildingType:'villa_house',structureReadiness:'ready',locationLatitude:33.3,locationLongitude:44.4,...(['Indoor Sales','Sales Manager'].includes(role)?{assignedOutdoorSalesId:id}:{})}};
   const body=endpoint==='offline'?{id,userId:id,projectId:id,action:'register',recordedAt:new Date().toISOString(),payload}:payload;
   const response=await route.POST({json:async()=>body});
-  const allowed=globalRole||branch==='Najaf';
+  const allowed=globalRole||branch==='Najaf'||role==='Outdoor Sales'&&branch==='Governorates';
   assert.equal(response.status,allowed?(endpoint==='offline'?200:201):400);
   assert.equal(writes.length,allowed?1:0,'An out-of-office registration must not reach the database write');
   if(allowed)assert.equal(writes[0].args.p_payload.project.branch,branch);

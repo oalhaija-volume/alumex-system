@@ -3,8 +3,9 @@ export type EmployeeBranch = typeof employeeBranches[number];
 export const projectBranches = [...employeeBranches, 'Governorates'] as const;
 export type ProjectBranch = typeof projectBranches[number];
 export const projectBranchLabels:Record<ProjectBranch,string> = {Karkh:'From Karkh',Rasafa:'From Rasafa',Najaf:'From Najaf',Governorates:'Governorates'};
-export const projectGovernorates = ['البصرة','الرمادي','صلاح الدين','ديالى','الحلة','كربلاء','النجف','الديوانية','الكوت','العمارة','الناصرية','السماوة'] as const;
-export type ProjectGovernorate = typeof projectGovernorates[number];
+export const projectGovernorates = ['البصرة','الرمادي','صلاح الدين','ديالى','الحلة','كربلاء','الديوانية','الكوت','العمارة','الناصرية','السماوة'] as const;
+// Existing projects can retain the retired province without offering it again.
+export type ProjectGovernorate = typeof projectGovernorates[number] | 'النجف';
 
 export function normalizeProjectBranch(value: unknown): ProjectBranch {
  if (!projectBranches.some(branch => branch === value)) {

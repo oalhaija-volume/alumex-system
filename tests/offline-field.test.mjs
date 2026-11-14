@@ -651,7 +651,7 @@ test('Outdoor Sales must choose a project branch and it survives local reads and
 
 test('shared governorate registrations validate before saving and survive offline reads and synchronization',async()=>{
  const outdoor={...actor,role:'Outdoor Sales',branch:'Karkh'};
- for(const governorate of [undefined,null,'','بغداد',{},['البصرة']]){
+ for(const governorate of [undefined,null,'','النجف','بغداد',{},['البصرة']]){
   const x=setup({actor:outdoor});
   await assert.rejects(x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch:'Governorates',governorate}}),/governorate/);
   assert.equal(x.state.queue.length,0);assert.equal(x.state.projects.length,0);

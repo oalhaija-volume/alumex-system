@@ -27,7 +27,7 @@ const globalRoles = ['Admin', 'Sales Director', 'Company Owner'];
 const offices = ['Karkh', 'Rasafa', 'Najaf'];
 const projectBranches = [...offices, 'Governorates', null, undefined];
 const belongsTo = (office, projectBranch, role) => offices.includes(office)
-  && (office === projectBranch || (office === 'Karkh' || role === 'Outdoor Sales' && office === 'Rasafa') && projectBranch === 'Governorates');
+  && (office === projectBranch || (office === 'Karkh' || role === 'Outdoor Sales') && projectBranch === 'Governorates');
 
 test('only Admin, Sales Director and Company Owner have global project visibility', () => {
   for (const role of appRoles) assert.equal(access.hasGlobalProjectAccess(role), globalRoles.includes(role), role);
@@ -46,7 +46,7 @@ for (const role of appRoles.filter(role => !globalRoles.includes(role))) {
   test(`${role} is restricted to its assigned office including Najaf`, () => {
     for (const branch of offices) {
       const actor = { role, branch };
-      assert.deepEqual(access.projectBranchesForActor(actor), branch === 'Karkh' || role === 'Outdoor Sales' && branch === 'Rasafa' ? [branch, 'Governorates'] : [branch]);
+      assert.deepEqual(access.projectBranchesForActor(actor), branch === 'Karkh' || role === 'Outdoor Sales' ? [branch, 'Governorates'] : [branch]);
       for (const projectBranch of projectBranches) {
         assert.equal(access.canAccessProjectBranch(actor, projectBranch), belongsTo(branch, projectBranch, role), `${branch} employee / ${projectBranch} project`);
       }

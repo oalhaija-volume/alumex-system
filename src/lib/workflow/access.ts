@@ -14,7 +14,7 @@ export async function salesProject(projectId: string, scope:boolean|'commercial'
  if(!hasSupabaseServiceRoleKey())return {response:NextResponse.json({error:"Service unavailable."},{status:503})};
  const admin=createAdminClient();
  const {data:project,error}=await admin.from('projects').select('id, additional_openings_state,additional_openings_original_ids,building_type,branch,governorate, project_number, project_name, client_id, address, location_latitude, location_longitude, created_by, structure_readiness, sales_status, next_follow_up_at, follow_up_type, follow_up_detail, follow_up_owner_id, project_notes, updated_at, assigned_outdoor_sales_id').eq('id',projectId).maybeSingle();
- if(project&&!canAccessProjectRow({id:auth.user.id,role:auth.role,branch:auth.profile?.branch},project))return {response:NextResponse.json({error:'Project not found.'},{status:404})};
+ if(project&&!canAccessProjectRow({id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds},project))return {response:NextResponse.json({error:'Project not found.'},{status:404})};
  if(error || !project || (!['Admin','Sales Director','CEO','Company Owner','Indoor Sales', 'Sales Manager'].includes(auth.role) && !canAccessOutdoorProject(project,{id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds})))return {response:NextResponse.json({error:'Project not found.'},{status:404})};
  return {auth,admin,project};
 }

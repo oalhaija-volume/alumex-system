@@ -81,7 +81,18 @@ export async function POST(request:Request){
   try{branch=normalizeProjectBranch(p.branch===undefined?auth.profile?.branch:p.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   if(!canAccessProjectBranch({role:auth.role,branch:auth.profile?.branch},branch))return NextResponse.json({error:'Choose a project from your branch.'},{status:400});
   let governorate;
-  try{governorate=normalizeProjectGovernorate(branch,p.governorate);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+  if(branch==='Governorates'&&p.governorate==='النجف'){
+   // A retired choice may still be in an older device's acknowledged work.
+   // Only an existing receipt can reach SQL, which verifies the exact payload
+   // fingerprint and current project access before returning its saved result.
+   const receipt=await createAdminClient().from('field_sync_receipts').select('operation_id')
+    .eq('operation_id',body.id).eq('actor_id',auth.user.id).eq('project_id',body.projectId).eq('action','register').maybeSingle();
+   if(receipt.error)return NextResponse.json({error:'Unable to verify the saved registration. Try again when connected.'},{status:503});
+   if(!receipt.data)return NextResponse.json({error:'Choose the project governorate.'},{status:400});
+   governorate='النجف';
+  }else{
+   try{governorate=normalizeProjectGovernorate(branch,p.governorate);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+  }
   let legacyOutdoorSalesId;
   try{legacyOutdoorSalesId=normalizeLegacyOutdoorSalesId(p.legacyOutdoorSalesId,auth.role);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   const assignee=p?.assignedOutdoorSalesId;
@@ -110,9 +121,9 @@ export async function POST(request:Request){
  const admin=createAdminClient();
  // SQL validates the active actor and creator/branch access before any replay.
  if(!hasGlobalProjectAccess(auth.role)){
-  const project=await admin.from('projects').select('branch,created_by').eq('id',body.projectId).maybeSingle();
+  const project=await admin.from('projects').select('branch,created_by,assigned_outdoor_sales_id').eq('id',body.projectId).maybeSingle();
   if(project.error)return NextResponse.json({error:'Unable to verify project access.'},{status:503});
-  if(project.data&&!canAccessProjectRow({id:auth.user.id,role:auth.role,branch:auth.profile?.branch},project.data))return NextResponse.json({error:'Project not found.'},{status:404});
+  if(project.data&&!canAccessProjectRow({id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds},project.data))return NextResponse.json({error:'Project not found.'},{status:404});
  }
  const result=await admin.rpc('sync_field_change',{p_operation:body.id,p_actor:auth.user.id,p_project:body.projectId,p_action:body.action,p_payload:payload,p_recorded_at:body.recordedAt,p_expected_updated_at:typeof body.expectedUpdatedAt==='string'?body.expectedUpdatedAt:null});
  if(result.error&&['Project is not available to this employee','This project was deleted. Its saved offline work cannot be synced.'].includes(result.error.message)){

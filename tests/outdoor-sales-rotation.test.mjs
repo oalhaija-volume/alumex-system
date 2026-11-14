@@ -19,7 +19,7 @@ const { outdoorProjectBranches, normalizeOutdoorProjectBranch, outdoorSalesBranc
 const { appRoles } = load('../src/lib/auth/roles.ts');
 const actor = (branch, outdoorRotationStartBranch = 'Karkh') => ({ role: 'Outdoor Sales', branch, outdoorRotationStartBranch });
 const restrictedBranchError = 'Choose a project from your branch.';
-const officeProjects = branch => branch === 'Karkh' || branch === 'Rasafa' ? [branch, 'Governorates'] : [branch];
+const officeProjects = branch => [branch, 'Governorates'];
 
 for (const starter of ['Karkh', 'Rasafa', 'Najaf']) {
   for (const [instant, expected] of [
@@ -35,8 +35,7 @@ for (const starter of ['Karkh', 'Rasafa', 'Najaf']) {
       assert.deepEqual(outdoorProjectBranches(actor(starter), date), officeProjects(starter));
       assert.equal(normalizeOutdoorProjectBranch(actor(starter), expected, date), expected);
       assert.throws(() => normalizeOutdoorProjectBranch(actor(starter), expected === 'Karkh' ? 'Rasafa' : 'Karkh', date), { message: restrictedBranchError });
-      if (starter !== 'Najaf') assert.equal(normalizeOutdoorProjectBranch(actor(starter), 'Governorates', date), 'Governorates');
-      else assert.throws(() => normalizeOutdoorProjectBranch(actor(starter), 'Governorates', date), { message: restrictedBranchError });
+      assert.equal(normalizeOutdoorProjectBranch(actor(starter), 'Governorates', date), 'Governorates');
     });
   }
 }

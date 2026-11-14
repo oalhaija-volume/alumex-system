@@ -94,7 +94,7 @@ function fixture(role, branch, overrides = {}) {
 }
 
 const allowedRows = (role, branch) => projectRows.filter(project => globalRoles.includes(role)
-  || offices.includes(branch) && (project.branch === branch || (branch === 'Karkh' || role === 'Outdoor Sales' && branch === 'Rasafa') && project.branch === 'Governorates'));
+  || offices.includes(branch) && (project.branch === branch || (branch === 'Karkh' || role === 'Outdoor Sales') && project.branch === 'Governorates'));
 
 const { appRoles } = moduleLoader({})('src/lib/auth/roles');
 
@@ -164,3 +164,23 @@ test('Outdoor Sales historical visit logs cannot restore a project from another 
   assert.equal(error, null);
   assert.deepEqual(data.map(project => project.id), [current.id]);
 });
+
+for (const branch of ['Rasafa', 'Najaf']) for (const history of ['legacy', 'measurement']) {
+  test(`${branch} Governorates registration access does not expose another employee's ${history} entry`, async () => {
+    const current = projectRows.find(project => project.branch === branch);
+    const unrelated = { ...projectRows.find(project => project.branch === 'Governorates'),
+      created_by: 'someone-else', assigned_outdoor_sales_id: 'someone-else',
+      ...(history === 'legacy' ? { legacy_outdoor_sales_id: actorId } : {}),
+    };
+    const x = fixture('Outdoor Sales', branch, {
+      projects: [current, unrelated],
+      field_sync_receipts: history === 'measurement'
+        ? [{ operation_id: 'receipt', project_id: unrelated.id, actor_id: actorId, action: 'finish', recorded_at: timestamp }]
+        : [],
+    });
+    const { data, error } = await x.load('src/lib/measurements/visitHistory').loadWorkspaceProjects(x.admin,
+      { id: actorId, role: 'Outdoor Sales', branch, outdoorTeamMemberIds: [actorId] });
+    assert.equal(error, null);
+    assert.deepEqual(data.map(project => project.id), [current.id]);
+  });
+}

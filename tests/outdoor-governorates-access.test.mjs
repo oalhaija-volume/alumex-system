@@ -31,32 +31,32 @@ const offlineAccess = load('lib/offline/projectAccess');
 const actorId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const teammateId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const actor = { id: actorId, role: 'Outdoor Sales', branch: 'Rasafa', name: 'Outdoor fixture', outdoorTeamMemberIds: [actorId, teammateId] };
-const governorates = ['البصرة', 'الرمادي', 'صلاح الدين', 'ديالى', 'الحلة', 'كربلاء', 'النجف', 'الديوانية', 'الكوت', 'العمارة', 'الناصرية', 'السماوة'];
+const governorates = ['البصرة', 'الرمادي', 'صلاح الدين', 'ديالى', 'الحلة', 'كربلاء', 'الديوانية', 'الكوت', 'العمارة', 'الناصرية', 'السماوة'];
 
-for (const branch of ['Karkh', 'Rasafa']) test(`${branch} Outdoor Sales can register Governorates while Najaf stays separate`, () => {
+for (const branch of ['Karkh', 'Rasafa', 'Najaf']) test(`${branch} Outdoor Sales can register Governorates while other offices stay separate`, () => {
   const employee = { ...actor, branch };
   assert.deepEqual(rotation.outdoorProjectBranches(employee), [branch, 'Governorates']);
   assert.equal(rotation.outdoorSalesBranch(employee), branch, 'The employee office stays fixed');
   assert.equal(rotation.normalizeOutdoorProjectBranch(employee, 'Governorates'), 'Governorates');
   assert.equal(access.canAccessProjectBranch(employee, 'Governorates'), true);
-  for (const forbidden of ['Najaf', branch === 'Karkh' ? 'Rasafa' : 'Karkh', null, '', 'Other']) {
+  for (const forbidden of [...['Karkh', 'Rasafa', 'Najaf'].filter(office => office !== branch), null, '', 'Other']) {
     assert.equal(access.canAccessProjectBranch(employee, forbidden), false);
     assert.throws(() => rotation.normalizeOutdoorProjectBranch(employee, forbidden));
   }
 });
 
-test('Najaf Outdoor Sales and unassigned employees cannot use Governorates', () => {
-  assert.deepEqual(rotation.outdoorProjectBranches({ ...actor, branch: 'Najaf' }), ['Najaf']);
-  for (const branch of ['Najaf', null, undefined, '', 'Governorates']) {
+test('Outdoor employees without a valid office cannot register Governorates', () => {
+  for (const branch of [null, undefined, '', 'Governorates']) {
     assert.equal(access.canAccessProjectBranch({ ...actor, branch }, 'Governorates'), false);
     assert.throws(() => rotation.normalizeOutdoorProjectBranch({ ...actor, branch }, 'Governorates'));
   }
 });
 
-test('all twelve geographic governorates remain available, including geographic Najaf', () => {
+test('eleven governorates are available for new entries and geographic Najaf is excluded', () => {
   assert.deepEqual(geography.projectGovernorates, governorates);
+  assert.equal(geography.projectGovernorates.length, 11);
   for (const governorate of governorates) assert.equal(geography.normalizeProjectGovernorate('Governorates', governorate), governorate);
-  for (const invalid of [undefined, null, '', 'Baghdad', 3, ['البصرة']]) assert.throws(() => geography.normalizeProjectGovernorate('Governorates', invalid));
+  for (const invalid of [undefined, null, '', 'النجف', 'Baghdad', 3, ['البصرة']]) assert.throws(() => geography.normalizeProjectGovernorate('Governorates', invalid));
   assert.equal(geography.normalizeProjectGovernorate('Rasafa', 'البصرة'), null);
 });
 
@@ -69,17 +69,21 @@ test('Governorates follow-up remains with Karkh Indoor Sales and Sales Managers'
   assert.equal(access.canOwnProjectFollowUp(actor, 'Governorates'), false);
 });
 
-test('restored Governorates access preserves Outdoor ownership and team restrictions in cached work', () => {
-  const project = { id: 'own', branch: 'Governorates', created_by: actorId, assigned_outdoor_sales_id: actorId };
+for (const branch of ['Rasafa', 'Najaf']) test(`${branch} Governorates access preserves creator and team restrictions in cached work`, () => {
+  const employee = { ...actor, branch };
+  const project = { id: 'own', branch: 'Governorates', governorate: 'النجف', created_by: actorId, assigned_outdoor_sales_id: actorId };
   const own = { ...project };
   const assigned = { ...project, id: 'team', created_by: 'other', assigned_outdoor_sales_id: teammateId };
   const unrelated = { ...project, id: 'unrelated', created_by: 'other', assigned_outdoor_sales_id: 'other' };
-  const najaf = { ...project, id: 'najaf', branch: 'Najaf', created_by: 'other' };
-  const projects = [own, assigned, unrelated, najaf];
-  const state = { actor, projects, openings: projects.map(row => ({ id: `opening-${row.id}`, projectId: row.id })), queue: [], syncedAt: null };
+  const foreign = { ...project, id: 'foreign-office', branch: branch === 'Najaf' ? 'Rasafa' : 'Najaf', created_by: 'other' };
+  const historical = { ...unrelated, id: 'historical-unrelated', project_log_only: true };
+  const projects = [own, assigned, unrelated, foreign, historical];
+  const state = { actor: employee, projects, openings: projects.map(row => ({ id: `opening-${row.id}`, projectId: row.id })), queue: [], syncedAt: null };
   assert.deepEqual(offlineAccess.visibleFieldState(state).projects.map(row => row.id), ['own', 'team']);
+  assert.equal(offlineAccess.visibleFieldState(state).projects[0].governorate, 'النجف', 'Existing geographic Najaf entries remain readable');
   assert.equal(offlineAccess.canAccessFieldProject(state, unrelated), false);
-  assert.equal(offlineAccess.canAccessFieldProject(state, najaf), false);
+  assert.equal(offlineAccess.canAccessFieldProject(state, foreign), false);
+  assert.equal(offlineAccess.canAccessFieldProject(state, historical), false);
   assert.deepEqual(state.projects, projects, 'Read filtering must preserve the stored records');
 });
 
@@ -91,7 +95,7 @@ function endpoint(path, role = actor.role, branch = actor.branch) {
     '@/lib/supabase/config': { hasSupabaseServiceRoleKey: () => true },
     '@/lib/supabase/admin': { createAdminClient: () => ({
       from(table) {
-        assert.equal(table, 'projects');
+        assert.ok(['projects', 'field_sync_receipts'].includes(table));
         return { select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: null, error: null }) };
       },
       rpc: async (name, input) => { writes.push({ name, input }); return { data: { projectId: actorId }, error: null }; },
@@ -121,7 +125,7 @@ for (const path of ['sales-intake', 'offline']) {
     assert.equal(x.writes[0].input.p_payload.project.governorate, governorate);
   });
   test(`${path}: missing governorate and forged Najaf branch never reach the registration write`, async () => {
-    for (const project of [{ governorate: '' }, { governorate: undefined }, { branch: 'Najaf' }]) {
+    for (const project of [{ governorate: '' }, { governorate: undefined }, { governorate: 'النجف' }, { branch: 'Najaf' }]) {
       const x = endpoint(path), response = await x.post(project);
       assert.equal(response.status, 400); assert.equal(x.writes.length, 0);
     }

@@ -10,7 +10,7 @@ function load(path) {
  return exports;
 }
 const history=load('lib/measurements/visitHistory');
-const actor={id:'visitor',role:'Outdoor Sales'};
+const actor={id:'visitor',role:'Outdoor Sales',branch:'Karkh'};
 const receipt={operation_id:'attempt-one',project_id:'site',actor_id:actor.id,action:'delay-measurements',recorded_at:'2026-10-21T08:00:00Z',result:{measurement_delay_reason:'client_no_answer',measurement_delay_note:'Site was closed',assignedOutdoorSales:'Visitor',photo:'private photo',project_notes:'private unrelated note'}};
 
 function fixture(tables) {
@@ -55,7 +55,7 @@ test('history includes every page and only the requested project/action scope',a
 });
 
 test('a previous visitor keeps a read-only site log after reassignment without unrelated project access',async()=>{
- const base={created_at:'2026-10-21T07:00:00Z',created_by:'creator',assigned_outdoor_sales_id:'next-visitor'};
+ const base={branch:'Karkh',created_at:'2026-10-21T07:00:00Z',created_by:'creator',assigned_outdoor_sales_id:'next-visitor'};
  const admin=fixture({projects:[{...base,id:'site'},{...base,id:'finished-site'},{...base,id:'mine',created_by:actor.id},{...base,id:'unrelated'}],field_sync_receipts:[receipt,{...receipt,project_id:'finished-site',action:'finish'},{...receipt,project_id:'unrelated',actor_id:'someone-else'}]});
  const result=await history.loadWorkspaceProjects(admin,actor);
  assert.deepEqual(result.data.map(project=>project.id).sort(),['finished-site','mine','site']);

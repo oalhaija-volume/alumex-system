@@ -1,5 +1,5 @@
 "use client";
-import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBranch';
+import { projectBranchLabels, type ProjectBranch, type ProjectGovernorate } from '@/lib/intake/projectBranch';
 /* eslint-disable @next/next/no-img-element -- Print documents use the original SVG brand asset. */
 import type { ReactNode } from 'react';
 import type { QuoteSnapshot,Charge } from '@/lib/workflow/pricing';
@@ -17,7 +17,7 @@ export function DocumentHeader({kind,number,createdAt}:{kind:'Quotation'|'Contra
 }
 export function DocumentParties({client,project}:{client:{name:string;mobile:string|null};project:{number:string;address:string|null;branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null}}){
  const {term}=useI18n();
- return <div className="document-parties"><section><h3>{term('PREPARED FOR / العميل')}</h3><p className="document-client" dir="auto">{client.name}</p><p><bdi dir="ltr">{client.mobile}</bdi></p></section><section><h3>{term('PROJECT SITE / موقع المشروع')}</h3><p className="document-client"><bdi dir="ltr">{project.number}</bdi></p><p dir="auto">{project.address||'—'}</p>{project.branch && <p className="mt-2 font-semibold">{term(project.branch === 'Governorates' ? 'Governorates' : project.branch === 'Karkh' ? 'From Karkh' : 'From Rasafa')}</p>}{project.governorate && <p className="mt-1 font-semibold">{project.branch !== 'Governorates' && <>{term('Governorates')} · </>}<bdi>{project.governorate}</bdi></p>}</section></div>;
+ return <div className="document-parties"><section><h3>{term('PREPARED FOR / العميل')}</h3><p className="document-client" dir="auto">{client.name}</p><p><bdi dir="ltr">{client.mobile}</bdi></p></section><section><h3>{term('PROJECT SITE / موقع المشروع')}</h3><p className="document-client"><bdi dir="ltr">{project.number}</bdi></p><p dir="auto">{project.address||'—'}</p>{project.branch && <p className="mt-2 font-semibold">{term(projectBranchLabels[project.branch])}</p>}{project.governorate && <p className="mt-1 font-semibold">{project.branch !== 'Governorates' && <>{term('Governorates')} · </>}<bdi>{project.governorate}</bdi></p>}</section></div>;
 }
 function ChargeRows({items,labels}:{items:Charge[];labels?:string[]}) {
  const {term,formatNumber}=useI18n();

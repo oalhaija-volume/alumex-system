@@ -28,7 +28,7 @@ for (const role of roles.appRoles) test(`${role} lands on an authorized dashboar
       assert.equal(table, 'projects');
       return {
         select(columns) {
-          assert.deepEqual(columns.split(',').sort(), ['id', 'project_name', 'project_number', 'structure_readiness', 'sales_status', 'status', 'created_at', 'created_by', 'updated_at', 'measurement_delayed', 'client_cancelled_at'].sort());
+          assert.deepEqual(columns.split(',').sort(), ['id', 'branch', 'project_name', 'project_number', 'structure_readiness', 'sales_status', 'status', 'created_at', 'created_by', 'updated_at', 'measurement_delayed', 'client_cancelled_at'].sort());
           return this;
         },
         is(column, value) { assert.equal(column, 'archived_at'); assert.equal(value, null); return this; },
@@ -42,7 +42,7 @@ for (const role of roles.appRoles) test(`${role} lands on an authorized dashboar
   const result = await route.GET();
   assert.equal(result.status, 200);
   assert.equal(scoped, role === 'Outdoor Sales');
-  assert.equal(branchScoped, role === 'Indoor Sales');
+  assert.equal(branchScoped, !['Admin', 'Sales Director', 'Company Owner'].includes(role));
 });
 
 test('an unauthenticated or inactive employee cannot read dashboard data', async () => {
@@ -66,12 +66,13 @@ test('leadership can open every active workspace; Outdoor Sales cannot open CRM 
 });
 
 test('employee dashboard returns creator names only for the visible project creators', async () => {
-  const projects = [{ id: 'site', created_by: 'creator', created_at: '2026-10-01T00:00:00Z' }];
+  const projects = [{ id: 'site', branch: 'Rasafa', created_by: 'creator', created_at: '2026-10-01T00:00:00Z' }];
   const route = load('../src/app/api/dashboard/route.ts', {
     'next/server': response, '@/lib/auth/roles': roles,
-    '@/lib/auth/adminServer': { requireRole: async () => ({ ok: true, role: 'HR', user: { id: 'hr' } }) },
+    '@/lib/auth/adminServer': { requireRole: async () => ({ ok: true, role: 'HR', profile: { branch: 'Rasafa' }, user: { id: 'hr' } }) },
     '@/lib/supabase/admin': { createAdminClient: () => ({ from: table => table === 'projects' ? {
-      select() { return this; }, is() { return this; }, order: async () => ({ data: projects, error: null }),
+      select() { return this; }, is() { return this; }, order() { return this; },
+      in: async (column, values) => { assert.equal(column, 'branch'); assert.deepEqual(values, ['Rasafa']); return { data: projects, error: null }; },
     } : {
       select(columns) { assert.equal(columns, 'id,full_name,username'); return this; },
       in: async (column, ids) => { assert.equal(column, 'id'); assert.deepEqual(ids, ['creator']); return { data: [{ id: 'creator', full_name: 'Project creator', username: 'creator' }], error: null }; },

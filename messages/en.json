@@ -306,8 +306,8 @@
       "loading": "Loading Outdoor Sales coverage…",
       "loadError": "Unable to load Outdoor Sales coverage.",
       "noAssignedStaff": "No Outdoor Sales staff assigned.",
-      "unconfigured": "Rotation not configured",
-      "governorates": "All Outdoor Sales staff can work in Governorates throughout the month."
+      "unconfigured": "Branch not assigned",
+      "governorates": "Governorates projects belong to the Karkh branch."
     },
     "preview": {
       "eyebrow": "Admin testing",
@@ -1278,6 +1278,23 @@
     "generating": "Generating..."
   },
   "terms": {
+    "Choose the project branch before selecting employees.": "Choose the project branch before selecting employees.",
+    "Choose the office responsible for this project.": "Choose the office responsible for this project.",
+    "Your branch: {branch}": "Your branch: {branch}",
+    "Choose the project branch: Karkh, Rasafa, Najaf or Governorates.": "Choose the project branch: Karkh, Rasafa, Najaf or Governorates.",
+    "Najaf": "Najaf",
+    "From Najaf": "From Najaf",
+    "Choose Karkh, Rasafa or Najaf.": "Choose Karkh, Rasafa or Najaf.",
+    "Choose a project from your branch.": "Choose a project from your branch.",
+    "Choose an employee from the project branch.": "Choose an employee from the project branch.",
+    "Ask Admin to assign your branch before creating a project.": "Ask Admin to assign your branch before creating a project.",
+    "Access to all branches": "Access to all branches",
+    "The employee can access projects from this branch only. Existing projects keep their original branch.": "The employee can access projects from this branch only. Existing projects keep their original branch.",
+    "Employees can access projects from their assigned branch. Admin, Sales Director and Company Owner can access all branches.": "Employees can access projects from their assigned branch. Admin, Sales Director and Company Owner can access all branches.",
+    "Required for employees who can access one branch only.": "Required for employees who can access one branch only.",
+    "New employees use your branch. Only Admin can change branch assignments.": "New employees use your branch. Only Admin can change branch assignments.",
+    "Only Admin can create accounts with access to all branches.": "Only Admin can create accounts with access to all branches.",
+    "Only Admin can assign roles with access to all branches.": "Only Admin can assign roles with access to all branches.",
     "Filters": "Filters",
     "Only Admin, Indoor Sales and Sales Managers can change client names.": "Only Admin, Indoor Sales and Sales Managers can change client names.",
     "Only Indoor Sales and Sales Managers can change project names.": "Only Indoor Sales and Sales Managers can change project names.",
@@ -2940,7 +2957,11 @@
     "Choose an aluminum section name that is not reserved for another catalog product.": "Choose an aluminum section name that is not reserved for another catalog product.",
     "An item with this name already exists in the catalog.": "An item with this name already exists in the catalog.",
     "Unable to check existing catalog sections. Try again.": "Unable to check existing catalog sections. Try again.",
-    "Unable to add the aluminum section. Try again.": "Unable to add the aluminum section. Try again."
+    "Unable to add the aluminum section. Try again.": "Unable to add the aluminum section. Try again.",
+    "Ask Admin to assign your branch before generating a contract.": "Ask Admin to assign your branch before generating a contract.",
+    "Choose an active employee from the project branch.": "Choose an active employee from the project branch.",
+    "You can only create projects for your assigned branch.": "You can only create projects for your assigned branch.",
+    "Choose a branch for this employee.": "Choose a branch for this employee."
   },
   "registration": {
     "title": "New client & project",

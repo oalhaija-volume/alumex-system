@@ -184,7 +184,7 @@ export async function syncFieldChanges(){
      failed.add(change.projectId);continue;
     }
     if([401,403].includes(response.status)){if(activeFieldUser()===id)setFieldUser(null);return;}
-    await updateFieldState(id,s=>({...s!,...(response.status===404&&['Indoor Sales','Outdoor Sales'].includes(s!.actor.role)?{unavailableProjectIds:[...new Set([...(s!.unavailableProjectIds??[]),change.projectId])]}:{}),queue:s!.queue.map(c=>c.id===change.id?{...c,error:result?.error??'Unable to sync. Your work is still saved on this device.'}:c)}));
+    await updateFieldState(id,s=>({...s!,...(response.status===404?{unavailableProjectIds:[...new Set([...(s!.unavailableProjectIds??[]),change.projectId])]}:{}),queue:s!.queue.map(c=>c.id===change.id?{...c,error:result?.error??'Unable to sync. Your work is still saved on this device.'}:c)}));
     failed.add(change.projectId);continue;
    }
    await updateFieldState(id,s=>{
@@ -202,13 +202,13 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
   const measurementReports=[...(s.measurementReports??[])];let projects=[...s.projects];const openings=[...s.openings];let p=projects.find(p=>p.id===projectId);
   if(action==='register'){
    const client=payload.client as Record<string,unknown>,project=payload.project as Record<string,unknown>;
-   const branch=s.actor.role==='Outdoor Sales'?normalizeOutdoorProjectBranch(s.actor,project.branch):s.actor.branch??null;
+   const branch=normalizeOutdoorProjectBranch(s.actor,project.branch??s.actor.branch);
    const governorate=normalizeProjectGovernorate(branch,project.governorate);
    const buildingType=normalizeBuildingType(project.buildingType,s.actor.role==='Outdoor Sales');
    const readinessNote=normalizeReadinessNote(s.actor.role,project.structureReadiness,project.readinessNote);
    const legacyOutdoorSalesId=normalizeLegacyOutdoorSalesId(project.legacyOutdoorSalesId,s.actor.role);
    const legacyOwner=legacyOutdoorSalesId?s.outdoorSales?.find(employee=>employee.id===legacyOutdoorSalesId):null;
-   if(legacyOutdoorSalesId&&!legacyOwner)throw new Error('Choose an active Outdoor Sales employee as the original project owner.');
+   if(legacyOutdoorSalesId&&(!legacyOwner||!canAccessProjectBranch({role:'Outdoor Sales',branch:legacyOwner.branch},branch)))throw new Error('Choose an employee from the project branch.');
    // Omit the optional attribution when disabled and keep only its normalized ID
    // when enabled. The durable registration payload survives every sync retry.
    if(Object.hasOwn(project,'legacyOutdoorSalesId')){
@@ -216,12 +216,11 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
     change.payload={...payload,project:{...normalizedProject,...(legacyOutdoorSalesId?{legacyOutdoorSalesId}:{})}};
    }
    const assigned=typeof project.assignedOutdoorSalesId==='string'?project.assignedOutdoorSalesId:'';
-   if((s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')&&!['Karkh','Rasafa'].includes(s.actor.branch??''))throw new Error('Ask Admin to assign your Karkh or Rasafa branch before creating a project.');
    const selfAssigned=(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')&&assigned===s.actor.id;
    if((s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')&&!assigned)throw new Error('Choose yourself or an Outdoor Sales employee to collect the initial measurements.');
-   if(assigned&&!selfAssigned&&!s.outdoorSales?.some(e=>e.id===assigned))throw new Error('Choose an Outdoor Sales employee from the list. Connect online to refresh employees.');
+   if(assigned&&!selfAssigned&&!s.outdoorSales?.some(e=>e.id===assigned&&canAccessProjectBranch({role:'Outdoor Sales',branch:e.branch},branch)))throw new Error('Choose an employee from the project branch.');
    const location=parseProjectLocation(project.locationLatitude,project.locationLongitude);
-   p={location_latitude:location.latitude,location_longitude:location.longitude,building_type:buildingType,branch:(s.actor.role === 'Outdoor Sales'||s.actor.role === 'Indoor Sales'||s.actor.role === 'Sales Manager')?branch:null,governorate,...(legacyOutdoorSalesId?{legacy_outdoor_sales_id:legacyOutdoorSalesId,owner_id:legacyOutdoorSalesId,sales_engineer_id:legacyOutdoorSalesId,legacyOutdoorSalesOwner:legacyOwner?.name??null}:{}),assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.id:null,followUpOwner:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
+   p={location_latitude:location.latitude,location_longitude:location.longitude,building_type:buildingType,branch,governorate,...(legacyOutdoorSalesId?{legacy_outdoor_sales_id:legacyOutdoorSalesId,owner_id:legacyOutdoorSalesId,sales_engineer_id:legacyOutdoorSalesId,legacyOutdoorSalesOwner:legacyOwner?.name??null}:{}),assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.id:null,followUpOwner:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
   }else{
    if(p?.project_log_only)throw new Error('This project is available in your log for reference only.');
    if(!canAccessFieldProject(s,p))throw new Error('Project is not available to this employee.');
@@ -241,7 +240,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if(action==='request-openings'){
     if(!['ready_for_quotation','quotation_in_progress','quotation_approved','contract_generated'].includes(p.sales_status)||p.structure_readiness!=='ready')throw new Error('Additional openings can only be requested after measurements and before signing.');
     const employee=s.outdoorSales?.find(e=>e.id===payload.assignedOutdoorSalesId);
-    if(!employee)throw new Error('Choose an active Outdoor Sales employee.');
+    if(!employee||!canAccessProjectBranch({role:'Outdoor Sales',branch:employee.branch},p.branch))throw new Error('Choose an employee from the project branch.');
     p={...p,additional_openings_state:'requested',additional_openings_original_ids:openings.filter(o=>o.projectId===projectId).map(o=>o.id),sales_status:'new_lead',measurement_delayed:false,assigned_outdoor_sales_id:employee.id,assignedOutdoorSales:employee.name,assignedToYou:employee.id===s.actor.id,measurement_assignment_id:change.id};
    }
    if(['opening','edit-opening','finish','reopen'].includes(action)&&p.measurement_delayed)throw new Error('Resume measurements before recording or completing them.');
@@ -290,7 +289,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if(action==='ready'||action==='assign-measurements'){
     if(p.sales_status!=='new_lead'||(action==='assign-measurements'&&p.structure_readiness!=='ready'))throw new Error('Measurement assignment is only available before measurements are completed.');
     const id=payload.assignedOutdoorSalesId??p.assigned_outdoor_sales_id;const employee=s.outdoorSales?.find(e=>e.id===id)??((p.original_creator_role === 'Indoor Sales' || p.original_creator_role === 'Sales Manager')&&id===p.created_by?s.indoorSales?.find(e=>e.id===id):undefined);
-    if(!employee)throw new Error('Choose an eligible employee for measurements.');
+    if(!employee||!canAccessProjectBranch({role:'Outdoor Sales',branch:employee.branch},p.branch))throw new Error('Choose an employee from the project branch.');
     change.payload={...payload,assignedOutdoorSalesId:employee.id};
     p={...p,measurement_delayed:false,assigned_outdoor_sales_id:employee.id,assignedOutdoorSales:employee.name,assignedToYou:employee.id===s.actor.id,measurement_assignment_id:change.id};
    }
@@ -299,7 +298,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if(action==='follow-up'){
     const owner=s.indoorSales?.find(e=>e.id===payload.followUpOwnerId);
     if(!owner)throw new Error('Choose an Indoor Sales employee from the list. Connect online to refresh employees.');
-    if(!canOwnProjectFollowUp(owner,p.branch))throw new Error('Governorates follow-up must be assigned to Karkh Indoor Sales or a Sales Manager.');
+    if(!canOwnProjectFollowUp(owner,p.branch))throw new Error('Choose an employee from the project branch.');
     p={...p,next_follow_up_at:String(payload.nextFollowUp),project_notes:String(payload.note??''),follow_up_type:String(payload.followUpType),follow_up_detail:String(payload.followUpDetail),follow_up_owner_id:owner.id,followUpOwner:owner.name};
    }
    if(['delay-measurements','assign-measurements','ready','request-openings','resume-measurements','finish'].includes(action)){
@@ -351,7 +350,7 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
      await updateFieldState(s.actor.id,old=>{
       if(!old)throw new Error('Offline account unavailable.');
       const registrations=new Set(old.queue.filter(change=>change.action==='register').map(change=>change.projectId));
-      const unavailableProjectIds=['Indoor Sales','Outdoor Sales'].includes(workspace.actor.role)?old.projects.filter(project=>!remoteProjects.has(project.id)&&(!registrations.has(project.id)||old.unavailableProjectIds?.includes(project.id))).map(project=>project.id):[];
+      const unavailableProjectIds=old.projects.filter(project=>!remoteProjects.has(project.id)&&(!registrations.has(project.id)||old.unavailableProjectIds?.includes(project.id))).map(project=>project.id);
       return {...old,actor:workspace.actor,indoorSales:workspace.indoorSales,unavailableProjectIds,projects:old.projects.map(project=>remoteProjects.has(project.id)?withCurrentProjectAccess(project,remoteProjects.get(project.id)!):project)};
      });
     }
@@ -365,7 +364,7 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
    if(response.status===404 && s && id && url.startsWith('/api/initial-measurements/') && activeFieldUser()===s.actor.id){
     await updateFieldState(s.actor.id,old=>{
      if(!old)throw new Error('Offline account unavailable.');
-     return ['Indoor Sales','Outdoor Sales'].includes(old.actor.role)?{...old,unavailableProjectIds:[...new Set([...(old.unavailableProjectIds??[]),id])]}:old;
+     return {...old,unavailableProjectIds:[...new Set([...(old.unavailableProjectIds??[]),id])]};
     });
    }
    if(response.status<500)return response;
@@ -414,7 +413,7 @@ export async function retryReviewedProject(projectId:string,updatedAt:string,cor
   if(corrected){
    const owner=s.indoorSales?.find(e=>e.id===corrected.followUpOwnerId);
    if(!owner)throw new Error('Choose an Indoor Sales employee from the list. Connect online to refresh employees.');
-   if(!canOwnProjectFollowUp(owner,s.projects.find(p=>p.id===projectId)?.branch))throw new Error('Governorates follow-up must be assigned to Karkh Indoor Sales or a Sales Manager.');
+   if(!canOwnProjectFollowUp(owner,s.projects.find(p=>p.id===projectId)?.branch))throw new Error('Choose an employee from the project branch.');
   }
   const queue=s.queue.map(c=>c.projectId===projectId?{...c,error:undefined,...(corrected&&c.id===correction?.changeId&&c.action==='follow-up'?{id:crypto.randomUUID(),payload:corrected}:{})}:c);
   const latest=queue.filter(c=>c.projectId===projectId&&c.action==='follow-up').at(-1)?.payload;

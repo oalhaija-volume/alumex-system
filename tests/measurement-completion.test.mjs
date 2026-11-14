@@ -34,9 +34,9 @@ for(const invalid of [false,true])test(`direct completion API validates and atom
   '@/lib/measurements/completion':rules,
   '@/lib/measurements/measurementDelay':{},'@/lib/measurements/registrationOpening':{},
   'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',user:{id:'actor'}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',profile:{branch:'Karkh'},user:{id:'actor'}})},
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
-  '@/lib/supabase/admin':{createAdminClient:()=>({from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:projectId,created_by:'actor',structure_readiness:'ready',sales_status:'new_lead'}})};},rpc:async(name,args)=>{rpc={name,args};return {data:{},error:null};}})},
+  '@/lib/supabase/admin':{createAdminClient:()=>({from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:projectId,branch:'Karkh',created_by:'actor',structure_readiness:'ready',sales_status:'new_lead'}})};},rpc:async(name,args)=>{rpc={name,args};return {data:{},error:null};}})},
  });
  const response=await api.PATCH({json:async()=>({action:'finish',note:invalid?3:'Site note',photo})},{params:Promise.resolve({projectId})});
  assert.equal(response.status,invalid?400:200);
@@ -48,8 +48,8 @@ test('offline API preserves legacy finish payloads for receipts already saved by
   '@/lib/measurements/visitHistory':{},
   '@/lib/measurements/completion':rules,'@/lib/intake/projectBranch':{},'@/lib/intake/buildingType':{},'@/lib/measurements/measurementDelay':{},'@/lib/intake/readinessNote':{},'@/lib/measurements/registrationOpening':{},'@/lib/location/coordinates':{},'@/lib/workflow/followUps':{},'@/lib/workflow/access':{salesRoles:[]},'@/lib/auth/permissions':{},
   'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,user:{id:'actor'},role:'Outdoor Sales'})},
-  '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{payload=args.p_payload;return {data:{},error:null};}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,user:{id:'actor'},role:'Outdoor Sales',profile:{branch:'Karkh'}})},
+  '@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{branch:'Karkh'}})}),rpc:async(name,args)=>{payload=args.p_payload;return {data:{},error:null};}})},
  });
  const response=await api.POST({json:async()=>({id:'11111111-1111-4111-8111-111111111111',projectId:'22222222-2222-4222-8222-222222222222',userId:'actor',recordedAt:'2026-10-18T08:00:00Z',action:'finish',payload:{action:'finish'}})});
  assert.equal(response.status,200);assert.deepEqual(payload,{});

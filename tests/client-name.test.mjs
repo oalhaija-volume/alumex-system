@@ -29,7 +29,7 @@ function modules(dependencies = {}) {
 
 test('Indoor Sales can rename clients only through an accessible branch', () => {
   const { canRenameClient } = modules()('lib/clients/name');
-  for (const branch of ['Karkh', 'Rasafa']) {
+  for (const branch of ['Karkh', 'Rasafa', 'Najaf']) {
     const actor = { id: actorId, role: 'Indoor Sales', branch };
     assert.equal(canRenameClient({ ...project, branch }, actor), true);
     assert.equal(canRenameClient({ ...project, branch: 'Governorates' }, actor), branch === 'Karkh');
@@ -38,7 +38,7 @@ test('Indoor Sales can rename clients only through an accessible branch', () => 
     assert.equal(canRenameClient({ ...project, branch, project_log_only: true }, actor), false);
   }
   assert.equal(canRenameClient(project, { role: 'Indoor Sales', branch: null }), false);
-  assert.equal(canRenameClient({ ...project, branch: 'Rasafa' }, { role: 'Sales Manager' }), true);
+  assert.equal(canRenameClient({ ...project, branch: 'Rasafa' }, { role: 'Sales Manager', branch: 'Rasafa' }), true);
   for (const role of ['Outdoor Sales', 'CEO', 'Sales Director', 'Company Owner', 'HR']) {
     assert.equal(canRenameClient(project, { role, branch: 'Karkh' }), false, role);
   }
@@ -105,8 +105,8 @@ test('client rename uses the authenticated actor and sends only the client-name 
 test('client rename permits Karkh Governorates and Sales Manager projects', async () => {
   for (const options of [
     { currentProject: { ...project, branch: 'Governorates' } },
-    { role: 'Sales Manager', currentProject: { ...project, branch: 'Rasafa' } },
-    { role: 'Sales Manager', branch: 'Rasafa', currentProject: { ...project, branch: 'Governorates' } },
+    { role: 'Sales Manager', branch: 'Rasafa', currentProject: { ...project, branch: 'Rasafa' } },
+    { role: 'Sales Manager', branch: 'Karkh', currentProject: { ...project, branch: 'Governorates' } },
   ]) {
     const x = endpoint(options);
     assert.equal((await x.patch(rename)).status, 200);

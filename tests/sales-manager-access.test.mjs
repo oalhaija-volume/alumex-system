@@ -9,6 +9,7 @@ function load(path, dependencies = {}) {
   }).outputText;
   const exports = {};
   new Function('require', 'exports', js)(name => {
+    if (name === '@/lib/auth/projectBranchAccess') return load('../src/lib/auth/projectBranchAccess.ts');
     if (name === '@/lib/intake/legacyOutdoorSales') return load('../src/lib/intake/legacyOutdoorSales.ts');
     assert.ok(name in dependencies, name);
     return dependencies[name];
@@ -65,7 +66,7 @@ for (const role of ['Indoor Sales', 'Sales Manager']) test(`${role} registration
   const route = load('../src/app/api/sales-intake/route.ts', {
     'next/server': { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } },
     '@/lib/auth/adminServer': { requireRole: async allowed => {
-      assert.ok(allowed.includes(role)); return { ok: true, role, user: { id: actor } };
+      assert.ok(allowed.includes(role)); return { ok: true, role, profile: { branch }, user: { id: actor } };
     } },
     '@/lib/supabase/admin': { createAdminClient: () => admin },
     '@/lib/supabase/config': { hasSupabaseServiceRoleKey: () => true },

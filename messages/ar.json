@@ -306,8 +306,8 @@
       "loading": "جارٍ تحميل توزيع المبيعات الخارجية…",
       "loadError": "تعذر تحميل توزيع المبيعات الخارجية.",
       "noAssignedStaff": "لا يوجد موظفو مبيعات خارجية مخصصون لهذه المنطقة.",
-      "unconfigured": "التناوب غير محدد",
-      "governorates": "يمكن لجميع موظفي المبيعات الخارجية العمل في المحافظات طوال الشهر."
+      "unconfigured": "الفرع غير محدد",
+      "governorates": "مشاريع المحافظات تابعة لفرع الكرخ."
     },
     "preview": {
       "eyebrow": "اختبار المدير",
@@ -1278,6 +1278,23 @@
     "generating": "جاري الإنشاء..."
   },
   "terms": {
+    "Choose the project branch before selecting employees.": "اختر فرع المشروع قبل تحديد الموظفين.",
+    "Choose the office responsible for this project.": "اختر الفرع المسؤول عن هذا المشروع.",
+    "Your branch: {branch}": "فرعك: {branch}",
+    "Choose the project branch: Karkh, Rasafa, Najaf or Governorates.": "اختر فرع المشروع: الكرخ أو الرصافة أو النجف أو المحافظات.",
+    "Najaf": "النجف",
+    "From Najaf": "من النجف",
+    "Choose Karkh, Rasafa or Najaf.": "اختر الكرخ أو الرصافة أو النجف.",
+    "Choose a project from your branch.": "اختر مشروعاً من فرعك.",
+    "Choose an employee from the project branch.": "اختر موظفاً من فرع المشروع.",
+    "Ask Admin to assign your branch before creating a project.": "اطلب من المسؤول تحديد فرعك قبل إنشاء مشروع.",
+    "Access to all branches": "صلاحية الوصول إلى جميع الفروع",
+    "The employee can access projects from this branch only. Existing projects keep their original branch.": "يمكن للموظف الوصول إلى مشاريع هذا الفرع فقط. تحتفظ المشاريع الحالية بفرعها الأصلي.",
+    "Employees can access projects from their assigned branch. Admin, Sales Director and Company Owner can access all branches.": "يمكن للموظفين الوصول إلى مشاريع فرعهم المحدد. يمكن للمسؤول ومدير المبيعات ومالك الشركة الوصول إلى جميع الفروع.",
+    "Required for employees who can access one branch only.": "مطلوب للموظفين الذين يمكنهم الوصول إلى فرع واحد فقط.",
+    "New employees use your branch. Only Admin can change branch assignments.": "يُضاف الموظفون الجدد إلى فرعك. يمكن للمسؤول فقط تغيير تعيينات الفروع.",
+    "Only Admin can create accounts with access to all branches.": "يمكن للمسؤول فقط إنشاء حسابات لها صلاحية الوصول إلى جميع الفروع.",
+    "Only Admin can assign roles with access to all branches.": "يمكن للمسؤول فقط تعيين أدوار لها صلاحية الوصول إلى جميع الفروع.",
     "Filters": "عوامل التصفية",
     "Only Admin, Indoor Sales and Sales Managers can change client names.": "يمكن فقط للمسؤول والمبيعات الداخلية ومديري المبيعات تعديل أسماء العملاء.",
     "Only Indoor Sales and Sales Managers can change project names.": "يمكن فقط للمبيعات الداخلية ومديري المبيعات تعديل أسماء المشاريع.",
@@ -2940,7 +2957,11 @@
     "Choose an aluminum section name that is not reserved for another catalog product.": "اختر اسماً لقطاع الألمنيوم غير محجوز لمنتج آخر في الدليل.",
     "An item with this name already exists in the catalog.": "يوجد منتج بهذا الاسم في دليل الأسعار.",
     "Unable to check existing catalog sections. Try again.": "تعذر التحقق من القطاعات الموجودة في الدليل. حاول مرة أخرى.",
-    "Unable to add the aluminum section. Try again.": "تعذرت إضافة قطاع الألمنيوم. حاول مرة أخرى."
+    "Unable to add the aluminum section. Try again.": "تعذرت إضافة قطاع الألمنيوم. حاول مرة أخرى.",
+    "Ask Admin to assign your branch before generating a contract.": "اطلب من المسؤول تعيين فرعك قبل إنشاء العقد.",
+    "Choose an active employee from the project branch.": "اختر موظفاً نشطاً من فرع المشروع.",
+    "You can only create projects for your assigned branch.": "يمكنك إنشاء مشاريع لفرعك المخصص فقط.",
+    "Choose a branch for this employee.": "اختر فرعاً لهذا الموظف."
   },
   "registration": {
     "title": "عميل ومشروع جديد",

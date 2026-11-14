@@ -27,10 +27,10 @@ for(const scenario of ['other-owner','not-ready','valid','valid-other']) test(`m
  const writes=[];
  const route=load('../src/app/api/initial-measurements/[projectId]/route.ts',{
   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',user:{id:'actor'}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',profile:{branch:'Karkh'},user:{id:'actor'}})},
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
   '@/lib/measurements/registrationOpening':rules,
-  '@/lib/supabase/admin':{createAdminClient:()=>({from(table){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:base.id,created_by:scenario==='other-owner'?'other':'actor',structure_readiness:scenario==='not-ready'?'not_ready':'ready',sales_status:'new_lead'}}),insert:async(value)=>{writes.push({table,value});return {error:null};}};}})},
+  '@/lib/supabase/admin':{createAdminClient:()=>({from(table){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:base.id,branch:'Karkh',created_by:scenario==='other-owner'?'other':'actor',structure_readiness:scenario==='not-ready'?'not_ready':'ready',sales_status:'new_lead'}}),insert:async(value)=>{writes.push({table,value});return {error:null};}};}})},
  });
  const response=await route.POST({json:async()=>({...base,room:scenario==='valid-other'?'Other':base.room,otherRoom:scenario==='valid-other'?'Meeting room':'',structuralType:'Louver',openingType:'Sliding',quantity:8,created_by:'forged'})},{params:Promise.resolve({projectId:base.id})});
  assert.equal(response.status,scenario==='other-owner'?404:scenario==='not-ready'?409:201);
@@ -51,13 +51,13 @@ for(const scenario of ['complete','repeated','invalid-quantity','empty','incompl
  const updates=[];
  const route=load('../src/app/api/initial-measurements/[projectId]/route.ts',{
   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',user:{id:'actor'}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',profile:{branch:'Karkh'},user:{id:'actor'}})},
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
   '@/lib/measurements/registrationOpening':rules,
   '@/lib/supabase/admin':{createAdminClient:()=>({from(table){return {
    select(){return this;},update(value){updates.push(value);return this;},
    eq(){return this;},
-   maybeSingle:async()=>({data:{id:base.id,created_by:'actor',structure_readiness:'ready',sales_status:'new_lead'}}),
+   maybeSingle:async()=>({data:{id:base.id,branch:'Karkh',created_by:'actor',structure_readiness:'ready',sales_status:'new_lead'}}),
    then(resolve){return Promise.resolve(table==='openings'?{data:scenario==='empty'?[]:[{...base,room:scenario==='incomplete'?'':base.room,quantity:scenario==='repeated'?8:scenario==='invalid-quantity'?0:1,opening_type:'Window',opening_direction:'Sliding'}]}:{error:scenario==='save-error'?{message:'offline'}:null}).then(resolve);},
   };}})},
  });

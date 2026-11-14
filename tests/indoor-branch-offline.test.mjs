@@ -179,10 +179,22 @@ test('missing or invalid Indoor Sales branches fail closed, including old snapsh
   }
 });
 
-test('other roles preserve existing cached access across both branches', async () => {
-  for (const role of ['Outdoor Sales', 'Sales Manager', 'Admin', 'General Manager', 'HR']) {
+test('only company-wide project roles retain cached access across every branch', async () => {
+  for (const role of ['Admin', 'Sales Director', 'Company Owner']) {
     const x = setup({ actor: { ...actor, role, branch: null } });
-    assert.deepEqual(await x.store.readFieldState(), x.raw);
+    const view = await x.store.readFieldState();
+    for (const key of ['projects', 'openings', 'queue', 'measurementReports', 'followUpHistories', 'archivedProjects']) assert.deepEqual(view[key], x.raw[key]);
+  }
+});
+
+test('other roles with no assigned office cannot expose any cached project or saved media', async () => {
+  for (const role of ['Outdoor Sales', 'Sales Manager', 'CEO', 'HR']) {
+    const x = setup({ actor: { ...actor, role, branch: null } });
+    const before = structuredClone(x.raw);
+    const view = await x.store.readFieldState();
+    for (const key of ['projects', 'openings', 'queue', 'measurementReports', 'archivedProjects']) assert.deepEqual(view[key], []);
+    assert.deepEqual(view.followUpHistories, {});
+    assert.deepEqual(x.raw, before, 'Filtering retains original unsynced work');
   }
 });
 

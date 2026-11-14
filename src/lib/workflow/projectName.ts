@@ -10,8 +10,7 @@ type Project = {
 
 export function canRenameProject(project: Project, actor: OutdoorTeamActor & { branch?: string | null }) {
   if(project.project_log_only)return false;
-  if(actor.role==='Indoor Sales')return canAccessProjectBranch(actor,project.branch);
-  if(actor.role==='Sales Manager')return true;
+  if(actor.role==='Indoor Sales'||actor.role==='Sales Manager')return canAccessProjectBranch(actor,project.branch);
   return false;
 }
 

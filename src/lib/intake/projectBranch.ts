@@ -1,14 +1,21 @@
-export const projectBranches = ['Karkh', 'Rasafa', 'Governorates'] as const;
+export const employeeBranches = ['Karkh', 'Rasafa', 'Najaf'] as const;
+export type EmployeeBranch = typeof employeeBranches[number];
+export const projectBranches = [...employeeBranches, 'Governorates'] as const;
 export type ProjectBranch = typeof projectBranches[number];
-export const projectBranchLabels:Record<ProjectBranch,string> = {Karkh:'From Karkh',Rasafa:'From Rasafa',Governorates:'Governorates'};
+export const projectBranchLabels:Record<ProjectBranch,string> = {Karkh:'From Karkh',Rasafa:'From Rasafa',Najaf:'From Najaf',Governorates:'Governorates'};
 export const projectGovernorates = ['البصرة','الرمادي','صلاح الدين','ديالى','الحلة','كربلاء','النجف','الديوانية','الكوت','العمارة','الناصرية','السماوة'] as const;
 export type ProjectGovernorate = typeof projectGovernorates[number];
 
 export function normalizeProjectBranch(value: unknown): ProjectBranch {
- if (value !== 'Karkh' && value !== 'Rasafa' && value !== 'Governorates') {
-  throw new Error('Choose the project branch: Karkh, Rasafa or Governorates.');
+ if (!projectBranches.some(branch => branch === value)) {
+  throw new Error('Choose the project branch: Karkh, Rasafa, Najaf or Governorates.');
  }
- return value;
+ return value as ProjectBranch;
+}
+
+export function normalizeEmployeeBranch(value: unknown): EmployeeBranch {
+ if (!employeeBranches.some(branch => branch === value)) throw new Error('Choose Karkh, Rasafa or Najaf.');
+ return value as EmployeeBranch;
 }
 
 export function normalizeProjectGovernorate(branch:unknown,value:unknown):ProjectGovernorate|null {

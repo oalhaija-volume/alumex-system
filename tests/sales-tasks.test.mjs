@@ -20,20 +20,21 @@ test('scheduling requires a contact type, valid owner and date, and a descriptio
  assert.equal(followUps.normalizeFollowUp({...schedule,followUpType:'other',followUpDetail:'  Video call  '}).followUpDetail,'Video call');
 });
 
-test('Governorates follow-up owners require Karkh Indoor Sales or an actual Sales Manager',()=>{
+test('follow-up owners must have the project office, including Karkh Governorates',()=>{
  for(const [employee,eligible] of [
   [{role:'Indoor Sales',branch:'Karkh'},true],
   [{role:'Indoor Sales',branch:'Rasafa'},false],
   [{role:'Indoor Sales',branch:null},false],
   [{role:'Indoor Sales'},false],
-  [{role:'Sales Manager',branch:'Rasafa'},true],
-  [{role:'Sales Manager'},true],
+  [{role:'Sales Manager',branch:'Rasafa'},false],
+  [{role:'Sales Manager',branch:'Karkh'},true],
+  [{role:'Sales Manager'},false],
   [{role:'Admin',branch:'Karkh'},false],
   [{branch:'Karkh'},false],
   [{},false],
  ]){
   assert.equal(branchAccess.canOwnProjectFollowUp(employee,'Governorates'),eligible,JSON.stringify(employee));
-  for(const branch of ['Karkh','Rasafa',null,undefined])assert.equal(branchAccess.canOwnProjectFollowUp(employee,branch),true,'Other project branches retain existing owner eligibility');
+  for(const branch of ['Karkh','Rasafa','Najaf',null,undefined])assert.equal(branchAccess.canOwnProjectFollowUp(employee,branch),['Indoor Sales','Sales Manager'].includes(employee.role)&&!!branch&&employee.branch===branch,'Every owner must match the project office');
  }
 });
 
@@ -41,7 +42,7 @@ test('the Governorates owner dropdown excludes stale Rasafa and metadata-free en
  const directory=[
   {id:indoor.id,name:'Karkh employee',role:'Indoor Sales',branch:'Karkh'},
   {id:'22222222-2222-4222-8222-222222222222',name:'Rasafa employee',role:'Indoor Sales',branch:'Rasafa'},
-  {id:'33333333-3333-4333-8333-333333333333',name:'Sales manager',role:'Sales Manager',branch:'Rasafa'},
+  {id:'33333333-3333-4333-8333-333333333333',name:'Sales manager',role:'Sales Manager',branch:'Karkh'},
   {id:'44444444-4444-4444-8444-444444444444',name:'Legacy employee'},
  ];
  const {FollowUpFields}=load('../src/components/workflow/FollowUpFields.tsx',{
@@ -64,8 +65,8 @@ test('the Governorates owner dropdown excludes stale Rasafa and metadata-free en
  assert.deepEqual(eligible.filter(option=>option.selected).map(option=>option.value),[directory[2].id]);
  for(const branch of ['Karkh','Rasafa']){
   const options=ownerSelect(branch,directory[1].id);
-  assert.deepEqual(options.map(option=>option.value),['',...directory.map(employee=>employee.id)]);
-  assert.deepEqual(options.filter(option=>option.selected).map(option=>option.value),[directory[1].id]);
+  assert.deepEqual(options.map(option=>option.value),['',...directory.filter(employee=>employee.branch===branch).map(employee=>employee.id)]);
+  assert.deepEqual(options.filter(option=>option.selected).map(option=>option.value),branch==='Rasafa'?[directory[1].id]:['']);
  }
 });
 test('reminders become due exactly at the scheduled instant and stay assigned to Indoor Sales',()=>{

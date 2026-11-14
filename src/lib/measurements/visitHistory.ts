@@ -1,7 +1,7 @@
 import type { createAdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
 import { measurementDelayReasons, type MeasurementDelayReason } from '@/lib/measurements/measurementDelay';
-import { indoorProjectBranches } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, projectBranchesForActor } from '@/lib/auth/projectBranchAccess';
 import { canAccessOutdoorProject, outdoorProjectFilter } from '@/lib/auth/outdoorTeams';
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -30,8 +30,10 @@ export function isHistoricalProject(project: { created_by: string | null; assign
 export async function loadWorkspaceProjects(admin: Admin, actor: Actor) {
   let query = admin.from('projects').select(workspaceProjectColumns).order('created_at', { ascending: false });
   if (actor.role === 'Outdoor Sales') query = query.or(outdoorProjectFilter(actor, true));
-  if (actor.role === 'Indoor Sales') query = query.in('branch', indoorProjectBranches(actor.branch));
+  const branches = projectBranchesForActor(actor);
+  if (branches !== null) query = query.in('branch', branches);
   const result = await query;
+  if (result.data) result.data = result.data.filter(project => canAccessProjectBranch(actor, project.branch));
   if (result.error || actor.role !== 'Outdoor Sales') return result;
 
   // A reassigned task remains in its previous visitor's read-only log. This
@@ -48,9 +50,11 @@ export async function loadWorkspaceProjects(admin: Admin, actor: Actor) {
   for (const project of result.data) previousIds.delete(project.id);
   const ids = [...previousIds];
   for (let offset = 0; offset < ids.length; offset += 100) {
-    const previous = await admin.from('projects').select(workspaceProjectColumns).in('id', ids.slice(offset, offset + 100));
+    let previousQuery = admin.from('projects').select(workspaceProjectColumns).in('id', ids.slice(offset, offset + 100));
+    if (branches !== null) previousQuery = previousQuery.in('branch', branches);
+    const previous = await previousQuery;
     if (previous.error) return { ...result, data: null, error: previous.error };
-    result.data.push(...previous.data);
+    result.data.push(...previous.data.filter(project => canAccessProjectBranch(actor, project.branch)));
   }
   result.data.sort((a, b) => b.created_at.localeCompare(a.created_at));
   return result;

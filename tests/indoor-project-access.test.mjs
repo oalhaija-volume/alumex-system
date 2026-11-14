@@ -6,7 +6,7 @@ import ts from 'typescript';
 const actorId = '11111111-1111-4111-8111-111111111111';
 const otherId = '22222222-2222-4222-8222-222222222222';
 const operationId = '33333333-3333-4333-8333-333333333333';
-const projects = ['Karkh', 'Rasafa', null, 'Governorates'].map((branch, index) => ({
+const projects = ['Karkh', 'Rasafa', null, 'Governorates', 'Najaf'].map((branch, index) => ({
   id: `${index + 4}${'4'.repeat(7)}-4444-4444-8444-444444444444`,
   branch, governorate: branch === 'Governorates' ? 'البصرة' : null, project_name: `${branch ?? 'Unassigned'} project`, project_number: `PRJ-${index}`,
   client_id: `client-${index}`, created_by: otherId, assigned_outdoor_sales_id: actorId,
@@ -39,14 +39,15 @@ function moduleLoader(dependencies) {
 }
 
 function fixture({ role = 'Indoor Sales', branch = 'Karkh', profileBranch = branch,
-  projectRows = projects, rpcError = null, projectError = null, deletedBranch, outdoorRotationStartBranch } = {}) {
+  projectRows = projects, rpcError = null, projectError = null, deletedBranch, outdoorRotationStartBranch, directoryRows = [] } = {}) {
   const reads = [], writes = [], rpcCalls = [];
   const tables = {
     projects: structuredClone(projectRows),
     field_sync_receipts: [],
     profiles: [
       { id: actorId, full_name: 'Employee', role, branch: profileBranch, outdoor_rotation_start_branch: outdoorRotationStartBranch, is_active: true, status: 'Active' },
-      { id: otherId, full_name: 'Creator', role: 'Outdoor Sales', is_active: true, status: 'Active' },
+      { id: otherId, full_name: 'Creator', role: 'Outdoor Sales', branch: profileBranch, is_active: true, status: 'Active' },
+      ...directoryRows,
     ],
     clients: projects.map(p => ({ id: p.client_id, mobile: `phone-${p.branch}` })),
     openings: projects.map(p => ({ id: `opening-${p.id}`, project_id: p.id,
@@ -123,13 +124,13 @@ const assertHidden = response => {
   assert.deepEqual(response.body, { error: 'Project not found.' });
 };
 
-for (const branch of ['Karkh', 'Rasafa', null, 'unknown']) {
+for (const branch of ['Karkh', 'Rasafa', 'Najaf', null, 'unknown']) {
   for (const path of ['dashboard', 'workspace', 'offline']) {
     test(`${path}: Indoor Sales ${branch ?? 'unassigned'} sees only its branch and related data`, async () => {
       const x = fixture({ branch });
       const response = await x.load(`src/app/api/${path}/route`).GET(request());
       assert.equal(response.status, 200);
-      const allowed = projects.filter(p => ['Karkh', 'Rasafa'].includes(branch) && (p.branch === branch || branch === 'Karkh' && p.branch === 'Governorates'));
+      const allowed = projects.filter(p => ['Karkh', 'Rasafa', 'Najaf'].includes(branch) && (p.branch === branch || branch === 'Karkh' && p.branch === 'Governorates'));
       assert.deepEqual(response.body.projects.map(p => p.id), allowed.map(p => p.id));
       for (const read of x.reads) {
         if (['openings', 'measurement_completion_reports'].includes(read.table)) {
@@ -142,7 +143,7 @@ for (const branch of ['Karkh', 'Rasafa', null, 'unknown']) {
   }
 }
 
-for (const role of ['Admin', 'Sales Director', 'CEO', 'Company Owner', 'Sales Manager', 'Outdoor Sales']) {
+for (const role of ['Admin', 'Sales Director', 'Company Owner']) {
   test(`${role} keeps existing project visibility across branches`, async () => {
     for (const path of ['dashboard', 'workspace', 'offline']) {
       const response = await fixture({ role }).load(`src/app/api/${path}/route`).GET(request());
@@ -157,7 +158,30 @@ for (const role of ['Admin', 'Sales Director', 'CEO', 'Company Owner', 'Sales Ma
   });
 }
 
-for (const branch of ['Karkh', 'Rasafa', null]) {
+for (const role of ['CEO', 'Sales Manager', 'Outdoor Sales']) {
+  test(`${role} sees its office projects while foreign offices stay hidden even for current assignments`, async () => {
+    const allowed = projects.filter(project => project.branch === 'Karkh' || project.branch === 'Governorates');
+    for (const path of ['dashboard', 'workspace', 'offline']) {
+      const response = await fixture({ role }).load(`src/app/api/${path}/route`).GET(request());
+      assert.equal(response.status, 200);
+      assert.deepEqual(response.body.projects.map(project => project.id), allowed.map(project => project.id));
+    }
+    for (const project of projects) {
+      const x = fixture({ role });
+      const access = await x.load('src/lib/workflow/access').salesProject(project.id);
+      const measured = await x.load('src/app/api/initial-measurements/[projectId]/route').GET(request(), context(project.id));
+      if (allowed.some(row => row.id === project.id)) {
+        assert.equal(access.response, undefined);
+        assert.equal(measured.status, 200);
+      } else {
+        assertHidden(access.response);
+        assertHidden(measured);
+      }
+    }
+  });
+}
+
+for (const branch of ['Karkh', 'Rasafa', 'Najaf', null]) {
   test(`shared project access and measurements enforce ${branch ?? 'unassigned'} branch even for creator or assignee`, async () => {
     for (const project of projects) {
       const own = branch !== null && (project.branch === branch || branch === 'Karkh' && project.branch === 'Governorates');
@@ -202,7 +226,7 @@ for (const path of [
 }
 
 test('workspace and quotation mutations cannot bypass branch access', async () => {
-  for (const branch of ['Karkh', 'Rasafa']) {
+  for (const branch of ['Karkh', 'Rasafa', 'Najaf']) {
     const otherProject = projects.find(project => project.branch !== branch && project.branch !== null);
     const x = fixture({ branch });
     for (const action of ['ready', 'follow-up', 'cancel-project', 'reactivate-project']) {
@@ -241,12 +265,15 @@ test('Outdoor Sales still needs project creation or assignment regardless of bra
 });
 
 for (const action of ['finish', 'register']) {
-  for (const branch of ['Karkh', 'Rasafa', null]) {
+  for (const branch of ['Karkh', 'Rasafa', 'Najaf', null]) {
     test(`offline ${action} rejects cross-branch changes and replayed registrations for ${branch ?? 'unassigned'} employee`, async () => {
       for (const project of projects) {
         const x = fixture({ branch });
         const response = await x.load('src/app/api/offline/route').POST(request(offlineChange(project.id, action)));
-        if (branch !== null && (project.branch === branch || branch === 'Karkh' && project.branch === 'Governorates')) {
+        if (action === 'register' && branch === null) {
+          assert.equal(response.status, 400);
+          assert.equal(x.rpcCalls.length, 0);
+        } else if (branch !== null && (project.branch === branch || branch === 'Karkh' && project.branch === 'Governorates')) {
           assert.equal(response.status, 200);
           assert.equal(x.rpcCalls.length, 1);
         } else {
@@ -266,7 +293,7 @@ test('offline preflight database failures do not send writes or disclose project
   assert.equal(JSON.stringify(response.body).includes('Private database details'), false);
 });
 
-for (const branch of ['Karkh','Rasafa']) for (const deletedBranch of ['Karkh', 'Rasafa', 'Governorates', null]) {
+for (const branch of ['Karkh','Rasafa','Najaf']) for (const deletedBranch of ['Karkh', 'Rasafa', 'Najaf', 'Governorates', null]) {
   test(`deleted project disclosure for ${branch} respects the access scope of ${deletedBranch ?? 'unassigned'} projects`, async () => {
     const x = fixture({ branch, projectRows: [], deletedBranch, rpcError: { message: 'Project is not available to this employee' } });
     const response = await x.load('src/app/api/offline/route').POST(request(offlineChange(projects[0].id)));
@@ -277,13 +304,18 @@ for (const branch of ['Karkh','Rasafa']) for (const deletedBranch of ['Karkh', '
 }
 
 test('a branch transfer during offline refresh cannot return projects from the former branch', async () => {
-  const x = fixture({ branch: 'Karkh', profileBranch: 'Rasafa' });
+  const x = fixture({ branch: 'Karkh', profileBranch: 'Rasafa', directoryRows: [
+    { id: operationId, full_name: 'Former office Outdoor employee', role: 'Outdoor Sales', branch: 'Karkh', is_active: true, status: 'Active' },
+    { id: 'former-indoor', full_name: 'Former office Indoor employee', role: 'Indoor Sales', branch: 'Karkh', is_active: true, status: 'Active' },
+  ] });
   const response = await x.load('src/app/api/offline/route').GET(request());
   assert.equal(response.status, 200);
   assert.equal(response.body.actor.branch, 'Rasafa');
   assert.ok(response.body.projects.every(project => project.branch === 'Rasafa'));
   assert.deepEqual(response.body.openings, []);
   assert.deepEqual(response.body.measurementReports, []);
+  assert.deepEqual(response.body.outdoorSales, [], 'A refreshed employee office must hide the former office directory');
+  assert.deepEqual(response.body.indoorSales, [], 'Directory access must be allowed by both profile snapshots');
 });
 
 for(const [path,session] of [['workspace',false],['offline',false],['offline',true]]) {
@@ -293,9 +325,9 @@ for(const [path,session] of [['workspace',false],['offline',false],['offline',tr
       const response=await x.load(`src/app/api/${path}/route`).GET({...request(),url:`http://localhost:3003/api/${path}${session?'?session=1':''}`});
       assert.equal(response.status,200);
       assert.equal(response.body.actor.outdoorRotationStartBranch,starter??null);
-      assert.equal(response.body.actor.branch,null,'A legacy fixed branch must not determine the Outdoor rotation');
+      assert.equal(response.body.actor.branch,'Karkh','Employee office access stays fixed independently of legacy rotation seeds');
       assert.ok(x.reads.some(read=>read.table==='profiles'&&read.fields.includes('outdoor_rotation_start_branch')));
-      if(!session)assert.deepEqual(response.body.projects.map(project=>project.id),projects.map(project=>project.id),'Monthly project creation restrictions preserve access to existing assigned projects');
+      if(!session)assert.deepEqual(response.body.projects.map(project=>project.id),projects.filter(project=>project.branch==='Karkh'||project.branch==='Governorates').map(project=>project.id),'Assignments do not grant access outside the employee office');
     });
   }
 }

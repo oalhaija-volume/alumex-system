@@ -25,9 +25,9 @@ const employeeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const teammateId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const otherTeamId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const projectId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
-const actor = { id: employeeId, name: 'Outdoor employee', role: 'Outdoor Sales', outdoorTeamMemberIds: [employeeId, teammateId] };
+const actor = { id: employeeId, name: 'Outdoor employee', role: 'Outdoor Sales', branch: 'Najaf', outdoorTeamMemberIds: [employeeId, teammateId] };
 const project = {
-  id: projectId, project_name: 'Shared site', project_number: 'PRJ-TEAM', created_by: 'indoor',
+  id: projectId, branch: 'Najaf', project_name: 'Shared site', project_number: 'PRJ-TEAM', created_by: 'indoor',
   registeredBy: 'Indoor employee', assigned_outdoor_sales_id: teammateId, assignedOutdoorSales: 'Teammate',
   assignedToYou: false, assignedToTeam: true, structure_readiness: 'ready', sales_status: 'new_lead',
   project_notes: 'Keep this note', next_follow_up_at: null, address: 'Baghdad', phone: null,

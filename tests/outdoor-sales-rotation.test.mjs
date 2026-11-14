@@ -17,35 +17,35 @@ function load(path) {
 
 const { outdoorProjectBranches, normalizeOutdoorProjectBranch, outdoorSalesBranch } = load('../src/lib/intake/outdoorRotation.ts');
 const { appRoles } = load('../src/lib/auth/roles.ts');
-const actor = outdoorRotationStartBranch => ({ role: 'Outdoor Sales', outdoorRotationStartBranch });
-const startBranchError = 'Ask Admin to assign your monthly Outdoor Sales rotation before creating a Karkh or Rasafa project.';
-const restrictedBranchError = 'You can only create projects for your assigned branch or Governorates during this half of the month.';
+const actor = (branch, outdoorRotationStartBranch = 'Karkh') => ({ role: 'Outdoor Sales', branch, outdoorRotationStartBranch });
+const restrictedBranchError = 'Choose a project from your branch.';
+const officeProjects = branch => branch === 'Karkh' ? ['Karkh', 'Governorates'] : [branch];
 
-for (const starter of ['Karkh', 'Rasafa']) {
-  const secondBranch = starter === 'Karkh' ? 'Rasafa' : 'Karkh';
+for (const starter of ['Karkh', 'Rasafa', 'Najaf']) {
   for (const [instant, expected] of [
     ['2026-10-01T00:00:00+03:00', starter],
     ['2026-10-15T23:59:59.999+03:00', starter],
-    ['2026-10-16T00:00:00+03:00', secondBranch],
-    ['2026-10-31T23:59:59.999+03:00', secondBranch],
+    ['2026-10-16T00:00:00+03:00', starter],
+    ['2026-10-31T23:59:59.999+03:00', starter],
     ['2026-11-01T00:00:00+03:00', starter],
   ]) {
-    test(`${starter} starters use ${expected} at Baghdad time ${instant}`, () => {
+    test(`${starter} employees keep their office at Baghdad time ${instant}`, () => {
       const date = new Date(instant);
       assert.equal(outdoorSalesBranch(actor(starter), date), expected);
-      assert.deepEqual(outdoorProjectBranches(actor(starter), date), [expected, 'Governorates']);
+      assert.deepEqual(outdoorProjectBranches(actor(starter), date), officeProjects(starter));
       assert.equal(normalizeOutdoorProjectBranch(actor(starter), expected, date), expected);
       assert.throws(() => normalizeOutdoorProjectBranch(actor(starter), expected === 'Karkh' ? 'Rasafa' : 'Karkh', date), { message: restrictedBranchError });
-      assert.equal(normalizeOutdoorProjectBranch(actor(starter), 'Governorates', date), 'Governorates');
+      if (starter === 'Karkh') assert.equal(normalizeOutdoorProjectBranch(actor(starter), 'Governorates', date), 'Governorates');
+      else assert.throws(() => normalizeOutdoorProjectBranch(actor(starter), 'Governorates', date), { message: restrictedBranchError });
     });
   }
 }
 
-test('the rotation switches with Baghdad midnight while the UTC calendar still shows the previous day', () => {
+test('Baghdad midnight and the legacy rotation seed cannot change the assigned office', () => {
   const outdoor = actor('Karkh');
   assert.equal(outdoorSalesBranch(outdoor, new Date('2026-10-15T20:59:59.999Z')), 'Karkh');
-  assert.equal(outdoorSalesBranch(outdoor, new Date('2026-10-15T21:00:00.000Z')), 'Rasafa');
-  assert.equal(outdoorSalesBranch(outdoor, new Date('2026-10-31T20:59:59.999Z')), 'Rasafa');
+  assert.equal(outdoorSalesBranch(outdoor, new Date('2026-10-15T21:00:00.000Z')), 'Karkh');
+  assert.equal(outdoorSalesBranch(outdoor, new Date('2026-10-31T20:59:59.999Z')), 'Karkh');
   assert.equal(outdoorSalesBranch(outdoor, new Date('2026-10-31T21:00:00.000Z')), 'Karkh');
 });
 
@@ -55,44 +55,45 @@ for (const [lastDay, nextMonth] of [
   ['2026-04-30', '2026-05-01'],
   ['2026-12-31', '2027-01-01'],
 ]) {
-  test(`the last day ${lastDay} rotates back on ${nextMonth}`, () => {
-    for (const starter of ['Karkh', 'Rasafa']) {
-      assert.equal(outdoorSalesBranch(actor(starter), new Date(`${lastDay}T23:59:59.999+03:00`)), starter === 'Karkh' ? 'Rasafa' : 'Karkh');
+  test(`the assigned office stays fixed across ${lastDay} and ${nextMonth}`, () => {
+    for (const starter of ['Karkh', 'Rasafa', 'Najaf']) {
+      assert.equal(outdoorSalesBranch(actor(starter), new Date(`${lastDay}T23:59:59.999+03:00`)), starter);
       assert.equal(outdoorSalesBranch(actor(starter), new Date(`${nextMonth}T00:00:00.000+03:00`)), starter);
     }
   });
 }
 
-test('every other application role retains the existing project branch choices', () => {
+test('every role is limited to its office unless explicitly allowed to access all branches', () => {
   for (const role of appRoles.filter(role => role !== 'Outdoor Sales')) {
     const employee = { role, branch: 'Karkh', outdoorRotationStartBranch: 'Rasafa' };
     assert.equal(outdoorSalesBranch(employee, new Date('2026-10-22T12:00:00+03:00')), null);
-    assert.deepEqual(outdoorProjectBranches(employee, new Date('2026-10-22T12:00:00+03:00')), ['Karkh', 'Rasafa', 'Governorates']);
-    for (const branch of ['Karkh', 'Rasafa', 'Governorates']) assert.equal(normalizeOutdoorProjectBranch(employee, branch), branch);
+    const expected = ['Admin', 'Sales Director', 'Company Owner'].includes(role) ? ['Karkh', 'Rasafa', 'Najaf', 'Governorates'] : ['Karkh', 'Governorates'];
+    assert.deepEqual(outdoorProjectBranches(employee, new Date('2026-10-22T12:00:00+03:00')), expected);
+    for (const branch of expected) assert.equal(normalizeOutdoorProjectBranch(employee, branch), branch);
+    for (const branch of ['Karkh', 'Rasafa', 'Najaf', 'Governorates'].filter(branch => !expected.includes(branch))) assert.throws(() => normalizeOutdoorProjectBranch(employee, branch), { message: restrictedBranchError });
   }
 });
 
-test('missing or invalid Outdoor Sales rotation assignments allow only Governorates', () => {
+test('legacy rotation values cannot grant access when the employee office is missing or invalid', () => {
   for (const starter of [undefined, null, '', 'karkh', 'Other', 'Governorates', 7]) {
-    const employee = { ...actor(starter), branch: 'Karkh', name: 'Mohammad' };
+    const employee = { ...actor(null, starter), name: 'Mohammad' };
     assert.equal(outdoorSalesBranch(employee), null);
-    assert.deepEqual(outdoorProjectBranches(employee), ['Governorates']);
-    assert.equal(normalizeOutdoorProjectBranch(employee, 'Governorates'), 'Governorates');
-    for (const branch of ['Karkh', 'Rasafa']) assert.throws(() => normalizeOutdoorProjectBranch(employee, branch), { message: startBranchError });
+    assert.deepEqual(outdoorProjectBranches(employee), []);
+    for (const branch of ['Karkh', 'Rasafa', 'Najaf', 'Governorates']) assert.throws(() => normalizeOutdoorProjectBranch(employee, branch), { message: restrictedBranchError });
   }
 });
 
-test('an invalid device clock never grants a Baghdad branch', () => {
+test('an invalid device clock cannot expand access beyond the assigned office', () => {
   const date = new Date('invalid');
-  for (const starter of ['Karkh', 'Rasafa']) {
+  for (const starter of ['Karkh', 'Rasafa', 'Najaf']) {
     assert.equal(outdoorSalesBranch(actor(starter), date), null);
-    assert.deepEqual(outdoorProjectBranches(actor(starter), date), ['Governorates']);
-    assert.equal(normalizeOutdoorProjectBranch(actor(starter), 'Governorates', date), 'Governorates');
-    for (const branch of ['Karkh', 'Rasafa']) assert.throws(() => normalizeOutdoorProjectBranch(actor(starter), branch, date));
+    assert.deepEqual(outdoorProjectBranches(actor(starter), date), officeProjects(starter));
+    for (const branch of officeProjects(starter)) assert.equal(normalizeOutdoorProjectBranch(actor(starter), branch, date), branch);
+    for (const branch of ['Karkh', 'Rasafa', 'Najaf', 'Governorates'].filter(branch => !officeProjects(starter).includes(branch))) assert.throws(() => normalizeOutdoorProjectBranch(actor(starter), branch, date), { message: restrictedBranchError });
   }
 });
 
-test('rotation validation keeps rejecting omitted, misspelled and forged project branches', () => {
+test('branch validation keeps rejecting omitted, misspelled and forged project branches', () => {
   for (const value of [undefined, null, '', 'karkh', 'Rasafa ', 'Other', 3, {}, ['Karkh']]) {
     for (const employee of [actor('Karkh'), { role: 'Admin' }]) {
       assert.throws(() => normalizeOutdoorProjectBranch(employee, value), /project branch/);

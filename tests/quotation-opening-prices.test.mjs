@@ -10,6 +10,7 @@ function load(path,dependencies={}) {
  const code=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText;
  const exports={};
  new Function('require','exports',code)(name=>{
+  if(name==='@/lib/intake/projectBranch')return load('../src/lib/intake/projectBranch.ts');
   if(!(name in dependencies))throw Error(`Unexpected dependency: ${name}`);
   return dependencies[name];
  },exports);

@@ -101,6 +101,7 @@ export async function requireRole(
     if (profileData?.outdoor_team_key) {
       const members = await profileClient.from('profiles').select('id')
         .eq('outdoor_team_key', profileData.outdoor_team_key).eq('role', 'Outdoor Sales')
+        .eq('branch', profileData.branch ?? '')
         .eq('is_active', true).eq('status', 'Active');
       if (members.error) return { ok: false, status: 503, error: 'Unable to verify your Outdoor Sales team.' };
       outdoorTeamMemberIds = [...new Set([user.id, ...members.data.map(member => member.id)])];

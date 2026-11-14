@@ -12,6 +12,17 @@ function loadModule(path, dependencies) {
     if(name==='@/lib/measurements/completion')return loadModule('../src/lib/measurements/completion.ts',{});if(name==='@/lib/measurements/measurementDelay')return loadModule('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':loadModule('../src/lib/auth/permissions.ts',{})});
     if(name==='@/lib/intake/projectBranch')return loadModule('../src/lib/intake/projectBranch.ts',{});if(name==='@/lib/intake/buildingType')return loadModule('../src/lib/intake/buildingType.ts',{});
     if(name==='@/lib/intake/readinessNote')return loadModule('../src/lib/intake/readinessNote.ts',{});if(name==='@/lib/intake/legacyOutdoorSales')return loadModule('../src/lib/intake/legacyOutdoorSales.ts',{});
+    if (name === '@/lib/supabase/admin' && dependencies[name]?.createAdminClient) {
+      return {createAdminClient: () => {
+        const admin = dependencies[name].createAdminClient();
+        const from = admin.from?.bind(admin);
+        return {...admin, from(table) {
+          // Registrations have no existing project; permission boundaries use real route tests elsewhere.
+          if (table === 'projects') return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null})};
+          return from(table);
+        }};
+      }};
+    }
     if (!(name in dependencies)) throw new Error(`Unexpected dependency: ${name}`);
     return dependencies[name];
   }, exports);
@@ -57,13 +68,13 @@ for (const role of ['Admin','Indoor Sales','Outdoor Sales']) for (const readines
   const writes=[];
   const route=loadModule('../src/app/api/sales-intake/route.ts', {
    'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
-   '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,user:{id:'actor'}})},
+   '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,profile:{branch:'Rasafa'},user:{id:'actor'}})},
    '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
    '@/lib/location/coordinates':{parseProjectLocation:()=>({isValid:true,latitude:33.3,longitude:44.4})},
    '@/lib/projects/numbering':{generateNextProjectNumber:()=> 'PRJ-TEST'},
    '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{writes.push({table:'rpc',value:args.p_payload,args});return {data:{projectId:'project',clientId:'client',projectNumber:'PRJ-TEST'}};},from(table){
     assert.ok(['clients','projects','profiles'].includes(table));
-    return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'}}),like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table,branch:table==='profiles'?'Karkh':undefined}})};
+    return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',branch:'Rasafa'}}),like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table,branch:table==='profiles'?'Karkh':undefined}})};
    }})},
   });
   const response=await route.POST({json:async()=>({client:{clientType:'individual',clientName:'Test',mobile:'07700000000'},project:{branch:'Rasafa',buildingType:'residential_building',structureReadiness:readiness,readinessNote:role==='Outdoor Sales'&&readiness==='not_ready'?'  Plastering unfinished  ':null,assignedOutdoorSalesId:role==='Indoor Sales'?'dddddddd-dddd-4ddd-8ddd-dddddddddddd':null},created_by:'forged'})});
@@ -84,11 +95,11 @@ for (const scenario of ['corporate','individual','missing-company','missing-site
   const coordinates=loadModule('../src/lib/location/coordinates.ts',{});
   const route=loadModule('../src/app/api/sales-intake/route.ts',{
    'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
-   '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Indoor Sales',user:{id:'sales'}})},
+   '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Indoor Sales',profile:{branch:'Rasafa'},user:{id:'sales'}})},
    '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
    '@/lib/location/coordinates':coordinates,
    '@/lib/projects/numbering':{generateNextProjectNumber:()=> 'PRJ-TEST'},
-   '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{writes.push({table:'rpc',value:args.p_payload,args});return {data:{projectId:'project',clientId:'client',projectNumber:'PRJ-TEST'}};},from(table){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'}}),like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table,branch:table==='profiles'?'Karkh':undefined}})};}})},
+   '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{writes.push({table:'rpc',value:args.p_payload,args});return {data:{projectId:'project',clientId:'client',projectNumber:'PRJ-TEST'}};},from(table){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',branch:'Rasafa'}}),like:async()=>({data:[]}),insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table,branch:table==='profiles'?'Karkh':undefined}})};}})},
   });
   const response=await route.POST({json:async()=>({
    client:{clientType:scenario==='invalid-type'?'unknown':scenario==='individual'?'individual':'company',clientName:'Example',mobile:'07701234567',...(scenario==='missing-company'?{}:{locationLatitude:33.1,locationLongitude:44.1})},
@@ -110,7 +121,7 @@ for (const hasSite of [true,false]) test(`corporate offline sync requires only t
  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
  const route=loadModule('../src/app/api/offline/route.ts',{
   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Admin',user:{id}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Admin',profile:{branch:'Karkh'},user:{id}})},
   '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{writes.push({name,args});return {data:{id},error:null};}})},
   '@/lib/workflow/followUps':{},'@/lib/auth/permissions':{},'@/lib/workflow/access':{salesRoles:['Admin']},
   '@/lib/measurements/registrationOpening':{},'@/lib/location/coordinates':loadModule('../src/lib/location/coordinates.ts',{}),
@@ -127,13 +138,13 @@ for(const target of ['self','outdoor','other-indoor','inactive','missing'])test(
  const actor='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';const other='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';const writes=[];
  const route=loadModule('../src/app/api/sales-intake/route.ts',{
   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Indoor Sales',user:{id:actor}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Indoor Sales',profile:{branch:'Rasafa'},user:{id:actor}})},
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
   '@/lib/location/coordinates':{parseProjectLocation:()=>({isValid:true,latitude:33.3,longitude:44.4})},
   '@/lib/projects/numbering':{generateNextProjectNumber:()=> 'PRJ-TEST'},
   '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{writes.push({table:'rpc',value:args.p_payload,args});return {data:{projectId:'project',clientId:'client',projectNumber:'PRJ-TEST'}};},from(table){return {
    select(){return this;},eq(){return this;},like:async()=>({data:[]}),
-   maybeSingle:async()=>({data:target==='outdoor'?{id:other}:null}),
+   maybeSingle:async()=>({data:target==='outdoor'?{id:other,branch:'Rasafa'}:null}),
    insert(value){writes.push({table,value});return this;},single:async()=>({data:{id:table,branch:'Karkh'}}),
   };}})},
  });
@@ -150,7 +161,7 @@ for (const endpoint of ['sales-intake','offline']) for (const note of [undefined
   const valid=typeof note==='string'&&note.trim()==='الجدران غير مكتملة';
   const route=loadModule(`../src/app/api/${endpoint}/route.ts`,{
    'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
-   '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',user:{id}})},
+   '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',profile:{branch:'Rasafa'},user:{id}})},
    '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
    '@/lib/location/coordinates':loadModule('../src/lib/location/coordinates.ts',{}),
    '@/lib/projects/numbering':{generateNextProjectNumber:()=> 'PRJ-TEST'},
@@ -193,7 +204,7 @@ for(const endpoint of ['sales-intake','offline'])for(const buildingType of [unde
  const valid=['commercial_building','residential_building','villa_house'].includes(buildingType)||(endpoint==='offline'&&buildingType===undefined);
  const route=loadModule(`../src/app/api/${endpoint}/route.ts`,{
   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',user:{id}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',profile:{branch:'Rasafa'},user:{id}})},
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
   '@/lib/location/coordinates':loadModule('../src/lib/location/coordinates.ts',{}),
   '@/lib/projects/numbering':{generateNextProjectNumber:()=> 'PRJ-TEST'},
@@ -211,8 +222,8 @@ for(const scenario of ['valid','invalid','conflict'])test(`offline opening edit 
  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',writes=[];
  const route=loadModule('../src/app/api/offline/route.ts',{
   'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',user:{id}})},
-  '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{writes.push(args);return scenario==='conflict'?{error:{message:'This opening changed on another device.'}}:{data:{id}};}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',profile:{branch:'Rasafa'},user:{id}})},
+  '@/lib/supabase/admin':{createAdminClient:()=>({from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{branch:'Rasafa'}})};},rpc:async(name,args)=>{writes.push(args);return scenario==='conflict'?{error:{message:'This opening changed on another device.'}}:{data:{id}};}})},
   '@/lib/workflow/followUps':{},'@/lib/auth/permissions':{},'@/lib/workflow/access':{},'@/lib/location/coordinates':{},
   '@/lib/measurements/registrationOpening':loadModule('../src/lib/measurements/registrationOpening.ts',{}),
  });
@@ -245,12 +256,12 @@ for(const role of ['Outdoor Sales','Indoor Sales','Sales Manager'])for(const bra
  if(role==='Outdoor Sales')assert.equal(filters.find(([key])=>key==='or')[1],`previous_value->>created_by.eq.${id},previous_value->>assigned_outdoor_sales_id.eq.${id}`);
 });
 
-for(const endpoint of ['sales-intake','offline'])for(const branch of [undefined,null,'','wrong',7,'Karkh','Rasafa'])test(`${endpoint} validates project branch ${String(branch)}`,async()=>{
+for(const endpoint of ['sales-intake','offline'])for(const branch of [undefined,null,'','wrong',7,'Karkh','Rasafa','Najaf'])test(`${endpoint} validates project branch ${String(branch)}`,async()=>{
  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',writes=[];
- const valid=['Karkh','Rasafa'].includes(branch)||(endpoint==='offline'&&branch===undefined);
+ const valid=['Karkh','Rasafa','Najaf'].includes(branch)||branch===undefined;
  const route=loadModule(`../src/app/api/${endpoint}/route.ts`,{
   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',user:{id}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',profile:{branch:['Karkh','Rasafa','Najaf'].includes(branch)?branch:'Rasafa'},user:{id}})},
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
   '@/lib/location/coordinates':loadModule('../src/lib/location/coordinates.ts',{}),
   '@/lib/projects/numbering':{generateNextProjectNumber:()=> 'PRJ-TEST'},
@@ -260,7 +271,7 @@ for(const endpoint of ['sales-intake','offline'])for(const branch of [undefined,
  const payload={client:{clientType:'individual',clientName:'Test',mobile:'07700000000'},project:{buildingType:'villa_house',...(branch===undefined?{}:{branch}),structureReadiness:'ready',locationLatitude:33.3,locationLongitude:44.4}};
  const body=endpoint==='offline'?{id,userId:id,projectId:id,action:'register',recordedAt:new Date().toISOString(),payload}:payload;
  const response=await route.POST({json:async()=>body});assert.equal(response.status,valid?(endpoint==='offline'?undefined:201):400);
- if(valid){const saved=writes.find(w=>w.table==='rpc').value;assert.equal(saved.branch,branch);if(branch===undefined)assert.equal(Object.hasOwn(saved,'branch'),false,'Preserve legacy receipt fingerprints');}
+ if(valid){const saved=writes.find(w=>w.table==='rpc').value;assert.equal(saved.branch,branch===undefined&&endpoint==='sales-intake'?'Rasafa':branch);if(branch===undefined&&endpoint==='offline')assert.equal(Object.hasOwn(saved,'branch'),false,'Preserve legacy receipt fingerprints');}
  else{assert.equal(writes.length,0);assert.match(response.body.error,/project branch/);}
 });
 
@@ -268,7 +279,7 @@ for(const endpoint of ['sales-intake','offline'])test(`${endpoint} requires a li
  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',writes=[];
  const route=loadModule(`../src/app/api/${endpoint}/route.ts`,{
   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
-  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',user:{id}})},
+  '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Admin',profile:{branch:null},user:{id}})},
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
   '@/lib/location/coordinates':loadModule('../src/lib/location/coordinates.ts',{}),
   '@/lib/auth/permissions':{},'@/lib/workflow/access':{},'@/lib/workflow/followUps':{},'@/lib/measurements/registrationOpening':{},
@@ -294,3 +305,28 @@ for(const endpoint of ['sales-intake','offline'])test(`${endpoint} requires a li
   assert.equal(writes.at(-1).branch,branch);assert.equal(Object.hasOwn(writes.at(-1),'governorate'),false);
  }
 });
+
+for (const endpoint of ['sales-intake','offline']) for (const role of ['Admin','Sales Director','Company Owner','CEO','Indoor Sales','Sales Manager','Outdoor Sales']) for (const branch of ['Najaf','Karkh','Governorates']) {
+ test(`${endpoint}: ${role} with Najaf office cannot forge another project branch (${branch})`, async () => {
+  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',writes=[];
+  const globalRole=['Admin','Sales Director','Company Owner'].includes(role);
+  const route=loadModule(`../src/app/api/${endpoint}/route.ts`,{
+   'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200})}},
+   '@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role,profile:{branch:globalRole?null:'Najaf'},user:{id}})},
+   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
+   '@/lib/location/coordinates':loadModule('../src/lib/location/coordinates.ts',{}),
+   '@/lib/auth/permissions':loadModule('../src/lib/auth/permissions.ts',{}),
+   '@/lib/workflow/access':{salesRoles:[role]},
+   '@/lib/workflow/followUps':{},'@/lib/measurements/registrationOpening':{},
+   '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{writes.push({name,args});return{data:{projectId:id},error:null};}})},
+  });
+  const payload={client:{clientType:'individual',clientName:'Branch fixture',mobile:'07000000000'},project:{branch,...(branch==='Governorates'?{governorate:'البصرة'}:{}),buildingType:'villa_house',structureReadiness:'ready',locationLatitude:33.3,locationLongitude:44.4,...(['Indoor Sales','Sales Manager'].includes(role)?{assignedOutdoorSalesId:id}:{})}};
+  const body=endpoint==='offline'?{id,userId:id,projectId:id,action:'register',recordedAt:new Date().toISOString(),payload}:payload;
+  const response=await route.POST({json:async()=>body});
+  const allowed=globalRole||branch==='Najaf';
+  assert.equal(response.status,allowed?(endpoint==='offline'?200:201):400);
+  assert.equal(writes.length,allowed?1:0,'An out-of-office registration must not reach the database write');
+  if(allowed)assert.equal(writes[0].args.p_payload.project.branch,branch);
+  else assert.match(response.body.error,/project from your branch/);
+ });
+}

@@ -52,7 +52,7 @@ test('Outdoor Sales cannot rename created, assigned or historical project names'
 
 test('Indoor Sales can rename accessible project titles without owning the project', () => {
   const { canRenameProject } = modules()('lib/workflow/projectName');
-  for (const branch of ['Karkh','Rasafa']) {
+  for (const branch of ['Karkh','Rasafa','Najaf']) {
     const indoor = { ...actor, role: 'Indoor Sales', branch };
     assert.equal(canRenameProject({ ...project, created_by: 'outdoor', branch }, indoor), true);
     assert.equal(canRenameProject({ ...project, branch: 'Governorates' }, indoor), branch === 'Karkh');
@@ -61,7 +61,7 @@ test('Indoor Sales can rename accessible project titles without owning the proje
     assert.equal(canRenameProject({ ...project, branch: null }, indoor), false);
   }
   assert.equal(canRenameProject({ ...project, branch: 'Karkh' }, { ...actor, role: 'Indoor Sales', branch: null }), false);
-  assert.equal(canRenameProject({ ...project, branch: 'Rasafa' }, { ...actor, role: 'Sales Manager' }), true);
+  assert.equal(canRenameProject({ ...project, branch: 'Rasafa' }, { ...actor, role: 'Sales Manager', branch: 'Rasafa' }), true);
 });
 
 test('project names accept trimmed Arabic and English and reject empty, oversized or non-string values', () => {
@@ -137,8 +137,8 @@ for(const path of ['workspace','offline'])test(`${path} refuses Indoor title cha
   }
 });
 
-for(const path of ['workspace','offline'])test(`${path} retains Sales Manager's broader project access`,async()=>{
-  const x=endpoint(path,{role:'Sales Manager',branch:null,currentProject:{...project,created_by:'outdoor-creator',branch:'Rasafa'}});
+for(const path of ['workspace','offline'])test(`${path} permits Sales Manager project titles only in the assigned office`,async()=>{
+  const x=endpoint(path,{role:'Sales Manager',branch:'Rasafa',currentProject:{...project,created_by:'outdoor-creator',branch:'Rasafa'}});
   const response=path==='workspace'?await x.api.PATCH(request(rename)):await x.api.POST(request(savedRename));
   assert.equal(response.status,200);
   assert.equal(x.calls.length,1);

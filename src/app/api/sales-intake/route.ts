@@ -1,4 +1,5 @@
-import { normalizeProjectBranch,normalizeProjectGovernorate } from '@/lib/intake/projectBranch';
+import { normalizeProjectBranch, normalizeProjectGovernorate } from '@/lib/intake/projectBranch';
+import { canAccessProjectBranch, hasGlobalProjectAccess } from '@/lib/auth/projectBranchAccess';
 import { normalizeBuildingType } from '@/lib/intake/buildingType';
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
 import { normalizeLegacyOutdoorSalesId } from '@/lib/intake/legacyOutdoorSales';
@@ -31,7 +32,9 @@ export async function POST(request: Request) {
   let buildingType;
   try{buildingType=normalizeBuildingType(body?.project?.buildingType,auth.role==='Outdoor Sales');}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   let branch;
-  if(auth.role==='Outdoor Sales'){try{branch=normalizeProjectBranch(body?.project?.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}}
+  if(!hasGlobalProjectAccess(auth.role)&&!auth.profile?.branch)return NextResponse.json({error:'Ask Admin to assign your branch before creating a project.'},{status:400});
+  try{branch=normalizeProjectBranch(body?.project?.branch===undefined?auth.profile?.branch:body.project.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+  if(!canAccessProjectBranch({role:auth.role,branch:auth.profile?.branch},branch))return NextResponse.json({error:'Choose a project from your branch.'},{status:400});
   let governorate;
   try{governorate=normalizeProjectGovernorate(branch,body?.project?.governorate);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   let legacyOutdoorSalesId;
@@ -40,16 +43,12 @@ export async function POST(request: Request) {
   if(assignee&&(typeof assignee!=='string'||!/^[0-9a-f-]{36}$/i.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
   if((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager')&&!assignee)return NextResponse.json({error:'Choose yourself or an Outdoor Sales employee to collect the initial measurements.'},{status:400});
   const admin = createAdminClient();
-  if ((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager')) {
-    const profile = await admin.from('profiles').select('branch').eq('id', auth.user.id).single();
-    if (profile.error) return NextResponse.json({error:'Unable to load your employee branch.'}, {status:503});
-    if (!profile.data.branch) return NextResponse.json({error:'Ask Admin to assign your Karkh or Rasafa branch before creating a project.'}, {status:400});
-  }
-  if(assignee && !((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager') && assignee===auth.user.id)){const employee=await admin.from('profiles').select('id').eq('id',assignee).eq('role','Outdoor Sales').eq('is_active',true).eq('status','Active').maybeSingle();if(employee.error||!employee.data)return NextResponse.json({error:'Choose an active Outdoor Sales employee.'},{status:400});}
+  if(assignee && !((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager') && assignee===auth.user.id)){const employee=await admin.from('profiles').select('id,branch').eq('id',assignee).eq('role','Outdoor Sales').eq('is_active',true).eq('status','Active').maybeSingle();if(employee.error||!employee.data)return NextResponse.json({error:'Choose an active Outdoor Sales employee.'},{status:400});if(!canAccessProjectBranch({role:'Outdoor Sales',branch:employee.data.branch},branch))return NextResponse.json({error:'Choose an employee from the project branch.'},{status:400});}
   if (legacyOutdoorSalesId) {
-    const owner = await admin.from('profiles').select('id').eq('id', legacyOutdoorSalesId).eq('role', 'Outdoor Sales').eq('is_active', true).eq('status', 'Active').maybeSingle();
+    const owner = await admin.from('profiles').select('id,branch').eq('id', legacyOutdoorSalesId).eq('role', 'Outdoor Sales').eq('is_active', true).eq('status', 'Active').maybeSingle();
     if (owner.error) return NextResponse.json({error:'Unable to verify the original project owner. Please try again.'}, {status:503});
     if (!owner.data) return NextResponse.json({error:'Choose an active Outdoor Sales employee as the original project owner.'}, {status:400});
+    if (!canAccessProjectBranch({role:'Outdoor Sales',branch:owner.data.branch},branch)) return NextResponse.json({error:'Choose an employee from the project branch.'}, {status:400});
   }
 
   const { data, error } = await admin.rpc('register_sales_project', {

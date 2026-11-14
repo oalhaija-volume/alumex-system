@@ -22,20 +22,21 @@ const helperPath = '../src/lib/dashboard/outdoorSalesCoverage.ts';
 const routePath = '../src/app/api/outdoor-sales-coverage/route.ts';
 const { outdoorSalesCoverage } = load(helperPath);
 const profiles = [
-  { id: 'west-starter', full_name: '  Another employee  ', username: 'west', outdoor_rotation_start_branch: 'Karkh' },
-  { id: 'east-starter', full_name: 'موظف آخر', username: 'east', outdoor_rotation_start_branch: 'Rasafa' },
+  { id: 'west-starter', full_name: '  Another employee  ', username: 'west', branch: 'Karkh', outdoor_rotation_start_branch: 'Karkh' },
+  { id: 'east-starter', full_name: 'موظف آخر', username: 'east', branch: 'Rasafa', outdoor_rotation_start_branch: 'Rasafa' },
+  { id: 'najaf-employee', full_name: 'موظف النجف', username: 'najaf', branch: 'Najaf', outdoor_rotation_start_branch: null },
 ];
 
 for (const [instant, expected] of [
   ['2026-10-01T00:00:00+03:00', ['Karkh', 'Rasafa']],
   ['2026-10-15T20:59:59.999Z', ['Karkh', 'Rasafa']],
-  ['2026-10-15T21:00:00.000Z', ['Rasafa', 'Karkh']],
-  ['2026-10-31T20:59:59.999Z', ['Rasafa', 'Karkh']],
+  ['2026-10-15T21:00:00.000Z', ['Karkh', 'Rasafa']],
+  ['2026-10-31T20:59:59.999Z', ['Karkh', 'Rasafa']],
   ['2026-10-31T21:00:00.000Z', ['Karkh', 'Rasafa']],
-  ['2028-02-29T23:59:59.999+03:00', ['Rasafa', 'Karkh']],
+  ['2028-02-29T23:59:59.999+03:00', ['Karkh', 'Rasafa']],
   ['2028-03-01T00:00:00+03:00', ['Karkh', 'Rasafa']],
 ]) {
-  test(`coverage uses Baghdad branch assignments at ${instant}`, () => {
+  test(`coverage keeps employee office assignments at ${instant}`, () => {
     const date = new Date(instant);
     const before = structuredClone(profiles);
     assert.deepEqual(outdoorSalesCoverage(profiles, date), {
@@ -43,6 +44,7 @@ for (const [instant, expected] of [
       staff: [
         { id: 'west-starter', name: 'Another employee', branch: expected[0] },
         { id: 'east-starter', name: 'موظف آخر', branch: expected[1] },
+        { id: 'najaf-employee', name: 'موظف النجف', branch: 'Najaf' },
       ],
     });
     assert.deepEqual(profiles, before, 'Coverage must not modify employee profiles');
@@ -52,8 +54,8 @@ for (const [instant, expected] of [
 test('coverage derives arbitrary employee names and assignments from profile data', () => {
   const date = new Date('2026-10-10T12:00:00+03:00');
   const rows = [
-    { id: 'new-1', full_name: '  New team member  ', username: 'unused', outdoor_rotation_start_branch: 'Rasafa' },
-    { id: 'new-2', full_name: null, username: '  field.employee  ', outdoor_rotation_start_branch: 'Karkh' },
+    { id: 'new-1', full_name: '  New team member  ', username: 'unused', branch: 'Rasafa', outdoor_rotation_start_branch: 'Karkh' },
+    { id: 'new-2', full_name: null, username: '  field.employee  ', branch: 'Karkh', outdoor_rotation_start_branch: 'Rasafa' },
     { id: 'new-3', full_name: ' \t ', username: '  another.employee  ', outdoor_rotation_start_branch: null },
     { id: 'new-4', full_name: null, username: '  ', outdoor_rotation_start_branch: null },
     { id: 'new-5', full_name: null, username: null, outdoor_rotation_start_branch: null },
@@ -70,11 +72,11 @@ test('coverage derives arbitrary employee names and assignments from profile dat
   });
 });
 
-test('coverage marks missing or invalid rotation assignments as unconfigured', () => {
+test('coverage marks missing employee offices as unconfigured regardless of legacy rotation assignments', () => {
   const date = new Date('2026-10-20T12:00:00+03:00');
   for (const seed of [undefined, null, '', 'karkh', 'Governorates', 7]) {
-    const data = outdoorSalesCoverage([{ id: 'unconfigured', full_name: 'Mohammad', username: 'mohd', outdoor_rotation_start_branch: seed, branch: 'Karkh' }], date);
-    assert.deepEqual(data.staff, [{ id: 'unconfigured', name: 'Mohammad', branch: null }], 'Names and fixed branches must not grant a monthly assignment');
+    const data = outdoorSalesCoverage([{ id: 'unconfigured', full_name: 'Mohammad', username: 'mohd', outdoor_rotation_start_branch: seed, branch: null }], date);
+    assert.deepEqual(data.staff, [{ id: 'unconfigured', name: 'Mohammad', branch: null }], 'Legacy rotation seeds must not grant an office assignment');
   }
 });
 
@@ -92,6 +94,7 @@ function fixedDate(instant) {
 const roster = [
   { ...profiles[0], role: 'Outdoor Sales', is_active: true, status: 'Active', email: 'hidden@example.invalid', password_hash: 'private-hash', phone: 'private-phone' },
   { ...profiles[1], role: 'Outdoor Sales', is_active: true, status: 'Active' },
+  { ...profiles[2], role: 'Outdoor Sales', is_active: true, status: 'Active' },
   { id: 'new-unconfigured', full_name: null, username: ' new.employee ', outdoor_rotation_start_branch: null, role: 'Outdoor Sales', is_active: true, status: 'Active' },
   { ...profiles[0], id: 'inactive-outdoor', is_active: false, status: 'Active', role: 'Outdoor Sales' },
   { ...profiles[0], id: 'disabled-outdoor', is_active: true, status: 'Inactive', role: 'Outdoor Sales' },
@@ -99,7 +102,7 @@ const roster = [
   { ...profiles[0], id: 'sales-manager', is_active: true, status: 'Active', role: 'Sales Manager' },
 ];
 
-function endpointFixture({ role = 'Admin', authStatus, rows = roster, error = null, DateClass = fixedDate('2026-10-15T21:00:00.000Z') } = {}) {
+function endpointFixture({ role = 'Admin', branch = 'Karkh', authStatus, rows = roster, error = null, DateClass = fixedDate('2026-10-15T21:00:00.000Z') } = {}) {
   const reads = [], authorizations = [];
   let clientCreations = 0;
   const route = load(routePath, {
@@ -109,7 +112,7 @@ function endpointFixture({ role = 'Admin', authStatus, rows = roster, error = nu
       assert.deepEqual([...allowed].sort(), [...leaderRoles].sort(), 'Coverage may be authorized only for the four leadership roles');
       return authStatus || !allowed.includes(role)
         ? { ok: false, status: authStatus ?? 403, error: 'Access denied' }
-        : { ok: true, role, user: { id: 'leader' } };
+        : { ok: true, role, profile: { branch }, user: { id: 'leader' } };
     } },
     '@/lib/supabase/admin': { createAdminClient: () => {
       clientCreations++;
@@ -159,19 +162,21 @@ for (const role of leaderRoles) {
     const x = endpointFixture({ role });
     const result = await x.route.GET();
     assert.equal(result.status, 200);
+    const staff = [
+      { id: 'west-starter', name: 'Another employee', branch: 'Karkh' },
+      { id: 'east-starter', name: 'موظف آخر', branch: 'Rasafa' },
+      { id: 'najaf-employee', name: 'موظف النجف', branch: 'Najaf' },
+      { id: 'new-unconfigured', name: 'new.employee', branch: null },
+    ];
     assert.deepEqual(result.body, {
       asOf: '2026-10-15T21:00:00.000Z',
-      staff: [
-        { id: 'west-starter', name: 'Another employee', branch: 'Rasafa' },
-        { id: 'east-starter', name: 'موظف آخر', branch: 'Karkh' },
-        { id: 'new-unconfigured', name: 'new.employee', branch: null },
-      ],
+      staff: role === 'CEO' ? staff.filter(employee => employee.branch === 'Karkh') : staff,
     });
     assert.equal(x.clientCreations, 1);
     assert.equal(x.reads.length, 1);
     assert.equal(x.reads[0].table, 'profiles');
-    assert.deepEqual(x.reads[0].selected.split(',').map(column => column.trim()).sort(), ['id', 'full_name', 'username', 'outdoor_rotation_start_branch'].sort());
-    assert.deepEqual(x.reads[0].filters.map(pair => pair.join(':')).sort(), ['role:Outdoor Sales', 'is_active:true', 'status:Active'].sort());
+    assert.deepEqual(x.reads[0].selected.split(',').map(column => column.trim()).sort(), ['id', 'full_name', 'username', 'branch', 'outdoor_rotation_start_branch'].sort());
+    assert.deepEqual(x.reads[0].filters.map(pair => pair.join(':')).sort(), ['role:Outdoor Sales', 'is_active:true', 'status:Active', ...(role === 'CEO' ? ['branch:Karkh'] : [])].sort());
     const headers = new Headers(result.headers);
     assert.match(headers.get('Cache-Control'), /private/);
     assert.match(headers.get('Cache-Control'), /no-store/);
@@ -209,6 +214,6 @@ test('coverage timestamp and all employee assignments use one server instant acr
   const result = await x.route.GET();
   assert.equal(result.status, 200);
   assert.equal(result.body.asOf, '2026-10-15T20:59:59.999Z');
-  assert.deepEqual(result.body.staff.map(employee => employee.branch), ['Karkh', 'Rasafa', null]);
+  assert.deepEqual(result.body.staff.map(employee => employee.branch), ['Karkh', 'Rasafa', 'Najaf', null]);
   assert.equal(instants, 1, 'Timestamp and branch calculations must share the same captured time');
 });

@@ -24,9 +24,9 @@ function modules(dependencies = {}) {
 const actorId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const teammateId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const projectId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
-const actor = { id: actorId, name: 'Outdoor employee', role: 'Outdoor Sales', outdoorTeamMemberIds: [actorId, teammateId] };
+const actor = { id: actorId, name: 'Outdoor employee', role: 'Outdoor Sales', branch: 'Najaf', outdoorTeamMemberIds: [actorId, teammateId] };
 const project = {
-  id: projectId, project_name: 'Shared measurement task', project_number: 'PRJ-OWN-ENTRY', created_by: teammateId,
+  id: projectId, branch: 'Najaf', project_name: 'Shared measurement task', project_number: 'PRJ-OWN-ENTRY', created_by: teammateId,
   registeredBy: 'Teammate', assigned_outdoor_sales_id: teammateId, assignedOutdoorSales: 'Teammate',
   structure_readiness: 'ready', sales_status: 'new_lead', address: 'Baghdad', phone: null,
   next_follow_up_at: null, project_notes: 'Preserved project note',

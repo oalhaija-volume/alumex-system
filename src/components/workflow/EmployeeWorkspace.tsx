@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import { useCurrentRole } from '@/components/auth/useCurrentRole';
+import { hasGlobalProjectAccess } from '@/lib/auth/projectBranchAccess';
+import { employeeBranches, type EmployeeBranch } from '@/lib/intake/projectBranch';
 import { api, button, card, field, Notice, secondary, useResource, Workspace } from './ui';
 
 type Employee = {
@@ -11,7 +13,7 @@ type Employee = {
   username: string | null;
   email: string;
   role: string;
-  branch: "Karkh" | "Rasafa" | null;
+  branch: EmployeeBranch | null;
   status: string;
   is_active: boolean;
   updated_at: string;
@@ -74,7 +76,7 @@ function EmployeeEditor({ employee, isAdmin, isSelf, onCancel, onSaved }: {
   const [resetting, setResetting] = useState(false);
   const [selectedRole, setSelectedRole] = useState(employee.role);
   const accessLocked = isSelf || primaryAdmin(employee);
-  const options = [...employeeRoles, ...(isAdmin ? ['Admin', 'Company Owner'] : [])];
+  const options = [...employeeRoles.filter(role => isAdmin || !hasGlobalProjectAccess(role)), ...(isAdmin ? ['Admin', 'Company Owner'] : [])];
   if (!options.includes(employee.role)) options.push(employee.role);
   useEffect(() => { nameInput.current?.focus(); }, []);
 
@@ -89,8 +91,7 @@ function EmployeeEditor({ employee, isAdmin, isSelf, onCancel, onSaved }: {
         body: JSON.stringify({ id: employee.id, action: 'update-profile', updatedAt: employee.updated_at,
           fullName: values.get('fullName'), username: values.get('username'),
           role: accessLocked ? employee.role : values.get('role'),
-          ...(isAdmin ? { branch: selectedRole === 'Outdoor Sales' ? null
-            : (selectedRole === 'Indoor Sales' || selectedRole === 'Sales Manager') ? values.get('branch') : employee.branch ?? null } : {}),
+          ...(isAdmin ? { branch: hasGlobalProjectAccess(selectedRole) ? null : values.get('branch') } : {}),
           isActive: accessLocked ? employee.is_active : values.get('status') === 'Active' }),
       });
       onSaved(result.user);
@@ -110,10 +111,10 @@ function EmployeeEditor({ employee, isAdmin, isSelf, onCancel, onSaved }: {
           <label>{term('Role')}<select required name="role" value={selectedRole} onChange={event => setSelectedRole(event.target.value)} disabled={accessLocked} className={`${field} disabled:bg-slate-100`}>
             {options.map(role => <option key={role} value={role}>{term(role)}</option>)}
           </select></label>
-          {isAdmin && (selectedRole === 'Indoor Sales' || selectedRole === 'Sales Manager') && <label>{term('Branch')}<select name="branch" defaultValue={(employee.role === 'Indoor Sales' || employee.role === 'Sales Manager') ? employee.branch ?? '' : ''} required className={field}>
-            <option value="">{term('Not assigned')}</option><option value="Karkh">{term('Karkh')}</option><option value="Rasafa">{term('Rasafa')}</option>
-          </select><span className="mt-2 block text-xs text-slate-500">{term('New projects use this branch. Existing projects keep their original branch.')}</span></label>}
-          {selectedRole === 'Outdoor Sales' && <p className="self-center text-sm text-slate-600">{term('Outdoor Sales serve both Karkh and Rasafa.')}</p>}
+          {isAdmin && !hasGlobalProjectAccess(selectedRole) && <label>{term('Branch')}<select name="branch" aria-label={term('Branch')} aria-describedby={`employee-branch-help-${employee.id}`} defaultValue={employee.branch ?? ''} required className={field}>
+            <option value="">{term('Not assigned')}</option>{employeeBranches.map(branch => <option key={branch} value={branch}>{term(branch)}</option>)}
+          </select><span id={`employee-branch-help-${employee.id}`} className="mt-2 block text-xs text-slate-500">{term('The employee can access projects from this branch only. Existing projects keep their original branch.')}</span></label>}
+          {hasGlobalProjectAccess(selectedRole) && <p className="self-center text-sm text-slate-600">{term('Access to all branches')}</p>}
           <label>{term('Account status')}<select name="status" defaultValue={employee.is_active ? 'Active' : 'Inactive'} disabled={accessLocked} className={`${field} disabled:bg-slate-100`}>
             <option value="Active">{term('Active')}</option><option value="Inactive">{term('Inactive')}</option>
           </select></label>
@@ -166,16 +167,18 @@ export function EmployeeWorkspace() {
 
   return <Workspace title={term('Employees')} description={term('Add employees, update their information, and manage system access.')}>
     <Notice error={error} />
+    <p className="mb-5 text-sm leading-6 text-slate-600">{term('Employees can access projects from their assigned branch. Admin, Sales Director and Company Owner can access all branches.')}</p>
     {notice && <p role="status" className="mb-5 rounded-md bg-green-50 p-4 text-sm text-green-800">{term(notice)}</p>}
     {canEditEmployees&&<form onSubmit={submit} aria-label={term('Add employee')} className={card}>
       <fieldset disabled={saving}>
         <div className="grid gap-5 sm:grid-cols-2">
           <label>{term('Employee name')}<input required name="fullName" maxLength={150} autoComplete="off" className={field} /></label>
-          <label>{term('Role')}<select required name="role" aria-label={term('Role')} value={newRole} onChange={event => setNewRole(event.target.value)} className={field}><option value="">{term('Choose role')}</option>{[...employeeRoles, ...(isAdmin ? ['Admin', 'Company Owner'] : [])].map(option => <option key={option} value={option}>{term(option)}</option>)}</select></label>
-          {isAdmin && (newRole === 'Indoor Sales' || newRole === 'Sales Manager') && <label>{term('Branch')}<select name="branch" required className={field}>
-            <option value="">{term('Not assigned')}</option><option value="Karkh">{term('Karkh')}</option><option value="Rasafa">{term('Rasafa')}</option>
-          </select><span className="mt-2 block text-xs text-slate-500">{term('Required for Indoor Sales. New quotations and contracts show this branch.')}</span></label>}
-          {newRole === 'Outdoor Sales' && <p className="self-center text-sm text-slate-600">{term('Outdoor Sales serve both Karkh and Rasafa.')}</p>}
+          <label>{term('Role')}<select required name="role" aria-label={term('Role')} value={newRole} onChange={event => setNewRole(event.target.value)} className={field}><option value="">{term('Choose role')}</option>{[...employeeRoles.filter(option => isAdmin || !hasGlobalProjectAccess(option)), ...(isAdmin ? ['Admin', 'Company Owner'] : [])].map(option => <option key={option} value={option}>{term(option)}</option>)}</select></label>
+          {isAdmin && newRole && !hasGlobalProjectAccess(newRole) && <label>{term('Branch')}<select name="branch" aria-label={term('Branch')} aria-describedby="new-employee-branch-help" required className={field}>
+            <option value="">{term('Not assigned')}</option>{employeeBranches.map(branch => <option key={branch} value={branch}>{term(branch)}</option>)}
+          </select><span id="new-employee-branch-help" className="mt-2 block text-xs text-slate-500">{term('Required for employees who can access one branch only.')}</span></label>}
+          {newRole && hasGlobalProjectAccess(newRole) && <p className="self-center text-sm text-slate-600">{term('Access to all branches')}</p>}
+          {!isAdmin && newRole && <p className="self-center text-sm text-slate-600">{term('New employees use your branch. Only Admin can change branch assignments.')}</p>}
           <label>{term('Username')}<input required name="username" dir="ltr" autoComplete="off" pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]{1,62}[a-zA-Z0-9]" className={field} /></label>
           <label>{term('Password')}<input required name="password" aria-label={term('Password')} aria-describedby="password-help" type={show ? 'text' : 'password'} autoComplete="new-password" minLength={8} className={field} /><span id="password-help" className="mt-2 block text-xs text-slate-500">{term('At least 8 characters. Passwords are never shown in the employee list.')}</span></label>
         </div>
@@ -188,10 +191,10 @@ export function EmployeeWorkspace() {
       <button type="button" className={secondary} disabled={editingId !== null || loading} onClick={() => { setError(''); void reload().catch(cause => setError(cause instanceof Error ? cause.message : 'Unable to load employees.')); }}>{term('Refresh employees')}</button>
     </div>
     {loading ? <p>{term('Loading employees…')}</p> : !data?.users.length ? <p className={card}>{term('No employees to display.')}</p> : <div className="space-y-3">{data.users.map(employee => {
-      const editable = isAdmin || (role === 'HR' && !['Admin','Company Owner'].includes(employee.role??'') && !primaryAdmin(employee));
+      const editable = isAdmin || (role === 'HR' && !hasGlobalProjectAccess(employee.role) && !primaryAdmin(employee));
       return <article key={employee.id} className={card}>
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0"><h3 className="break-words font-semibold">{employee.full_name || employee.username}</h3><p dir="ltr" className="mt-1 break-all text-sm text-slate-500">{employee.username}</p><p className="mt-2 text-sm text-slate-600">{term(employee.role)} · {term(employee.status)}</p>{employee.role === 'Outdoor Sales' ? <p className="mt-2 text-sm font-medium text-slate-700">{term('Both branches')}</p> : ((employee.role === 'Indoor Sales' || employee.role === 'Sales Manager') || employee.branch) && <p className="mt-2 text-sm font-medium text-slate-700">{term('Branch')}: {term(employee.branch ?? 'Not assigned')}</p>}</div>
+          <div className="min-w-0"><h3 className="break-words font-semibold">{employee.full_name || employee.username}</h3><p dir="ltr" className="mt-1 break-all text-sm text-slate-500">{employee.username}</p><p className="mt-2 text-sm text-slate-600">{term(employee.role)} · {term(employee.status)}</p><p className="mt-2 text-sm font-medium text-slate-700">{hasGlobalProjectAccess(employee.role) ? term('Access to all branches') : <>{term('Branch')}: {term(employee.branch ?? 'Not assigned')}</>}</p></div>
           {editable && <button type="button" className={secondary} aria-label={term('Edit {name}', { name: employee.full_name || employee.username || term('Employee') })} aria-expanded={editingId === employee.id} disabled={editingId !== null} onClick={event => { editButton.current = event.currentTarget; setEditingId(employee.id); setNotice(''); }}>{term('Edit')}</button>}
         </div>
         {editingId === employee.id && <EmployeeEditor employee={employee} isAdmin={isAdmin} isSelf={employee.id === userId} onCancel={closeEditor} onSaved={saved} />}

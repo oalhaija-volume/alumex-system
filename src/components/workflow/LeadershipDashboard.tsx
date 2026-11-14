@@ -3,6 +3,7 @@ import { useProjectRegistrationFilters } from './useProjectRegistrationFilters';
 import { useOutdoorSalesProjectFilters } from './useOutdoorSalesProjectFilters';
 import { OutdoorSalesProjectFilter } from './OutdoorSalesProjectFilter';
 import { projectOutdoorSalesOrigin } from '@/lib/dashboard/outdoorProjectFilters';
+import { projectBranchLabels } from '@/lib/intake/projectBranch';
 import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDelayNotice';
 
 import { DashboardProjectFilters } from './DashboardProjectFilters';
@@ -91,7 +92,7 @@ function ProjectRow({ project, data, leadership, overdue, busy, onDelete, onProj
           <h3 id={`project-name-${project.id}`} className="min-w-0 break-words text-base font-semibold leading-7 text-slate-950 [overflow-wrap:anywhere]">
             <Link href={action.href} className="rounded-sm hover:text-blue-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">{project.project_name}</Link>
           </h3>
-          <span className="text-sm text-slate-600"><bdi>{term(project.project_number)}</bdi>{project.branch && <span> · {term(project.branch === 'Governorates' ? 'Governorates' : project.branch === 'Karkh' ? 'From Karkh' : 'From Rasafa')}{project.governorate && <> · <bdi>{project.governorate}</bdi></>}</span>}</span>
+          <span className="text-sm text-slate-600"><bdi>{term(project.project_number)}</bdi>{project.branch && <span> · {term(projectBranchLabels[project.branch])}{project.governorate && <> · <bdi>{project.governorate}</bdi></>}</span>}</span>
           {project.pending && <span className="text-sm text-slate-600">{term('Saved on device')}</span>}
           {project.client_name && <p className="basis-full break-words text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]">{term('Client name')}: <bdi className="font-medium text-slate-800">{project.client_name}</bdi></p>}
         </div>

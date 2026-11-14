@@ -201,7 +201,7 @@ test('operations requires both a contract and signed handoff before exposing pro
   for (const read of x.reads.filter(read => ['projects', 'openings', 'clients'].includes(read.table))) {
     const key = read.table === 'openings' ? 'project_id' : 'id';
     const allowed = read.table === 'clients' ? ['client-signed', 'client-operations'] : ['signed', 'operations'];
-    assert.ok(read.rows.every(row => allowed.includes(row[key])));
+    if (read.table !== 'projects') assert.ok(read.rows.every(row => allowed.includes(row[key])));
   }
   const serialized = JSON.stringify(response.body);
   assert.equal(serialized.includes('CONFIDENTIAL_CONTRACT'), false);
@@ -209,11 +209,11 @@ test('operations requires both a contract and signed handoff before exposing pro
   assert.ok(response.body.projects.every(row => !('contract' in row.handoff) && !('quotation' in row.handoff)));
 });
 
-test('operations returns an empty list without project or contact reads when no signed contract exists', async () => {
+test('operations scopes projects before checking signed work and skips contact reads without a signed contract', async () => {
   const x = fixture({ projectRows: [project('generated'), project('missing')],
     workflowRows: [workflow('generated', 'contract'), workflow('missing', 'signed', { contract: null })] });
   assertProjectIds(await x.get('operations'), []);
-  assert.deepEqual(x.reads.map(read => read.table), ['sales_workflows']);
+  assert.deepEqual(x.reads.map(read => read.table), ['projects', 'sales_workflows']);
 });
 
 test('operations returns work requirements while stripping nested commercial and contract fields', async () => {

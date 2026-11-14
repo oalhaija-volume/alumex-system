@@ -1,4 +1,6 @@
 import { leadershipRoles } from '@/lib/auth/permissions';
+import { hasGlobalProjectAccess } from '@/lib/auth/projectBranchAccess';
+import { employeeBranches } from '@/lib/intake/projectBranch';
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/adminServer";
 import { isAppRole } from "@/lib/auth/roles";
@@ -43,17 +45,25 @@ export async function GET() {
   }
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+  const directoryBranch = roleCheck.profile?.branch;
+  if (!hasGlobalProjectAccess(roleCheck.role) && !employeeBranches.some(branch => branch === directoryBranch)) {
+    return NextResponse.json({ users: [] }, { headers: { "Cache-Control": "private, no-store" } });
+  }
+  let directory = admin
     .from("profiles")
     .select("id, email, username, full_name, role, branch, status, is_active, created_at, updated_at")
     .order("created_at", { ascending: false });
+  if (!hasGlobalProjectAccess(roleCheck.role)) directory = directory.eq("branch", directoryBranch);
+  const { data, error } = await directory;
 
   if (error) {
     if (isMissingUsernameColumn(error)) {
-      const { data: fallbackData, error: fallbackError } = await admin
+      let fallbackDirectory = admin
         .from("profiles")
         .select("id, email, full_name, role, branch, status, is_active, created_at, updated_at")
         .order("created_at", { ascending: false });
+      if (!hasGlobalProjectAccess(roleCheck.role)) fallbackDirectory = fallbackDirectory.eq("branch", directoryBranch);
+      const { data: fallbackData, error: fallbackError } = await fallbackDirectory;
 
       if (fallbackError) {
         return NextResponse.json({ error: fallbackError.message }, { status: 500 });
@@ -65,13 +75,13 @@ export async function GET() {
           username: null,
         })),
         warning: usernameColumnMissingError,
-      });
+      }, { headers: { "Cache-Control": "private, no-store" } });
     }
 
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ users: data ?? [] });
+  return NextResponse.json({ users: data ?? [] }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -112,16 +122,17 @@ export async function POST(request: Request) {
     );
   }
 
-  // Older employee forms may still submit a branch for Outdoor Sales.
-  const branch = role === "Outdoor Sales" || body?.branch === "" || body?.branch == null ? null : body.branch;
-  if (branch !== null && branch !== "Karkh" && branch !== "Rasafa") {
-    return NextResponse.json({ error: "Choose Karkh or Rasafa." }, { status: 400 });
+  const globalRole = hasGlobalProjectAccess(role);
+  if (roleCheck.role !== "Admin" && globalRole) {
+    return NextResponse.json({ error: "Only Admin can create accounts with access to all branches." }, { status: 403 });
   }
-  if (branch !== null && roleCheck.role !== "Admin") {
+  const requestedBranch = body?.branch === "" || body?.branch == null ? null : body.branch;
+  const branch = globalRole ? null : roleCheck.role === "Admin" ? requestedBranch : roleCheck.profile?.branch ?? null;
+  if (!globalRole && !employeeBranches.some(value => value === branch)) {
+    return NextResponse.json({ error: "Choose Karkh, Rasafa or Najaf." }, { status: 400 });
+  }
+  if (roleCheck.role !== "Admin" && requestedBranch !== null && requestedBranch !== branch) {
     return NextResponse.json({ error: "Only Admin can assign employee branches." }, { status: 403 });
-  }
-  if ((role === 'Indoor Sales' || role === 'Sales Manager') && roleCheck.role === "Admin" && branch === null) {
-    return NextResponse.json({ error: "Choose a branch for the Indoor Sales employee." }, { status: 400 });
   }
 
   if (!isValidUsername(username)) {
@@ -189,6 +200,7 @@ export async function POST(request: Request) {
         role,
         full_name: fullName || undefined,
         username,
+        branch,
         requires_password_change: false,
       },
     });
@@ -280,13 +292,16 @@ export async function PATCH(request: Request) {
       typeof body.updatedAt !== "string" || !Number.isFinite(Date.parse(body.updatedAt))) {
     return NextResponse.json({ error: "Enter a valid employee name, username, role and status." }, { status: 400 });
   }
-  const hasBranch = Object.hasOwn(body, "branch");
-  const branch = body.role === "Outdoor Sales" || body.branch === "" || body.branch == null ? null : body.branch;
-  if (hasBranch && branch !== null && branch !== "Karkh" && branch !== "Rasafa") {
-    return NextResponse.json({ error: "Choose Karkh or Rasafa." }, { status: 400 });
+  if (actor.role !== "Admin" && hasGlobalProjectAccess(body.role)) {
+    return NextResponse.json({ error: "Only Admin can assign roles with access to all branches." }, { status: 403 });
   }
+  const hasBranch = Object.hasOwn(body, "branch");
+  const branch = hasGlobalProjectAccess(body.role) ? null : body.branch === "" || body.branch == null ? null : body.branch;
   if (hasBranch && actor.role !== "Admin") {
     return NextResponse.json({ error: "Only Admin can assign employee branches." }, { status: 403 });
+  }
+  if (hasBranch && !hasGlobalProjectAccess(body.role) && !employeeBranches.some(value => value === branch)) {
+    return NextResponse.json({ error: "Choose Karkh, Rasafa or Najaf." }, { status: 400 });
   }
   const args = {
     p_actor: actor.user.id, p_employee: body.id, p_expected_updated_at: body.updatedAt,

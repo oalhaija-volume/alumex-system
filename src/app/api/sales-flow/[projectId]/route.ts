@@ -101,7 +101,7 @@ export async function POST(request:Request,context:Context){
    if((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager')){
     const creator=await admin.from('profiles').select('branch').eq('id',auth.user.id).single();
     if(creator.error)throw new Error('Unable to load your employee branch.');
-    if(creator.data.branch!=='Karkh'&&creator.data.branch!=='Rasafa')throw new Error('Ask Admin to assign your Karkh or Rasafa branch before generating a contract.');
+    if(creator.data.branch!=='Karkh'&&creator.data.branch!=='Rasafa'&&creator.data.branch!=='Najaf')throw new Error('Ask Admin to assign your branch before generating a contract.');
     branch=creator.data.branch;
    }
    const client=await admin.from('clients').select('name:client_name,mobile,client_type').eq('id',project.client_id).single();

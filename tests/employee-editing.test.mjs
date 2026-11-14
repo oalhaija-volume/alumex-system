@@ -11,22 +11,27 @@ function load(path, dependencies = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', source)(name => { if(name==='@/lib/auth/permissions') return load('../src/lib/auth/permissions.ts'); assert.ok(name in dependencies, name); return dependencies[name]; }, exports);
+  new Function('require', 'exports', source)(name => {
+    if(name==='@/lib/auth/permissions') return load('../src/lib/auth/permissions.ts');
+    if(name==='@/lib/auth/projectBranchAccess') return load('../src/lib/auth/projectBranchAccess.ts');
+    if(name==='@/lib/intake/projectBranch') return load('../src/lib/intake/projectBranch.ts');
+    assert.ok(name in dependencies, name); return dependencies[name];
+  }, exports);
   return exports;
 }
 const roles = load('../src/lib/auth/roles.ts');
 const username = load('../src/lib/auth/username.ts');
 const id = '11111111-1111-4111-8111-111111111111';
 const input = { id, action: 'update-profile', fullName: 'Updated Employee', username: 'updated.user', role: 'CEO', isActive: true, updatedAt: '2026-10-14T10:00:00.123456Z' };
-function route({ role = 'Admin', authenticated = true, databaseError = null, resetError = null, employee = {id} } = {}) {
+function route({ role = 'Admin', branch = 'Karkh', authenticated = true, databaseError = null, resetError = null, employee = {id} } = {}) {
   const calls = [];
   return { calls, api: load('../src/app/api/admin/users/route.ts', {
     'next/server': { NextResponse: {json:(body, options)=>({body,status:options?.status??200})} },
-    '@/lib/auth/adminServer': {requireRole:async allowed=> !authenticated ? {ok:false,status:401,error:'Authentication required'} : !allowed.includes(role) ? {ok:false,status:403,error:'Denied'} : {ok:true,role,user:{id:'actor'}}},
+    '@/lib/auth/adminServer': {requireRole:async allowed=> !authenticated ? {ok:false,status:401,error:'Authentication required'} : !allowed.includes(role) ? {ok:false,status:403,error:'Denied'} : {ok:true,role,user:{id:'actor'},profile:{branch}}},
     '@/lib/auth/roles':roles, '@/lib/auth/username':username,
     '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
     '@/lib/supabase/admin':{createAdminClient:()=>({
-      rpc:async(name,args)=>{calls.push({name,args});return {data:{id,username:args.p_username,role:args.p_role},error:databaseError};},
+      rpc:async(name,args)=>{calls.push({name,args});return {data:name.endsWith('_ready')?true:{id,username:args.p_username,role:args.p_role},error:databaseError};},
       from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:employee}),
         upsert:async(profile)=>{calls.push({profile});return {error:null};}}),
       auth:{admin:{
@@ -144,7 +149,7 @@ test('legacy Sales User profiles can retain their role while editing information
   assert.equal(result.status,200);assert.equal(calls[0].args.p_role,'Sales User');
 });
 
-for (const branch of ['Karkh','Rasafa']) test(`Admin saves ${branch} together with the employee profile`,async()=>{
+for (const branch of ['Karkh','Rasafa','Najaf']) test(`Admin saves ${branch} together with the employee profile`,async()=>{
  const {api,calls}=route();
  const result=await api.PATCH(request({...input,role:'Indoor Sales',branch}));
  assert.equal(result.status,200);assert.equal(calls[0].name,'update_employee_profile_with_branch');
@@ -159,6 +164,7 @@ test('employee branch selector is available to Admin and hidden from HR',()=>{
  assert.match(render('Admin',true),/<select name="branch"/);
  assert.match(render('Admin',true),/<option value="Karkh"[^>]*>Karkh/);
  assert.match(render('Admin',true),/<option value="Rasafa">Rasafa/);
+ assert.match(render('Admin',true),/<option value="Najaf">Najaf/);
  assert.doesNotMatch(render('HR',true),/<select name="branch"/);
 });
 for (const branch of ['Karkh','Rasafa',null]) test(`printed document renders the stored branch: ${branch}`,()=>{
@@ -174,21 +180,21 @@ for (const branch of ['Karkh','Rasafa',null]) test(`printed document renders the
  if(branch)assert.match(markup,new RegExp('From '+branch));else assert.doesNotMatch(markup,/From Karkh|From Rasafa/);
 });
 
-for (const branch of ['Karkh', 'Rasafa', null]) test(`Outdoor profile edits discard old branch: ${branch}`, async () => {
+for (const branch of ['Karkh', 'Rasafa', 'Najaf']) test(`Outdoor profile edits retain the selected office branch: ${branch}`, async () => {
  const {api,calls}=route();
  const result=await api.PATCH(request({...input,role:'Outdoor Sales',branch}));
- assert.equal(result.status,200); assert.equal(calls[0].args.p_branch,null);
+ assert.equal(result.status,200); assert.equal(calls[0].args.p_branch,branch);
 });
-for (const role of ['Admin','HR']) test(`${role} can switch an employee to Outdoor without assigning a branch`,async()=>{
+for (const role of ['Admin','HR']) test(`${role} can switch an employee to Outdoor while retaining its stored branch`,async()=>{
  const {api,calls}=route({role});
  assert.equal((await api.PATCH(request({...input,role:'Outdoor Sales'}))).status,200);
  assert.equal(calls[0].name,'update_employee_profile');
  assert.equal(calls[0].args.p_role,'Outdoor Sales');
 });
-test('Outdoor employee editor and card show both branches even with obsolete profile metadata',()=>{
+test('Outdoor employee editor and card show the assigned office and allow Admin to choose Najaf',()=>{
  const markup=render('Admin',true,'Outdoor Sales');
- assert.match(markup,/Both branches/);
- assert.match(markup,/Outdoor Sales serve both Karkh and Rasafa/);
- assert.doesNotMatch(markup,/<select name="branch"/);
- assert.doesNotMatch(markup,/Branch: Karkh/);
+ assert.doesNotMatch(markup,/Both branches|Outdoor Sales serve both Karkh and Rasafa/);
+ assert.match(markup,/<select name="branch"/);
+ assert.match(markup,/<option value="Najaf">Najaf/);
+ assert.match(markup,/Branch: Karkh/);
 });

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth/adminServer';
 import { appRoles } from '@/lib/auth/roles';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { indoorProjectBranches } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, projectBranchesForActor } from '@/lib/auth/projectBranchAccess';
 import { outdoorProjectFilter } from '@/lib/auth/outdoorTeams';
 
 export async function GET() {
@@ -12,17 +12,17 @@ export async function GET() {
   // stay in the sales workspace behind its own role and project checks.
   const admin = createAdminClient();
   let query = admin.from('projects')
-    .select('id,project_name,project_number,structure_readiness,sales_status,status,created_at,created_by,updated_at,measurement_delayed,client_cancelled_at')
+    .select('id,branch,project_name,project_number,structure_readiness,sales_status,status,created_at,created_by,updated_at,measurement_delayed,client_cancelled_at')
     .is('archived_at', null).order('updated_at', { ascending: false });
   if (auth.role === 'Outdoor Sales') {
     query = query.or(outdoorProjectFilter({id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}));
   }
-  if (auth.role === 'Indoor Sales') {
-    query = query.in('branch', indoorProjectBranches(auth.profile?.branch));
-  }
+  const actor = { role: auth.role, branch: auth.profile?.branch };
+  const branches = projectBranchesForActor(actor);
+  if (branches !== null) query = query.in('branch', branches);
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: 'Unable to load project stages.' }, { status: 500 });
-  let projects = data ?? [];
+  let projects = (data ?? []).filter(project => canAccessProjectBranch(actor, project.branch));
   if (auth.role === 'Operations Manager' && projects.length) {
     // This service-role query bypasses RLS. Verify an actual current or legacy
     // contract exists; project status alone can be stale or manually changed.

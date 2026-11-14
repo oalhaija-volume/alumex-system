@@ -36,7 +36,7 @@ function authorization(role, active = true) {
     '@/lib/supabase/admin': {},
     '@/lib/supabase/server': { createClient: async () => ({
       auth: { getUser: async () => ({ data: { user: { id: 'leader', email: 'leader@example.invalid' } } }) },
-      from: () => ({ select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: { role, is_active: active, status: active ? 'Active' : 'Inactive' } }) }),
+      from: () => ({ select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: { role, branch: 'Karkh', is_active: active, status: active ? 'Active' : 'Inactive' } }) }),
     }) },
   });
 }
@@ -71,8 +71,8 @@ for (const role of ['Sales Director', 'CEO', 'Company Owner']) {
     assert.equal((await authorization(role, false).requireRole([role])).ok, false);
   });
 
-  test(`${role} can open another employee's project`, async () => {
-    const project = {id:projectId,created_by:'other',follow_up_owner_id:'other',assigned_outdoor_sales_id:'other'};
+  test(`${role} can open another employee's project within its permitted branch scope`, async () => {
+    const project = {id:projectId,branch:'Karkh',created_by:'other',follow_up_owner_id:'other',assigned_outdoor_sales_id:'other'};
     const access = load('../src/lib/workflow/access.ts', {
       'next/server': json,
       '@/lib/auth/adminServer': authorization(role),
@@ -83,15 +83,20 @@ for (const role of ['Sales Director', 'CEO', 'Company Owner']) {
     assert.equal(result.response, undefined);
     assert.equal(result.project, project);
     assert.equal(result.auth.role, role);
+    project.branch = 'Rasafa';
+    const crossBranch = await access.salesProject(projectId);
+    if (role === 'CEO') assert.equal(crossBranch.response.status, 404);
+    else assert.equal(crossBranch.response, undefined);
   });
 
   test(`${role} sees team projects without owner filters in online and offline lists`, async () => {
     for (const path of ['../src/app/api/workspace/route.ts', '../src/app/api/offline/route.ts']) {
       let filters = 0;
+      const branchFilters = [];
       const admin = {from: table => ({
-        select(){return this;},eq(){return this;},in(){return this;},order(){return this;},range(){return this;},or(){filters++;return this;},
-        single:async()=>({data:{full_name:'Leader'}}),
-        then(resolve){return Promise.resolve({data:table==='projects'?[{id:projectId,client_id:'client',created_by:'other'}]:[],error:null}).then(resolve);},
+        select(){return this;},eq(){return this;},in(column,values){if(table==='projects'&&column==='branch')branchFilters.push(values);return this;},order(){return this;},range(){return this;},or(){filters++;return this;},
+        single:async()=>({data:{full_name:'Leader',branch:'Karkh'}}),
+        then(resolve){return Promise.resolve({data:table==='projects'?[{id:projectId,branch:'Karkh',client_id:'client',created_by:'other'},{id:'second-project',branch:'Rasafa',client_id:'client',created_by:'other'}]:[],error:null}).then(resolve);},
       })};
       const route = load(path, {
         'next/server':json, '@/lib/auth/adminServer':authorization(role),
@@ -103,6 +108,8 @@ for (const role of ['Sales Director', 'CEO', 'Company Owner']) {
       assert.equal(result.status,200);
       assert.equal(result.body.projects[0].created_by,'other');
       assert.equal(filters,0);
+      assert.equal(result.body.projects.length,role==='CEO'?1:2);
+      assert.deepEqual(branchFilters,role==='CEO'?[['Karkh','Governorates']]:[]);
     }
   });
 
@@ -114,7 +121,7 @@ for (const role of ['Sales Director', 'CEO', 'Company Owner']) {
       '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},
       '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async()=>({error:{message:'Missing migration'}}),auth:{admin:{createUser:()=>{created=true;}}}})},
     });
-    const result = await route.POST({json:async()=>({fullName:'Leader',username:'leader',password:'example-password',role})});
+    const result = await route.POST({json:async()=>({fullName:'Leader',username:'leader',password:'example-password',role,branch:'Karkh'})});
     assert.equal(result.status,503);
     assert.equal(created,false);
   });
@@ -131,7 +138,7 @@ for (const role of ['Sales Director', 'CEO', 'Company Owner']) {
         auth:{admin:{createUser:async()=>({data:{user:{id:'new-leader'}}})}},
       })},
     });
-    const result = await route.POST({json:async()=>({fullName:'Leader',username:'leader',password:'example-password',role})});
+    const result = await route.POST({json:async()=>({fullName:'Leader',username:'leader',password:'example-password',role,branch:'Karkh'})});
     assert.equal(result.status,201);
     assert.equal(saved.role,role);
     assert.equal(result.body.user.role,role);
@@ -142,7 +149,7 @@ for (const role of ['Sales Director', 'CEO', 'Company Owner']) {
     let called = false;
     const route = load('../src/app/api/operations/route.ts', {
       'next/server':json, '@/lib/auth/adminServer':authorization(role), '@/lib/workflow/operations':{},
-      '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{
+      '@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{branch:'Karkh'}})}),rpc:async(name,args)=>{
         called=true;assert.equal(name,'advance_sales_flow');assert.equal(args.p_action,'accept');assert.equal(args.p_actor,'leader');return {data:{quotation:{total:100}}};
       }})},
     });
@@ -153,7 +160,7 @@ for (const role of ['Sales Director', 'CEO', 'Company Owner']) {
   });
 }
 
-for (const actor of ['Admin', 'HR']) test(`${actor} employee form offers both leadership roles`, () => {
+for (const actor of ['Admin', 'HR']) test(`${actor} employee form offers only authorized leadership roles`, () => {
   const component = load('../src/components/workflow/EmployeeWorkspace.tsx', {
     'react': React, 'react/jsx-runtime': jsxRuntime,
     '@/components/i18n/I18nProvider': {useI18n:()=>({term:value=>value})},
@@ -161,7 +168,7 @@ for (const actor of ['Admin', 'HR']) test(`${actor} employee form offers both le
     './ui': {useResource:()=>({data:{users:[]},error:'',loading:false}),Workspace:({children})=>children,Notice:()=>null},
   });
   const markup=renderToStaticMarkup(React.createElement(component.EmployeeWorkspace));
-  assert.match(markup, /<option value="Sales Director">Sales Director<\/option>/);
+  assert.equal(markup.includes('<option value="Sales Director">'),actor==='Admin');
   assert.match(markup, /<option value="CEO">CEO<\/option>/);
   assert.equal(markup.includes('<option value="Admin">'),actor==='Admin');
 });

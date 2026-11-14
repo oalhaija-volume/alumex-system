@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { canReactivateProject, normalizeReactivation } from '../src/lib/workflow/reactivation.ts';
 import { supportsOfflineWorkspace } from '../src/lib/offline/device.ts';
+import * as branchAccess from '../src/lib/auth/projectBranchAccess.ts';
 
 const cancelled = { sales_status: 'cancelled', client_cancelled_at: '2026-10-19T09:00:00Z' };
 test('only Indoor Sales and Admin can reactivate client cancellations', () => {
@@ -26,6 +27,7 @@ test('desktop cannot use the device workspace while phones and tablets retain ac
 function route(role) {
   const calls=[];
   const deps={
+    '@/lib/auth/projectBranchAccess':branchAccess,
     '@/lib/auth/outdoorTeams':{},'@/lib/measurements/visitHistory':{},
     '@/lib/measurements/measurementDelay':{},
     '@/lib/workflow/reactivation':{normalizeReactivation},

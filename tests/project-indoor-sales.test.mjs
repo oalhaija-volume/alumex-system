@@ -136,8 +136,8 @@ test('inactive, missing and cross-branch employees are rejected before any proje
 test('Karkh Governorates and Sales Manager assignments remain eligible', async () => {
   for (const options of [
     { currentProject: { ...project, branch: 'Governorates' } },
-    { currentProject: { ...project, branch: 'Governorates' }, targetOwner: { ...owner, role: 'Sales Manager', branch: 'Rasafa' } },
-    { currentProject: { ...project, branch: null }, targetOwner: { ...owner, role: 'Sales Manager' } },
+    { currentProject: { ...project, branch: 'Governorates' }, targetOwner: { ...owner, role: 'Sales Manager', branch: 'Karkh' } },
+    { currentProject: { ...project, branch: 'Najaf' }, targetOwner: { ...owner, role: 'Sales Manager', branch: 'Najaf' } },
   ]) {
     const x = endpoint(options); assert.equal((await x.patch()).status, 200); assert.equal(x.calls.length, 2);
     if (options.currentProject.branch === null) assert.deepEqual(x.calls[1].filters.at(-1), ['is', 'branch', null]);

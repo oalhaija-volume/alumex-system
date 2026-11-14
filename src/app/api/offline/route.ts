@@ -1,5 +1,5 @@
 import { isHistoricalProject, loadMeasurementAttempts, loadWorkspaceProjects } from '@/lib/measurements/visitHistory';
-import { normalizeProjectBranch,normalizeProjectGovernorate } from '@/lib/intake/projectBranch';
+import { normalizeProjectBranch, normalizeProjectGovernorate } from '@/lib/intake/projectBranch';
 import {normalizeMeasurementCompletion} from '@/lib/measurements/completion';
 import { normalizeBuildingType } from '@/lib/intake/buildingType';
 import { normalizeClientCancellation, normalizeMeasurementDelay } from '@/lib/measurements/measurementDelay';
@@ -10,7 +10,7 @@ import { requireRole } from '@/lib/auth/adminServer';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeFollowUp,normalizeMeasurementAssignment } from '@/lib/workflow/followUps';
 import { canAccessCRM } from '@/lib/auth/permissions';
-import { canAccessProjectBranch, indoorProjectBranches } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, hasGlobalProjectAccess, projectBranchesForActor } from '@/lib/auth/projectBranchAccess';
 import { salesRoles } from '@/lib/workflow/access';
 import { normalizeProjectName } from '@/lib/workflow/projectName';
 import { isOutdoorAssignmentMember, outdoorAssignmentIds } from '@/lib/auth/outdoorTeams';
@@ -22,19 +22,22 @@ export async function GET(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const admin=createAdminClient();
  const profileQuery=admin.from('profiles').select('full_name,username,branch,outdoor_rotation_start_branch').eq('id',auth.user.id).single();
- const actorFromProfile=(profile:{full_name:string|null;username:string|null;branch:string|null;outdoor_rotation_start_branch:string|null}|null)=>({id:auth.user.id,name:profile?.full_name??profile?.username??'Employee',role:auth.role,branch:auth.role==='Outdoor Sales'?null:profile?.branch??null,outdoorRotationStartBranch:auth.role==='Outdoor Sales'?profile?.outdoor_rotation_start_branch??null:null,outdoorTeamMemberIds:auth.outdoorTeamMemberIds});
+ const actorFromProfile=(profile:{full_name:string|null;username:string|null;branch:string|null;outdoor_rotation_start_branch:string|null}|null)=>({id:auth.user.id,name:profile?.full_name??profile?.username??'Employee',role:auth.role,branch:profile?.branch??null,outdoorRotationStartBranch:auth.role==='Outdoor Sales'?profile?.outdoor_rotation_start_branch??null:null,outdoorTeamMemberIds:auth.outdoorTeamMemberIds});
  if(new URL(request.url).searchParams.has('session')){
   const profile=await profileQuery;
   if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
   return NextResponse.json({actor:actorFromProfile(profile.data)},{headers:{'Cache-Control':'no-store'}});
  }
- const [profile,projects,directory]=await Promise.all([profileQuery,loadWorkspaceProjects(admin,{id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}),admin.from('profiles').select('id,full_name,username,role,branch').in('role',['Indoor Sales', 'Sales Manager','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name')]);
+ let directoryQuery=admin.from('profiles').select('id,full_name,username,role,branch').in('role',['Indoor Sales', 'Sales Manager','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name');
+ if(!hasGlobalProjectAccess(auth.role))directoryQuery=directoryQuery.eq('branch',auth.profile?.branch??'');
+ const [profile,projects,directory]=await Promise.all([profileQuery,loadWorkspaceProjects(admin,{id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}),directoryQuery]);
  if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
  const actor=actorFromProfile(profile.data);
  if(projects.error)return NextResponse.json({error:'Unable to download projects.'},{status:500});
  // A branch may have changed between authentication and the profile refresh.
  // Only download projects allowed by both snapshots of the employee profile.
  projects.data=projects.data.filter(project=>canAccessProjectBranch(actor,project.branch));
+ directory.data=(directory.data??[]).filter(employee=>hasGlobalProjectAccess(actor.role)||employee.branch===actor.branch);
  const ids=projects.data.filter(p=>!isHistoricalProject(p,actor)).map(p=>p.id);const clientIds=[...new Set(projects.data.map(p=>p.client_id))];
  const peopleIds=[...new Set(projects.data.flatMap(p=>[p.created_by,p.legacy_outdoor_sales_id,p.assigned_outdoor_sales_id,p.follow_up_owner_id,p.measurement_delayed_by,p.client_cancelled_by]).filter((id):id is string=>!!id))];
  const [people,openings,clients,reports,attempts]=await Promise.all([
@@ -48,7 +51,7 @@ export async function GET(request:Request){
  if(directory.error||people.error)return NextResponse.json({error:'Unable to load employee assignments.'},{status:500});
  if(openings.error||clients.error||reports.error)return NextResponse.json({error:'Unable to download measurements.'},{status:500});
  const indoorSales=directory.data.filter(p=>(p.role === 'Indoor Sales' || p.role === 'Sales Manager')).map(p=>({id:p.id,name:p.full_name??p.username??'Employee',role:p.role,branch:p.branch}));
- const outdoorSales=directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee'}));
+ const outdoorSales=directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee',branch:p.branch}));
  const employees=new Map((people.data??[]).map(p=>[p.id,p]));
  const contacts=new Map(clients.data.map(c=>[c.id,c]));
  const name=(id:string|null)=>id?(employees.get(id)?.full_name??employees.get(id)?.username):null;
@@ -75,7 +78,8 @@ export async function POST(request:Request){
   try{buildingType=normalizeBuildingType(p.buildingType,auth.role==='Outdoor Sales'&&p.buildingType!==undefined);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   // Retain compatibility with registrations already saved by older installed clients.
   let branch;
-  if(auth.role==='Outdoor Sales'&&p.branch!==undefined){try{branch=normalizeProjectBranch(p.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}}
+  try{branch=normalizeProjectBranch(p.branch===undefined?auth.profile?.branch:p.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+  if(!canAccessProjectBranch({role:auth.role,branch:auth.profile?.branch},branch))return NextResponse.json({error:'Choose a project from your branch.'},{status:400});
   let governorate;
   try{governorate=normalizeProjectGovernorate(branch,p.governorate);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   let legacyOutdoorSalesId;
@@ -83,7 +87,7 @@ export async function POST(request:Request){
   const assignee=p?.assignedOutdoorSalesId;
   if(assignee && (typeof assignee!=='string'||!uuid.test(assignee)))return NextResponse.json({error:'Choose an Outdoor Sales employee.'},{status:400});
   if((auth.role === 'Indoor Sales' || auth.role === 'Sales Manager')&&!assignee)return NextResponse.json({error:'Choose yourself or an Outdoor Sales employee to collect the initial measurements.'},{status:400});
-  payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(branch?{branch}:{}),...(governorate?{governorate}:{}),...(p.buildingType===undefined?{}:{buildingType}),...(assignee?{assignedOutdoorSalesId:assignee}:{}),...(legacyOutdoorSalesId?{legacyOutdoorSalesId}:{}),address:address.slice(0,2000)||`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
+  payload={client:{clientName:name,mobile:phone,clientType:c.clientType,locationLatitude:c.clientType==='company'?company.latitude:null,locationLongitude:c.clientType==='company'?company.longitude:null},project:{...(p.branch===undefined?{}:{branch}),...(governorate?{governorate}:{}),...(p.buildingType===undefined?{}:{buildingType}),...(assignee?{assignedOutdoorSalesId:assignee}:{}),...(legacyOutdoorSalesId?{legacyOutdoorSalesId}:{}),address:address.slice(0,2000)||`${location.latitude}, ${location.longitude}`,locationLatitude:location.latitude,locationLongitude:location.longitude,structureReadiness:p.structureReadiness,readinessNote}};
  }else if(body.action==='rename-project'){
   if(!['Indoor Sales','Sales Manager'].includes(auth.role))return NextResponse.json({error:'Only Indoor Sales and Sales Managers can change project names.'},{status:403});
   if(typeof body.expectedUpdatedAt!=='string'||!Number.isFinite(Date.parse(body.expectedUpdatedAt)))return NextResponse.json({error:'Reload the project before changing its name.'},{status:400});
@@ -106,7 +110,7 @@ export async function POST(request:Request){
  const admin=createAdminClient();
  // SQL checks an active original owner after replaying any saved receipt, so a
  // committed registration can still clear its device queue after deactivation.
- if(auth.role==='Indoor Sales'){
+ if(!hasGlobalProjectAccess(auth.role)){
   const project=await admin.from('projects').select('branch').eq('id',body.projectId).maybeSingle();
   if(project.error)return NextResponse.json({error:'Unable to verify project access.'},{status:503});
   if(project.data&&!canAccessProjectBranch({role:auth.role,branch:auth.profile?.branch},project.data.branch))return NextResponse.json({error:'Project not found.'},{status:404});
@@ -117,7 +121,8 @@ export async function POST(request:Request){
   // Confirm deletion and the employee's former access before disclosing it.
   let deletion=admin.from('audit_events').select('id').eq('action','project_deleted').eq('entity_type','project').eq('entity_id',body.projectId);
   if(!canAccessCRM(auth.role))deletion=deletion.or([`previous_value->>created_by.eq.${auth.user.id}`,...outdoorAssignmentIds({id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}).map(id=>`previous_value->>assigned_outdoor_sales_id.eq.${id}`)].join(','));
-  if(auth.role==='Indoor Sales'){const branches=indoorProjectBranches(auth.profile?.branch);deletion=branches.length?deletion.in('previous_value->>branch',branches):deletion.eq('previous_value->>branch','');}
+  const branches=projectBranchesForActor({role:auth.role,branch:auth.profile?.branch});
+  if(branches!==null)deletion=branches.length?deletion.in('previous_value->>branch',branches):deletion.eq('previous_value->>branch','');
   const archived=await deletion.limit(1).maybeSingle();
   if(!archived.error&&archived.data)return NextResponse.json({code:'project_deleted',error:'This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.'},{status:410,headers:{'Cache-Control':'no-store'}});
  }

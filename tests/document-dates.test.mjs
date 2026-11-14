@@ -6,6 +6,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as jsx from 'react/jsx-runtime';
 import { formatBusinessDate } from '../src/lib/dates.ts';
+import * as projectBranches from '../src/lib/intake/projectBranch.ts';
 
 for (const locale of ['en', 'ar']) for (const kind of ['Quotation', 'Contract']) test(`${locale} ${kind} issue date uses English digits and DD/MM/YYYY`, () => {
   const exports = {};
@@ -14,6 +15,7 @@ for (const locale of ['en', 'ar']) for (const kind of ['Quotation', 'Contract'])
   }).outputText;
   new Function('require', 'exports', source)(name => {
     if (name === 'react/jsx-runtime') return jsx;
+    if (name === '@/lib/intake/projectBranch') return projectBranches;
     if (name === '@/components/i18n/I18nProvider') return { useI18n: () => ({ locale, term: value => value, formatDate: formatBusinessDate }) };
     if (name === '@/lib/quotations/clientPricing') return {};
     if (name === '@/lib/quotations/itemGroups') return {};

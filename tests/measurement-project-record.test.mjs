@@ -49,7 +49,7 @@ function fixture({ auth, projectPatch = {}, profileError = null, held = false } 
   const reads = [];
   const pending = new Map();
   const row = { ...project, ...projectPatch };
-  const actor = auth ?? { ok: true, user: { id: actorId }, role: 'Outdoor Sales', profile: { branch: null }, outdoorTeamMemberIds: [actorId, teammateId] };
+  const actor = auth ?? { ok: true, user: { id: actorId }, role: 'Outdoor Sales', profile: { branch: 'Karkh' }, outdoorTeamMemberIds: [actorId, teammateId] };
   const admin = { from(table) {
     const read = { table, filters: [] };
     reads.push(read);

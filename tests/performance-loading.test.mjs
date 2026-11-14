@@ -16,12 +16,12 @@ function load(path, dependencies = {}) {
   }, exports);
   return exports;
 }
-const actor = { id: 'employee', role: 'Outdoor Sales' };
-const project = { id: 'project', client_id: 'client', created_by: actor.id, assigned_outdoor_sales_id: actor.id, follow_up_owner_id: actor.id };
+const actor = { id: 'employee', role: 'Outdoor Sales', branch: 'Karkh' };
+const project = { id: 'project', branch: 'Karkh', client_id: 'client', created_by: actor.id, assigned_outdoor_sales_id: actor.id, follow_up_owner_id: actor.id };
 const json = { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } };
 const dependencies = {
   'next/server': json,
-  '@/lib/auth/adminServer': { requireRole: async () => ({ ok: true, user: { id: actor.id }, role: actor.role }) },
+  '@/lib/auth/adminServer': { requireRole: async () => ({ ok: true, user: { id: actor.id }, role: actor.role, profile: { branch: actor.branch } }) },
   '@/lib/workflow/access': { salesRoles: ['Outdoor Sales'] },
   '@/lib/workflow/followUps': {}, '@/lib/auth/permissions': {},
   '@/lib/measurements/registrationOpening': {}, '@/lib/location/coordinates': {},
@@ -32,17 +32,20 @@ for (const endpoint of ['workspace', 'offline']) {
   test(`${endpoint} overlaps independent reads and preserves the employee's project scope`, async () => {
     const started = new Map();
     const filters = [];
+    const directoryBranches = [];
     const admin = { from(table) {
       let fields;
+      const branches = [];
       return {
         select(value) { fields = value; return this; },
-        eq() { return this; }, in() { return this; }, order() { return this; }, range() { return this; }, single() { return this; },
+        eq(column,value) { if(column==='branch'){branches.push(value);if(table==='profiles')directoryBranches.push(value);}return this; },
+        in(column,values) { if(column==='branch')branches.push(...values);return this; }, order() { return this; }, range() { return this; }, single() { return this; },
         or(value) { filters.push(value); return this; },
         then(resolve) {
           if (table === 'field_sync_receipts') return Promise.resolve({data:[],error:null}).then(resolve);
           const key = table === 'profiles' ? fields.startsWith('full_name') ? 'actor' : fields.split(',').includes('role') ? 'directory' : 'people' : table;
           if(key==='directory')assert.deepEqual(fields.split(','),['id','full_name','username','role','branch']);
-          return new Promise(done => started.set(key, data => done({ data, error: null }))).then(resolve);
+          return new Promise(done => started.set(key, data => done({ data: Array.isArray(data)&&branches.length?data.filter(row=>branches.includes(row.branch)):data, error: null }))).then(resolve);
         },
       };
     } };
@@ -53,10 +56,10 @@ for (const endpoint of ['workspace', 'offline']) {
     assert.deepEqual(filters, ['created_by.eq.employee,assigned_outdoor_sales_id.eq.employee,legacy_outdoor_sales_id.eq.employee']);
     started.get('projects')([project]);
     started.get('directory')([
-      {id:actor.id,full_name:'Employee',role:actor.role},
+      {id:actor.id,full_name:'Employee',role:actor.role,branch:'Karkh'},
       {id:'karkh-owner',full_name:'Karkh employee',role:'Indoor Sales',branch:'Karkh'},
       {id:'rasafa-owner',full_name:'Rasafa employee',role:'Indoor Sales',branch:'Rasafa'},
-      {id:'manager-owner',full_name:'Sales manager',role:'Sales Manager',branch:'Rasafa'},
+      {id:'manager-owner',full_name:'Sales manager',role:'Sales Manager',branch:'Karkh'},
     ]);
     started.get('actor')?.({ full_name: 'Employee', branch: 'Karkh' });
     await tick();
@@ -71,14 +74,15 @@ for (const endpoint of ['workspace', 'offline']) {
     const result = await response;
     assert.equal(result.status, 200);
     assert.equal(result.body.actor.id, actor.id);
+    assert.equal(result.body.actor.branch, 'Karkh');
     assert.equal(result.body.projects[0].registeredBy, 'Employee');
     assert.equal(result.body.projects[0].phone, '07700000000');
     assert.equal(result.body.projects[0].assignedToYou, true);
     assert.deepEqual(result.body.indoorSales,[
       {id:'karkh-owner',name:'Karkh employee',role:'Indoor Sales',branch:'Karkh'},
-      {id:'rasafa-owner',name:'Rasafa employee',role:'Indoor Sales',branch:'Rasafa'},
-      {id:'manager-owner',name:'Sales manager',role:'Sales Manager',branch:'Rasafa'},
-    ],'The downloaded owner directory retains actual roles and branches for project-specific eligibility');
+      {id:'manager-owner',name:'Sales manager',role:'Sales Manager',branch:'Karkh'},
+    ],'The downloaded owner directory retains same-office roles and branches while excluding other offices');
+    assert.deepEqual(directoryBranches,['Karkh']);
   });
 
   test(`${endpoint} does not start data reads before authorization`, async () => {
@@ -102,7 +106,7 @@ test('the synchronization identity check does not download projects or directori
   });
   const response = await route.GET(new Request('http://localhost:3003/api/offline?session=1'));
   assert.equal(response.status, 200);
-  assert.equal(response.body.actor.branch, null, 'Outdoor Sales never inherit a cached single-branch assignment');
+  assert.equal(response.body.actor.branch, 'Karkh', 'The synchronization identity retains the current verified employee office');
   assert.deepEqual(tables, ['profiles']);
 });
 

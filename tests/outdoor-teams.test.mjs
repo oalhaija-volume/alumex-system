@@ -26,7 +26,7 @@ const employees = [
   { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', full_name: 'Mohammad', outdoor_team_key: 'ahmad-mohammad' },
   { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', full_name: 'Sajjad', outdoor_team_key: 'sajjad-ehab' },
   { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', full_name: 'Ehab', outdoor_team_key: 'sajjad-ehab' },
-].map(employee => ({ ...employee, username: employee.full_name.toLowerCase(), role: 'Outdoor Sales', branch: null, is_active: true, status: 'Active' }));
+].map(employee => ({ ...employee, username: employee.full_name.toLowerCase(), role: 'Outdoor Sales', branch: employee.outdoor_team_key === 'ahmad-mohammad' ? 'Karkh' : 'Najaf', is_active: true, status: 'Active' }));
 const indoorId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const openingId = '99999999-9999-4999-8999-999999999999';
 const curtainId = '88888888-8888-4888-8888-888888888888';
@@ -34,12 +34,12 @@ const skylightId = '77777777-7777-4777-8777-777777777777';
 const version = '2026-11-04T08:00:00Z';
 const projects = employees.map((employee, index) => ({
   id: `${index + 1}${'1'.repeat(7)}-1111-4111-8111-111111111111`, project_name: `${employee.full_name} assignment`,
-  project_number: `PRJ-TEAM-${index}`, client_id: `client-${index}`, branch: index % 2 ? 'Rasafa' : 'Karkh',
+  project_number: `PRJ-TEAM-${index}`, client_id: `client-${index}`, branch: employee.branch,
   created_by: indoorId, assigned_outdoor_sales_id: employee.id, structure_readiness: 'ready', sales_status: 'new_lead',
   archived_at: null, created_at: version, updated_at: version, project_notes: null, next_follow_up_at: null,
 }));
 const teamIds = employee => employees.filter(member => member.outdoor_team_key === employee.outdoor_team_key).map(member => member.id);
-const actorFor = employee => ({ id: employee.id, role: employee.role, outdoorTeamMemberIds: teamIds(employee) });
+const actorFor = employee => ({ id: employee.id, role: employee.role, branch: employee.branch, outdoorTeamMemberIds: teamIds(employee) });
 
 // Execute the real access policies and route handlers with a row-filtering
 // database transport. No account, database or environment is changed.
@@ -101,6 +101,7 @@ for (const employee of employees) test(`${employee.full_name}: authentication re
     { ...employee, id: 'inactive-status', status: 'Inactive' },
     { ...employee, id: 'wrong-role', role: 'Indoor Sales' },
     { ...employee, id: 'other-team', outdoor_team_key: 'different-team' },
+    { ...employee, id: 'other-office-same-team', branch: employee.branch === 'Karkh' ? 'Najaf' : 'Karkh' },
   ];
   const x = authentication(employee, { extraProfiles, userPatch: { user_metadata: { outdoorTeamMemberIds: extraProfiles.map(member => member.id) } } });
   const result = await x.check();
@@ -169,7 +170,7 @@ test('the team policy shares assignees reciprocally without sharing teammate-cre
 function fixture(employee, { projectRows = projects, memberIds = teamIds(employee) } = {}) {
   const tables = {
     projects: structuredClone(projectRows), field_sync_receipts: [],
-    profiles: [...employees, { id: indoorId, full_name: 'Indoor employee', role: 'Indoor Sales', is_active: true, status: 'Active' }],
+    profiles: [...employees, { id: indoorId, full_name: 'Indoor employee', role: 'Indoor Sales', branch: 'Karkh', is_active: true, status: 'Active' }],
     clients: projects.map(project => ({ id: project.client_id, mobile: '07700000000' })),
     openings: projects.flatMap(project => [
       { id: openingId, project_id: project.id, created_by: employee.id, width: 100, height: 200, quantity: 1, floor: 'GF', room: 'Kitchen', opening_type: 'Window', opening_direction: 'Sliding' },

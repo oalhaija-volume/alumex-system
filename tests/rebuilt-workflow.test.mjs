@@ -4,7 +4,7 @@ import test from 'node:test';
 import ts from 'typescript';
 function load(path,dependencies={}){
  const source=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
- const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts',{});if(name==='@/lib/measurements/visitHistory')return load('../src/lib/measurements/visitHistory.ts');if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(name in dependencies))throw Error(name);return dependencies[name];},exports);return exports;
+ const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/intake/projectBranch')return load('../src/lib/intake/projectBranch.ts');if(name==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts',{});if(name==='@/lib/measurements/visitHistory')return load('../src/lib/measurements/visitHistory.ts');if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(name in dependencies))throw Error(name);return dependencies[name];},exports);return exports;
 }
 const termsData=JSON.parse(readFileSync(new URL('../src/lib/contracts/uploadedTerms.json',import.meta.url),'utf8'));
 const uploadedTerms=load('../src/lib/contracts/uploadedTerms.ts',{'./uploadedTerms.json':{default:termsData}});
@@ -53,7 +53,7 @@ for(const role of ['Operations Manager','Project Manager'])test(`${role} is reje
  const context={params:Promise.resolve({projectId:'project'})};assert.equal((await route.GET(new Request('https://example.test'),context)).status,403);assert.equal((await route.POST(new Request('https://example.test',{method:'POST'}),context)).status,403);
 });
 test('operations acceptance never returns the commercial RPC record',async()=>{
- const route=load('../src/app/api/operations/route.ts',{'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Operations Manager',user:{id:'actor'}})},'@/lib/workflow/operations':load('../src/lib/workflow/operations.ts'),'@/lib/supabase/admin':{createAdminClient:()=>({rpc:async()=>({data:{quotation:{total:9000},contract:{},evidence:{signature:'secret'}},error:null})})}});
+ const route=load('../src/app/api/operations/route.ts',{'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Operations Manager',profile:{branch:'Karkh'},user:{id:'actor'}})},'@/lib/workflow/operations':load('../src/lib/workflow/operations.ts'),'@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{branch:'Karkh'}})}),rpc:async()=>({data:{quotation:{total:9000},contract:{},evidence:{signature:'secret'}},error:null})})}});
  const result=await route.POST({json:async()=>({projectId:'project',revision:3})});assert.deepEqual(result.body,{ok:true});
 });
 test('stale quotation revision never reaches the transition RPC',async()=>{
@@ -73,7 +73,7 @@ for(const body of [{method:'digital',signature:''},{method:'upload'},{method:'di
 const username=load('../src/lib/auth/username.ts');
 const roles=load('../src/lib/auth/roles.ts');
 function employeeRoute(admin,actorRole='Admin'){
- return load('../src/app/api/admin/users/route.ts',{'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:actorRole})},'@/lib/auth/roles':roles,'@/lib/auth/username':username,'@/lib/supabase/admin':{createAdminClient:()=>admin},'@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true}});
+ return load('../src/app/api/admin/users/route.ts',{'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:actorRole,profile:{branch:actorRole==='HR'?'Rasafa':'Karkh'}})},'@/lib/auth/roles':roles,'@/lib/auth/username':username,'@/lib/supabase/admin':{createAdminClient:()=>admin},'@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true}});
 }
 test('HR requires manually entered credentials and cannot grant Admin',async()=>{
  const route=employeeRoute({},'HR');
@@ -82,7 +82,7 @@ test('HR requires manually entered credentials and cannot grant Admin',async()=>
 });
 test('manager provisioning fails closed when database privacy rules are absent',async()=>{
  let created=false;const route=employeeRoute({rpc:async()=>({error:{code:'missing'}}),auth:{admin:{createUser:()=>{created=true;}}}});
- for(const role of ['Operations Manager','Project Manager'])assert.equal((await route.POST({json:async()=>({fullName:'Employee',role,username:'employee',password:'secure-example'})})).status,503);
+ for(const role of ['Operations Manager','Project Manager'])assert.equal((await route.POST({json:async()=>({fullName:'Employee',role,branch:'Karkh',username:'employee',password:'secure-example'})})).status,503);
  assert.equal(created,false);
 });
 test('employee creation passes password only to Auth, never profile or response',async()=>{
@@ -293,7 +293,7 @@ test('creating an Indoor Sales account requires a valid branch from Admin',async
  }
 });
 
-for(const branch of ['Karkh','Rasafa',null,'invalid','lookup-error'])test(`contract uses the authenticated Indoor Sales creator branch: ${branch}`,async()=>{
+for(const branch of ['Karkh','Rasafa','Najaf',null,'invalid','lookup-error'])test(`contract uses the authenticated Indoor Sales creator branch: ${branch}`,async()=>{
  let input;const lookups=[];
  const admin={from(table){return {select(){return this;},eq(key,value){if(table==='profiles')lookups.push([key,value]);return this;},
   maybeSingle:async()=>({data:{revision:2,stage:'approved'},error:null}),
@@ -303,17 +303,18 @@ for(const branch of ['Karkh','Rasafa',null,'invalid','lookup-error'])test(`contr
  const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{role:'Indoor Sales',user:{id:'creator'}},project:{id:'project',client_id:'client',project_name:'Site',project_number:'PRJ-1',address:'Baghdad',branch:projectBranch}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
  const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'contract',revision:2,template:'residential',branch:projectBranch,createdBy:'forged'})}),{params:Promise.resolve({projectId:'project'})});
  assert.deepEqual(lookups,[['id','creator']]);
- if(branch==='Karkh'||branch==='Rasafa'){
+ if(branch==='Karkh'||branch==='Rasafa'||branch==='Najaf'){
   assert.equal(result.status,200);assert.equal(input.p_payload.branch,branch);assert.equal(input.p_payload.createdBy,'creator');
   assert.equal(input.p_payload.project.branch,projectBranch);assert.equal(input.p_actor,'creator');
  }else{assert.equal(result.status,400);assert.equal(input,undefined);assert.match(result.body.error,/branch/);}
 });
 
-for(const branch of ['Karkh','Rasafa',undefined]) test(`Outdoor employee creation ignores obsolete branch: ${branch}`,async()=>{
+for(const branch of ['Karkh','Rasafa','Najaf',undefined]) test(`Outdoor employee creation requires and retains an office branch: ${branch}`,async()=>{
  let profileInput;
  const route=employeeRoute({from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null}),upsert:async(value)=>{profileInput=value;return {error:null};}};},auth:{admin:{createUser:async()=>({data:{user:{id:'new-user'}},error:null})}}});
  const result=await route.POST({json:async()=>({fullName:'Outdoor employee',role:'Outdoor Sales',branch,username:'outdoor.employee',password:'test-only-password'})});
- assert.equal(result.status,201);assert.equal(profileInput.branch,null);assert.equal(result.body.user.branch,null);
+ assert.equal(result.status,branch?201:400);
+ if(branch){assert.equal(profileInput.branch,branch);assert.equal(result.body.user.branch,branch);}else assert.equal(profileInput,undefined);
 });
 
 test('repeated openings multiply system, glass and each per-opening add-on once',()=>{

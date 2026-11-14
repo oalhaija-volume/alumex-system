@@ -2,6 +2,7 @@
 
 import {useI18n} from '@/components/i18n/I18nProvider';
 import type {OutdoorSalesCoverageData} from '@/lib/dashboard/outdoorSalesCoverage';
+import {employeeBranches} from '@/lib/intake/projectBranch';
 import {useResource} from './ui';
 
 export function OutdoorSalesCoverage(){
@@ -19,7 +20,7 @@ export function OutdoorSalesCoverage(){
    {error&&<p role="alert" className="text-sm text-red-700">{t('dashboard.outdoorCoverage.loadError')}</p>}
    {data&&!error&&<>
     <div className="grid gap-3 sm:grid-cols-2">
-     {(['Karkh','Rasafa'] as const).map(branch=>{
+     {employeeBranches.map(branch=>{
       const employees=data.staff.filter(employee=>employee.branch===branch);
       const headingId=`outdoor-sales-coverage-${branch.toLowerCase()}`;
       return <section key={branch} aria-labelledby={headingId} className="min-w-0 rounded-md border border-blue-100 bg-blue-50/40 px-4 py-3">

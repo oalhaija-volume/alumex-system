@@ -4,8 +4,8 @@ import test from 'node:test';
 import ts from 'typescript';
 
 const indoor = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Indoor entrant', role: 'Indoor Sales', branch: 'Karkh' };
-const owner = { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Original Outdoor owner', role: 'Outdoor Sales', is_active: true, status: 'Active' };
-const collector = { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', name: 'Measurement collector', role: 'Outdoor Sales', is_active: true, status: 'Active' };
+const owner = { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Original Outdoor owner', role: 'Outdoor Sales', branch: 'Karkh', is_active: true, status: 'Active' };
+const collector = { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', name: 'Measurement collector', role: 'Outdoor Sales', branch: 'Karkh', is_active: true, status: 'Active' };
 const projectId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const operationId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 
@@ -190,7 +190,7 @@ test('offline ownership preserves the Indoor entrant and follow-up owner through
 test('an unavailable original owner cannot enter the offline queue or project cache', async () => {
   for (const id of [indoor.id, 'not-a-uuid', 'ffffffff-ffff-4fff-8fff-ffffffffffff']) {
     const x = device();
-    await assert.rejects(x.client.saveFieldChange('register', projectId, payload({ legacyOutdoorSalesId: id }), indoor.id), /Outdoor Sales/);
+    await assert.rejects(x.client.saveFieldChange('register', projectId, payload({ legacyOutdoorSalesId: id }), indoor.id), /Outdoor Sales|project branch/);
     assert.deepEqual(x.state.projects, []);
     assert.deepEqual(x.state.queue, []);
   }
@@ -210,7 +210,7 @@ test('ordinary offline registration leaves pre-system attribution unset', async 
 test('the credited Outdoor owner can retain a reference record without gaining measurement tasks or writes', async () => {
   const x = device({ actor: owner });
   const project = {
-    id: projectId, created_by: indoor.id, assigned_outdoor_sales_id: collector.id,
+    id: projectId, branch: 'Karkh', created_by: indoor.id, assigned_outdoor_sales_id: collector.id,
     legacy_outdoor_sales_id: owner.id, project_log_only: true,
     structure_readiness: 'ready', sales_status: 'new_lead',
   };

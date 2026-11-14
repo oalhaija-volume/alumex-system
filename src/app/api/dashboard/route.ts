@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth/adminServer';
 import { appRoles } from '@/lib/auth/roles';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { canAccessProjectBranch, projectBranchesForActor } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectRow, projectBranchesForActor } from '@/lib/auth/projectBranchAccess';
 import { outdoorProjectFilter } from '@/lib/auth/outdoorTeams';
 
 export async function GET() {
@@ -17,12 +17,12 @@ export async function GET() {
   if (auth.role === 'Outdoor Sales') {
     query = query.or(outdoorProjectFilter({id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}));
   }
-  const actor = { role: auth.role, branch: auth.profile?.branch };
+  const actor = { id: auth.user.id, role: auth.role, branch: auth.profile?.branch };
   const branches = projectBranchesForActor(actor);
-  if (branches !== null) query = query.in('branch', branches);
+  if (branches !== null && auth.role !== 'Outdoor Sales') query = query.in('branch', branches);
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: 'Unable to load project stages.' }, { status: 500 });
-  let projects = (data ?? []).filter(project => canAccessProjectBranch(actor, project.branch));
+  let projects = (data ?? []).filter(project => canAccessProjectRow(actor, project));
   if (auth.role === 'Operations Manager' && projects.length) {
     // This service-role query bypasses RLS. Verify an actual current or legacy
     // contract exists; project status alone can be stale or manually changed.

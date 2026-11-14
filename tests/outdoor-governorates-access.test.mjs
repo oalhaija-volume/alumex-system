@@ -74,7 +74,7 @@ test('restored Governorates access preserves Outdoor ownership and team restrict
   const own = { ...project };
   const assigned = { ...project, id: 'team', created_by: 'other', assigned_outdoor_sales_id: teammateId };
   const unrelated = { ...project, id: 'unrelated', created_by: 'other', assigned_outdoor_sales_id: 'other' };
-  const najaf = { ...project, id: 'najaf', branch: 'Najaf' };
+  const najaf = { ...project, id: 'najaf', branch: 'Najaf', created_by: 'other' };
   const projects = [own, assigned, unrelated, najaf];
   const state = { actor, projects, openings: projects.map(row => ({ id: `opening-${row.id}`, projectId: row.id })), queue: [], syncedAt: null };
   assert.deepEqual(offlineAccess.visibleFieldState(state).projects.map(row => row.id), ['own', 'team']);

@@ -187,8 +187,8 @@ test('only company-wide project roles retain cached access across every branch',
   }
 });
 
-test('other roles with no assigned office cannot expose any cached project or saved media', async () => {
-  for (const role of ['Outdoor Sales', 'Sales Manager', 'CEO', 'HR']) {
+test('office-scoped roles with no assigned office cannot expose any cached project or saved media', async () => {
+  for (const role of ['Sales Manager', 'CEO', 'HR']) {
     const x = setup({ actor: { ...actor, role, branch: null } });
     const before = structuredClone(x.raw);
     const view = await x.store.readFieldState();

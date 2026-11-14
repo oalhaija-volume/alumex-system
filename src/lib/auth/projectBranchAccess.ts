@@ -14,6 +14,16 @@ export function canAccessProjectBranch(
   return branches === null || branches.includes(projectBranch ?? "");
 }
 
+// Outdoor employees retain their own saved entries after an office change.
+// Creation and employee assignment continue to use the branch-only helper.
+export function canAccessProjectRow(
+  actor: ProjectBranchActor & { id?: string },
+  project: { branch?: string | null; created_by?: string | null } | null | undefined,
+): boolean {
+  return !!project && (canAccessProjectBranch(actor, project.branch)
+    || actor.role === 'Outdoor Sales' && !!actor.id && project.created_by === actor.id);
+}
+
 export function indoorProjectBranches(branch: string | null | undefined): string[] {
   if (branch === "Karkh") return ["Karkh", "Governorates"];
   return branch === "Rasafa" || branch === "Najaf" ? [branch] : [];

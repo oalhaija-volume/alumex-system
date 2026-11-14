@@ -10,7 +10,7 @@ import { requireRole } from '@/lib/auth/adminServer';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeFollowUp,normalizeMeasurementAssignment } from '@/lib/workflow/followUps';
 import { canAccessCRM } from '@/lib/auth/permissions';
-import { canAccessProjectBranch, hasGlobalProjectAccess, projectBranchesForActor } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, canAccessProjectRow, hasGlobalProjectAccess, projectBranchesForActor } from '@/lib/auth/projectBranchAccess';
 import { salesRoles } from '@/lib/workflow/access';
 import { normalizeProjectName } from '@/lib/workflow/projectName';
 import { isOutdoorAssignmentMember, outdoorAssignmentIds } from '@/lib/auth/outdoorTeams';
@@ -36,7 +36,7 @@ export async function GET(request:Request){
  if(projects.error)return NextResponse.json({error:'Unable to download projects.'},{status:500});
  // A branch may have changed between authentication and the profile refresh.
  // Only download projects allowed by both snapshots of the employee profile.
- projects.data=projects.data.filter(project=>canAccessProjectBranch(actor,project.branch));
+ projects.data=projects.data.filter(project=>canAccessProjectRow(actor,project));
  directory.data=(directory.data??[]).filter(employee=>hasGlobalProjectAccess(actor.role)||employee.branch===actor.branch);
  const ids=projects.data.filter(p=>!isHistoricalProject(p,actor)).map(p=>p.id);const clientIds=[...new Set(projects.data.map(p=>p.client_id))];
  const peopleIds=[...new Set(projects.data.flatMap(p=>[p.created_by,p.legacy_outdoor_sales_id,p.assigned_outdoor_sales_id,p.follow_up_owner_id,p.measurement_delayed_by,p.client_cancelled_by]).filter((id):id is string=>!!id))];
@@ -108,21 +108,25 @@ export async function POST(request:Request){
   try{payload=normalizeMeasurementDelay(body.payload);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  }else if(!['finish','reopen','ready','resume-measurements'].includes(body.action))return NextResponse.json({error:'Unknown offline action.'},{status:400});
  const admin=createAdminClient();
- // SQL checks an active original owner after replaying any saved receipt, so a
- // committed registration can still clear its device queue after deactivation.
+ // SQL validates the active actor and creator/branch access before any replay.
  if(!hasGlobalProjectAccess(auth.role)){
-  const project=await admin.from('projects').select('branch').eq('id',body.projectId).maybeSingle();
+  const project=await admin.from('projects').select('branch,created_by').eq('id',body.projectId).maybeSingle();
   if(project.error)return NextResponse.json({error:'Unable to verify project access.'},{status:503});
-  if(project.data&&!canAccessProjectBranch({role:auth.role,branch:auth.profile?.branch},project.data.branch))return NextResponse.json({error:'Project not found.'},{status:404});
+  if(project.data&&!canAccessProjectRow({id:auth.user.id,role:auth.role,branch:auth.profile?.branch},project.data))return NextResponse.json({error:'Project not found.'},{status:404});
  }
  const result=await admin.rpc('sync_field_change',{p_operation:body.id,p_actor:auth.user.id,p_project:body.projectId,p_action:body.action,p_payload:payload,p_recorded_at:body.recordedAt,p_expected_updated_at:typeof body.expectedUpdatedAt==='string'?body.expectedUpdatedAt:null});
  if(result.error&&['Project is not available to this employee','This project was deleted. Its saved offline work cannot be synced.'].includes(result.error.message)){
   // A missing project may have been deleted while the employee was offline.
   // Confirm deletion and the employee's former access before disclosing it.
   let deletion=admin.from('audit_events').select('id').eq('action','project_deleted').eq('entity_type','project').eq('entity_id',body.projectId);
-  if(!canAccessCRM(auth.role))deletion=deletion.or([`previous_value->>created_by.eq.${auth.user.id}`,...outdoorAssignmentIds({id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}).map(id=>`previous_value->>assigned_outdoor_sales_id.eq.${id}`)].join(','));
   const branches=projectBranchesForActor({role:auth.role,branch:auth.profile?.branch});
-  if(branches!==null)deletion=branches.length?deletion.in('previous_value->>branch',branches):deletion.eq('previous_value->>branch','');
+  if(auth.role==='Outdoor Sales'){
+   const ownEntry=`previous_value->>created_by.eq.${auth.user.id}`;
+   const assignments=outdoorAssignmentIds({id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}).map(id=>`previous_value->>assigned_outdoor_sales_id.eq.${id}`).join(',');
+   // Ownership survives an office transfer. Assignment-only archives still
+   // require both the employee's branch scope and a current team assignment.
+   deletion=deletion.or(branches?.length?`${ownEntry},and(previous_value->>branch.in.(${branches.join(',')}),or(${assignments}))`:ownEntry);
+  }else if(branches!==null)deletion=branches.length?deletion.in('previous_value->>branch',branches):deletion.eq('previous_value->>branch','');
   const archived=await deletion.limit(1).maybeSingle();
   if(!archived.error&&archived.data)return NextResponse.json({code:'project_deleted',error:'This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.'},{status:410,headers:{'Cache-Control':'no-store'}});
  }

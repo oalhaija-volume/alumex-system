@@ -8,7 +8,7 @@ import { canCancelProject, normalizeClientCancellation, canDelayMeasurements, ca
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
 import { normalizeLegacyOutdoorSalesId } from '@/lib/intake/legacyOutdoorSales';
 import { canAccessCRM } from '@/lib/auth/permissions';
-import { canAccessProjectBranch, canOwnProjectFollowUp } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, canAccessProjectRow, canOwnProjectFollowUp } from '@/lib/auth/projectBranchAccess';
 import { isOutdoorAssignmentMember } from '@/lib/auth/outdoorTeams';
 import { canAccessFieldProject, visibleFieldState } from './projectAccess';
 import { normalizeFollowUp,type FollowUpInput } from '@/lib/workflow/followUps';
@@ -160,7 +160,7 @@ export async function syncFieldChanges(){
     await updateFieldState(id,s=>({...s!,queue:s!.queue.map(c=>c.id===change.id?{...c,error:'Only Indoor Sales and Sales Managers can change project names.'}:c)}));
     failed.add(change.projectId);continue;
    }
-   if(!current||!canAccessProjectBranch(current.actor,project?.branch)){failed.add(change.projectId);continue;}
+   if(!current||!canAccessProjectRow(current.actor,project)){failed.add(change.projectId);continue;}
    let response:Response;
    try{response=await fetch('/api/offline',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(20000),body:JSON.stringify({...change,expectedUpdatedAt:project?.serverUpdatedAt??project?.updated_at})});}catch{connection(false);return;}
    const result=await response.json().catch(()=>null);
@@ -397,7 +397,7 @@ export type {FieldProject};
 export async function reviewServerProject(projectId:string){
  const response=await fetch('/api/offline',{cache:'no-store'});if(!response.ok)throw new Error('Connect and sign in to review the latest version.');
  const data=await response.json() as FieldState;if(data.actor.id!==activeFieldUser())throw new Error('Sign in with the employee who saved this work.');
- const snapshot=data.projects.find(p=>p.id===projectId&&canAccessProjectBranch(data.actor,p.branch));
+ const snapshot=data.projects.find(p=>p.id===projectId&&canAccessProjectRow(data.actor,p));
  const project=snapshot&&canAccessFieldProject({...data,unavailableProjectIds:[]},snapshot)?snapshot:undefined;
  await updateFieldState(data.actor.id,s=>{if(!s)throw new Error('Offline account unavailable.');return {...s,actor:data.actor,indoorSales:data.indoorSales??s.indoorSales,unavailableProjectIds:snapshot?(s.unavailableProjectIds??[]).filter(id=>id!==projectId):[...new Set([...(s.unavailableProjectIds??[]),projectId])],projects:s.projects.map(p=>p.id===projectId&&snapshot?withCurrentProjectAccess(p,snapshot):p)};});
  if(!project)throw new Error('Project no longer available. Your saved work remains on this device.');

@@ -42,7 +42,7 @@ for (const role of roles.appRoles) test(`${role} lands on an authorized dashboar
   const result = await route.GET();
   assert.equal(result.status, 200);
   assert.equal(scoped, role === 'Outdoor Sales');
-  assert.equal(branchScoped, !['Admin', 'Sales Director', 'Company Owner'].includes(role));
+  assert.equal(branchScoped, !['Admin', 'Sales Director', 'Company Owner', 'Outdoor Sales'].includes(role));
 });
 
 test('an unauthenticated or inactive employee cannot read dashboard data', async () => {

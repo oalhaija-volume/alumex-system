@@ -253,7 +253,7 @@ for(const role of ['Outdoor Sales','Indoor Sales','Sales Manager'])for(const bra
  assert.ok(filters.some(([key,value])=>key==='action'&&value==='project_deleted'));
  assert.equal(filters.some(([key])=>key==='or'),role==='Outdoor Sales');
  if(role==='Indoor Sales')assert.deepEqual(filters.find(([key])=>key==='previous_value->>branch')[1],branch==='Karkh'?['Karkh','Governorates']:['Rasafa']);
- if(role==='Outdoor Sales')assert.equal(filters.find(([key])=>key==='or')[1],`previous_value->>created_by.eq.${id},previous_value->>assigned_outdoor_sales_id.eq.${id}`);
+ if(role==='Outdoor Sales')assert.equal(filters.find(([key])=>key==='or')[1],`previous_value->>created_by.eq.${id},and(previous_value->>branch.in.(Karkh,Governorates),or(previous_value->>assigned_outdoor_sales_id.eq.${id}))`);
 });
 
 for(const endpoint of ['sales-intake','offline'])for(const branch of [undefined,null,'','wrong',7,'Karkh','Rasafa','Najaf'])test(`${endpoint} validates project branch ${String(branch)}`,async()=>{

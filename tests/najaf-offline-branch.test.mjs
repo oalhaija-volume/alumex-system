@@ -31,7 +31,7 @@ function snapshot(role, branch) {
   const actor = { id: employeeId, name: 'Employee', role, branch };
   const projects = [...offices, 'Governorates', null].map((projectBranch, index) => ({
     id: `project-${index}`, branch: projectBranch, project_name: `${projectBranch ?? 'Unassigned'} private client`,
-    phone: `private-phone-${index}`, project_number: `PRJ-${index}`, created_by: employeeId,
+    phone: `private-phone-${index}`, project_number: `PRJ-${index}`, created_by: 'other-creator',
     assigned_outdoor_sales_id: employeeId, structure_readiness: 'ready', sales_status: 'new_lead',
     updated_at: '2026-11-14T00:00:00Z', pending: true,
   }));
@@ -101,7 +101,7 @@ test('legacy directory entries without office assignments stay hidden until an a
   assert.equal(state.indoorSales.length, 5);
 });
 
-test('Outdoor Sales ownership, team assignments and historical visits cannot bypass the office boundary', () => {
+test('Outdoor Sales team assignments and historical visits cannot expose another creator\'s foreign office entries', () => {
   const state = snapshot('Outdoor Sales', 'Najaf');
   state.actor.outdoorTeamMemberIds = ['teammate'];
   state.projects = state.projects.map(project => ({ ...project, assigned_outdoor_sales_id: 'teammate', project_log_only: project.branch !== 'Najaf' }));

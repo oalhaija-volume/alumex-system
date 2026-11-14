@@ -11,7 +11,7 @@ const branches = [...offices, 'Governorates', null];
 const projectRows = branches.map((branch, index) => ({
   id: `${index + 1}1111111-1111-4111-8111-111111111111`, branch, project_number: `PRJ-${index}`,
   project_name: `${branch ?? 'Unassigned'} private project`, address: `private address ${index}`,
-  created_by: actorId, assigned_outdoor_sales_id: actorId, client_id: `client-${index}`,
+  created_by: 'other-creator', assigned_outdoor_sales_id: actorId, client_id: `client-${index}`,
   structure_readiness: 'ready', sales_status: 'contract_signed', status: 'Production',
   created_at: timestamp, updated_at: timestamp, archived_at: null,
 }));

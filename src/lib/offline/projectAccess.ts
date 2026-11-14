@@ -1,20 +1,20 @@
-import { canAccessProjectBranch, hasGlobalProjectAccess } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, canAccessProjectRow, hasGlobalProjectAccess } from '@/lib/auth/projectBranchAccess';
 import { canAccessOutdoorProject } from '@/lib/auth/outdoorTeams';
 import type { FieldProject, FieldState } from './types';
 
 export function canAccessFieldProject(state: FieldState, project: FieldProject | undefined): boolean {
-  if (!project || !canAccessProjectBranch(state.actor, project.branch)
+  if (!project || !canAccessProjectRow(state.actor, project)
     || state.unavailableProjectIds?.includes(project.id)) return false;
   if (state.actor.role === 'Outdoor Sales') return !project.project_log_only
     && canAccessOutdoorProject(project, state.actor);
   return true;
 }
 
-// Retain unsynced records in storage, but never expose another branch's project
-// through a workspace, conflict, archive, media, or follow-up history read.
+// Keep each Outdoor creator's entries across offices, including saved work.
+// All other rows retain their branch boundary in every offline view.
 export function visibleFieldState(state: FieldState): FieldState {
   const outdoor = state.actor.role === 'Outdoor Sales';
-  const projects = state.projects.filter(project => canAccessProjectBranch(state.actor, project.branch)
+  const projects = state.projects.filter(project => canAccessProjectRow(state.actor, project)
     && !state.unavailableProjectIds?.includes(project.id)
     && (!outdoor || project.project_log_only || canAccessOutdoorProject(project, state.actor)));
   const writableIds = new Set(projects.filter(project => canAccessFieldProject(state, project)).map(project => project.id));
@@ -31,7 +31,7 @@ export function visibleFieldState(state: FieldState): FieldState {
     followUpHistories: state.followUpHistories
       ? Object.fromEntries(Object.entries(state.followUpHistories).filter(([id]) => writableIds.has(id)))
       : undefined,
-    archivedProjects: state.archivedProjects?.filter(archive => canAccessProjectBranch(state.actor, archive.project?.branch)
+    archivedProjects: state.archivedProjects?.filter(archive => canAccessProjectRow(state.actor, archive.project)
       && (!outdoor || !!archive.project && !archive.project.project_log_only && canAccessOutdoorProject(archive.project, state.actor))),
     unavailableProjectIds: undefined,
   };

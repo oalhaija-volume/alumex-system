@@ -44,10 +44,23 @@ export async function POST(request:Request,context:Context){
  }else{body=await request.json().catch(()=>({}));}
  const action=body.action;const revision=body.revision;
  if(project.additional_openings_state==='requested'||(project.additional_openings_state==='submitted'&&action!=='save'))return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.'},{status:409});
- if(!['save','approve','contract','sign','preview-prices','update-prices','set-discount','change-contract-template'].includes(String(action))||!Number.isInteger(revision)||revision!==(flow?.revision??0))return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
+ if(!['save','approve','contract','sign','preview-prices','update-prices','set-discount','change-contract-template','save-contract-details'].includes(String(action))||!Number.isInteger(revision)||revision!==(flow?.revision??0))return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
  if(!QUOTATION_DISCOUNTS_ENABLED&&(action==='set-discount'||['save','preview-prices','update-prices'].includes(String(action))&&body.discountPercent===5))return NextResponse.json({error:'Quotation discounts are temporarily unavailable.'},{status:403});
  let payload:Json={};let uploadedPath:string|null=null;
  try{
+  if(action==='save-contract-details'){
+   if(flow?.signed_at||flow?.evidence||flow?.accepted_at||flow?.accepted_by||['contract_signed','transferred_to_operations'].includes(project.sales_status))return NextResponse.json({error:'Signed contracts cannot be changed.'},{status:409});
+   if(!flow?.contract||flow.stage!=='contract'||project.sales_status!=='contract_generated'||flow.contract.agreement2027?.version!=='agreement-2027')return NextResponse.json({error:'Only an unsigned 2027 contract can have its details changed.'},{status:409});
+   if(body.confirmed!==true)throw new Error('Confirm that you want to save the contract details.');
+   const kind=flow.contract.template;
+   if(kind!=='residential'&&kind!=='commercial')throw new Error('Choose the residential or commercial contract template.');
+   const {normalizeAgreement2027Fields}=await import('@/lib/contracts/agreement2027Server');
+   const fields=normalizeAgreement2027Fields(body.details);
+   const agreement={...flow.contract.agreement2027,fields};
+   const result=await admin.rpc('update_agreement_contract',{p_project:projectId,p_revision:revision as number,p_agreement:agreement as unknown as Json,p_terms:flow.contract.terms as unknown as Json,p_template:kind,p_actor:auth.user.id});
+   if(result.error)throw new Error(result.error.message);
+   return NextResponse.json({flow:result.data},{headers:{'Cache-Control':'no-store'}});
+  }
   if(action==='change-contract-template'){
    if(flow?.signed_at||flow?.evidence||flow?.accepted_at||flow?.accepted_by||['contract_signed','transferred_to_operations'].includes(project.sales_status))return NextResponse.json({error:'Signed contracts cannot be changed.'},{status:409});
    if(!flow?.contract||flow.stage!=='contract'||project.sales_status!=='contract_generated')return NextResponse.json({error:'Only an unsigned generated contract can have its type changed.'},{status:409});
@@ -55,6 +68,13 @@ export async function POST(request:Request,context:Context){
    if(kind!=='residential'&&kind!=='commercial')throw new Error('Choose the residential or commercial contract template.');
    if(body.confirmed!==true)throw new Error('Confirm that you want to change the contract type.');
    if(kind===flow.contract.template)throw new Error('Choose a different contract type.');
+   if(flow.contract.agreement2027?.version==='agreement-2027'){
+    const {buildAgreement2027Snapshot,agreement2027Terms}=await import('@/lib/contracts/agreement2027Server');
+    const agreement={...buildAgreement2027Snapshot(flow.contract.quotation,kind,flow.contract.agreement2027.fields,flow.contract.agreement2027.openingSpecifications),readiness:flow.contract.agreement2027.readiness,specificationNotes:flow.contract.agreement2027.specificationNotes};
+    const result=await admin.rpc('update_agreement_contract',{p_project:projectId,p_revision:revision as number,p_agreement:agreement as unknown as Json,p_terms:agreement2027Terms(kind) as unknown as Json,p_template:kind,p_actor:auth.user.id});
+    if(result.error)throw new Error(result.error.message);
+    return NextResponse.json({flow:result.data},{headers:{'Cache-Control':'no-store'}});
+   }
    payload={template:kind,terms:uploadedContractTerms(kind)};
   }
   if(action==='set-discount'){
@@ -95,6 +115,7 @@ export async function POST(request:Request,context:Context){
   }
   if(action==='approve' && body.confirmed!==true)throw new Error('Confirm that the client approved this quotation.');
   if(action==='contract'){
+   if(!flow||flow.stage!=='approved'||flow.signed_at||project.sales_status!=='quotation_approved')throw new Error('Generate the contract from a client-approved quotation first.');
    const kind=body.template;
    if(kind!=='residential'&&kind!=='commercial')throw new Error('Choose the residential or commercial contract template.');
    let branch=project.branch;
@@ -104,10 +125,10 @@ export async function POST(request:Request,context:Context){
     if(creator.data.branch!=='Karkh'&&creator.data.branch!=='Rasafa'&&creator.data.branch!=='Najaf')throw new Error('Ask Admin to assign your branch before generating a contract.');
     branch=creator.data.branch;
    }
-   const client=await admin.from('clients').select('name:client_name,mobile,client_type').eq('id',project.client_id).single();
-   if(client.error)throw new Error('Unable to load client information.');
-   const sections=uploadedContractTerms(kind);
-   payload={number:`CT-${project.project_number}-${revision}`,createdAt:new Date().toISOString(),createdBy:auth.user.id,branch,client:client.data,project:{branch:project.branch,governorate:project.governorate??null,name:project.project_name,number:project.project_number,address:project.address},terms:sections,template:kind};
+   const {loadAgreement2027Snapshot,agreement2027Terms}=await import('@/lib/contracts/agreement2027Server');
+   const agreement2027=await loadAgreement2027Snapshot(admin,projectId,flow.quotation,kind,auth.user.id);
+   const client={name:agreement2027.fields.clientLegalName,mobile:agreement2027.fields.directPhone||null,client_type:agreement2027.fields.clientClassification==='شركة'?'company':'individual'};
+   payload={number:`CT-${project.project_number}-${revision}`,createdAt:new Date().toISOString(),createdBy:auth.user.id,branch,client,project:{branch:project.branch,governorate:project.governorate??null,name:project.project_name,number:project.project_number,address:project.address},terms:agreement2027Terms(kind),template:kind,agreement2027} as unknown as Json;
   }
   if(action==='sign'){
    if(flow?.stage!=='contract')throw new Error('Only an unsigned generated contract can be signed.');

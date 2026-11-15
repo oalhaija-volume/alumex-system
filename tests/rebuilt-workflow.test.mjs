@@ -4,10 +4,17 @@ import test from 'node:test';
 import ts from 'typescript';
 function load(path,dependencies={}){
  const source=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
- const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/intake/projectBranch')return load('../src/lib/intake/projectBranch.ts');if(name==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts',{});if(name==='@/lib/measurements/visitHistory')return load('../src/lib/measurements/visitHistory.ts');if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(name in dependencies))throw Error(name);return dependencies[name];},exports);return exports;
+ const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/contracts/agreement2027Server')return agreementServer;if(name==='@/lib/intake/projectBranch')return load('../src/lib/intake/projectBranch.ts');if(name==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts',{});if(name==='@/lib/measurements/visitHistory')return load('../src/lib/measurements/visitHistory.ts');if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(name in dependencies))throw Error(name);return dependencies[name];},exports);return exports;
 }
 const termsData=JSON.parse(readFileSync(new URL('../src/lib/contracts/uploadedTerms.json',import.meta.url),'utf8'));
 const uploadedTerms=load('../src/lib/contracts/uploadedTerms.ts',{'./uploadedTerms.json':{default:termsData}});
+const agreementContent=load('../src/lib/contracts/agreement2027Content.ts');
+const agreementTypes=load('../src/lib/contracts/agreement2027Types.ts');
+const agreementModel=load('../src/lib/contracts/agreement2027.ts',{'./agreement2027Content':agreementContent,'./agreement2027Types':agreementTypes});
+// Source lookups are covered by agreement-2027-server.test.mjs. These route
+// fixtures retain their focus on canonical terms and issuing-branch attribution.
+const agreementServer={...agreementContent,loadAgreement2027Snapshot:async(admin,projectId,quote,kind)=>agreementModel.buildAgreement2027Snapshot(quote,kind,{...agreementModel.emptyAgreement2027Fields(),clientLegalName:'Client',directPhone:'07000',clientClassification:'فرد'})};
+
 const catalogRules=load('../src/lib/workflow/catalogRules.ts');
 const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules});
 const registration=load('../src/lib/measurements/registrationOpening.ts');
@@ -99,14 +106,14 @@ test('operations specification projection excludes all monetary and contractual 
  assert.equal(/rate|price|total|signature|contract/i.test(JSON.stringify(safe)),false);
 });
 
-for(const template of ['residential','commercial'])test(`${template} contract generation saves its uploaded terms and selected template`,async()=>{
+for(const template of ['residential','commercial'])test(`${template} contract generation saves the 2027 terms, approved amount and selected template`,async()=>{
  let input;
- const admin={from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{revision:2,stage:'approved'},error:null}),single:async()=>({data:{name:'Client',mobile:'07000',client_type:'individual'},error:null})};},rpc:async(name,args)=>{input=args;return {data:{},error:null};}};
- const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project',client_id:'client',project_name:'Site',project_number:'PRJ-1',address:'Baghdad',branch:'Rasafa'}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
+ const admin={from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{revision:2,stage:'approved',quotation:pricing.priceQuotation([opening],[choice],catalog,'approved-author')},error:null}),single:async()=>({data:{name:'Client',mobile:'07000',client_type:'individual'},error:null})};},rpc:async(name,args)=>{input=args;return {data:{},error:null};}};
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project',client_id:'client',project_name:'Site',project_number:'PRJ-1',address:'Baghdad',branch:'Rasafa',sales_status:'quotation_approved'}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
  const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'contract',revision:2,template})}),{params:Promise.resolve({projectId:'project'})});
- assert.equal(result.status,200);assert.equal(input.p_payload.template,template);assert.equal(input.p_payload.project.branch,'Rasafa');assert.equal(input.p_payload.branch,'Rasafa');assert.equal(input.p_payload.createdBy,'actor');assert.deepEqual(input.p_payload.terms,termsData[template]);
- const payments=input.p_payload.terms.find(x=>x.title==='payment terms').text;
- assert.match(payments,template==='commercial'?/25%/:/50/);
+ assert.equal(result.status,200);assert.equal(input.p_payload.template,template);assert.equal(input.p_payload.project.branch,'Rasafa');assert.equal(input.p_payload.branch,'Rasafa');assert.equal(input.p_payload.createdBy,'actor');assert.deepEqual(input.p_payload.terms,agreementContent.agreement2027Terms(template));assert.equal(input.p_payload.agreement2027.total,551000);assert.equal(input.p_payload.agreement2027.version,'agreement-2027');
+ const payments=input.p_payload.terms[2].text;
+ assert.match(payments,template==='commercial'?/30%/:/50/);
  assert.ok(input.p_payload.terms.some(x=>x.text.includes('عشرة سنوات')));
 });
 test('project deletion rejects unauthorized roles and missing confirmation before mutation',async()=>{
@@ -296,11 +303,11 @@ test('creating an Indoor Sales account requires a valid branch from Admin',async
 for(const branch of ['Karkh','Rasafa','Najaf',null,'invalid','lookup-error'])test(`contract uses the authenticated Indoor Sales creator branch: ${branch}`,async()=>{
  let input;const lookups=[];
  const admin={from(table){return {select(){return this;},eq(key,value){if(table==='profiles')lookups.push([key,value]);return this;},
-  maybeSingle:async()=>({data:{revision:2,stage:'approved'},error:null}),
+  maybeSingle:async()=>({data:{revision:2,stage:'approved',quotation:pricing.priceQuotation([opening],[choice],catalog,'approved-author')},error:null}),
   single:async()=>table==='profiles'?{data:{branch},error:branch==='lookup-error'?{message:'failed'}:null}:{data:{name:'Client',mobile:'07000',client_type:'individual'},error:null}
  };},rpc:async(name,args)=>{input=structuredClone(args);return {data:{},error:null};}};
  const projectBranch=branch==='Karkh'?'Rasafa':'Karkh';
- const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{role:'Indoor Sales',user:{id:'creator'}},project:{id:'project',client_id:'client',project_name:'Site',project_number:'PRJ-1',address:'Baghdad',branch:projectBranch}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{role:'Indoor Sales',user:{id:'creator'}},project:{id:'project',client_id:'client',project_name:'Site',project_number:'PRJ-1',address:'Baghdad',branch:projectBranch,sales_status:'quotation_approved'}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
  const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'contract',revision:2,template:'residential',branch:projectBranch,createdBy:'forged'})}),{params:Promise.resolve({projectId:'project'})});
  assert.deepEqual(lookups,[['id','creator']]);
  if(branch==='Karkh'||branch==='Rasafa'||branch==='Najaf'){

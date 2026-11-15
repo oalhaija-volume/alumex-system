@@ -100,12 +100,12 @@ for (const branch of ['Karkh', 'Rasafa', null]) {
 for (const action of ['save', 'contract']) {
   test(`${action} preserves governorate in the commercial snapshot`, async () => {
     let payload;
-    const project = { ...projects[2], project_name: 'Basra villa', project_number: 'PRJ-BASRA', address: 'Basra site', sales_status: 'ready_for_quotation' };
+    const project = { ...projects[2], project_name: 'Basra villa', project_number: 'PRJ-BASRA', address: 'Basra site', sales_status: action==='contract'?'quotation_approved':'ready_for_quotation' };
     const admin = {
       from(table) {
         return {
           select() { return this; }, eq() { return this; }, order() { return this; },
-          maybeSingle: async () => ({ data: null, error: null }),
+          maybeSingle: async () => ({ data: action==='contract'?{revision:0,stage:'approved',quotation:{lines:[],total:100,currency:'IQD'}}:null, error: null }),
           single: async () => ({ data: table === 'profiles' ? { branch: 'Karkh' } : { name: 'Client', mobile: '07700000000' }, error: null }),
           then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); },
         };
@@ -116,6 +116,7 @@ for (const action of ['save', 'contract']) {
       'next/server': response,
       '@/lib/workflow/access': { salesProject: async () => ({ project, admin, auth: { role: 'Indoor Sales', user: { id: 'indoor' } } }) },
       '@/lib/contracts/uploadedTerms': { uploadedContractTerms: () => [] },
+      '@/lib/contracts/agreement2027Server': {agreement2027Terms:()=>[],loadAgreement2027Snapshot:async(admin,id,quotation)=>({version:'agreement-2027',total:quotation.total,fields:{clientLegalName:'Client',directPhone:'07700000000',clientClassification:'فرد'}})},
       '@/lib/workflow/pricing': { priceQuotation: () => ({ lines: [], total: 100, currency: 'IQD' }) },
       '@/lib/workflow/quotationOpenings': { quotationOpenings: () => [], normalizeExcludedOpeningIds: load('lib/workflow/quotationOpenings.ts').normalizeExcludedOpeningIds },
     });

@@ -1,0 +1,31 @@
+export const AGREEMENT_2027_VERSION = 'agreement-2027' as const;
+export const agreementApprovalRoles = ['salesEngineer', 'salesManager', 'operationsManager', 'projectsManager', 'projectEngineer'] as const;
+export type AgreementApprovalRole = typeof agreementApprovalRoles[number];
+export const agreementSamples = ['aluminum', 'glass', 'rollerShutter', 'curtainWall'] as const;
+export type AgreementSample = typeof agreementSamples[number];
+export type AgreementApproval = { name: string; date: string; signature: string };
+export type AgreementPhase = { technicalMeetingDate: string; measurementReadyDate: string; installationReadyDate: string; notes: string };
+export type Agreement2027Fields = {
+ clientLegalName: string; companyName: string; executingEntity: string;
+ ownerName: string; ownerPhone: string; directPhone: string; whatsapp: string; email: string;
+ consultantName: string; consultantPhone: string; contractorName: string; contractorPhone: string;
+ salesEngineerName: string; stateAtSigning: string; clientClassification: string;
+ handoverDate: string; handoverReceivedDate: string; projectApprovalDate: string; advancePaidDate: string;
+ samples: AgreementSample[]; specialInstructions: string; agreedCommitments: string; followUpNotes: string; administrativeNotes: string;
+ companyRepresentativeName: string; companyRepresentativeTitle: string; companyRepresentativeDate: string; companyRepresentativeSignature: string;
+ approvals: Record<AgreementApprovalRole, AgreementApproval>;
+ phases: AgreementPhase[];
+};
+export type AgreementPaymentStage = { id: string; label: string; percent: number; amount: number; trigger: string };
+export type AgreementOpeningSpecification = { openingId: string; aluminumColor: string; glassColor: string; bottomFrame: string; notes: string; technicalDescription?: string };
+export type Agreement2027Snapshot = {
+ version: typeof AGREEMENT_2027_VERSION;
+ sourceDocument: 'عقد اتفاق 2027.pdf';
+ fields: Agreement2027Fields;
+ total: number;
+ amountInWords: string;
+ paymentSchedule: AgreementPaymentStage[];
+ openingSpecifications: AgreementOpeningSpecification[];
+ readiness: { measurement: string[]; installation: string[]; notes: string[] };
+ specificationNotes: string[];
+};

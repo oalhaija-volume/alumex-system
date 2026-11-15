@@ -244,11 +244,11 @@ function fixture({role='Indoor Sales',branch='Karkh',projectBranch='Karkh',stage
  const saved=quotation(discountPercent);
  const stored={project_id:projectId,revision:4,stage,quotation:saved,contract:stage==='contract'?{quotation:structuredClone(saved)}:null,evidence:null,signed_at:signedAt};
  const unrelated={project_id:'other-project',revision:6,stage:'approved',quotation:quotation(),contract:null,signed_at:null};
- const tables={projects:[project],sales_workflows:missingFlow?[unrelated]:[stored,unrelated],product_price_settings:structuredClone(catalog),openings:[{...structuredClone(opening),project_id:projectId}],profiles:[{id:actorId,branch}],clients:[{id:'client',name:'Client',mobile:'07700000000'}],quotation_revisions:[{project_id:projectId,version:3,quotation:quotation(5),contract:null,previous_stage:'approved',superseded_at:'2026-11-11T08:00:00Z'}]};
+ const tables={projects:[project],sales_workflows:missingFlow?[unrelated]:[stored,unrelated],product_price_settings:structuredClone(catalog),openings:[{...structuredClone(opening),project_id:projectId}],profiles:[{id:actorId,branch}],client_contacts:[],clients:[{id:'client',name:'Client',client_name:'Client',client_type:'individual',mobile:'07700000000'}],quotation_revisions:[{project_id:projectId,version:3,quotation:quotation(5),contract:null,previous_stage:'approved',superseded_at:'2026-11-11T08:00:00Z'}]};
  const admin={from(table){
   const predicates=[];
   const result=single=>{const rows=tables[table].filter(row=>predicates.every(predicate=>predicate(row)));reads.push({table,rows});return {data:single?rows[0]??null:rows,error:null};};
-  return {select(){return this;},eq(key,value){predicates.push(row=>row[key]===value);return this;},order(){return this;},maybeSingle:async()=>result(true),single:async()=>result(true),then(resolve){return Promise.resolve(result(false)).then(resolve);}};
+  return {select(){return this;},eq(key,value){predicates.push(row=>row[key]===value);return this;},in(key,values){predicates.push(row=>values.includes(row[key]));return this;},or(){return this;},order(){return this;},maybeSingle:async()=>result(true),single:async()=>result(true),then(resolve){return Promise.resolve(result(false)).then(resolve);}};
  },rpc:async(name,args)=>{calls.push({name,args});return {data:{...stored,revision:5,stage:'quotation',quotation:args.p_payload},error:null};}};
  const route=moduleLoader({
   'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200,headers:options?.headers})}},
@@ -525,6 +525,10 @@ test('historical discounted quotations remain readable, approvable, contractable
   assert.equal(result.status,200,body.action);
   assert.equal(x.calls.length,1);
   assert.equal(x.calls[0].args.p_action,body.action);
+  if(body.action==='contract'){
+   assert.equal(x.calls[0].args.p_payload.agreement2027.total,savedBefore.sales_workflows[0].quotation.total,'The historical approved discount remains the contract amount');
+   assert.equal(x.calls[0].args.p_payload.agreement2027.paymentSchedule[0].amount,1533300);
+  }
   assert.deepEqual(x.tables,savedBefore,'Existing quotation discounts and archived revisions remain intact');
  }
 });

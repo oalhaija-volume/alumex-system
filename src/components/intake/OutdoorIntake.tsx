@@ -46,6 +46,7 @@ export function OutdoorIntake({ initialEmployeeState = null,onRegistered }: { in
   const [legacyOutdoorSalesId,setLegacyOutdoorSalesId]=useState('');
   const actorRole = employeeState?.actor.role;
   const actorBranch = employeeState?.actor.branch;
+  const actorRotationStartBranch = employeeState?.actor.outdoorRotationStartBranch;
   const currentOutdoorBranch = employeeState ? outdoorSalesBranch(employeeState.actor,rotationDate) : null;
   const baghdadOutdoor = actorRole==='Outdoor Sales'&&(actorBranch==='Karkh'||actorBranch==='Rasafa');
   const allowedProjectBranches = employeeState ? outdoorProjectBranches(employeeState.actor,rotationDate) : [];
@@ -82,10 +83,10 @@ export function OutdoorIntake({ initialEmployeeState = null,onRegistered }: { in
   },[]);
 
   useEffect(()=>{
-    const branches=outdoorProjectBranches({role:actorRole??'',branch:actorBranch},rotationDate);
+    const branches=outdoorProjectBranches({role:actorRole??'',branch:actorBranch,outdoorRotationStartBranch:actorRotationStartBranch},rotationDate);
     const timer=window.setTimeout(()=>setProjectBranch(current=>current&&branches.includes(current)?current:branches.length===1?branches[0]:''),0);
     return()=>window.clearTimeout(timer);
-  },[actorRole,actorBranch,currentOutdoorBranch,rotationDate]);
+  },[actorRole,actorBranch,actorRotationStartBranch,currentOutdoorBranch,rotationDate]);
 
   async function submit() {
     if (saving) return;

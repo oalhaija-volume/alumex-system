@@ -638,9 +638,11 @@ test('Outdoor Sales must choose a project branch and it survives local reads and
   await assert.rejects(x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch}}),/project branch/);
   assert.equal(x.state.queue.length,0);assert.equal(x.state.projects.length,0);
  }
- for(const branch of ['Karkh','Rasafa','Najaf']){
-  context.mock.timers.setTime(Date.parse(branch==='Rasafa'?'2026-11-20T08:00:00Z':'2026-11-14T08:00:00Z'));
-  const outdoor=outdoorActorForCurrentBranch(branch);const x=setup({actor:outdoor});
+ for(const office of ['Karkh','Rasafa','Najaf'])for(const half of ['first','second']){
+  context.mock.timers.setTime(Date.parse(half==='first'?'2026-11-15T08:00:00Z':'2026-11-16T08:00:00Z'));
+  const outdoor=outdoorActorForCurrentBranch(office);const x=setup({actor:outdoor});
+  const start=outdoor.outdoorRotationStartBranch;
+  const branch=office==='Najaf'?'Najaf':half==='first'?start:start==='Karkh'?'Rasafa':'Karkh';
   await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch}});
   assert.equal(x.state.projects[0].branch,branch);assert.equal(x.state.queue[0].payload.project.branch,branch);
   assert.equal((await (await x.client.fieldFetch('/api/workspace')).json()).projects[0].branch,branch);
@@ -650,7 +652,7 @@ test('Outdoor Sales must choose a project branch and it survives local reads and
    assert.equal(JSON.parse(init.body).payload.project.branch,branch);
    return Response.json({project:{...x.state.projects[0],branch,project_number:'PRJ-1',updated_at:new Date().toISOString()}});
   };
-  await x.client.syncFieldChanges();assert.equal(x.state.queue.length,0);assert.equal(x.state.projects[0].branch,branch);assert.equal(x.state.actor.branch,branch);
+  await x.client.syncFieldChanges();assert.equal(x.state.queue.length,0);assert.equal(x.state.projects[0].branch,branch);assert.equal(x.state.actor.branch,office);
  }
 });
 
@@ -676,9 +678,11 @@ test('shared governorate registrations validate before saving and survive offlin
 });
 
 test('Outdoor Sales cannot queue another office and denied registrations leave saved work intact',async context=>{
- for(const allowed of ['Karkh','Rasafa','Najaf']){
-  context.mock.timers.setTime(Date.parse(allowed==='Rasafa'?'2026-11-20T08:00:00Z':'2026-11-14T08:00:00Z'));
-  const x=setup({actor:outdoorActorForCurrentBranch(allowed)});
+ for(const office of ['Karkh','Rasafa','Najaf'])for(const half of ['first','second']){
+  context.mock.timers.setTime(Date.parse(half==='first'?'2026-11-15T08:00:00Z':'2026-11-16T08:00:00Z'));
+  const outdoor=outdoorActorForCurrentBranch(office),x=setup({actor:outdoor});
+  const start=outdoor.outdoorRotationStartBranch;
+  const allowed=office==='Najaf'?'Najaf':half==='first'?start:start==='Karkh'?'Rasafa':'Karkh';
   await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch:allowed}});
   const before=structuredClone(x.state);
   const otherBranch=allowed==='Karkh'?'Rasafa':'Karkh';

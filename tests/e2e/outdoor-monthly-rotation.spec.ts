@@ -63,8 +63,8 @@ function saveButton(page:Page,locale:string){
 }
 
 for(const locale of ['en','ar'])for(const employee of employees)for(const half of ['first','second'])test(`${locale}: ${employee.name} can register only the assigned Baghdad branch in the ${half} half`,async({page},testInfo)=>{
- const date=half==='first'?'2026-10-10T09:00:00Z':'2026-10-20T09:00:00Z';
- const assigned=half==='first'?'Karkh':'Rasafa';
+ const date=half==='first'?'2026-11-15T09:00:00Z':'2026-11-16T09:00:00Z';
+ const assigned=half==='first'?employee.outdoorRotationStartBranch:employee.outdoorRotationStartBranch==='Karkh'?'Rasafa':'Karkh';
  const forbidden=assigned==='Karkh'?'Rasafa':'Karkh';
  const {posts,errors}=await prepare(page,locale,employee,date);
  const branches=page.locator('input[name="projectBranch"]');
@@ -78,7 +78,7 @@ for(const locale of ['en','ar'])for(const employee of employees)for(const half o
  await page.locator('#project-governorate').selectOption('البصرة');
  await page.locator(`input[name="projectBranch"][value="${assigned}"]`).check();
  await expect(page.locator('#project-governorate')).toHaveCount(0);
- if(employee.name==='Mohammad'&&half==='second'){
+ if((employee.name==='Sajjad'||employee.name==='Ehab')&&half==='second'){
   await page.getByRole('group',{name:locale==='en'?/Project branch/:/فرع المشروع/}).screenshot({path:testInfo.outputPath('monthly-assignment.png')});
   await page.screenshot({path:testInfo.outputPath('monthly-assignment-page.png'),fullPage:false});
  }
@@ -140,6 +140,23 @@ for(const boundary of [
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await expect(page.locator('input[name="projectBranch"][value="Governorates"]')).toBeChecked();
  await expect(page.locator('#project-governorate')).toHaveValue('البصرة');
+ expect(errors).toEqual([]);
+});
+
+for(const employee of employees.filter(employee=>employee.name==='Sajjad'||employee.name==='Ehab'))test(`${employee.name} switches from Rasafa to Karkh at Baghdad midnight on November 16`,async({page})=>{
+ const {errors}=await prepare(page,'en',employee,'2026-11-15T20:59:59Z');
+ await page.locator('input[name="projectBranch"][value="Rasafa"]').check();
+ await page.locator('input[autocomplete="name"]').fill('Keep the Rasafa draft');
+ await page.clock.setFixedTime(new Date('2026-11-15T21:00:00Z'));
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await expect(page.locator('input[name="projectBranch"][value="Rasafa"]')).toHaveCount(0);
+ await expect(page.locator('input[name="projectBranch"][value="Karkh"]')).toBeVisible();
+ await expect(page.locator('input[name="projectBranch"]:checked')).toHaveCount(0);
+ await expect(page.locator('input[autocomplete="name"]')).toHaveValue('Keep the Rasafa draft');
+ await page.locator('input[name="projectBranch"][value="Karkh"]').check();
+ await page.clock.setFixedTime(new Date('2026-11-30T20:59:59Z'));
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await expect(page.locator('input[name="projectBranch"][value="Karkh"]')).toBeChecked();
  expect(errors).toEqual([]);
 });
 

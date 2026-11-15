@@ -5,17 +5,18 @@
 begin;
 
 do $calendar$
-declare office text; month_start timestamp;
+declare office text; opposite text; month_start timestamp;
 begin
   foreach office in array array['Karkh','Rasafa'] loop
-    assert public.outdoor_sales_branch_for_date(office,'2026-11-15 20:59:59+00')='Karkh';
-    assert public.outdoor_sales_branch_for_date(office,'2026-11-15 21:00:00+00')='Rasafa';
-    assert public.outdoor_sales_branch_for_date(office,'2026-11-30 20:59:59+00')='Rasafa';
-    assert public.outdoor_sales_branch_for_date(office,'2026-11-30 21:00:00+00')='Karkh';
+    opposite:=case when office='Karkh' then 'Rasafa' else 'Karkh' end;
+    assert public.outdoor_sales_branch_for_date(office,'2026-11-15 20:59:59.999+00')=office;
+    assert public.outdoor_sales_branch_for_date(office,'2026-11-15 21:00:00+00')=opposite;
+    assert public.outdoor_sales_branch_for_date(office,'2026-11-30 20:59:59.999+00')=opposite;
+    assert public.outdoor_sales_branch_for_date(office,'2026-11-30 21:00:00+00')=office;
     foreach month_start in array array['2027-02-01'::timestamp,'2028-02-01'::timestamp,
       '2026-04-01'::timestamp,'2026-07-01'::timestamp] loop
-      assert public.outdoor_sales_branch_for_date(office,(month_start+interval '1 month'-interval '1 second') at time zone 'Asia/Baghdad')='Rasafa';
-      assert public.outdoor_sales_branch_for_date(office,(month_start+interval '1 month') at time zone 'Asia/Baghdad')='Karkh';
+      assert public.outdoor_sales_branch_for_date(office,(month_start+interval '1 month'-interval '1 second') at time zone 'Asia/Baghdad')=opposite;
+      assert public.outdoor_sales_branch_for_date(office,(month_start+interval '1 month') at time zone 'Asia/Baghdad')=office;
     end loop;
   end loop;
   assert public.outdoor_sales_branch_for_date('Najaf',now()) is null;
@@ -34,23 +35,53 @@ begin
     foreach office in array array['Karkh','Rasafa','Najaf'] loop
       employee:=md5('baghdad-scope-'||job||office)::uuid;
       insert into auth.users(id,email) values(employee,md5(job||office)||'.baghdadscope@example.invalid');
-      insert into public.profiles(id,email,username,full_name,role,branch,is_active,status)
+      insert into public.profiles(id,email,username,full_name,role,branch,outdoor_rotation_start_branch,is_active,status)
         values(employee,md5(job||office)||'.baghdadscope@example.invalid','baghdadscope.'||substr(md5(job||office),1,10),
-          job||office,job::public.app_role,office,true,'Active');
+          job||office,job::public.app_role,office,case when job='Outdoor Sales' and office in ('Karkh','Rasafa') then office end,true,'Active');
     end loop;
   end loop;
 end;
 $fixtures$;
 
+do $rotation_seeds$
+declare office text; seed text; actor uuid; allowed_branch text; forbidden_branch text; result jsonb;
+  payload jsonb:='{"client":{"clientName":"Employee rotation fixture","clientType":"individual","mobile":"00000000000"},"project":{"address":"Fixture","structureReadiness":"ready","buildingType":"villa_house"}}';
+begin
+  -- The stored seed, rather than the permanent office, controls registration.
+  -- Null seeds retain the preceding shared-calendar default.
+  foreach office in array array['Karkh','Rasafa'] loop
+    actor:=md5('baghdad-scope-Outdoor Sales'||office)::uuid;
+    foreach seed in array array['Karkh','Rasafa',null::text] loop
+      update public.profiles set outdoor_rotation_start_branch=seed where id=actor;
+      allowed_branch:=public.outdoor_sales_branch_for_date(coalesce(seed,'Karkh'),statement_timestamp());
+      forbidden_branch:=case when allowed_branch='Karkh' then 'Rasafa' else 'Karkh' end;
+      perform public.require_outdoor_project_creation_branch(actor,allowed_branch);
+      perform public.require_outdoor_project_creation_branch(actor,'Governorates');
+      begin
+        perform public.require_outdoor_project_creation_branch(actor,forbidden_branch);
+        raise exception 'Outdoor creation guard ignored employee rotation seed';
+      exception when insufficient_privilege then null; end;
+      result:=public.register_sales_project(actor,jsonb_set(payload,'{project,branch}',to_jsonb(allowed_branch)));
+      assert (select branch=allowed_branch from public.projects where id=(result->>'projectId')::uuid),
+        'Explicit registration ignored employee rotation seed';
+      result:=public.register_sales_project(actor,payload);
+      assert (select branch=allowed_branch from public.projects where id=(result->>'projectId')::uuid),
+        'Legacy registration default ignored employee rotation seed';
+    end loop;
+    update public.profiles set outdoor_rotation_start_branch=office where id=actor;
+  end loop;
+end;
+$rotation_seeds$;
+
 do $registration$
 declare office text; actor uuid; allowed_branch text; forbidden_branch text; result jsonb; replay jsonb; payload jsonb;
   operation uuid; project_id uuid; candidate uuid; province text;
 begin
-  allowed_branch:=public.outdoor_sales_branch_for_date('Karkh',statement_timestamp());
-  forbidden_branch:=case when allowed_branch='Karkh' then 'Rasafa' else 'Karkh' end;
   payload:='{"client":{"clientName":"Baghdad scope fixture","clientType":"individual","mobile":"00000000000"},"project":{"address":"Fixture","structureReadiness":"ready","buildingType":"villa_house"}}';
   foreach office in array array['Karkh','Rasafa'] loop
     actor:=md5('baghdad-scope-Outdoor Sales'||office)::uuid;
+    allowed_branch:=public.outdoor_sales_branch_for_date(office,statement_timestamp());
+    forbidden_branch:=case when allowed_branch='Karkh' then 'Rasafa' else 'Karkh' end;
     assert public.employee_can_access_project_branch(actor,'Karkh');
     assert public.employee_can_access_project_branch(actor,'Rasafa');
     assert public.employee_can_access_project_branch(actor,'Governorates');

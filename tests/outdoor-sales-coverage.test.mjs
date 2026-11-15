@@ -28,15 +28,18 @@ const profiles = [
 ];
 
 for (const [instant, expected] of [
-  ['2026-10-01T00:00:00+03:00', ['Karkh', 'Karkh']],
-  ['2026-10-15T20:59:59.999Z', ['Karkh', 'Karkh']],
-  ['2026-10-15T21:00:00.000Z', ['Rasafa', 'Rasafa']],
-  ['2026-10-31T20:59:59.999Z', ['Rasafa', 'Rasafa']],
-  ['2026-10-31T21:00:00.000Z', ['Karkh', 'Karkh']],
-  ['2028-02-29T23:59:59.999+03:00', ['Rasafa', 'Rasafa']],
-  ['2028-03-01T00:00:00+03:00', ['Karkh', 'Karkh']],
+  ['2026-10-01T00:00:00+03:00', ['Karkh', 'Rasafa']],
+  ['2026-10-15T20:59:59.999Z', ['Karkh', 'Rasafa']],
+  ['2026-10-15T21:00:00.000Z', ['Rasafa', 'Karkh']],
+  ['2026-10-31T20:59:59.999Z', ['Rasafa', 'Karkh']],
+  ['2026-10-31T21:00:00.000Z', ['Karkh', 'Rasafa']],
+  ['2026-11-15T20:59:59.999Z', ['Karkh', 'Rasafa']],
+  ['2026-11-15T21:00:00.000Z', ['Rasafa', 'Karkh']],
+  ['2026-11-30T20:59:59.999Z', ['Rasafa', 'Karkh']],
+  ['2028-02-29T23:59:59.999+03:00', ['Rasafa', 'Karkh']],
+  ['2028-03-01T00:00:00+03:00', ['Karkh', 'Rasafa']],
 ]) {
-  test(`coverage shows the shared Baghdad assignment and separate Najaf at ${instant}`, () => {
+  test(`coverage shows each employee's Baghdad rotation and separate Najaf at ${instant}`, () => {
     const date = new Date(instant);
     const before = structuredClone(profiles);
     assert.deepEqual(outdoorSalesCoverage(profiles, date), {
@@ -64,7 +67,7 @@ test('coverage derives arbitrary employee names and assignments from profile dat
     asOf: date.toISOString(),
     staff: [
       { id: 'new-1', name: 'New team member', branch: 'Karkh' },
-      { id: 'new-2', name: 'field.employee', branch: 'Karkh' },
+      { id: 'new-2', name: 'field.employee', branch: 'Rasafa' },
       { id: 'new-3', name: 'another.employee', branch: null },
       { id: 'new-4', name: 'Employee', branch: null },
       { id: 'new-5', name: 'Employee', branch: null },
@@ -164,7 +167,7 @@ for (const role of leaderRoles) {
     assert.equal(result.status, 200);
     const staff = [
       { id: 'west-starter', name: 'Another employee', branch: 'Rasafa' },
-      { id: 'east-starter', name: 'موظف آخر', branch: 'Rasafa' },
+      { id: 'east-starter', name: 'موظف آخر', branch: 'Karkh' },
       { id: 'najaf-employee', name: 'موظف النجف', branch: 'Najaf' },
       { id: 'new-unconfigured', name: 'new.employee', branch: null },
     ];
@@ -214,6 +217,6 @@ test('coverage timestamp and all employee assignments use one server instant acr
   const result = await x.route.GET();
   assert.equal(result.status, 200);
   assert.equal(result.body.asOf, '2026-10-15T20:59:59.999Z');
-  assert.deepEqual(result.body.staff.map(employee => employee.branch), ['Karkh', 'Karkh', 'Najaf', null]);
+  assert.deepEqual(result.body.staff.map(employee => employee.branch), ['Karkh', 'Rasafa', 'Najaf', null]);
   assert.equal(instants, 1, 'Timestamp and branch calculations must share the same captured time');
 });

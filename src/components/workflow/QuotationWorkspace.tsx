@@ -18,6 +18,7 @@ import { QuotationOpeningForm } from './QuotationOpeningForm';
 import { QuotationFacadeForm } from './QuotationFacadeForm';
 import { discountedSystemRate,measuredOpeningArea,billableOpeningArea,openingSellingBand,openingMinimumSellingRate,quotationSellingSuggestion,isQuotationCurtainRateEditable } from '@/lib/workflow/pricing';
 import { OpeningAreaBadge,OpeningSellingLegend } from './OpeningAreaIndicator';
+import { ContractPaymentPreview } from '@/components/contracts/ContractPaymentPreview';
 import { DocumentHeader,DocumentParties,OpeningSchedule,DocumentFooter,DocumentPaper } from './CommercialDocument';
 import { api,button,card,field,Notice,secondary,useResource,Workspace } from './ui';
 
@@ -68,7 +69,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const [suggestionHidden,setSuggestionHidden]=useState(()=>{
   try{return typeof window!=='undefined'&&window.localStorage.getItem(suggestionPreferenceKey)==='1';}catch{return false;}
  });
- const [template,setTemplate]=useState<'residential'|'commercial'>(['company','corporate'].includes(data.client.client_type??'')?'commercial':'residential');
+ const [template,setTemplate]=useState<'residential'|'commercial'|''>('');
  const waiting=data.project.additional_openings_state==='requested';
  const needsRevision=!!data.project.additional_openings_state;
  const canEdit=!waiting&&!['contract_signed','transferred_to_operations','cancelled','lost','closed'].includes(data.project.sales_status)&&(!flow||(!flow.signed_at&&['quotation','approved','contract'].includes(flow.stage)));
@@ -145,10 +146,11 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   setAddingFacade(false);
  }
  async function act(action:string){
-  if(busy||pricePreview||action==='save'&&hasUnappliedGroupRates)return;
+  if(busy||pricePreview||action==='save'&&hasUnappliedGroupRates||action==='contract'&&!template)return;
   setBusy(true);setError('');clearActionError();
   try{
-   await api(`/api/sales-flow/${projectId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,choices:activeChoices,excludedOpeningIds,additionalItems,newOpenings,discountPercent,revision:flow?.revision??0,confirmed:approved,template,replaceUnsignedContract:replaceContract})});
+   const payload=action==='contract'?{action,revision:flow?.revision??0,template}:{action,choices:activeChoices,excludedOpeningIds,additionalItems,newOpenings,discountPercent,revision:flow?.revision??0,confirmed:approved,template,replaceUnsignedContract:replaceContract};
+   await api(`/api/sales-flow/${projectId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
    await reload();
   }catch(e){setError((e as Error).message);}finally{setBusy(false);}
  }
@@ -335,7 +337,17 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
    <div className="mt-6 flex flex-wrap gap-3 print:hidden">
     <button disabled={editing||discountChanged} onClick={()=>window.print()} className={secondary}>{term("Print quotation")}</button>
     {!editing&&!archived&&!needsRevision&&flow.stage==='quotation'&&<div className="w-full border-t border-slate-200 pt-5"><label className="mb-4 flex items-center gap-3 text-sm"><input type="checkbox" disabled={busy||!!pricePreview||discountChanged} checked={approved} onChange={e=>setApproved(e.target.checked)}/>{term("The client approved this saved quotation.")}</label><button disabled={busy||!!pricePreview||discountChanged||!approved} onClick={()=>void act('approve')} className={button}>{term("Record client approval")}</button></div>}
-    {!editing&&!archived&&!needsRevision&&flow.stage==='approved'&&<div className="w-full space-y-4"><label className="block text-sm">{term("Contract template")}<select disabled={busy||!!pricePreview} aria-label={term("Contract template")} value={template} onChange={e=>setTemplate(e.target.value as 'residential'|'commercial')} className={field}><option value="residential">{term("Residential — uploaded Arabic terms")}</option><option value="commercial">{term("Commercial — uploaded Arabic terms")}</option></select></label><p className="text-sm text-slate-500">{term("Each template has its own payment schedule. Review all terms before signing.")}</p><button disabled={busy||!!pricePreview||discountChanged} onClick={()=>void act('contract')} className={button}>{term("Generate contract")}</button></div>}
+    {!editing&&!archived&&!needsRevision&&flow.stage==='approved'&&<section aria-label={term('Contract generation')} className={`${card} w-full space-y-4`}>
+     <h2 className="font-semibold">{term('Choose the contract type')}</h2>
+     <label className="block text-sm font-medium">{term('Contract type')}<select required disabled={busy||!!pricePreview} aria-label={term('Contract type')} aria-describedby={`contract-generation-help-${projectId}`} value={template} onChange={event=>setTemplate(event.target.value==='residential'||event.target.value==='commercial'?event.target.value:'')} className={`${field} block sm:max-w-sm`}>
+      <option value="">{term('Choose contract type')}</option>
+      <option value="residential">{term('Residential contract')}</option>
+      <option value="commercial">{term('Commercial contract')}</option>
+     </select></label>
+     <p id={`contract-generation-help-${projectId}`} className="text-sm leading-6 text-slate-600">{term('Choose Residential or Commercial before generating the contract.')}</p>
+     {template&&<ContractPaymentPreview total={flow.quotation.total} kind={template}/>}
+     <button disabled={busy||!!pricePreview||discountChanged||!template} onClick={()=>void act('contract')} className={button}>{term('Generate contract')}</button>
+    </section>}
     {!editing&&!busy&&!pricePreview&&!discountChanged&&flow.contract&&<Link href={`/contract/${projectId}`} className={button}>{term("Open contract →")}</Link>}
    </div>
   </section>}

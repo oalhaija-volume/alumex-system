@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import ts from 'typescript';
 
@@ -10,22 +11,31 @@ const contentExports = {};
 new Function('exports', source)(contentExports);
 const { agreement2027Terms, agreement2027PaymentSchedule, arabicDinarAmount, agreement2027Readiness, agreement2027SpecificationNotes, productTechnicalDescription } = contentExports;
 
-for (const kind of ['residential', 'commercial']) {
- test(`${kind}: contracts below fifteen million require the whole amount upfront`, () => {
+test('residential contracts always require half at signing and half before installation, including below fifteen million', () => {
+ for (const total of [0, 1, 14_999_999, 15_000_000, 25_000_000]) {
+  const result = agreement2027PaymentSchedule(total, 'residential');
+  assert.deepEqual(result.map(stage => [stage.id, stage.percent]), [['signing', 50], ['before-installation', 50]]);
+  assert.equal(result.reduce((sum, stage) => sum + stage.amount, 0), total);
+  assert.match(result[0].trigger, /توقيع العقد/);
+  assert.match(result[1].trigger, /قبل المباشرة بأعمال التركيب/);
+  assert.doesNotMatch(result[1].trigger, /جهوزية|سبعة أيام/);
+ }
+});
+
+test('commercial contracts below fifteen million retain the old whole-amount upfront exception', () => {
   for (const total of [0, 1, 14_999_999]) {
-   const result = agreement2027PaymentSchedule(total, kind);
+   const result = agreement2027PaymentSchedule(total, 'commercial');
    assert.equal(result.length, 1);
    assert.deepEqual({ id: result[0].id, percent: result[0].percent, amount: result[0].amount }, { id: 'signing', percent: 100, amount: total });
    assert.match(result[0].trigger, /توقيع العقد/);
   }
- });
-}
+});
 
-test('fifteen million exactly follows the selected factory or commercial schedule', () => {
+test('fifteen million exactly follows the selected residential or restored commercial schedule', () => {
  assert.deepEqual(agreement2027PaymentSchedule(15_000_000, 'residential').map(stage => [stage.percent, stage.amount]), [[50, 7_500_000], [50, 7_500_000]]);
  assert.deepEqual(agreement2027PaymentSchedule(15_000_000, 'commercial').map(stage => [stage.id, stage.percent, stage.amount]), [
-  ['signing', 30, 4_500_000], ['profiles-delivered', 20, 3_000_000], ['profiles-installed', 10, 1_500_000],
-  ['glass-delivered', 20, 3_000_000], ['glass-installed', 15, 2_250_000], ['before-finishing', 5, 750_000],
+  ['signing', 25, 3_750_000], ['profiles-delivered', 25, 3_750_000], ['profiles-installed', 25, 3_750_000],
+  ['glass-delivered', 15, 2_250_000], ['before-finishing', 10, 1_500_000],
  ]);
 });
 
@@ -39,14 +49,19 @@ test('whole-IQD installments reconcile to the approved amount, including roundin
   }
  }
  assert.deepEqual(agreement2027PaymentSchedule(15_000_001, 'residential').map(stage => stage.amount), [7_500_001, 7_500_000]);
- assert.equal(agreement2027PaymentSchedule(15_000_001, 'commercial').at(-1).amount, 750_001);
+ assert.equal(agreement2027PaymentSchedule(15_000_001, 'commercial').at(-1).amount, 1_500_001);
 });
 
-test('commercial due dates preserve seven-day invoice periods and final payment before finishing', () => {
+test('commercial milestones match the old contract with glass paid before installation and final payment before finishing', () => {
  const schedule = agreement2027PaymentSchedule(25_000_000, 'commercial');
- for (const stage of schedule.slice(1, 5)) assert.match(stage.trigger, /سبعة أيام.*الفاتورة.*المستندات/);
+ assert.deepEqual(schedule.map(stage => stage.percent), [25, 25, 25, 15, 10]);
+ assert.match(schedule[1].trigger, /توريد بروفيلات الألمنيوم إلى الموقع/);
+ assert.match(schedule[2].trigger, /الانتهاء من نصب هيكل بروفيلات الألمنيوم/);
+ assert.match(schedule[3].trigger, /توريد الزجاج.*قبل التركيب/);
  assert.match(schedule.at(-1).trigger, /قبل التشطيب النهائي.*سلكون.*البرشر.*الكاب/);
- assert.match(agreement2027PaymentSchedule(25_000_000, 'residential').at(-1).trigger, /سبعة أيام.*إخبار الفريق الأول/);
+ assert.ok(schedule.every(stage => !stage.trigger.includes('سبعة أيام')));
+ const original = JSON.parse(readFileSync(new URL('../src/lib/contracts/uploadedTerms.json', import.meta.url), 'utf8')).commercial.find(section => section.title === 'payment terms').text;
+ assert.deepEqual([...original.matchAll(/(\d+)%/g)].map(match => Number(match[1])), [25, 25, 25, 15, 100]);
 });
 
 test('invalid amounts and template kinds cannot produce a financial contract representation', () => {
@@ -93,7 +108,8 @@ test('all nineteen source clauses retain the client-first and company-second obl
   assert.match(terms[0].title, /^أولاً/);
   assert.match(terms.at(-1).text, /تسعة عشر بنداً/);
   assert.match(terms[2].text, /الفريق الأول.*للفريق الثاني/);
-  assert.match(terms[2].text, /15,000,000.*100%/s);
+  if (kind === 'commercial') assert.match(terms[2].text, /15,000,000.*100%/s);
+  else assert.doesNotMatch(terms[2].text, /15,000,000|100%|جهوزية البضاعة/);
   assert.match(terms[2].text, /كفالة.*عشرة سنوات.*تسديد كافة المستحقات/);
   assert.match(terms[3].text, /عرض السعر المعتمد المرفق بالعقد/);
   assert.match(terms[4].text, /غير قابلة للاسترداد/);
@@ -110,8 +126,12 @@ test('all nineteen source clauses retain the client-first and company-second obl
   assert.match(terms[16].text, /المحاكم العراقية المختصة في العاصمة بغداد/);
   assert.match(terms[17].text, /غير خاضع لأي تخفيض.*عرض سعر جديد.*واتساب.*إيجاب وقبول/s);
  }
- assert.match(agreement2027Terms('commercial')[2].text, /30%.*65%.*20%.*10%.*20%.*15%.*5%/s);
- assert.match(agreement2027Terms('residential')[2].text, /50%.*50%/s);
+ assert.match(agreement2027Terms('commercial')[2].text, /25%.*25%.*25%.*15%.*10%/s);
+ assert.match(agreement2027Terms('residential')[2].text, /50%.*توقيع العقد.*50%.*قبل المباشرة بأعمال التركيب/s);
+ for (const kind of ['residential', 'commercial']) {
+  const unchangedClauses = agreement2027Terms(kind).filter((_, index) => index !== 2);
+  assert.equal(createHash('sha256').update(JSON.stringify(unchangedClauses)).digest('hex'), 'e9f32d273716bf73282d02263abe469b6d16718c9d3e75a87936f1585c1fec50', 'The other eighteen agreement clauses must remain unchanged');
+ }
 });
 
 test('terms and payment results are independent snapshots and do not rewrite earlier versions', () => {
@@ -125,7 +145,7 @@ test('terms and payment results are independent snapshots and do not rewrite ear
  assert.equal(agreement2027Terms('commercial').length, 19);
  const schedule = agreement2027PaymentSchedule(25_000_000, 'commercial');
  schedule[0].amount = 1;
- assert.equal(agreement2027PaymentSchedule(25_000_000, 'commercial')[0].amount, 7_500_000);
+ assert.equal(agreement2027PaymentSchedule(25_000_000, 'commercial')[0].amount, 6_250_000);
  assert.equal(readFileSync(new URL('../src/lib/contracts/uploadedTerms.json', import.meta.url), 'utf8'), legacy);
 });
 

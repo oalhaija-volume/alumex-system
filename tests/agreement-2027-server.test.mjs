@@ -64,9 +64,27 @@ test('generation captures server source data and approved prices without queryin
  const payload=x.calls[0].args.p_payload;assert.equal(payload.agreement2027.version,'agreement-2027');assert.equal(payload.agreement2027.total,quote.total);assert.equal(payload.branch,'Najaf');assert.equal(payload.project.branch,'Rasafa');assert.equal(payload.createdBy,actorId);assert.equal(payload.client.name,client.client_name);assert.equal(payload.terms.length,19);
  const fields=payload.agreement2027.fields;assert.equal(fields.ownerName,client.client_name);assert.equal(fields.email,client.email);assert.equal(fields.whatsapp,client.whatsapp);assert.equal(fields.consultantName,'Project consultant');assert.equal(fields.consultantPhone,'consultant-phone');assert.equal(fields.contractorPhone,'contractor-phone');assert.equal(fields.salesEngineerName,'Sales engineer');assert.equal(fields.approvals.operationsManager.name,'Operations manager');assert.equal(fields.approvals.salesManager.name,'Sales manager');assert.equal(fields.companyRepresentativeSignature,'');assert.equal(fields.approvals.salesEngineer.signature,'');assert.equal(fields.approvals.salesEngineer.date,'');
  assert.equal(payload.agreement2027.openingSpecifications.length,1);assert.equal(payload.agreement2027.openingSpecifications[0].openingId,'opening-1');assert.match(payload.agreement2027.openingSpecifications[0].technicalDescription,/14/);
- assert.deepEqual(payload.agreement2027.paymentSchedule.map(stage=>stage.percent),[30,20,10,20,15,5]);assert.equal(payload.agreement2027.paymentSchedule.reduce((sum,stage)=>sum+stage.amount,0),quote.total);
+ assert.deepEqual(payload.agreement2027.paymentSchedule.map(stage=>stage.percent),[25,25,25,15,10]);assert.equal(payload.agreement2027.paymentSchedule.reduce((sum,stage)=>sum+stage.amount,0),quote.total);
  assert.equal(x.reads.some(read=>read.table==='product_price_settings'),false);assert.deepEqual({flow:x.stored,project:x.siteRow},x.before);
  const contactRead=x.reads.find(read=>read.table==='client_contacts');assert.deepEqual(contactRead.filters,[['client_id','client-id'],['or',`project_id.eq.${projectId},project_id.is.null`]]);
+});
+for(const template of ['residential','commercial'])for(const total of [14_999_999,15_000_000,25_000_001])test(`generation uses the chosen ${template} payment policy for ${total} IQD`,async()=>{
+ const quotation={...structuredClone(quote),total};
+ const x=setup({flowPatch:{quotation}});
+ const response=await x.submit({action:'contract',template,total:1,paymentSchedule:[{percent:100,amount:1}],agreement2027:{total:1,paymentSchedule:[]}});
+ assert.equal(response.status,200);
+ const contract=x.calls[0].args.p_payload;
+ const expected=template==='residential'?[50,50]:total<15_000_000?[100]:[25,25,25,15,10];
+ assert.equal(contract.template,template);
+ assert.equal(contract.agreement2027.total,total);
+ assert.deepEqual(contract.agreement2027.paymentSchedule.map(stage=>stage.percent),expected);
+ assert.equal(contract.agreement2027.paymentSchedule.reduce((sum,stage)=>sum+stage.amount,0),total);
+ if(template==='residential')assert.match(contract.agreement2027.paymentSchedule[1].trigger,/قبل.*التركيب/);
+ assert.deepEqual(x.stored.quotation,quotation,'Generation does not rewrite approved prices');
+});
+for(const template of [undefined,'','Residential','other',null])test(`contract generation requires an explicit supported type: ${String(template)}`,async()=>{
+ const x=setup();const response=await x.submit({action:'contract',template});
+ assert.equal(response.status,400);assert.deepEqual(x.calls,[]);
 });
 test('project consultant and contractor names never acquire another person’s phone number',async()=>{
  const x=setup({contactRows:contacts.map(contact=>({...contact,contact_name:'Different person'}))});
@@ -90,13 +108,35 @@ test('source lookup failure does not create a partial contract',async()=>{
 for(const patch of [{stage:'quotation'},{stage:'signed'},{stage:'operations'}])test(`generation requires the persisted approved quote: ${patch.stage}`,async()=>{
  const x=setup(patch);const result=await x.submit({action:'contract',template:'residential'});assert.equal(result.status,400);assert.deepEqual(x.calls,[]);
 });
-test('saving supplementary details preserves source snapshots and recalculates payments from the saved approved total',async()=>{
+test('saving supplementary details preserves source snapshots and the saved payment schedule',async()=>{
  const x=setup({stage:'contract'}),details=emptyAgreement2027Fields();details.clientLegalName='Contract legal name';details.handoverDate='2026-11-15';details.phases[0].measurementReadyDate='2026-12-01';
  const response=await x.submit({action:'save-contract-details',details,confirmed:true,agreement2027:{total:1},terms:[],actor:'forged'});
  assert.equal(response.status,200);assert.equal(x.calls.length,1);assert.equal(x.calls[0].name,'update_agreement_contract');assert.equal(x.calls[0].args.p_actor,actorId);assert.equal(x.calls[0].args.p_agreement.total,quote.total);assert.deepEqual(x.calls[0].args.p_agreement.openingSpecifications,x.stored.contract.agreement2027.openingSpecifications);assert.deepEqual(x.calls[0].args.p_agreement.readiness,x.stored.contract.agreement2027.readiness);assert.deepEqual(x.calls[0].args.p_agreement.specificationNotes,x.stored.contract.agreement2027.specificationNotes);assert.equal(x.calls[0].args.p_agreement.amountInWords,x.stored.contract.agreement2027.amountInWords);assert.equal(x.calls[0].args.p_agreement.fields.clientLegalName,'Contract legal name');assert.equal(x.calls[0].args.p_terms.length,19);assert.deepEqual(x.reads.map(read=>read.table),['sales_workflows']);assert.deepEqual({flow:x.stored,project:x.siteRow},x.before);
 });
+for(const template of ['residential','commercial'])test(`supplementary edits retain the historical ${template} payments and terms exactly`,async()=>{
+ const total=template==='residential'?10_000_001:quote.total;
+ const percentages=template==='residential'?[100]:[30,20,10,20,15,5];
+ const x=setup({stage:'contract'});
+ x.stored.quotation.total=total;
+ x.stored.contract.template=template;
+ x.stored.contract.quotation.total=total;
+ x.stored.contract.agreement2027.total=total;
+ let allocated=0;
+ x.stored.contract.agreement2027.paymentSchedule=percentages.map((percent,index)=>{
+  const amount=index===percentages.length-1?total-allocated:Math.round(total*percent/100);allocated+=amount;
+  return {id:`historical-${index}`,label:`Saved stage ${index}`,percent,amount,trigger:`Saved trigger ${index}`};
+ });
+ x.stored.contract.terms[2].text='Previously issued payment terms';
+ const before=structuredClone(x.stored);
+ const details=emptyAgreement2027Fields();details.ownerName='Updated owner name';
+ const response=await x.submit({action:'save-contract-details',details,confirmed:true});
+ assert.equal(response.status,200);
+ assert.deepEqual(x.calls[0].args.p_agreement.paymentSchedule,before.contract.agreement2027.paymentSchedule);
+ assert.deepEqual(x.calls[0].args.p_terms,before.contract.terms);
+ assert.deepEqual(x.stored,before);
+});
 test('changing 2027 contract type uses saved prices and existing filled details',async()=>{
- const x=setup({stage:'contract'});const response=await x.submit({action:'change-contract-template',template:'commercial',confirmed:true});assert.equal(response.status,200);assert.equal(x.calls[0].name,'update_agreement_contract');assert.equal(x.calls[0].args.p_template,'commercial');assert.equal(x.calls[0].args.p_agreement.total,quote.total);assert.deepEqual(x.calls[0].args.p_agreement.paymentSchedule.map(stage=>stage.percent),[30,20,10,20,15,5]);assert.deepEqual(x.reads.map(read=>read.table),['sales_workflows']);assert.deepEqual({flow:x.stored,project:x.siteRow},x.before);
+ const x=setup({stage:'contract'});const response=await x.submit({action:'change-contract-template',template:'commercial',confirmed:true});assert.equal(response.status,200);assert.equal(x.calls[0].name,'update_agreement_contract');assert.equal(x.calls[0].args.p_template,'commercial');assert.equal(x.calls[0].args.p_agreement.total,quote.total);assert.deepEqual(x.calls[0].args.p_agreement.paymentSchedule.map(stage=>stage.percent),[25,25,25,15,10]);assert.deepEqual(x.reads.map(read=>read.table),['sales_workflows']);assert.deepEqual({flow:x.stored,project:x.siteRow},x.before);
 });
 for(const patch of [{signed_at:'2026-11-15T10:00:00Z'},{evidence:{method:'hard_copy'}},{accepted_by:'operations'},{accepted_at:'2026-11-15T11:00:00Z'},{stage:'signed'}])test(`saving details rejects immutable state ${Object.keys(patch)[0]}`,async()=>{
  const x=setup({stage:'contract',flowPatch:patch});const response=await x.submit({action:'save-contract-details',details:emptyAgreement2027Fields(),confirmed:true});assert.ok([400,409].includes(response.status));assert.deepEqual(x.calls,[]);

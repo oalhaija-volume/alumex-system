@@ -527,7 +527,7 @@ test('historical discounted quotations remain readable, approvable, contractable
   assert.equal(x.calls[0].args.p_action,body.action);
   if(body.action==='contract'){
    assert.equal(x.calls[0].args.p_payload.agreement2027.total,savedBefore.sales_workflows[0].quotation.total,'The historical approved discount remains the contract amount');
-   assert.equal(x.calls[0].args.p_payload.agreement2027.paymentSchedule[0].amount,1533300);
+   assert.deepEqual(x.calls[0].args.p_payload.agreement2027.paymentSchedule.map(stage=>[stage.percent,stage.amount]),[[50,766650],[50,766650]]);
   }
   assert.deepEqual(x.tables,savedBefore,'Existing quotation discounts and archived revisions remain intact');
  }

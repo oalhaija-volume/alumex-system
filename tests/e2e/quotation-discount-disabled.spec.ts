@@ -110,6 +110,8 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: discounts stay in s
   const approval = page.getByRole('checkbox', { name: term('The client approved this saved quotation.'), exact: true });
   await expect(approval).toBeEnabled(); await approval.check();
   await page.getByRole('button', { name: term('Record client approval'), exact: true }).click();
+  await expect(page.getByRole('button', { name: term('Generate contract'), exact: true })).toBeDisabled();
+  await page.getByRole('combobox', { name: term('Contract type'), exact: true }).selectOption('residential');
   await expect(page.getByRole('button', { name: term('Generate contract'), exact: true })).toBeEnabled();
   expect(saved).toEqual(legacy);
   await page.getByRole('button', { name: term('Generate contract'), exact: true }).click();

@@ -5,8 +5,9 @@ do $$
 declare
  indoor uuid:=gen_random_uuid(); other_branch uuid:=gen_random_uuid(); outdoor uuid:=gen_random_uuid(); manager uuid:=gen_random_uuid(); administrator uuid:=gen_random_uuid(); inactive uuid:=gen_random_uuid();
  target uuid:=gen_random_uuid(); client uuid; opening_id uuid:=gen_random_uuid();
- quotation jsonb; terms jsonb; agreement jsonb; invalid jsonb;
+ quotation jsonb; terms jsonb; agreement jsonb; invalid jsonb; historical jsonb; historical_schedule jsonb;
  current_flow public.sales_workflows; before_flow public.sales_workflows;
+ probe_flow public.sales_workflows;
  before_project jsonb; before_openings jsonb; before_history jsonb; before_contract jsonb;
  employee uuid; field_name text; stage_name text; expected_history integer:=0;
 begin
@@ -96,7 +97,12 @@ begin
  exception when invalid_parameter_value then null;end;
  update sales_workflows set contract=before_flow.contract where project_id=target;
  assert (select count(*)=expected_history from contract_template_corrections where project_id=target),'Rejected updates left audit rows';
- agreement:=jsonb_set(agreement,'{paymentSchedule}','[{"id":"sign","label":"Signing","percent":30,"amount":7500000,"trigger":"At signing"},{"id":"profiles","label":"Profiles","percent":20,"amount":5000000,"trigger":"Profiles supplied"},{"id":"frame","label":"Frame","percent":10,"amount":2500000,"trigger":"Frame installed"},{"id":"glass","label":"Glass","percent":20,"amount":5000000,"trigger":"Glass supplied"},{"id":"installation","label":"Installation","percent":15,"amount":3750000,"trigger":"Glass installed"},{"id":"finish","label":"Finish","percent":5,"amount":1250001,"trigger":"Before finish"}]');
+ historical_schedule:='[{"id":"sign","label":"Signing","percent":30,"amount":7500000,"trigger":"At signing"},{"id":"profiles","label":"Profiles","percent":20,"amount":5000000,"trigger":"Profiles supplied"},{"id":"frame","label":"Frame","percent":10,"amount":2500000,"trigger":"Frame installed"},{"id":"glass","label":"Glass","percent":20,"amount":5000000,"trigger":"Glass supplied"},{"id":"installation","label":"Installation","percent":15,"amount":3750000,"trigger":"Glass installed"},{"id":"finish","label":"Finish","percent":5,"amount":1250001,"trigger":"Before finish"}]';
+ begin
+  perform update_agreement_contract(target,current_flow.revision,jsonb_set(agreement,'{paymentSchedule}',historical_schedule),terms,'commercial',indoor);
+  raise exception using errcode='ZX001',message='A type change accepted the superseded six-stage commercial policy';
+ exception when invalid_parameter_value then null;end;
+ agreement:=jsonb_set(agreement,'{paymentSchedule}','[{"id":"signing","label":"Signing","percent":25,"amount":6250000,"trigger":"At signing"},{"id":"profiles-delivered","label":"Profiles","percent":25,"amount":6250000,"trigger":"Profiles supplied"},{"id":"profiles-installed","label":"Frame","percent":25,"amount":6250000,"trigger":"Frame installed"},{"id":"glass-delivered","label":"Glass","percent":15,"amount":3750000,"trigger":"Glass supplied before installation"},{"id":"before-finishing","label":"Finish","percent":10,"amount":2500001,"trigger":"After glass installation, before finishing"}]');
  foreach employee in array array[manager,administrator] loop
   current_flow:=update_agreement_contract(target,current_flow.revision,agreement,terms,'commercial',employee);expected_history:=expected_history+1;
   assert current_flow.contract->>'template'='commercial' and current_flow.contract#>'{agreement2027,total}'='25000001';
@@ -104,6 +110,67 @@ begin
  end loop;
  assert current_flow.contract->'quotation'=before_contract->'quotation' and current_flow.quotation=before_flow.quotation;
  assert (select coalesce(jsonb_agg(to_jsonb(r) order by version),'[]'::jsonb)=before_history from quotation_revisions r where project_id=target);
+ assert (select sum((stage->>'amount')::numeric)=25000001 from jsonb_array_elements(current_flow.contract#>'{agreement2027,paymentSchedule}') stage),'Restored commercial installments lost the IQD remainder';
+ foreach invalid in array array[jsonb_set(agreement,'{paymentSchedule,0,amount}','6250001'),jsonb_set(agreement,'{paymentSchedule,0,percent}','30'),jsonb_set(agreement,'{paymentSchedule,4,amount}','2500000'),jsonb_set(agreement,'{paymentSchedule}',(agreement->'paymentSchedule')-4)] loop
+  begin
+   perform update_agreement_contract(target,current_flow.revision,invalid,terms,'commercial',indoor);
+   raise exception using errcode='ZX001',message='Forged restored commercial payments were accepted';
+  exception when invalid_parameter_value then null;end;
+ end loop;
+ assert (select count(*)=expected_history from contract_template_corrections where project_id=target),'Rejected commercial payments retained audit rows';
+ -- Preserve an actual historical commercial schedule during supplementary
+ -- edits, without accepting edited historical percentages, amounts or text.
+ begin
+  historical:=jsonb_set(agreement,'{paymentSchedule}',historical_schedule);
+  update sales_workflows set contract=jsonb_set(contract,'{agreement2027}',historical) where project_id=target;
+  historical:=jsonb_set(historical,'{fields,clientLegalName}','"Historical commercial details"');
+  probe_flow:=update_agreement_contract(target,current_flow.revision,historical,terms,'commercial',indoor);
+  assert probe_flow.contract#>'{agreement2027,paymentSchedule}'=historical_schedule,'A detail edit rewrote the historical commercial schedule';
+  foreach invalid in array array[jsonb_set(historical,'{paymentSchedule,0,amount}','1'),jsonb_set(historical,'{paymentSchedule,0,percent}','29'),jsonb_set(historical,'{paymentSchedule,0,trigger}','"Changed legacy milestone"')] loop
+   begin
+    perform update_agreement_contract(target,probe_flow.revision,invalid,terms,'commercial',indoor);
+    raise exception using errcode='ZX001',message='A forged historical commercial schedule was accepted';
+   exception when invalid_parameter_value then null;end;
+  end loop;
+  -- Equality with stored JSON is not an amount-validation bypass. Even an
+  -- already-corrupt historical fixture must satisfy the original arithmetic.
+  foreach invalid in array array[jsonb_set(historical,'{paymentSchedule,0,amount}','1'),jsonb_set(historical,'{paymentSchedule,0,percent}','29')] loop
+   update sales_workflows set contract=jsonb_set(contract,'{agreement2027}',invalid) where project_id=target;
+   begin
+    perform update_agreement_contract(target,probe_flow.revision,invalid,terms,'commercial',indoor);
+    raise exception using errcode='ZX001',message='A copied corrupt historical schedule bypassed amount validation';
+   exception when invalid_parameter_value then null;end;
+  end loop;
+  raise exception using errcode='ZT000',message='Rollback isolated historical commercial fixture';
+ exception when sqlstate 'ZT000' then null;
+ end;
+ -- Existing small residential contracts retain their saved 100% schedule.
+ -- A newly selected residential policy must instead use 50%/50%, even for an
+ -- amount below fifteen million; commercial keeps its original 100% exception.
+ begin
+  historical:=jsonb_set(jsonb_set(agreement,'{total}','10000001'),'{paymentSchedule}','[{"id":"signing","label":"Signing","percent":100,"amount":10000001,"trigger":"Historical small-contract upfront payment"}]');
+  update sales_workflows stored set quotation=jsonb_set(stored.quotation,'{total}','10000001'),contract=jsonb_set(jsonb_set(jsonb_set(stored.contract,'{quotation,total}','10000001'),'{template}','"residential"'),'{agreement2027}',historical) where stored.project_id=target;
+  historical:=jsonb_set(historical,'{fields,clientLegalName}','"Historical residential details"');
+  probe_flow:=update_agreement_contract(target,current_flow.revision,historical,terms,'residential',indoor);
+  assert probe_flow.contract#>'{agreement2027,paymentSchedule,0,percent}'='100' and jsonb_array_length(probe_flow.contract#>'{agreement2027,paymentSchedule}')=1,'A detail edit changed an existing residential payment agreement';
+  invalid:=jsonb_set(historical,'{paymentSchedule,0,amount}','10000000');
+  begin
+   perform update_agreement_contract(target,probe_flow.revision,invalid,terms,'residential',indoor);
+   raise exception using errcode='ZX001',message='A forged small residential legacy amount was accepted';
+  exception when invalid_parameter_value then null;end;
+  update sales_workflows set contract=jsonb_set(contract,'{template}','"commercial"') where project_id=target;
+  begin
+   perform update_agreement_contract(target,probe_flow.revision,historical,terms,'residential',indoor);
+   raise exception using errcode='ZX001',message='A newly selected small residential policy accepted 100% upfront';
+  exception when invalid_parameter_value then null;end;
+  invalid:=jsonb_set(historical,'{paymentSchedule}','[{"id":"signing","label":"Signing","percent":50,"amount":5000001,"trigger":"At signing"},{"id":"before-installation","label":"Before installation","percent":50,"amount":5000000,"trigger":"Before installation"}]');
+  probe_flow:=update_agreement_contract(target,probe_flow.revision,invalid,terms,'residential',indoor);
+  assert probe_flow.contract#>'{agreement2027,paymentSchedule}'=invalid->'paymentSchedule','A new small residential agreement did not use 50%/50%';
+  probe_flow:=update_agreement_contract(target,probe_flow.revision,historical,terms,'commercial',indoor);
+  assert probe_flow.contract#>'{agreement2027,paymentSchedule,0,amount}'='10000001','The old small commercial upfront exception was lost';
+  raise exception using errcode='ZT000',message='Rollback isolated historical residential fixture';
+ exception when sqlstate 'ZT000' then null;
+ end;
  -- A persisted zero-value approved snapshot remains zero; the supplemental
  -- editor must neither invent a charge nor reject the same nonnegative bound
  -- used by the application calculator. Roll this special fixture back locally.

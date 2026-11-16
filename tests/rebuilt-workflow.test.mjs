@@ -113,7 +113,7 @@ for(const template of ['residential','commercial'])test(`${template} contract ge
  const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'contract',revision:2,template})}),{params:Promise.resolve({projectId:'project'})});
  assert.equal(result.status,200);assert.equal(input.p_payload.template,template);assert.equal(input.p_payload.project.branch,'Rasafa');assert.equal(input.p_payload.branch,'Rasafa');assert.equal(input.p_payload.createdBy,'actor');assert.deepEqual(input.p_payload.terms,agreementContent.agreement2027Terms(template));assert.equal(input.p_payload.agreement2027.total,551000);assert.equal(input.p_payload.agreement2027.version,'agreement-2027');
  const payments=input.p_payload.terms[2].text;
- assert.match(payments,template==='commercial'?/30%/:/50/);
+ assert.match(payments,template==='commercial'?/25%/:/50/);
  assert.ok(input.p_payload.terms.some(x=>x.text.includes('عشرة سنوات')));
 });
 test('project deletion rejects unauthorized roles and missing confirmation before mutation',async()=>{

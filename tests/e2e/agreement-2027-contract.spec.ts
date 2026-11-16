@@ -17,8 +17,8 @@ import type { ContractSnapshot, SalesFlow } from '../../src/lib/workflow/types';
 // Browser plugin unavailable. Compile the actual online contract component,
 // preserve the real local styles, and intercept every business API request.
 // No production account, project, signature, or contract is changed by this suite.
-const directory = resolve('artifacts/agreement-2027-qa');
-const bundleDirectory = resolve(directory, 'component');
+let directory = '';
+let bundleDirectory = '';
 const projectId = '11111111-1111-4111-8111-111111111111';
 const pathname = `/contract/${projectId}`;
 const endpoint = `/api/sales-flow/${projectId}`;
@@ -81,7 +81,9 @@ function fixture({ kind = 'commercial', quantity = 10, legacy = false, signed = 
 
 // The bundle comes from current source; the live dev server supplies only CSS
 // and public brand assets. Server authorization/RPC tests are separate checks.
-test.beforeAll(async ({ request }) => {
+test.beforeAll(async ({ request }, testInfo) => {
+ directory = resolve(testInfo.outputPath('contract-tools'));
+ bundleDirectory = resolve(directory, 'component');
  mkdirSync(bundleDirectory, { recursive: true });
  const entry = resolve(bundleDirectory, 'entry.tsx'), loader = resolve(bundleDirectory, 'typescript-loader.cjs');
  writeFileSync(entry, `import React from 'react';import {createRoot} from 'react-dom/client';import {I18nProvider} from '@/components/i18n/I18nProvider';import {ContractWorkspace} from '@/components/workflow/ContractWorkspace';createRoot(document.getElementById('root')!).render(<I18nProvider><ContractWorkspace projectId="${projectId}"/></I18nProvider>);`);
@@ -162,7 +164,7 @@ for (const locale of ['en', 'ar'] as const) {
   await expect(schedule).not.toContainText(number(300000));
   const payments = paper.locator('[data-agreement-section="payments"]');
   for (const stage of before.agreement2027!.paymentSchedule) await expect(payments).toContainText(number(stage.amount));
-  expect(before.agreement2027!.paymentSchedule.map(stage => stage.percent)).toEqual([30, 20, 10, 20, 15, 5]);
+  expect(before.agreement2027!.paymentSchedule.map(stage => stage.percent)).toEqual([25, 25, 25, 15, 10]);
   expect(before.agreement2027!.paymentSchedule.reduce((sum, stage) => sum + stage.amount, 0)).toBe(before.quotation.total);
   await expect(paper).not.toContainText('2026 / 00 / 00');
   await noOverflow(page);
@@ -250,7 +252,7 @@ for (const locale of ['en', 'ar'] as const) {
   expect(health.pageErrors).toEqual([]); expect(health.consoleErrors).toEqual([]); expect(health.unexpected).toEqual([]);
  });
 
- test(`${locale}: contracts below 15 million use the approved total as 100 percent upfront`, async ({ page }, testInfo) => {
+ test(`${locale}: commercial contracts below 15 million retain 100 percent upfront`, async ({ page }, testInfo) => {
   const state = fixture({ quantity: 1 });
   expect(state.flow.quotation.total).toBeLessThan(15000000);
   const health = await mount(page, locale, state);
@@ -269,6 +271,14 @@ for (const locale of ['en', 'ar'] as const) {
 
  test(`${locale}: signed and legacy contracts retain their saved document and expose no unsafe 2027 editor`, async ({ page }) => {
   const state = fixture({ signed: true });
+  // Preserve a contract issued before the payment policy changed.
+  let allocated = 0;
+  const savedPercentages = [30, 20, 10, 20, 15, 5];
+  state.flow.contract!.agreement2027!.paymentSchedule = savedPercentages.map((percent, index) => {
+   const amount = index === savedPercentages.length - 1 ? state.flow.quotation.total - allocated : Math.round(state.flow.quotation.total * percent / 100);
+   allocated += amount;
+   return { id: `historical-${index}`, label: `الدفعة المحفوظة ${index + 1}`, percent, amount, trigger: 'موعد الدفعة المحفوظ في العقد الموقع' };
+  });
   state.flow.contract!.agreement2027!.readiness.measurement = ['شرط جاهزية محفوظ في العقد الموقع'];
   state.flow.contract!.agreement2027!.specificationNotes = ['ملاحظة مواصفات محفوظة في العقد الموقع'];
   const original = structuredClone(state.flow.contract!);
@@ -280,6 +290,8 @@ for (const locale of ['en', 'ar'] as const) {
   await expect(paper).toContainText('صاحب العقد الموقع');
   await expect(paper).toContainText('شرط جاهزية محفوظ في العقد الموقع');
   await expect(paper).toContainText('ملاحظة مواصفات محفوظة في العقد الموقع');
+  await expect(paper.locator('[data-payment-stage]')).toHaveCount(6);
+  await expect(paper).toContainText('موعد الدفعة المحفوظ في العقد الموقع');
   await page.reload(); await expect(paper).toContainText('صاحب العقد الموقع'); expect(state.flow.contract).toEqual(original);
   const legacy = fixture({ legacy: true }); state.project = legacy.project; state.flow = legacy.flow;
   const legacyBefore = structuredClone(state.flow.contract!);

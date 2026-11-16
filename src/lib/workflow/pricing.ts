@@ -3,12 +3,13 @@ import { catalogKind, compatibleAddon, compatibleGlass, isAvailable, isCurtainWa
 export type CatalogItem = {id:string;name:string;category:string|null;unit:string;unit_price:number;is_active:boolean};
 export type MeasuredOpening = {has_roller_shutter?:boolean;work_area?:"facade"|"internal"|null;facade_number?:number|null;has_arch?:boolean;id:string;floor:string|null;room:string|null;width:number;height:number;quantity?:number;opening_type:string|null;opening_direction:string|null};
 export type ExtraChoice = {id:string;quantity:number;motorPrice?:number};
-export type OpeningChoice = {openingId:string;systemId:string;systemRate?:number;glassId?:string;extras:ExtraChoice[];hasCurtainWallArch?:boolean};
+export type CurtainWallGlassType = 'single'|'double';
+export type OpeningChoice = {openingId:string;systemId:string;systemRate?:number;glassId?:string;curtainWallGlassType?:CurtainWallGlassType;extras:ExtraChoice[];hasCurtainWallArch?:boolean};
 export type SurfaceMeasurement = {label:string;width:number;height:number;quantity:number};
-export type AdditionalChoice = {id:string;quantity:number;unitRate?:number;measurements?:SurfaceMeasurement[];extras?:ExtraChoice[];hasCurtainWallArch?:boolean};
+export type AdditionalChoice = {id:string;quantity:number;unitRate?:number;curtainWallGlassType?:CurtainWallGlassType;measurements?:SurfaceMeasurement[];extras?:ExtraChoice[];hasCurtainWallArch?:boolean};
 export type Charge = {id:string;name:string;unit:string;rate:number;quantity:number;total:number;rateSource?:'quotation';motorFor?:string};
-export type StandaloneCharge = Charge & {measurements?:SurfaceMeasurement[];extras?:Charge[];projectAddon?:true};
-export type QuoteLine = {opening:MeasuredOpening;system:Charge;glass:Charge|null;extras:Charge[];area:number;total:number};
+export type StandaloneCharge = Charge & {curtainWallGlassType?:CurtainWallGlassType;measurements?:SurfaceMeasurement[];extras?:Charge[];projectAddon?:true};
+export type QuoteLine = {opening:MeasuredOpening;system:Charge;glass:Charge|null;curtainWallGlassType?:CurtainWallGlassType;extras:Charge[];area:number;total:number};
 export type QuoteSnapshot = {excludedOpeningIds?:string[];facadeMeasurements?:MeasuredOpening[];branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;discount?:{percent:5;subtotal:number;amount:number};total:number;currency:"IQD";createdAt:string;preparedBy:string};
 // Keep charge rates intact and deduct the discount once from the whole quotation.
 // Reconstructing the subtotal also makes removal and repeated edits non-stacking.
@@ -49,6 +50,12 @@ function priceCurtainWallArch(selected:unknown,curtain:boolean,quantity:number):
  if(!selected)return [];
  if(!curtain)throw new Error('The arch option is available only for curtain walls.');
  return [curtainWallArchCharge(quantity)];
+}
+function curtainWallGlassType(selected:unknown,curtain:boolean):CurtainWallGlassType|undefined {
+ if(selected===undefined)return undefined;
+ if(selected!=='single'&&selected!=='double')throw new Error('Choose Single Glass or Double Glass for the curtain wall.');
+ if(!curtain)throw new Error('The curtain wall glass type is available only for curtain walls.');
+ return selected;
 }
 type OpeningSellingDetails = Pick<MeasuredOpening,'opening_type'|'opening_direction'>;
 export function isAlumexSqmSystem(product:Pick<CatalogItem,'name'|'unit'>|null|undefined) {
@@ -158,7 +165,7 @@ export function quotationAdditionalChoices(snapshot:Pick<QuoteSnapshot,'lines'|'
  };
  for(const item of snapshot.additionalItems??[]){
   if(projectAddon(item))addProjectAddon(item);
-  else items.push({id:item.id,quantity:item.quantity,...(item.rateSource==='quotation'&&item.unit==='sqm'&&isCurtainWall(item)?{unitRate:item.rate}:{}),...(item.measurements?{measurements:item.measurements.map(surface=>({...surface}))}:{}),extras:(item.extras??[]).filter(extra=>!projectAddon(extra)).map(extra=>({id:extra.id,quantity:extra.quantity}))});
+  else items.push({id:item.id,quantity:item.quantity,...(item.rateSource==='quotation'&&item.unit==='sqm'&&isCurtainWall(item)?{unitRate:item.rate}:{}),...(item.curtainWallGlassType!==undefined?{curtainWallGlassType:item.curtainWallGlassType}:{}),...(item.measurements?{measurements:item.measurements.map(surface=>({...surface}))}:{}),extras:(item.extras??[]).filter(extra=>!projectAddon(extra)).map(extra=>({id:extra.id,quantity:extra.quantity}))});
  }
  for(const extra of [...snapshot.lines.flatMap(line=>line.extras),...(snapshot.additionalItems??[]).flatMap(item=>item.extras??[])]){
   if(projectAddon(extra))addProjectAddon(extra);
@@ -217,6 +224,7 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
   return curtainWallArchCharge(quantity);
  };
  quotation.lines=quotation.lines.map(line=>{
+  curtainWallGlassType(line.curtainWallGlassType,line.opening.opening_type==='Curtain Wall'&&isCurtainWall(line.system));
   const system=refresh(line.system,line.opening);
   const glass=line.glass?refresh(line.glass):null;
   const extras=line.extras.map(extra=>{
@@ -230,6 +238,7 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
   return {...line,system,glass,extras,total:system.total+(glass?.total??0)+extras.reduce((sum,extra)=>sum+extra.total,0)};
  });
  if(quotation.additionalItems)quotation.additionalItems=quotation.additionalItems.map(item=>{
+  curtainWallGlassType(item.curtainWallGlassType,isCurtainWall(item));
   if(isCurtainWallArchCharge(item)){
    if(item.name!=='Curtain Wall Arch'||item.unit!=='item'||item.rateSource!==undefined||item.motorFor!==undefined||item.measurements!==undefined||(item.extras?.length??0)>0||quotation.additionalItems!.filter(isCurtainWallArchCharge).length!==1)throw new Error(curtainWallArchReview);
    return curtainWallArchCharge(item.quantity);
@@ -246,8 +255,8 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
 export function quotationPriceKey(snapshot:QuoteSnapshot) {
  const charge=(item:Charge)=>({id:item.id,unit:item.unit,rate:item.rate,quantity:item.quantity,...(item.rateSource?{rateSource:item.rateSource}:{}),...(item.motorFor!==undefined?{motorFor:item.motorFor}:{})});
  return JSON.stringify({
-  lines:snapshot.lines.map(line=>({system:charge(line.system),glass:line.glass?charge(line.glass):null,extras:line.extras.map(charge)})),
-  additionalItems:(snapshot.additionalItems??[]).map(item=>({...charge(item),extras:(item.extras??[]).map(charge)})),
+  lines:snapshot.lines.map(line=>({system:charge(line.system),glass:line.glass?charge(line.glass):null,...(line.curtainWallGlassType!==undefined?{curtainWallGlassType:line.curtainWallGlassType}:{}),extras:line.extras.map(charge)})),
+  additionalItems:(snapshot.additionalItems??[]).map(item=>({...charge(item),...(item.curtainWallGlassType!==undefined?{curtainWallGlassType:item.curtainWallGlassType}:{}),extras:(item.extras??[]).map(charge)})),
   ...(snapshot.discount?{discount:snapshot.discount}:{}),
  });
 }
@@ -300,10 +309,11 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   const system=choice.systemRate===undefined?catalogSystem:quotationSystemCharge(catalogSystem,catalog.find(product=>product.id===choice.systemId),choice.systemRate);
   if(choice.glassId&&!glassOptions(opening,catalog,choice.systemId).some(p=>p.id===choice.glassId))throw new Error('Choose a compatible glass option.');
   const glass=choice.glassId?charge(choice.glassId):null;
+  const glassType=curtainWallGlassType(choice.curtainWallGlassType,opening.opening_type==='Curtain Wall'&&isCurtainWall(system));
   const arch=choice.hasCurtainWallArch;
   const extras=[...priceExtras(choice.extras,addonOptions(opening,catalog,choice.systemId),catalog,billableArea,[choice.systemId,choice.glassId??''],quantity),...priceCurtainWallArch(arch,opening.opening_type==='Curtain Wall',quantity)];
   if(opening.has_roller_shutter&&!extras.some(isRollerShutter))throw new Error('This window requires roller shutters. Choose a roller shutter add-on.');
-  return {opening,area,system,glass,extras,total:system.total+(glass?.total??0)+extras.reduce((s,p)=>s+p.total,0)};
+  return {opening,area,system,glass,...(glassType!==undefined?{curtainWallGlassType:glassType}:{}),extras,total:system.total+(glass?.total??0)+extras.reduce((s,p)=>s+p.total,0)};
  });
  if(!Array.isArray(additionalItems)||additionalItems.length>100||additionalItems.some(item=>!item)||new Set(additionalItems.map(item=>item.id)).size!==additionalItems.length)throw new Error('Select each standalone product or service once and enter its measurements or quantity.');
  const additional=additionalItems.map((item:AdditionalChoice)=>{
@@ -314,8 +324,9 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   const catalogBase=item.id===CURTAIN_WALL_ARCH_ID?curtainWallArchCharge(quantity):catalogCharge(item.id,quantity,catalog);
   if(item.unitRate!==undefined&&!isQuotationCurtainRateEditable(product))throw new Error('Standalone quotation rates are available only for active Curtain Wall priced per m².');
   const base=item.unitRate===undefined?catalogBase:quotationSystemCharge(catalogBase,product,item.unitRate);
+  const glassType=curtainWallGlassType(item.curtainWallGlassType,isCurtainWall(product));
   const extras=[...priceExtras(item.extras??[],facadeAddonOptions(product,catalog),catalog,quantity),...priceCurtainWallArch(item.hasCurtainWallArch,isCurtainWall(product),1)];
-  return {...base,...(catalogKind(product)==='addon'?{projectAddon:true as const}:{}),...(facade?{measurements:item.measurements!.map(s=>({label:s.label.trim(),width:s.width,height:s.height,quantity:s.quantity}))}:{}),...(extras.length?{extras}:{} )};
+  return {...base,...(glassType!==undefined?{curtainWallGlassType:glassType}:{}),...(catalogKind(product)==='addon'?{projectAddon:true as const}:{}),...(facade?{measurements:item.measurements!.map(s=>({label:s.label.trim(),width:s.width,height:s.height,quantity:s.quantity}))}:{}),...(extras.length?{extras}:{} )};
  });
  const total=lines.reduce((sum,line)=>sum+line.total,0)+additional.reduce((sum,item)=>sum+item.total+(item.extras?.reduce((s,e)=>s+e.total,0)??0),0);
  if(!Number.isSafeInteger(total)||total<=0)throw new Error('Add a measured opening, facade service or standalone product before quoting.');

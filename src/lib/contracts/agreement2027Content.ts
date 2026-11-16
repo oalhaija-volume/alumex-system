@@ -187,6 +187,6 @@ const technicalDescriptions: Readonly<Record<string, string>> = Object.freeze({
 });
 
 export function productTechnicalDescription(name: string): string | undefined {
- const key = name.trim().toUpperCase().replace(/[()–—-]/g, ' ').replace(/\s+/g, ' ');
+ const key = name.trim().toUpperCase().replace(/[()–—-]/g, ' ').replace(/\s+/g, ' ').replace(/^ALUMEX A16(?=$| )/, 'ALUMEX 16');
  return technicalDescriptions[key];
 }

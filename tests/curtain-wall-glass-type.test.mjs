@@ -10,7 +10,8 @@ function load(path,dependencies={}){
  return exports;
 }
 const rules=load('../src/lib/workflow/catalogRules.ts');
-const {priceQuotation,repriceQuotation,quotationAdditionalChoices,quotationPriceKey}=load('../src/lib/workflow/pricing.ts',{'./catalogRules':rules});
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':rules});
+const {priceQuotation,repriceQuotation,quotationAdditionalChoices,quotationPriceKey}=load('../src/lib/workflow/pricing.ts',{'./catalogRules':rules, './alumexModels': alumexModels});
 const product=(id,name,category,unit,unit_price)=>({id,name,category,unit,unit_price,is_active:true});
 const catalog=[
  product('curtain','Curtain Wall','facade_service','sqm',180000),

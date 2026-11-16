@@ -17,7 +17,8 @@ function load(path,dependencies={}) {
  return exports;
 }
 const catalogRules=load('../src/lib/workflow/catalogRules.ts');
-const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules});
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':catalogRules});
+const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules, './alumexModels': alumexModels});
 const {quotationItemGroups}=load('../src/lib/quotations/itemGroups.ts',{
  '../workflow/catalogRules':catalogRules,
  '@/lib/workflow/catalogRules':catalogRules,

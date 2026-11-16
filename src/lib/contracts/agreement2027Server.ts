@@ -1,5 +1,6 @@
 import type { createAdminClient } from '@/lib/supabase/admin';
 import type { QuoteSnapshot } from '@/lib/workflow/pricing';
+import { alumexSystemLabel } from '@/lib/workflow/alumexModels';
 import { emptyAgreement2027Fields, buildAgreement2027Snapshot } from './agreement2027';
 import { productTechnicalDescription } from './agreement2027Content';
 import type { Agreement2027Snapshot, AgreementOpeningSpecification } from './agreement2027Types';
@@ -54,7 +55,7 @@ export async function loadAgreement2027Snapshot(admin:Admin,projectId:string,quo
  const quotedIds=new Set(quotation.lines.map(line=>line.opening.id));
  const specifications:AgreementOpeningSpecification[]=(openings.data??[]).filter(opening=>quotedIds.has(opening.id)).map(opening=>{
   const quoted=quotation.lines.find(line=>line.opening.id===opening.id);
-  const technicalDescription=quoted?productTechnicalDescription(quoted.system.name):undefined;
+  const technicalDescription=quoted?productTechnicalDescription(alumexSystemLabel(quoted.system.name,quoted.systemModel)):undefined;
   return {openingId:opening.id,aluminumColor:string(opening.aluminum_color),glassColor:string(opening.glass_color),bottomFrame:string(opening.bottom_frame),notes:string(opening.notes),...(technicalDescription?{technicalDescription}:{})};
  });
  return buildAgreement2027Snapshot(quotation,kind,fields,specifications);

@@ -13,7 +13,8 @@ function load(path,dependencies={}) {
  return exports;
 }
 const catalogRules=load('../src/lib/workflow/catalogRules.ts');
-const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules});
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':catalogRules});
+const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules, './alumexModels': alumexModels});
 const {quotationClientPricing}=load('../src/lib/quotations/clientPricing.ts',{'../workflow/pricing':pricing});
 const charge=(id,name,unit,rate,quantity,total=Math.round(rate*quantity))=>({id,name,unit,rate,quantity,total});
 function openingLine(id,quantity,rate,{name='Alumex System',unit='sqm',opening_type='Window',opening_direction='Sliding',physicalQuantity=1,measuredArea=quantity,systemTotal=Math.round(quantity*rate),glass=null,extras=[]}={}) {

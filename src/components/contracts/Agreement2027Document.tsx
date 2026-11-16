@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- Actual company/team signatures are private PNGs saved with the contract. */
 import type { ReactNode } from 'react';
 import type { ContractSnapshot } from '@/lib/workflow/types';
+import { alumexSystemLabel } from '@/lib/workflow/alumexModels';
 import { agreementApprovalRoles, type Agreement2027Snapshot, type AgreementApprovalRole } from '@/lib/contracts/agreement2027Types';
 import { OpeningSchedule } from '@/components/workflow/CommercialDocument';
 
@@ -84,7 +85,7 @@ function Specifications({ contract, agreement }: { contract: ContractSnapshot; a
   <OpeningSchedule quote={contract.quotation} />
   {!!agreement.openingSpecifications.length && <section><h4 className="mb-3 font-semibold">تفاصيل المواصفات والمخططات لكل فقرة</h4><div className="grid gap-3 sm:grid-cols-2">{contract.quotation.lines.map((line, index) => {
    const spec = specs.get(line.opening.id);
-   return <section key={line.opening.id} className="min-w-0 space-y-2 rounded border border-slate-200 p-3 text-xs leading-7 print:break-inside-avoid"><h5 className="font-semibold">الفقرة {index + 1}: {line.system.name}</h5>{spec?.technicalDescription && <p className="whitespace-pre-wrap">{spec.technicalDescription}</p>}<p>لون الألمنيوم: {value(spec?.aluminumColor)}</p><p>لون الزجاج: {value(spec?.glassColor)}</p><p>الإطار الأرضي / عتب الباب: {value(spec?.bottomFrame)}</p><p className="whitespace-pre-wrap">ملاحظات: {value(spec?.notes)}</p></section>;
+   return <section key={line.opening.id} className="min-w-0 space-y-2 rounded border border-slate-200 p-3 text-xs leading-7 print:break-inside-avoid"><h5 className="font-semibold">الفقرة {index + 1}: <bdi dir="ltr">{alumexSystemLabel(line.system.name,line.systemModel)}</bdi></h5>{spec?.technicalDescription && <p className="whitespace-pre-wrap">{spec.technicalDescription}</p>}<p>لون الألمنيوم: {value(spec?.aluminumColor)}</p><p>لون الزجاج: {value(spec?.glassColor)}</p><p>الإطار الأرضي / عتب الباب: {value(spec?.bottomFrame)}</p><p className="whitespace-pre-wrap">ملاحظات: {value(spec?.notes)}</p></section>;
   })}</div></section>}
   <ul className="list-inside list-disc space-y-2 text-sm leading-8">{agreement.specificationNotes.map((note, index) => <li key={index}>{note}</li>)}</ul>
  </section>;

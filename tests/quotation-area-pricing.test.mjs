@@ -13,7 +13,8 @@ function load(path,dependencies={}) {
  return exports;
 }
 const catalogRules=load('../src/lib/workflow/catalogRules.ts');
-const {priceQuotation,repriceQuotation,measuredOpeningArea,billableOpeningArea,openingAreaBand}=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules});
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':catalogRules});
+const {priceQuotation,repriceQuotation,measuredOpeningArea,billableOpeningArea,openingAreaBand}=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules, './alumexModels': alumexModels});
 const opening={id:'window',floor:'Ground',room:'Office',width:50,height:100,opening_type:'Window',opening_direction:'Sliding'};
 const product=(id,name,category,unit,unit_price)=>({id,name,category,unit,unit_price,is_active:true});
 const catalog=[

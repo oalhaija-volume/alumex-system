@@ -17,7 +17,8 @@ function load(path,dependencies={}) {
  return exports;
 }
 const catalogRules=load('../src/lib/workflow/catalogRules.ts');
-const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules});
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':catalogRules});
+const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules,'./alumexModels':alumexModels});
 const groupRates=load('../src/lib/quotations/groupRates.ts',{'@/lib/workflow/pricing':pricing,'@/lib/workflow/catalogRules':catalogRules});
 const itemGroups=load('../src/lib/quotations/itemGroups.ts',{'../workflow/catalogRules':catalogRules,'@/lib/workflow/catalogRules':catalogRules});
 const messages=Object.fromEntries(['en','ar'].map(locale=>[locale,JSON.parse(readFileSync(new URL(`../messages/${locale}.json`,import.meta.url),'utf8'))]));
@@ -123,9 +124,9 @@ for(const locale of ['en','ar'])for(const discount of [0,5])test(`${locale} acti
   const data={project:{project_name:'Price display fixture',project_number:'PRJ-FIXTURE',address:'Baghdad',branch:'Karkh',sales_status:'quotation_in_progress'},client:{name:'Fixture client',mobile:null},openings:saved.lines.map(line=>line.opening),catalog:snapshots.catalog,history:[],flow:{project_id:'project-fixture',revision:2,stage:'quotation',quotation:saved,contract:null,evidence:null,signed_at:null}};
   const empty=()=>null;
   const {QuotationWorkspace}=load('../src/components/workflow/QuotationWorkspace.tsx',{
-   ...shared,'next/link':({children,href})=>React.createElement('a',{href},children),'@/lib/workflow/catalogRules':catalogRules,'@/lib/quotations/groupRates':groupRates,'@/components/contracts/ContractPaymentPreview':{ContractPaymentPreview:empty},
+   ...shared,'next/link':({children,href})=>React.createElement('a',{href},children),'@/lib/workflow/catalogRules':catalogRules,'@/lib/quotations/groupRates':groupRates,'@/lib/workflow/alumexModels':alumexModels,'@/components/contracts/ContractPaymentPreview':{ContractPaymentPreview:empty},
    '@/lib/workflow/quotationOpenings':{quotationOpenings:(existing,added)=>{assert.deepEqual(added,[]);return existing;}},
-   './StandaloneItems':{StandaloneItems:empty},'./CurtainWallGlassTypeField':load('../src/components/workflow/CurtainWallGlassTypeField.tsx',{...shared,'./ui':{field:'field'}}),'./CurtainWallArchOption':{CurtainWallArchOption:empty},'@/components/measurements/MeasurementReports':{MeasurementReports:empty},'./ProjectRecord':{ProjectRecord:empty},'./QuotationOpeningForm':{QuotationOpeningForm:empty},'./QuotationFacadeForm':{QuotationFacadeForm:empty},'./OpeningAreaIndicator':indicators,'./CommercialDocument':document,
+   './StandaloneItems':{StandaloneItems:empty},'./AlumexSystemModelField':{AlumexSystemModelField:empty},'./CurtainWallGlassTypeField':load('../src/components/workflow/CurtainWallGlassTypeField.tsx',{...shared,'./ui':{field:'field'}}),'./CurtainWallArchOption':{CurtainWallArchOption:empty},'@/components/measurements/MeasurementReports':{MeasurementReports:empty},'./ProjectRecord':{ProjectRecord:empty},'./QuotationOpeningForm':{QuotationOpeningForm:empty},'./QuotationFacadeForm':{QuotationFacadeForm:empty},'./OpeningAreaIndicator':indicators,'./CommercialDocument':document,
    './ui':{button:'button',card:'card',field:'field',secondary:'secondary',Notice:empty,Workspace:({children})=>React.createElement('main',null,children),useResource:()=>({data,loading:false,error:'',reload:()=>{throw Error('Rendering must not write or fetch data');}}),api:()=>{throw Error('Rendering must not write or fetch data');}},
   });
   return renderToStaticMarkup(React.createElement(QuotationWorkspace,{projectId:'project-fixture'}));

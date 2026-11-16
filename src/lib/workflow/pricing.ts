@@ -1,15 +1,17 @@
 import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBranch';
 import { catalogKind, compatibleAddon, compatibleGlass, isAvailable, isCurtainWall, isCurtainWallArch, isLouver, isPushout, isRollerShutter, isShutterBox, normalizeCatalogItem } from './catalogRules';
+import { alumexSystemLabel, validateAlumexSystemModel, type AlumexSystemModel } from './alumexModels';
+export { alumexSystemLabel };
 export type CatalogItem = {id:string;name:string;category:string|null;unit:string;unit_price:number;is_active:boolean};
 export type MeasuredOpening = {has_roller_shutter?:boolean;work_area?:"facade"|"internal"|null;facade_number?:number|null;has_arch?:boolean;id:string;floor:string|null;room:string|null;width:number;height:number;quantity?:number;opening_type:string|null;opening_direction:string|null};
 export type ExtraChoice = {id:string;quantity:number;motorPrice?:number};
 export type CurtainWallGlassType = 'single'|'double';
-export type OpeningChoice = {openingId:string;systemId:string;systemRate?:number;glassId?:string;curtainWallGlassType?:CurtainWallGlassType;extras:ExtraChoice[];hasCurtainWallArch?:boolean};
+export type OpeningChoice = {openingId:string;systemId:string;systemRate?:number;systemModel?:AlumexSystemModel;glassId?:string;curtainWallGlassType?:CurtainWallGlassType;extras:ExtraChoice[];hasCurtainWallArch?:boolean};
 export type SurfaceMeasurement = {label:string;width:number;height:number;quantity:number};
 export type AdditionalChoice = {id:string;quantity:number;unitRate?:number;curtainWallGlassType?:CurtainWallGlassType;measurements?:SurfaceMeasurement[];extras?:ExtraChoice[];hasCurtainWallArch?:boolean};
 export type Charge = {id:string;name:string;unit:string;rate:number;quantity:number;total:number;rateSource?:'quotation';motorFor?:string};
 export type StandaloneCharge = Charge & {curtainWallGlassType?:CurtainWallGlassType;measurements?:SurfaceMeasurement[];extras?:Charge[];projectAddon?:true};
-export type QuoteLine = {opening:MeasuredOpening;system:Charge;glass:Charge|null;curtainWallGlassType?:CurtainWallGlassType;extras:Charge[];area:number;total:number};
+export type QuoteLine = {opening:MeasuredOpening;system:Charge;systemModel?:AlumexSystemModel;glass:Charge|null;curtainWallGlassType?:CurtainWallGlassType;extras:Charge[];area:number;total:number};
 export type QuoteSnapshot = {excludedOpeningIds?:string[];facadeMeasurements?:MeasuredOpening[];branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;discount?:{percent:5;subtotal:number;amount:number};total:number;currency:"IQD";createdAt:string;preparedBy:string};
 // Keep charge rates intact and deduct the discount once from the whole quotation.
 // Reconstructing the subtotal also makes removal and repeated edits non-stacking.
@@ -224,6 +226,7 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
   return curtainWallArchCharge(quantity);
  };
  quotation.lines=quotation.lines.map(line=>{
+  validateAlumexSystemModel(line.systemModel,line.opening,catalog.find(product=>product.id===line.system.id));
   curtainWallGlassType(line.curtainWallGlassType,line.opening.opening_type==='Curtain Wall'&&isCurtainWall(line.system));
   const system=refresh(line.system,line.opening);
   const glass=line.glass?refresh(line.glass):null;
@@ -255,7 +258,7 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
 export function quotationPriceKey(snapshot:QuoteSnapshot) {
  const charge=(item:Charge)=>({id:item.id,unit:item.unit,rate:item.rate,quantity:item.quantity,...(item.rateSource?{rateSource:item.rateSource}:{}),...(item.motorFor!==undefined?{motorFor:item.motorFor}:{})});
  return JSON.stringify({
-  lines:snapshot.lines.map(line=>({system:charge(line.system),glass:line.glass?charge(line.glass):null,...(line.curtainWallGlassType!==undefined?{curtainWallGlassType:line.curtainWallGlassType}:{}),extras:line.extras.map(charge)})),
+  lines:snapshot.lines.map(line=>({system:charge(line.system),...(line.systemModel!==undefined?{systemModel:line.systemModel}:{}),glass:line.glass?charge(line.glass):null,...(line.curtainWallGlassType!==undefined?{curtainWallGlassType:line.curtainWallGlassType}:{}),extras:line.extras.map(charge)})),
   additionalItems:(snapshot.additionalItems??[]).map(item=>({...charge(item),...(item.curtainWallGlassType!==undefined?{curtainWallGlassType:item.curtainWallGlassType}:{}),extras:(item.extras??[]).map(charge)})),
   ...(snapshot.discount?{discount:snapshot.discount}:{}),
  });
@@ -307,13 +310,14 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   if(!systemOptions(opening,catalog).some(p=>p.id===choice.systemId))throw new Error('Choose a compatible system for this structural type.');
   const catalogSystem=charge(choice.systemId);
   const system=choice.systemRate===undefined?catalogSystem:quotationSystemCharge(catalogSystem,catalog.find(product=>product.id===choice.systemId),choice.systemRate);
+  const systemModel=validateAlumexSystemModel(choice.systemModel,opening,catalog.find(product=>product.id===choice.systemId));
   if(choice.glassId&&!glassOptions(opening,catalog,choice.systemId).some(p=>p.id===choice.glassId))throw new Error('Choose a compatible glass option.');
   const glass=choice.glassId?charge(choice.glassId):null;
   const glassType=curtainWallGlassType(choice.curtainWallGlassType,opening.opening_type==='Curtain Wall'&&isCurtainWall(system));
   const arch=choice.hasCurtainWallArch;
   const extras=[...priceExtras(choice.extras,addonOptions(opening,catalog,choice.systemId),catalog,billableArea,[choice.systemId,choice.glassId??''],quantity),...priceCurtainWallArch(arch,opening.opening_type==='Curtain Wall',quantity)];
   if(opening.has_roller_shutter&&!extras.some(isRollerShutter))throw new Error('This window requires roller shutters. Choose a roller shutter add-on.');
-  return {opening,area,system,glass,...(glassType!==undefined?{curtainWallGlassType:glassType}:{}),extras,total:system.total+(glass?.total??0)+extras.reduce((s,p)=>s+p.total,0)};
+  return {opening,area,system,...(systemModel!==undefined?{systemModel}:{}),glass,...(glassType!==undefined?{curtainWallGlassType:glassType}:{}),extras,total:system.total+(glass?.total??0)+extras.reduce((s,p)=>s+p.total,0)};
  });
  if(!Array.isArray(additionalItems)||additionalItems.length>100||additionalItems.some(item=>!item)||new Set(additionalItems.map(item=>item.id)).size!==additionalItems.length)throw new Error('Select each standalone product or service once and enter its measurements or quantity.');
  const additional=additionalItems.map((item:AdditionalChoice)=>{

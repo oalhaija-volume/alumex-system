@@ -10,7 +10,8 @@ function load(path,dependencies={}){
  return exports;
 }
 const rules=load('../src/lib/workflow/catalogRules.ts');
-const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':rules});
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':rules});
+const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':rules, './alumexModels': alumexModels});
 const {quotationRateGroups,applyQuotationGroupRate}=load('../src/lib/quotations/groupRates.ts',{'@/lib/workflow/catalogRules':rules,'@/lib/workflow/pricing':pricing});
 const {priceQuotation,repriceQuotation,quotationAdditionalChoices,isQuotationCurtainRateEditable,isQuotationSystemRateEditable,isAlumexSqmSystem,quotationSellingSuggestion}=pricing;
 const product=(id,name,category,unit,unit_price)=>({id,name,category,unit,unit_price,is_active:true});

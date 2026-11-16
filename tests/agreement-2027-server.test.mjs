@@ -68,6 +68,20 @@ test('generation captures server source data and approved prices without queryin
  assert.equal(x.reads.some(read=>read.table==='product_price_settings'),false);assert.deepEqual({flow:x.stored,project:x.siteRow},x.before);
  const contactRead=x.reads.find(read=>read.table==='client_contacts');assert.deepEqual(contactRead.filters,[['client_id','client-id'],['or',`project_id.eq.${projectId},project_id.is.null`]]);
 });
+for(const [systemModel,description]of [['A16',/14 سم.*1\.6 إلى 1\.8/],['A16 Pro',/14 سم.*1\.6 إلى 2/],['A16 Pro+',undefined],['4500',/5\.5 سم.*1\.5 إلى 1\.6/],['4500 Pro',/14 سم.*1\.5 إلى 2/]])test(`contract specifications use saved ${systemModel} without inventing unsupported dimensions`,async()=>{
+ const quotation=structuredClone(quote);
+ quotation.lines[0].systemModel=systemModel;
+ quotation.lines[0].opening.opening_direction=systemModel.startsWith('4500')?'Hinged':'Sliding';
+ const before=structuredClone(quotation);
+ const x=setup({flowPatch:{quotation}});
+ const response=await x.submit({action:'contract',template:'residential'});
+ assert.equal(response.status,200);
+ const specifications=x.calls[0].args.p_payload.agreement2027.openingSpecifications;
+ if(description)assert.match(specifications[0].technicalDescription,description);
+ else assert.equal(Object.hasOwn(specifications[0],'technicalDescription'),false,'Pro+ must not inherit unverified PLUS specifications');
+ assert.deepEqual(x.stored.quotation,before);
+ assert.equal(x.reads.some(read=>read.table==='product_price_settings'),false);
+});
 for(const template of ['residential','commercial'])for(const total of [14_999_999,15_000_000,25_000_001])test(`generation uses the chosen ${template} payment policy for ${total} IQD`,async()=>{
  const quotation={...structuredClone(quote),total};
  const x=setup({flowPatch:{quotation}});

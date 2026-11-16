@@ -17,9 +17,10 @@ function load(path,dependencies={}) {
  return exports;
 }
 const rules=load('../src/lib/workflow/catalogRules.ts');
-const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':rules});
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':rules});
+const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':rules, './alumexModels': alumexModels});
 const groups=load('../src/lib/quotations/itemGroups.ts');
-const operations=load('../src/lib/workflow/operations.ts');
+const operations=load('../src/lib/workflow/operations.ts',{'./alumexModels':alumexModels});
 const product=(id,name,category,unit,unit_price)=>({id,name,category,unit,unit_price,is_active:true});
 const catalog=[
  product('curtain','Curtain Wall','facade_service','sqm',100000),

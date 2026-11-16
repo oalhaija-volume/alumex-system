@@ -13,7 +13,8 @@ function load(path,dependencies={}) {
  return exports;
 }
 const rules=load('../src/lib/workflow/catalogRules.ts');
-const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':rules});
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':rules});
+const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':rules, './alumexModels': alumexModels});
 const {priceQuotation,repriceQuotation,quotationPriceKey,isRollerShutterMotor,applyQuotationDiscount}=pricing;
 const {quotationClientPricing}=load('../src/lib/quotations/clientPricing.ts',{'../workflow/pricing':pricing});
 const catalog=[

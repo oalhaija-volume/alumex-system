@@ -16,7 +16,8 @@ const agreementModel=load('../src/lib/contracts/agreement2027.ts',{'./agreement2
 const agreementServer={...agreementContent,loadAgreement2027Snapshot:async(admin,projectId,quote,kind)=>agreementModel.buildAgreement2027Snapshot(quote,kind,{...agreementModel.emptyAgreement2027Fields(),clientLegalName:'Client',directPhone:'07000',clientClassification:'فرد'})};
 
 const catalogRules=load('../src/lib/workflow/catalogRules.ts');
-const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules});
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':catalogRules});
+const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules, './alumexModels': alumexModels});
 const registration=load('../src/lib/measurements/registrationOpening.ts');
 const quotationOpenings=load('../src/lib/workflow/quotationOpenings.ts',{'@/lib/measurements/registrationOpening':registration});
 const opening={id:'opening',floor:'Ground',room:'Kitchen',width:120,height:150,opening_type:'Window',opening_direction:'Sliding'};
@@ -60,7 +61,7 @@ for(const role of ['Operations Manager','Project Manager'])test(`${role} is reje
  const context={params:Promise.resolve({projectId:'project'})};assert.equal((await route.GET(new Request('https://example.test'),context)).status,403);assert.equal((await route.POST(new Request('https://example.test',{method:'POST'}),context)).status,403);
 });
 test('operations acceptance never returns the commercial RPC record',async()=>{
- const route=load('../src/app/api/operations/route.ts',{'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Operations Manager',profile:{branch:'Karkh'},user:{id:'actor'}})},'@/lib/workflow/operations':load('../src/lib/workflow/operations.ts'),'@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{branch:'Karkh'}})}),rpc:async()=>({data:{quotation:{total:9000},contract:{},evidence:{signature:'secret'}},error:null})})}});
+ const route=load('../src/app/api/operations/route.ts',{'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Operations Manager',profile:{branch:'Karkh'},user:{id:'actor'}})},'@/lib/workflow/operations':load('../src/lib/workflow/operations.ts',{'./alumexModels':alumexModels}),'@/lib/supabase/admin':{createAdminClient:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{branch:'Karkh'}})}),rpc:async()=>({data:{quotation:{total:9000},contract:{},evidence:{signature:'secret'}},error:null})})}});
  const result=await route.POST({json:async()=>({projectId:'project',revision:3})});assert.deepEqual(result.body,{ok:true});
 });
 test('stale quotation revision never reaches the transition RPC',async()=>{
@@ -99,7 +100,7 @@ test('employee creation passes password only to Auth, never profile or response'
 });
 
 test('operations specification projection excludes all monetary and contractual fields',()=>{
- const operations=load('../src/lib/workflow/operations.ts');
+ const operations=load('../src/lib/workflow/operations.ts',{'./alumexModels':alumexModels});
  const quote=pricing.priceQuotation([opening],[choice],catalog,'actor');
  const safe=operations.operationalSpecifications(quote);
  assert.deepEqual(safe,[{openingId:'opening',system:'Alumex System',glass:'Low-E Glass',extras:[{name:'Closer',quantity:2,unit:'item'}]}]);
@@ -153,7 +154,7 @@ test('additional product and service rows use catalog rates and explicit quantit
  const quote=pricing.priceQuotation([opening],[choice],items,'actor',[{id:'install',quantity:1,rate:1},{id:'product',quantity:999,total:1,measurements:[{label:'Front',width:1.75,height:2,quantity:1}]}]);
  assert.equal(quote.total,551000+75000+42000);
  assert.deepEqual(quote.additionalItems.map(item=>[item.rate,item.quantity,item.total]),[[75000,1,75000],[12000,3.5,42000]]);
- const safe=load('../src/lib/workflow/operations.ts').operationalAdditionalItems(quote);
+ const safe=load('../src/lib/workflow/operations.ts',{'./alumexModels':alumexModels}).operationalAdditionalItems(quote);
  assert.deepEqual(safe,[{name:'Installation',quantity:1,unit:'project'},{name:'Cladding panel',quantity:3.5,unit:'sqm',measurements:[{label:'Front',width:1.75,height:2,quantity:1}]}]);
  assert.equal(/rate|price|total|contract/.test(JSON.stringify(safe)),false);
 });
@@ -278,7 +279,7 @@ test('standalone doors are independently priced and skylights are excluded from 
 
 test('Operations receives facade measurements and pushout counts without monetary fields',()=>{
  const quote=pricing.priceQuotation([],[],correctedCatalog,'actor',[{id:'curtain',quantity:1,measurements:[surface]},{id:'pushout',quantity:3}]);
- const safe=load('../src/lib/workflow/operations.ts').operationalAdditionalItems(quote);
+ const safe=load('../src/lib/workflow/operations.ts',{'./alumexModels':alumexModels}).operationalAdditionalItems(quote);
  assert.deepEqual(safe,[{name:'Curtain Wall',quantity:60,unit:'sqm',measurements:[surface]},{name:'Curtain Wall Pushout',quantity:3,unit:'item'}]);
  assert.equal(/rate|price|total|signature|contract/.test(JSON.stringify(safe)),false);
 });

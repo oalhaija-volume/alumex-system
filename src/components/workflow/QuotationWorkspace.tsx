@@ -7,6 +7,8 @@ import { useState } from 'react';
 import { applyQuotationDiscount,quotationAdditionalChoices,recordedFacadeAreas,defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,isQuotationSystemRateEditable,isRollerShutterMotor,QUOTATION_SYSTEM_RATE_MIN,QUOTATION_DISCOUNTS_ENABLED,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice,type QuoteSnapshot } from '@/lib/workflow/pricing';
 import { StandaloneItems } from './StandaloneItems';
 import { CurtainWallGlassTypeField } from './CurtainWallGlassTypeField';
+import { AlumexSystemModelField } from './AlumexSystemModelField';
+import { alumexSystemModelOptions } from '@/lib/workflow/alumexModels';
 import { isShutterBox, isRollerShutter, isCurtainWallArch, isPushout, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
 import type { RegistrationOpening } from '@/lib/measurements/registrationOpening';
@@ -42,7 +44,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const facades=measured.filter(opening=>opening.opening_type==='Facade').sort((a,b)=>(a.facade_number??0)-(b.facade_number??0));
  const [choices,setChoices]=useState<OpeningChoice[]>(()=>quotableOpenings(data.openings).map(o=>{
   const saved=flow?.quotation.lines.find(l=>l.opening.id===o.id);
-  return {openingId:o.id,systemId:saved?.system.id??defaultSystem(o,catalog)?.id??'',...(saved?.system.rateSource==='quotation'?{systemRate:saved.system.rate}:{}),...(saved?.curtainWallGlassType?{curtainWallGlassType:saved.curtainWallGlassType}:{}),glassId:saved?.glass?.id??'',extras:saved?.extras.filter(e=>!isRollerShutterMotor(e)&&!isCurtainWallArch(e)&&!isPushout(e)).map(e=>{
+  return {openingId:o.id,systemId:saved?.system.id??defaultSystem(o,catalog)?.id??'',...(saved?.system.rateSource==='quotation'?{systemRate:saved.system.rate}:{}),...(saved?.curtainWallGlassType?{curtainWallGlassType:saved.curtainWallGlassType}:{}),...(saved?.systemModel?{systemModel:saved.systemModel}:{}),glassId:saved?.glass?.id??'',extras:saved?.extras.filter(e=>!isRollerShutterMotor(e)&&!isCurtainWallArch(e)&&!isPushout(e)).map(e=>{
    const motor=saved.extras.find(charge=>isRollerShutterMotor(charge)&&charge.motorFor===e.id);
    return {id:e.id,quantity:isRollerShutter(e)?1:e.unit==='sqm'?e.quantity:e.quantity/(saved.opening.quantity??1),...(motor?{motorPrice:motor.rate}:{})};
   })??[]};
@@ -219,6 +221,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     const index=allOpenings.findIndex(row=>row.id===opening.id);
     const choice=choices.find(row=>row.openingId===opening.id)!;
     const system=catalog.find(p=>p.id===choice.systemId);
+    const modelOptions=alumexSystemModelOptions(opening,system);
     const editableAlumexRate=!!system&&isQuotationSystemRateEditable(system);
     const editableCurtainRate=opening.opening_type==='Curtain Wall'&&isQuotationCurtainRateEditable(system);
     const editableRate=editableAlumexRate||editableCurtainRate;
@@ -234,8 +237,13 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
      <p className="mt-2 text-sm text-slate-500">{term("Floor")} {term(opening.floor)} · {opening.work_area==='internal'?`${term('Internal works')} · ${term(opening.room)}`:term(opening.room)} · {formatNumber(opening.width)} × {formatNumber(opening.height)} {term("cm")} · {term("Quantity")}: {formatNumber(opening.quantity??1)}{isNew?` · ${term('Not saved yet')}`:''}</p>
      {minimumApplied&&<p className="mt-2 text-xs text-slate-600">{term('Minimum billable area: 1 m² per window.')} {term('Billable area: {area} m²',{area:formatNumber(billableOpeningArea(opening)*(opening.quantity??1))})}</p>}
      <div className="mt-5 grid gap-4 sm:grid-cols-2">
-      <label className="text-sm">{term("System / product")}<select aria-label={term("System / product")} value={choice.systemId} onChange={e=>edit(opening.id,{systemId:e.target.value,systemRate:undefined,glassId:'',extras:[]})} className={field}><option value="">{term("Choose system")}</option>{systemOptions(opening,catalog).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
+      <label className="text-sm">{term("System / product")}<select aria-label={term("System / product")} value={choice.systemId} onChange={event=>{
+       const systemId=event.target.value;
+       const allowedModels=alumexSystemModelOptions(opening,catalog.find(product=>product.id===systemId));
+       edit(opening.id,{systemId,systemRate:undefined,glassId:'',extras:[],systemModel:choice.systemModel&&allowedModels.includes(choice.systemModel)?choice.systemModel:undefined});
+      }} className={field}><option value="">{term("Choose system")}</option>{systemOptions(opening,catalog).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
       <label className="text-sm">{term("Glass")}<select aria-label={term("Glass")} value={choice.glassId} onChange={e=>edit(opening.id,{glassId:e.target.value,extras:choice.extras.filter(x=>x.id!==e.target.value)})} className={field}><option value="">{term("Standard glass included")}</option>{glassOptions(opening,catalog,choice.systemId).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
+      {!!modelOptions.length&&<div className="sm:col-span-2"><AlumexSystemModelField options={modelOptions} value={choice.systemModel} onChange={value=>edit(opening.id,{systemModel:value})}/></div>}
       {opening.opening_type==='Curtain Wall'&&<div className="sm:col-span-2"><CurtainWallGlassTypeField value={choice.curtainWallGlassType} onChange={value=>edit(opening.id,{curtainWallGlassType:value})}/></div>}
       {editableRate&&<div className="sm:col-span-2">
        <label className="block text-sm">{term(editableCurtainRate?'Curtain Wall rate (IQD / m²)':'Quotation system rate (IQD / m²)')}<input aria-label={term(editableCurtainRate?'Curtain Wall rate (IQD / m²)':'Quotation system rate (IQD / m²)')} aria-describedby={`system-rate-help-${opening.id}`} aria-invalid={invalidRate} type="number" inputMode="numeric" min={minimumRate} step={1} value={systemRate||''} onChange={e=>edit(opening.id,{systemRate:Number(e.target.value)})} className={`${field} block sm:max-w-xs`}/></label>

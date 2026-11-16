@@ -16,7 +16,8 @@ function load(path, dependencies = {}) {
 }
 
 const rules = load('../src/lib/workflow/catalogRules.ts');
-const { priceQuotation, repriceQuotation, systemOptions } = load('../src/lib/workflow/pricing.ts', { './catalogRules': rules });
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':rules});
+const { priceQuotation, repriceQuotation, systemOptions } = load('../src/lib/workflow/pricing.ts', { './catalogRules': rules , './alumexModels': alumexModels});
 const section = {
   id: '11111111-1111-4111-8111-111111111111', name: 'Custom Thermal Section',
   category: 'aluminum_section', unit: 'sqm', unit_price: 500000, is_active: true,

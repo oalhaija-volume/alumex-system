@@ -3,7 +3,7 @@ import { projectBranchLabels, type ProjectBranch, type ProjectGovernorate } from
 /* eslint-disable @next/next/no-img-element -- Print documents use the original SVG brand asset. */
 import type { ReactNode } from 'react';
 import type { QuoteSnapshot,Charge } from '@/lib/workflow/pricing';
-import { discountedSystemRate,measuredOpeningArea,openingSellingBand,isAlumexSqmSystem } from '@/lib/workflow/pricing';
+import { discountedSystemRate,measuredOpeningArea,openingSellingBand,isAlumexSqmSystem,alumexSystemLabel } from '@/lib/workflow/pricing';
 import { quotationItemGroups } from '@/lib/quotations/itemGroups';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import { OpeningAreaBadge,OpeningSellingLegend } from './OpeningAreaIndicator';
@@ -61,7 +61,7 @@ export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal
        <td rowSpan={charges.length}><strong>{term(line.opening.opening_type)} {line.opening.opening_direction?term(line.opening.opening_direction):''}{line.opening.has_arch?` · ${term('Arch')}`:''}{line.opening.has_roller_shutter?` · ${term('Roller shutter')}`:''}</strong><span className="document-table-detail"><bdi dir="ltr">{formatNumber(line.opening.width)} × {formatNumber(line.opening.height)}</bdi> {term('cm')}</span><span className="document-table-detail">{formatNumber(line.area,2)} {term('m²')}</span>{showAreaColors&&<span className="document-opening-area-indicator mt-1 block">{band?<OpeningAreaBadge area={area} rate={line.system.rate} opening={line.opening} discountPercent={colorDiscountPercent}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}</span>}{minimumApplied&&<span className="document-table-detail">{term('Minimum billable area: 1 m² per window.')}</span>}</td>
        <td rowSpan={charges.length} className="document-table-number">{formatNumber(line.opening.quantity??1)}</td>
       </>}
-      <td><span className="document-charge-kind">{term(labels[chargeIndex])}</span><span dir="auto">{term(charge.name)}</span>{chargeIndex===0&&line.curtainWallGlassType&&<span className="document-table-detail">{term(line.curtainWallGlassType==='single'?'Single Glass':'Double Glass')}</span>}</td>
+      <td><span className="document-charge-kind">{term(labels[chargeIndex])}</span><span dir="auto">{term(chargeIndex===0?alumexSystemLabel(charge.name,line.systemModel):charge.name)}</span>{chargeIndex===0&&line.curtainWallGlassType&&<span className="document-table-detail">{term(line.curtainWallGlassType==='single'?'Single Glass':'Double Glass')}</span>}</td>
       <td className="document-table-number">{formatNumber(charge.quantity)} {term(charge.unit==='sqm'?'m²':charge.unit==='meter'?'m':charge.unit)}</td>
       <td className="document-table-number">{formatNumber(charge.rate,4)}</td>
       <td className="document-table-number">{formatNumber(charge.total)}</td>

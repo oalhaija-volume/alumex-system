@@ -13,7 +13,8 @@ function load(path,dependencies={}) {
  return exports;
 }
 const catalogRules=load('../src/lib/workflow/catalogRules.ts');
-const {openingMinimumSellingRate,openingSellingBand,isAlumexSqmSystem,quotationSellingSuggestion,defaultSystem,systemOptions,priceQuotation,repriceQuotation}=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules});
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':catalogRules});
+const {openingMinimumSellingRate,openingSellingBand,isAlumexSqmSystem,quotationSellingSuggestion,defaultSystem,systemOptions,priceQuotation,repriceQuotation}=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules, './alumexModels': alumexModels});
 const product=(id,name,category,unit,unit_price)=>({id,name,category,unit,unit_price,is_active:true});
 const catalog=[
  product('system','Alumex System','aluminum_system','sqm',240000),

@@ -62,6 +62,9 @@ let syncing:Promise<void>|null=null;
 let lastSnapshot:{actorId:string;downloadedAt:number}|null=null;
 let accountGeneration=0;
 const BACKGROUND_REFRESH_INTERVAL=60000;
+// A full workspace includes project history and saved openings. Allow slower
+// mobile connections to finish downloading it before falling back to storage.
+const WORKSPACE_DOWNLOAD_TIMEOUT=30000;
 if(typeof window!=='undefined')window.addEventListener?.('field-change',event=>{
  if((event as CustomEvent<FieldChangeDetail>).detail?.source==='account'){accountGeneration++;lastSnapshot=null;}
 });
@@ -93,7 +96,7 @@ export async function prepareOffline({background=false}:{background?:boolean}={}
    openingIds:new Set(stored.openings.map(opening=>opening.id)),
   }:null;
   let response:Response;
-  try{response=await fetch('/api/offline',{cache:'no-store',signal:AbortSignal.timeout(8000)});checkAccount();connection(true);}catch{checkAccount();connection(false);const cached=await readFieldState();checkAccount();if(cached)return cached;throw new Error('Connect once to prepare this device for offline work.');}
+  try{response=await fetch('/api/offline',{cache:'no-store',signal:AbortSignal.timeout(WORKSPACE_DOWNLOAD_TIMEOUT)});checkAccount();connection(true);}catch{checkAccount();connection(false);const cached=await readFieldState();checkAccount();if(cached)return cached;throw new Error('Connect once to prepare this device for offline work.');}
   checkAccount();
   if(!response.ok){if([401,403].includes(response.status))setFieldUser(null);else if(response.status>=500){connection(false);const cached=await readFieldState();checkAccount();if(cached)return cached;}throw new Error('Sign in with an active sales account to use offline work.');}
   const remote=await response.json() as FieldState;

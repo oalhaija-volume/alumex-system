@@ -16,7 +16,10 @@ export function OutdoorProjects() {
   const { data, error, loading, reload } = useResource<SalesWorkspaceData>('/api/workspace');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
-  const projects = (data?.projects ?? []).filter(project => !project.project_log_only && data && canAccessOutdoorProject(project, data.actor));
+  const projects = (data?.projects ?? []).filter(project => data && (
+    project.created_by === data.actor.id || project.legacy_outdoor_sales_id === data.actor.id
+    || (!project.project_log_only && canAccessOutdoorProject(project, data.actor))
+  ));
   const selected = projects.filter(project => matchesProjectSearch(project, search) && (filter === 'all' || projectStage(project) === filter));
 
   return <Workspace title="My projects" description="Your registered projects and your team's assignments. Open a project to review its name and saved openings.">
@@ -24,7 +27,9 @@ export function OutdoorProjects() {
     {loading ? <p role="status">{term('Loading projects…')}</p> : <>
       <DashboardProjectFilters search={search} onSearch={setSearch} filter={filter} onFilter={setFilter} onClear={() => { setSearch(''); setFilter('all'); }} count={selected.length} total={projects.length}/>
       {!selected.length ? <p className={card}>{term(projects.length ? 'No projects match this view.' : 'No projects yet. Start by registering a client.')}</p> : <div className="space-y-4">
-        {selected.map(project => <article key={project.id} id={`project-${project.id}`} aria-labelledby={`my-project-title-${project.id}`} className={`${card} scroll-mt-5`}>
+        {selected.map(project => {
+          const readOnly = project.project_log_only || !data || !canAccessOutdoorProject(project, data.actor);
+          return <article key={project.id} id={`project-${project.id}`} aria-labelledby={`my-project-title-${project.id}`} className={`${card} scroll-mt-5`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-blue-700">{term(project.project_number)}{project.pending ? ` · ${term('Saved on device')}` : ''}</p>
@@ -35,9 +40,11 @@ export function OutdoorProjects() {
           {project.address && <p dir="auto" className="mt-3 break-words text-sm leading-6 text-slate-600">{project.address}</p>}
           <p className="mt-3 text-sm text-slate-700">{term('Measurements by')}: <bdi className="font-semibold">{project.assignedOutdoorSales ?? term('Not assigned')}</bdi></p>
           <p className="mt-2 text-xs leading-5 text-slate-500">{term('Created by')} <bdi>{project.registeredBy === 'Employee' ? term('Employee') : project.registeredBy}</bdi><time dateTime={project.created_at} dir="ltr" className="mt-1 block w-fit max-w-full">{formatDateTime(project.created_at)}</time></p>
+          {project.legacy_outdoor_sales_id && <p className="mt-2 break-words text-sm text-red-800">{term('Original Outdoor Sales owner')}: <bdi className="font-semibold">{project.legacyOutdoorSalesOwner ?? term('Employee')}</bdi></p>}
+          {readOnly && <p className="mt-3 text-sm text-slate-600">{term('This project is available in your log for reference only.')}</p>}
           {data && <ProjectNameEditor project={project} actor={data.actor} onSaved={reload}/>}
-          {project.structure_readiness === 'ready' && <Link href={`/initial-measurements/${project.id}`} className={`${button} mt-3 inline-flex items-center justify-center`}>{term('Open project')}</Link>}
-        </article>)}
+          {!readOnly && project.structure_readiness === 'ready' && <Link href={`/initial-measurements/${project.id}`} className={`${button} mt-3 inline-flex items-center justify-center`}>{term('Open project')}</Link>}
+        </article>;})}
       </div>}
     </>}
   </Workspace>;

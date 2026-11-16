@@ -867,6 +867,36 @@ test('explicit preparation bypasses the background freshness interval',async t=>
  await x.client.prepareOffline({background:true});assert.equal(x.calls,2);
 });
 
+test('a slow mobile download includes newly registered projects and preserves queued work',async t=>{
+ t.mock.timers.reset();
+ t.mock.timers.enable({apis:['Date','setTimeout'],now:new Date('2026-11-16T10:00:00Z')});
+ const x=backgroundSnapshots(t);
+ const pendingOpening={id:'local-opening',projectId,action:'opening',payload:{width:120}};
+ x.accounts.get(actor.id).queue.push(pendingOpening);
+ const added={...x.remote.get(actor.id).projects[0],id:'99999999-9999-4999-8999-999999999999',project_name:'New server project'};
+ x.remote.get(actor.id).projects.push(added);
+ // Model the browser timeout with the same clock as a nine-second download.
+ t.mock.method(AbortSignal,'timeout',duration=>{
+  const controller=new AbortController();
+  setTimeout(()=>controller.abort(new DOMException('Download timed out','TimeoutError')),duration);
+  return controller.signal;
+ });
+ let began;
+ const started=new Promise(resolve=>{began=resolve;});
+ globalThis.fetch=async(url,{signal})=>new Promise((resolve,reject)=>{
+  assert.equal(url,'/api/offline');
+  signal.addEventListener('abort',()=>reject(signal.reason),{once:true});
+  setTimeout(()=>resolve(Response.json(x.remote.get(actor.id))),9000);
+  began();
+ });
+ const download=x.client.prepareOffline();
+ await started;t.mock.timers.tick(9000);
+ const current=await download;
+ assert.equal(current.projects.some(project=>project.id===added.id),true,'A slow download must not silently return the old project list');
+ assert.deepEqual(current.queue,[pendingOpening],'Refreshing projects must retain unsynced work');
+ assert.equal(x.client.isFieldOnline(),true);
+});
+
 for(const failure of ['network','server'])test(`a ${failure} snapshot failure falls back to saved work without advancing download freshness`,async t=>{
  const x=backgroundSnapshots(t);
  await x.client.prepareOffline({background:true});

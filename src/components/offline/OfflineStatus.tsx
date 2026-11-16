@@ -17,6 +17,7 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
  const [ready,setReady]=useState(false);
  const [shellReady,setShellReady]=useState(false);
  const [syncedAt,setSyncedAt]=useState<string|null>(null);
+ const [refreshing,setRefreshing]=useState(false);
  useEffect(()=>{
   if(!isOfflineDevice()){
    // Online desktop pages do not need a second download of every field record.
@@ -35,12 +36,13 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
   async function connect(force=false){
    if(connecting){forcePending ||= force;return;}
    connecting=true;
+   if(mounted)setRefreshing(true);
    try{
     await refresh();
     if(navigator.onLine){await syncFieldChanges();if(activeFieldUser())await prepareOffline({background:!force});}
     if(mounted)setSetupError('');
    }catch(e){if(mounted)setSetupError(e instanceof Error?e.message:'Offline setup unavailable.');}
-   finally{connecting=false;await refresh();if(mounted&&forcePending){forcePending=false;void connect(true);}}
+   finally{await refresh();connecting=false;if(mounted)setRefreshing(false);if(mounted&&forcePending){forcePending=false;void connect(true);}}
   }
   async function prepareShell(){
    if(!('serviceWorker' in navigator))throw new Error('Offline reopening is unavailable in this browser.');
@@ -62,16 +64,23 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
   const reconnect=()=>{void connect(true);};
   const focus=()=>{void connect();};
   const visible=()=>{if(document.visibilityState==='visible')void connect();};
-  window.addEventListener('online',reconnect);window.addEventListener('offline',refresh);window.addEventListener('focus',focus);document.addEventListener('visibilitychange',visible);
+  window.addEventListener('online',reconnect);window.addEventListener('field-refresh',reconnect);window.addEventListener('offline',refresh);window.addEventListener('focus',focus);document.addEventListener('visibilitychange',visible);
   const timer=window.setInterval(()=>{if(document.visibilityState==='visible')void connect();},30000);
-  return()=>{mounted=false;clearInterval(timer);window.removeEventListener('field-change',refresh);window.removeEventListener('field-connection',refresh);window.removeEventListener('online',reconnect);window.removeEventListener('offline',refresh);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',visible);};
+  return()=>{mounted=false;clearInterval(timer);window.removeEventListener('field-change',refresh);window.removeEventListener('field-connection',refresh);window.removeEventListener('online',reconnect);window.removeEventListener('field-refresh',reconnect);window.removeEventListener('offline',refresh);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',visible);};
  },[]);
  const issue=error||setupError||shellError;
  if(!showOffline)return null;
  const status=!ready?term('Preparing offline storage…'):count?term(count===1?'{count} change saved on this device · {status}':'{count} changes saved on this device · {status}',{count:formatNumber(count),status:term(online?'Sync pending':'Offline')}):!shellReady?term('Saved data ready · Preparing offline reopening…'):online?term('Synced · Offline saving ready'):term('Offline · Saved work is available on this device');
- // Outdoor staff need an alert only when saved work needs attention. Synchronization
- // and shell preparation keep running even when the routine status is not rendered.
- if(quiet)return issue?<div role="alert" className="mx-auto max-w-5xl px-5 pt-4 text-sm text-red-700">{errorMessage(issue)} {error&&<button onClick={()=>void syncFieldChanges()} className="min-h-11 px-2 font-semibold underline">{term('Retry sync')}</button>}</div>:null;
+ // Keep freshness and an explicit retry visible even when routine storage
+ // details are hidden. A failed download may have returned an older snapshot.
+ if(quiet)return <div className="mx-auto max-w-5xl px-5 pt-3 text-sm print:hidden">
+  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+   <div className="min-w-0 text-xs text-slate-600">{syncedAt&&<p>{term('Last synced')} <time dateTime={syncedAt} dir="ltr" className="inline-block">{formatDateTime(syncedAt)}</time></p>}</div>
+   <button type="button" disabled={refreshing} onClick={()=>window.dispatchEvent(new Event('field-refresh'))} className="min-h-11 rounded-md px-3 font-semibold text-blue-700 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">{term(refreshing?'Refreshing projects…':'Refresh projects')}</button>
+  </div>
+  {ready&&!online&&<p role="status" className="mt-1 rounded-md bg-amber-50 p-3 leading-6 text-amber-900">{term('Showing saved projects. Connect and refresh to see the latest entries.')}</p>}
+  {issue&&<div role="alert" className="mt-2 text-red-700">{errorMessage(issue)} {error&&<button onClick={()=>void syncFieldChanges()} className="min-h-11 px-2 font-semibold underline">{term('Retry sync')}</button>}</div>}
+ </div>;
  return <div className="border-b border-slate-200 bg-white px-5 py-3 text-sm print:hidden">
   <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
    <div><p role="status" className={issue?'text-red-700':!online||count?'text-amber-800':'text-slate-600'}>{status}</p>{syncedAt&&<p className="mt-1 text-xs text-slate-500">{term('Last synced')} <time dateTime={syncedAt} dir="ltr" className="inline-block">{formatDateTime(syncedAt)}</time></p>}</div>

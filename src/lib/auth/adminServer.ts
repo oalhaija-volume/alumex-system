@@ -6,6 +6,7 @@ import type { AppRole } from "@/lib/auth/permissions";
 import { normalizeAppRole } from "@/lib/auth/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseServiceRoleKey } from "@/lib/supabase/config";
+import type { OutdoorRotationStartBranch } from "@/lib/intake/outdoorRotation";
 
 const seedAdminEmail = "admin@alumex.com";
 
@@ -28,6 +29,7 @@ export type RoleCheck =
         branch: string | null;
         status?: string | null;
         outdoor_team_key?: string | null;
+        outdoor_rotation_start_branch?: OutdoorRotationStartBranch | null;
       } | null;
     }
   | { ok: false; status: number; error: string };
@@ -61,7 +63,7 @@ export async function requireRole(
     : supabase;
   const { data: profile, error: profileError } = await profileClient
     .from("profiles")
-    .select("full_name, username, role, is_active, status, branch, outdoor_team_key")
+    .select("full_name, username, role, is_active, status, branch, outdoor_team_key, outdoor_rotation_start_branch")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -78,6 +80,7 @@ export async function requireRole(
     branch: string | null;
     status?: string | null;
     outdoor_team_key?: string | null;
+    outdoor_rotation_start_branch?: OutdoorRotationStartBranch | null;
   } | null;
   const role =
     isInactiveProfile(profileData)

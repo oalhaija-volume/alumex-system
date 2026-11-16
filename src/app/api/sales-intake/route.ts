@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   try{buildingType=normalizeBuildingType(body?.project?.buildingType,auth.role==='Outdoor Sales');}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   let branch;
   if(!hasGlobalProjectAccess(auth.role)&&!auth.profile?.branch)return NextResponse.json({error:'Ask Admin to assign your branch before creating a project.'},{status:400});
-  const actor={role:auth.role,branch:auth.profile?.branch};
+  const actor={role:auth.role,branch:auth.profile?.branch,outdoorRotationStartBranch:auth.profile?.outdoor_rotation_start_branch};
   try{branch=normalizeOutdoorProjectBranch(actor,body?.project?.branch===undefined?(outdoorSalesBranch(actor)??auth.profile?.branch):body.project.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   let governorate;
   try{governorate=normalizeProjectGovernorate(branch,body?.project?.governorate);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}

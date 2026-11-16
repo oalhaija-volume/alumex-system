@@ -115,7 +115,10 @@ for (const name of ['sales-intake', 'offline']) {
   }
 
   for (const role of ['Outdoor Sales', 'Sales Director', 'CEO', 'Company Owner']) {
-    test(`${name}: ${role} cannot forge pre-system ownership`, async () => {
+    test(`${name}: ${role} cannot forge pre-system ownership`, async t => {
+      // Keep the chosen Karkh branch valid so this tests ownership validation
+      // independently of the current half-month rotation assignment.
+      t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-01T09:00:00+03:00') });
       const x = endpoint(name, { role });
       const response = await x.submit(payload({ assignedOutdoorSalesId: collector.id }));
       assert.equal(response.status, 400);

@@ -81,7 +81,7 @@ export async function POST(request:Request){
   let buildingType;
   try{buildingType=normalizeBuildingType(p.buildingType,auth.role==='Outdoor Sales'&&p.buildingType!==undefined);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   // Retain compatibility with registrations already saved by older installed clients.
-  const actor={id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds};
+  const actor={id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorRotationStartBranch:auth.profile?.outdoor_rotation_start_branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds};
   let branch;
   try{branch=normalizeProjectBranch(p.branch===undefined?(outdoorSalesBranch(actor)??auth.profile?.branch):p.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   const retiredNajaf=branch==='Governorates'&&effectiveProjectBranch({branch,governorate:p.governorate})==='Najaf';

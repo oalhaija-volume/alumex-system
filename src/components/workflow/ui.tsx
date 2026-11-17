@@ -64,7 +64,7 @@ export function useResource<T>(url:string){
    timer=setTimeout(()=>{pendingForce=false;void loader.refresh(true);},150);
   }
   void loader.refresh();
-  const live=url==='/api/workspace'||url==='/api/dashboard'||url==='/api/outdoor-sales-coverage';
+  const live=url==='/api/workspace'||url==='/api/dashboard'||url==='/api/outdoor-sales-coverage'||url==='/api/signed-contracts';
   const interval=live?setInterval(()=>{if(document.visibilityState==='visible')changed();},30000):undefined;
   if(live){window.addEventListener('field-change',changed);window.addEventListener('focus',changed);}
   const unsubscribe=live?subscribeWorkspaceChanges(workspaceChanged):()=>{};

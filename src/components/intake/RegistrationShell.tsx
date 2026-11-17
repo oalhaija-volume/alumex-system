@@ -21,6 +21,7 @@ const links = [
   ["/dashboard", "Dashboard", "لوحة المتابعة"],
   ["/intake", "New project", "مشروع جديد"],
   ["/projects", "Projects", "المشاريع"],
+  ["/signed-contracts", "Signed contracts", "العقود الموقعة"],
   ["/mini-crm", "Follow-ups", "المتابعات"],
   ["/catalog", "Price catalog", "دليل الأسعار"],
   ["/hr", "Employees", "الموظفون"],

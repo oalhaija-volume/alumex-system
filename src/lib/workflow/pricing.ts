@@ -1,7 +1,7 @@
 import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBranch';
 import { catalogKind, compatibleAddon, compatibleGlass, isAvailable, isCurtainWall, isCurtainWallArch, isLouver, isPushout, isRollerShutter, isShutterBox, normalizeCatalogItem } from './catalogRules';
 import { alumexSystemLabel, validateAlumexSystemModel, type AlumexSystemModel } from './alumexModels';
-export { alumexSystemLabel };
+export { alumexSystemLabel, isLouver };
 export type CatalogItem = {id:string;name:string;category:string|null;unit:string;unit_price:number;is_active:boolean};
 export type MeasuredOpening = {has_roller_shutter?:boolean;work_area?:"facade"|"internal"|null;facade_number?:number|null;has_arch?:boolean;id:string;floor:string|null;room:string|null;width:number;height:number;quantity?:number;opening_type:string|null;opening_direction:string|null};
 export type ExtraChoice = {id:string;quantity:number;motorPrice?:number};
@@ -72,8 +72,9 @@ export function isQuotationCurtainRateEditable(product:CatalogItem|null|undefine
 export function measuredOpeningArea(opening:Pick<MeasuredOpening,'width'|'height'>) {
  return Number(opening.width)*Number(opening.height)/10000;
 }
-export function billableOpeningArea(opening:Pick<MeasuredOpening,'width'|'height'|'opening_type'>) {
+export function billableOpeningArea(opening:Pick<MeasuredOpening,'width'|'height'|'opening_type'>,product?:Pick<CatalogItem,'name'>) {
  const area=measuredOpeningArea(opening);
+ if(opening.opening_type==='Louver'||product&&isLouver(product))return Math.max(Number(opening.width),100)*Math.max(Number(opening.height),100)/10000;
  return opening.opening_type==='Window'?Math.max(area,1):area;
 }
 export function openingAreaBand(area:number):'red'|'orange'|'yellow'|'green' {
@@ -202,9 +203,9 @@ function rollerShutterMotorCharge(shutterId:string,rate:unknown,quantity:number)
  return {id:`roller-shutter-motor:${shutterId}`,name:'Roller shutter motor',unit:'item',rate,quantity,total,motorFor:shutterId};
 }
 
-// Price refresh uses the quantities already charged in the saved quotation.
-// Reconstructing choices from openings could multiply repeated accessories a
-// second time or change a facade's recorded area.
+// Preserve saved charge quantities except louver sqm pricing, whose minimum
+// dimensions are applied from the actual opening and repetition count. Never
+// reconstruct accessory choices or alter the recorded measurements.
 export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[],actor:string):QuoteSnapshot {
  const catalog=rawCatalog.map(normalizeCatalogItem);
  const quotation=structuredClone(snapshot);
@@ -213,13 +214,19 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
   if(charge.motorFor!==undefined)throw new Error('Review the roller shutter motor in Edit quotation before updating prices.');
   const item=catalog.find(item=>item.id===charge.id&&isAvailable(item));
   if(item&&item.unit!==charge.unit)throw new Error('A catalog unit changed. Use Edit quotation to review the affected items before updating prices.');
-  let current=catalogCharge(charge.id,charge.quantity,catalog);
+  const louver=!!opening&&charge.unit==='sqm'&&(opening.opening_type==='Louver'||isLouver(charge)||!!item&&isLouver(item));
+  let quantity=charge.quantity;
+  if(louver&&opening){
+   if(!Number.isFinite(Number(opening.width))||Number(opening.width)<=0||!Number.isFinite(Number(opening.height))||Number(opening.height)<=0||!Number.isInteger(opening.quantity??1)||(opening.quantity??1)<1||(opening.quantity??1)>10000)throw new Error('Complete all opening measurements first.');
+   quantity=billableOpeningArea(opening,item&&isLouver(item)?item:charge)*(opening.quantity??1);
+  }
+  let current=catalogCharge(charge.id,quantity,catalog);
   if(charge.rateSource!==undefined){
    const curtain=isQuotationCurtainRateEditable(item);
    if(charge.rateSource!=='quotation'||(!opening&&!(standaloneCurtain&&curtain))||curtain&&opening&&opening.opening_type!=='Curtain Wall')throw new Error('Quotation-specific rates can only be applied to the opening system or standalone Curtain Wall.');
    current=quotationSystemCharge(current,item,charge.rate);
   }
-  return {...charge,rate:current.rate,total:current.total};
+  return {...charge,...(louver?{quantity:current.quantity}:{}),rate:current.rate,total:current.total};
  };
  const refreshArch=(charge:Charge,curtain:boolean,quantity:number,extras:Charge[]):Charge=>{
   if(!curtain||charge.name!=='Curtain Wall Arch'||charge.unit!=='item'||charge.quantity!==quantity||charge.rateSource!==undefined||charge.motorFor!==undefined||extras.filter(isCurtainWallArchCharge).length!==1)throw new Error(curtainWallArchReview);
@@ -303,9 +310,9 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   const choice=choices.find(c=>c.openingId===opening.id);
   if(!choice || !Array.isArray(choice.extras))throw new Error('Invalid opening selections.');
   const area=measuredOpeningArea(opening)*quantity;
-  // Apply the window minimum to each physical opening before repetitions.
+  // Apply pricing minimums to each physical opening before repetitions.
   // Keep measured area in the snapshot for dimensions and operational use.
-  const billableArea=billableOpeningArea(opening)*quantity;
+  const billableArea=billableOpeningArea(opening,catalog.find(product=>product.id===choice.systemId))*quantity;
   const charge=(id:string)=>catalogCharge(id,catalog.find(p=>p.id===id)?.unit==='sqm'?billableArea:quantity,catalog);
   if(!systemOptions(opening,catalog).some(p=>p.id===choice.systemId))throw new Error('Choose a compatible system for this structural type.');
   const catalogSystem=charge(choice.systemId);

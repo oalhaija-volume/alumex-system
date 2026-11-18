@@ -83,7 +83,7 @@ test('item systems and item or metre accessories keep their quantities on a smal
  assert.equal(quote.total,532000);
 });
 
-for(const [opening_type,systemId,withGlass] of [['Door','system',true],['Curtain Wall','curtain',true],['Louver','louver',false]])test(`${opening_type} area quantities are not subject to the window minimum`,()=>{
+for(const [opening_type,systemId,withGlass] of [['Door','system',true],['Curtain Wall','curtain',true]])test(`${opening_type} area quantities are not subject to the window minimum`,()=>{
  const measured={...opening,opening_type,quantity:3};
  const quote=priceQuotation([measured],[{openingId:'window',systemId,...(withGlass?{glassId:'glass'}:{}),extras:opening_type==='Door'?[{id:'shutter',quantity:1,motorPrice:10000}]:[]}],catalog,'sales');
  const line=quote.lines[0];

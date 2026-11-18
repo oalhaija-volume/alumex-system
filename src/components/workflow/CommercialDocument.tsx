@@ -3,7 +3,7 @@ import { projectBranchLabels, type ProjectBranch, type ProjectGovernorate } from
 /* eslint-disable @next/next/no-img-element -- Print documents use the original SVG brand asset. */
 import type { ReactNode } from 'react';
 import type { QuoteSnapshot,Charge } from '@/lib/workflow/pricing';
-import { discountedSystemRate,measuredOpeningArea,openingSellingBand,isAlumexSqmSystem,alumexSystemLabel } from '@/lib/workflow/pricing';
+import { discountedSystemRate,measuredOpeningArea,billableOpeningArea,openingSellingBand,isAlumexSqmSystem,alumexSystemLabel,isLouver } from '@/lib/workflow/pricing';
 import { quotationItemGroups } from '@/lib/quotations/itemGroups';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import { OpeningAreaBadge,OpeningSellingLegend } from './OpeningAreaIndicator';
@@ -52,13 +52,17 @@ export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal
     const labels=['Aluminum / system',...(line.glass?['Glass']:[]),...line.extras.map(()=>'Add-on')];
     const area=measuredOpeningArea(line.opening);
     const band=showAreaColors&&isAlumexSqmSystem(line.system)?openingSellingBand(area,discountedSystemRate(line.system.rate,colorDiscountPercent),line.opening):undefined;
-    const minimumApplied=line.opening.opening_type==='Window'&&area<1&&charges.some(charge=>charge.unit==='sqm'&&charge.quantity>line.area);
+    const louver=line.opening.opening_type==='Louver'||isLouver(line.system);
+    const minimumApplied=!louver&&line.opening.opening_type==='Window'&&area<1&&charges.some(charge=>charge.unit==='sqm'&&charge.quantity>line.area);
+    const louverBillableArea=billableOpeningArea(line.opening,line.system)*(line.opening.quantity??1);
+    const louverMinimumApplied=louver&&line.system.unit==='sqm'&&line.system.quantity>line.area
+     &&Math.abs(line.system.quantity-louverBillableArea)<=1e-6;
     return <tbody key={line.opening.id} data-area-band={band} className={`document-opening-group${band?` opening-area-${band}`:''}`}>
      {charges.map((charge,chargeIndex)=><tr key={`${charge.id}-${chargeIndex}`}>
       {chargeIndex===0&&<>
        <th scope="rowgroup" rowSpan={charges.length} className="document-opening-index">{formatNumber(openingNumbers.get(line.opening.id)!)}</th>
        <td rowSpan={charges.length}><strong dir="auto">{term(line.opening.floor)}</strong><span className="document-table-detail" dir="auto">{line.opening.work_area==='internal'?`${term('Internal works')} · ${term(line.opening.room)}`:term(line.opening.room)}</span></td>
-       <td rowSpan={charges.length}><strong>{term(line.opening.opening_type)} {line.opening.opening_direction?term(line.opening.opening_direction):''}{line.opening.has_arch?` · ${term('Arch')}`:''}{line.opening.has_roller_shutter?` · ${term('Roller shutter')}`:''}</strong><span className="document-table-detail"><bdi dir="ltr">{formatNumber(line.opening.width)} × {formatNumber(line.opening.height)}</bdi> {term('cm')}</span><span className="document-table-detail">{formatNumber(line.area,2)} {term('m²')}</span>{showAreaColors&&<span className="document-opening-area-indicator mt-1 block">{band?<OpeningAreaBadge area={area} rate={line.system.rate} opening={line.opening} discountPercent={colorDiscountPercent}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}</span>}{minimumApplied&&<span className="document-table-detail">{term('Minimum billable area: 1 m² per window.')}</span>}</td>
+       <td rowSpan={charges.length}><strong>{term(line.opening.opening_type)} {line.opening.opening_direction?term(line.opening.opening_direction):''}{line.opening.has_arch?` · ${term('Arch')}`:''}{line.opening.has_roller_shutter?` · ${term('Roller shutter')}`:''}</strong><span className="document-table-detail"><bdi dir="ltr">{formatNumber(line.opening.width)} × {formatNumber(line.opening.height)}</bdi> {term('cm')}</span><span className="document-table-detail">{formatNumber(line.area,2)} {term('m²')}</span>{showAreaColors&&<span className="document-opening-area-indicator mt-1 block">{band?<OpeningAreaBadge area={area} rate={line.system.rate} opening={line.opening} discountPercent={colorDiscountPercent}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}</span>}{minimumApplied&&<span className="document-table-detail">{term('Minimum billable area: 1 m² per window.')}</span>}{louverMinimumApplied&&<span className="document-table-detail">{term('Louver pricing uses a minimum of 100 cm for each dimension. Actual dimensions are unchanged.')}</span>}</td>
        <td rowSpan={charges.length} className="document-table-number">{formatNumber(line.opening.quantity??1)}</td>
       </>}
       <td><span className="document-charge-kind">{term(labels[chargeIndex])}</span><span dir="auto">{term(chargeIndex===0?alumexSystemLabel(charge.name,line.systemModel):charge.name)}</span>{chargeIndex===0&&line.curtainWallGlassType&&<span className="document-table-detail">{term(line.curtainWallGlassType==='single'?'Single Glass':'Double Glass')}</span>}</td>

@@ -1278,6 +1278,7 @@
     "generating": "جاري الإنشاء..."
   },
   "terms": {
+    "Louver pricing uses a minimum of 100 cm for each dimension. Actual dimensions are unchanged.": "يُحتسب سعر اللوفر بحد أدنى 100 سم لكل بُعد. تبقى الأبعاد الفعلية دون تغيير.",
     "Signed contracts": "العقود الموقعة",
     "Signed contract records for your branch, including projects transferred to Operations.": "سجل العقود الموقعة لفرعك، بما فيها المشاريع المحولة إلى العمليات.",
     "Client name corrections update the shared client record across the system. The signed document keeps its original details.": "يُحدّث تصحيح اسم العميل سجله المشترك في النظام بالكامل. وتحتفظ الوثيقة الموقعة ببياناتها الأصلية.",

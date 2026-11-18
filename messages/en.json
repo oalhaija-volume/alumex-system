@@ -1278,6 +1278,7 @@
     "generating": "Generating..."
   },
   "terms": {
+    "Louver pricing uses a minimum of 100 cm for each dimension. Actual dimensions are unchanged.": "Louver pricing uses a minimum of 100 cm for each dimension. Actual dimensions are unchanged.",
     "Signed contracts": "Signed contracts",
     "Signed contract records for your branch, including projects transferred to Operations.": "Signed contract records for your branch, including projects transferred to Operations.",
     "Client name corrections update the shared client record across the system. The signed document keeps its original details.": "Client name corrections update the shared client record across the system. The signed document keeps its original details.",

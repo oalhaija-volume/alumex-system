@@ -9,7 +9,7 @@ import { StandaloneItems } from './StandaloneItems';
 import { CurtainWallGlassTypeField } from './CurtainWallGlassTypeField';
 import { AlumexSystemModelField } from './AlumexSystemModelField';
 import { alumexSystemModelOptions } from '@/lib/workflow/alumexModels';
-import { isShutterBox, isRollerShutter, isCurtainWallArch, isPushout, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
+import { isShutterBox, isRollerShutter, isCurtainWallArch, isPushout, isLouver, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
 import type { RegistrationOpening } from '@/lib/measurements/registrationOpening';
 import type { QuotationRevision,SalesFlow } from '@/lib/workflow/types';
@@ -231,11 +231,12 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     const isNew=newOpenings.some(o=>o.id===opening.id);
     const area=measuredOpeningArea(opening);
     const band=editableAlumexRate?openingSellingBand(area,discountedSystemRate(systemRate,discountPercent),opening):undefined;
-    const minimumApplied=billableOpeningArea(opening)>area&&[choice.systemId,choice.glassId,...choice.extras.map(extra=>extra.id)].some(id=>catalog.some(item=>item.id===id&&item.unit==='sqm'));
+    const louver=opening.opening_type==='Louver'||!!system&&isLouver(system);
+    const minimumApplied=billableOpeningArea(opening,system)>area&&[choice.systemId,choice.glassId,...choice.extras.map(extra=>extra.id)].some(id=>catalog.some(item=>item.id===id&&item.unit==='sqm'));
     return <section key={opening.id} data-area-band={band} data-opening-id={opening.id} className={`${card} quotation-opening${band?` opening-area-${band}`:''}`} aria-label={term('Opening {number}',{number:formatNumber(index+1)})}>
      <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Opening {number}',{number:formatNumber(index+1)})} · {term(opening.opening_type)} {opening.opening_direction?term(opening.opening_direction):''}{opening.has_arch?` · ${term('Arch')}`:''}</h2>{editableAlumexRate?<OpeningAreaBadge area={area} rate={systemRate} opening={opening} discountPercent={discountPercent}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}<button type="button" aria-label={term('Remove opening {number} from quotation',{number:formatNumber(index+1)})} className="min-h-11 rounded-md px-3 text-sm font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700" onClick={()=>removeOpening(opening)}>{term('Remove from quotation')}</button></div>
      <p className="mt-2 text-sm text-slate-500">{term("Floor")} {term(opening.floor)} · {opening.work_area==='internal'?`${term('Internal works')} · ${term(opening.room)}`:term(opening.room)} · {formatNumber(opening.width)} × {formatNumber(opening.height)} {term("cm")} · {term("Quantity")}: {formatNumber(opening.quantity??1)}{isNew?` · ${term('Not saved yet')}`:''}</p>
-     {minimumApplied&&<p className="mt-2 text-xs text-slate-600">{term('Minimum billable area: 1 m² per window.')} {term('Billable area: {area} m²',{area:formatNumber(billableOpeningArea(opening)*(opening.quantity??1))})}</p>}
+     {minimumApplied&&<p className="mt-2 text-xs text-slate-600">{term(louver?'Louver pricing uses a minimum of 100 cm for each dimension. Actual dimensions are unchanged.':'Minimum billable area: 1 m² per window.')} {term('Billable area: {area} m²',{area:formatNumber(billableOpeningArea(opening,system)*(opening.quantity??1))})}</p>}
      <div className="mt-5 grid gap-4 sm:grid-cols-2">
       <label className="text-sm">{term("System / product")}<select aria-label={term("System / product")} value={choice.systemId} onChange={event=>{
        const systemId=event.target.value;

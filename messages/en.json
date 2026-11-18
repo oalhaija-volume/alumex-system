@@ -1278,6 +1278,8 @@
     "generating": "Generating..."
   },
   "terms": {
+    "Shutter area: {area} m² · {price} per m²": "Shutter area: {area} m² · {price} per m²",
+    "Window and door openings in all systems. Priced per m² using the measured opening area, with a separately priced motor.": "Window and door openings in all systems. Priced per m² using the measured opening area, with a separately priced motor.",
     "Louver pricing uses a minimum of 100 cm for each dimension. Actual dimensions are unchanged.": "Louver pricing uses a minimum of 100 cm for each dimension. Actual dimensions are unchanged.",
     "Signed contracts": "Signed contracts",
     "Signed contract records for your branch, including projects transferred to Operations.": "Signed contract records for your branch, including projects transferred to Operations.",

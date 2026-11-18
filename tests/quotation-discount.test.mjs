@@ -50,9 +50,9 @@ test('the optional five-percent discount applies once after every system, glass,
  const gross=quotation();
  const before=structuredClone({gross,catalog,opening,choice,additional});
  const discounted=applyQuotationDiscount(gross,5);
- assert.equal(gross.total,1614000);
- assert.deepEqual(discounted.discount,{percent:5,subtotal:1614000,amount:80700});
- assert.equal(discounted.total,1533300);
+ assert.equal(gross.total,1584000);
+ assert.deepEqual(discounted.discount,{percent:5,subtotal:1584000,amount:79200});
+ assert.equal(discounted.total,1504800);
  assert.deepEqual(discounted.lines,gross.lines);
  assert.deepEqual(discounted.additionalItems,gross.additionalItems);
  assert.deepEqual(applyQuotationDiscount(discounted,5),discounted,'Selecting five percent again must not compound the discount');
@@ -70,7 +70,7 @@ test('the default and zero-percent paths preserve legacy quotation shape and rem
  assert.equal(Object.hasOwn(explicitZero,'discount'),false);
  const removed=applyQuotationDiscount(applyQuotationDiscount(gross,5),0);
  assert.equal(Object.hasOwn(removed,'discount'),false);
- assert.equal(removed.total,1614000);
+ assert.equal(removed.total,1584000);
 });
 
 test('gross subtotal is reconstructed from saved charges rather than stale quotation and opening totals',()=>{
@@ -79,8 +79,8 @@ test('gross subtotal is reconstructed from saved charges rather than stale quota
  saved.discount={percent:5,subtotal:3,amount:1};
  const before=structuredClone(saved);
  const corrected=applyQuotationDiscount(saved,5);
- assert.deepEqual(corrected.discount,{percent:5,subtotal:1614000,amount:80700});
- assert.equal(corrected.total,1533300);
+ assert.deepEqual(corrected.discount,{percent:5,subtotal:1584000,amount:79200});
+ assert.equal(corrected.total,1504800);
  assert.deepEqual(saved,before);
 });
 
@@ -107,8 +107,8 @@ test('priceQuotation can generate the discounted snapshot directly while keeping
  const discounted=quotation(5);
  assert.deepEqual(discounted.lines,gross.lines);
  assert.deepEqual(discounted.additionalItems,gross.additionalItems);
- assert.deepEqual(discounted.discount,{percent:5,subtotal:1614000,amount:80700});
- assert.equal(discounted.total,1533300);
+ assert.deepEqual(discounted.discount,{percent:5,subtotal:1584000,amount:79200});
+ assert.equal(discounted.total,1504800);
 });
 
 test('catalog refresh preserves five percent, recalculates the gross subtotal and never compounds discounts',()=>{
@@ -116,8 +116,8 @@ test('catalog refresh preserves five percent, recalculates the gross subtotal an
  const before=structuredClone(saved);
  const doubled=catalog.map(item=>({...item,unit_price:item.unit_price*2}));
  const refreshed=repriceQuotation(saved,doubled,'refresher');
- assert.deepEqual(refreshed.discount,{percent:5,subtotal:3028000,amount:151400});
- assert.equal(refreshed.total,2876600);
+ assert.deepEqual(refreshed.discount,{percent:5,subtotal:2968000,amount:148400});
+ assert.equal(refreshed.total,2819600);
  assert.deepEqual(refreshed.lines[0].extras.find(extra=>extra.motorFor==='shutter'),saved.lines[0].extras.find(extra=>extra.motorFor==='shutter'),'Catalog refresh keeps the manual price per motor and repeated motor quantity');
  assert.deepEqual(repriceQuotation(refreshed,doubled,'again').discount,refreshed.discount);
  assert.equal(repriceQuotation(refreshed,doubled,'again').total,refreshed.total);
@@ -127,8 +127,8 @@ test('catalog refresh preserves five percent, recalculates the gross subtotal an
  assert.equal(explicitRefresh.lines[0].system.rate,275000);
  assert.equal(explicitRefresh.lines[0].system.rateSource,'quotation');
  assert.equal(explicitRefresh.discount.percent,5);
- assert.equal(explicitRefresh.discount.subtotal,2618000);
- assert.equal(explicitRefresh.total,2487100);
+ assert.equal(explicitRefresh.discount.subtotal,2558000);
+ assert.equal(explicitRefresh.total,2430100);
 });
 
 test('price keys distinguish discount preferences while existing gross-only quotations retain matching keys',()=>{
@@ -281,31 +281,31 @@ test('the save API uses gross prices and ignores forged monetary and discount me
  assert.equal(args.p_revision,4);
  assert.equal(args.p_actor,actorId);
  assert.equal(Object.hasOwn(args.p_payload,'discount'),false);
- assert.equal(args.p_payload.total,1614000);
+ assert.equal(args.p_payload.total,1584000);
  assert.equal(args.p_payload.preparedBy,actorId);
  assert.deepEqual({tables:x.tables,stored:x.stored,unrelated:x.unrelated},before);
 });
 
-test('the save API creates one fixed-price shutter and motor per opening and ignores forged quantities and charges',async()=>{
+test('the save API prices shutters from measured sqm and motors per opening while ignoring forged quantities and charges',async()=>{
  const x=fixture();
  const selection={...choice,extras:choice.extras.map(extra=>extra.id==='shutter'?{...extra,quantity:99,motorPrice:125000,total:1,rate:1}:extra)};
  const response=await x.post({...saveBody,choices:[selection],discountPercent:0,total:1,lines:[{extras:[{id:'forged-motor',motorFor:'shutter',rate:1,quantity:99,total:1}]}],motorPrice:1});
  assert.equal(response.status,200);
  assert.equal(x.calls.length,1);
  const quotation=x.calls[0].args.p_payload;
- assert.deepEqual(quotation.lines[0].extras.find(extra=>extra.id==='shutter'),{id:'shutter',name:'Roller Shutter - Foam',unit:'item',rate:30000,quantity:2,total:60000});
+ assert.deepEqual(quotation.lines[0].extras.find(extra=>extra.id==='shutter'),{id:'shutter',name:'Roller Shutter - Foam',unit:'sqm',rate:30000,quantity:1,total:30000});
  const motor=quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter');
  assert.deepEqual(motor,{id:'roller-shutter-motor:shutter',name:'Roller shutter motor',unit:'item',rate:125000,quantity:2,total:250000,motorFor:'shutter'});
  assert.equal(quotation.lines[0].extras.filter(extra=>extra.motorFor).length,1);
- assert.equal(quotation.lines[0].total,850000);
+ assert.equal(quotation.lines[0].total,820000);
  assert.equal(Object.hasOwn(quotation,'discount'),false);
- assert.equal(quotation.total,1664000);
+ assert.equal(quotation.total,1634000);
  assert.equal(quotation.preparedBy,actorId);
 });
 
-test('the save API keeps shutter and motor prices fixed across different opening areas',async()=>{
+test('the save API changes shutter sqm quantities with opening area and keeps motor prices and counts fixed',async()=>{
  const shutters=[],motors=[];
- for(const [width,height,lineTotal,total] of [[50,100,850000,1664000],[200,300,3450000,4264000]]){
+ for(const [width,height,lineTotal,total] of [[50,100,820000,1634000],[200,300,3750000,4564000]]){
   const x=fixture();
   Object.assign(x.tables.openings[0],{width,height});
   const selection={...choice,extras:choice.extras.map(extra=>extra.id==='shutter'?{...extra,quantity:99,motorPrice:125000}:extra)};
@@ -318,22 +318,28 @@ test('the save API keeps shutter and motor prices fixed across different opening
   assert.equal(Object.hasOwn(quotation,'discount'),false);
   assert.equal(quotation.total,total);
  }
- assert.deepEqual(shutters[0],shutters[1],'Shutter price and count depend on physical openings, never their area');
+ assert.equal(shutters[0].unit,'sqm');
+ assert.equal(shutters[1].unit,'sqm');
+ assert.equal(shutters[0].rate,shutters[1].rate,'The shutter sqm catalog rate is unchanged across opening sizes');
+ assert.equal(shutters[1].quantity,12);
+ assert.equal(shutters[1].total,360000);
  assert.deepEqual(motors[0],motors[1],'Motor price and count depend on physical openings, never their area');
- assert.equal(shutters[0].quantity,2);
- assert.equal(shutters[0].total,60000);
+ assert.equal(shutters[0].quantity,1);
+ assert.equal(shutters[0].total,30000);
  assert.equal(motors[0].quantity,2);
  assert.equal(motors[0].total,250000);
 });
 
-test('legacy sqm shutter quotations require editing before API price refresh',async()=>{
+test('legacy per-piece shutter quotations require editing before API price refresh',async()=>{
  const x=fixture();
- x.stored.quotation.lines[0].extras.find(extra=>extra.id==='shutter').unit='sqm';
+ Object.assign(x.stored.quotation.lines[0].extras.find(extra=>extra.id==='shutter'),{unit:'item',quantity:2,total:60000});
+ x.stored.quotation.lines[0].total+=30000;
+ x.stored.quotation.total+=30000;
  const before=structuredClone(x.stored.quotation);
  const response=await x.post({action:'preview-prices',revision:4});
  assert.equal(response.status,400);
  assert.match(response.body.error,/catalog unit changed.*Edit quotation/);
- assert.equal(x.calls.length,0,'A refresh must not silently reinterpret a saved sqm charge as a per-opening charge');
+ assert.equal(x.calls.length,0,'A refresh must not silently reinterpret a saved per-piece charge as a sqm charge');
  assert.deepEqual(x.stored.quotation,before);
 });
 
@@ -363,11 +369,11 @@ test('omitting the save discount or setting zero creates a gross revision of a l
  const before=structuredClone(x.tables);
  assert.equal((await x.post(saveBody)).status,200);
  assert.equal(Object.hasOwn(x.calls[0].args.p_payload,'discount'),false);
- assert.equal(x.calls[0].args.p_payload.total,1614000);
+ assert.equal(x.calls[0].args.p_payload.total,1584000);
  x.calls.length=0;
  assert.equal((await x.post({...saveBody,discountPercent:0})).status,200);
  assert.equal(Object.hasOwn(x.calls[0].args.p_payload,'discount'),false);
- assert.equal(x.calls[0].args.p_payload.total,1614000);
+ assert.equal(x.calls[0].args.p_payload.total,1584000);
  assert.deepEqual(x.tables,before,'Saved historical quotation and revision snapshots remain unchanged');
 });
 
@@ -474,8 +480,8 @@ test('price-preview and confirmed refresh create gross revisions while preservin
  assert.equal(preview.status,200);
  assert.equal(x.calls.length,0);
  assert.equal(Object.hasOwn(preview.body.quotation,'discount'),false);
- assert.equal(preview.body.quotation.total,3028000);
- assert.deepEqual(preview.body.quotation.lines[0].extras.find(extra=>extra.id==='shutter'),{id:'shutter',name:'Roller Shutter - Foam',unit:'item',rate:60000,quantity:2,total:120000});
+ assert.equal(preview.body.quotation.total,2968000);
+ assert.deepEqual(preview.body.quotation.lines[0].extras.find(extra=>extra.id==='shutter'),{id:'shutter',name:'Roller Shutter - Foam',unit:'sqm',rate:60000,quantity:1,total:60000});
  assert.deepEqual(preview.body.quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter'),x.stored.quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter'));
  assert.equal((await x.post({action:'update-prices',revision:4,priceKey:preview.body.priceKey})).status,400,'Updating prices still requires confirmation');
  const legacyKey=quotationPriceKey(repriceQuotation(x.stored.quotation,x.tables.product_price_settings,actorId));
@@ -483,7 +489,7 @@ test('price-preview and confirmed refresh create gross revisions while preservin
  assert.equal(x.calls.length,0);
  assert.equal((await x.post({action:'update-prices',revision:4,priceKey:preview.body.priceKey,confirmed:true,choices:[{...choice,extras:[{id:'shutter',quantity:1,motorPrice:1}]}],motorPrice:1,total:1})).status,200);
  assert.equal(Object.hasOwn(x.calls[0].args.p_payload,'discount'),false);
- assert.equal(x.calls[0].args.p_payload.total,3028000);
+ assert.equal(x.calls[0].args.p_payload.total,2968000);
  assert.deepEqual(x.calls[0].args.p_payload.lines[0].extras.find(extra=>extra.motorFor==='shutter'),x.stored.quotation.lines[0].extras.find(extra=>extra.motorFor==='shutter'));
  assert.deepEqual(x.tables,before);
 });
@@ -494,7 +500,7 @@ test('gross saves accept the 240000-IQD manual minimum and rates below the previ
   assert.equal((await accepted.post({...saveBody,choices:[{...choice,systemRate:rate}]})).status,200);
   const saved=accepted.calls[0].args.p_payload;
   assert.equal(saved.lines[0].system.rate,rate);
-  assert.equal(saved.total,1134000+rate*2);
+  assert.equal(saved.total,1104000+rate*2);
   assert.equal(Object.hasOwn(saved,'discount'),false);
  }
  const rejected=fixture();
@@ -510,7 +516,7 @@ test('historical discounted quotations remain readable, approvable, contractable
  const response=await read.get();
  assert.equal(response.status,200);
  assert.equal(response.body.flow.quotation.discount.percent,5);
- assert.equal(response.body.flow.quotation.total,1533300);
+ assert.equal(response.body.flow.quotation.total,1504800);
  assert.equal(response.body.history[0].quotation.discount.percent,5);
  assert.equal(read.calls.length,0);
  assert.deepEqual(read.tables,before);
@@ -527,7 +533,9 @@ test('historical discounted quotations remain readable, approvable, contractable
   assert.equal(x.calls[0].args.p_action,body.action);
   if(body.action==='contract'){
    assert.equal(x.calls[0].args.p_payload.agreement2027.total,savedBefore.sales_workflows[0].quotation.total,'The historical approved discount remains the contract amount');
-   assert.deepEqual(x.calls[0].args.p_payload.agreement2027.paymentSchedule.map(stage=>[stage.percent,stage.amount]),[[50,766650],[50,766650]]);
+   assert.equal(x.calls[0].args.p_payload.template,'residential');
+   assert.deepEqual(x.calls[0].args.p_payload.agreement2027.paymentSchedule.map(stage=>[stage.percent,stage.amount]),[[50,752400],[50,752400]]);
+   assert.equal(Object.hasOwn(x.calls[0].args.p_payload.agreement2027,'paymentSchedules'),false);
   }
   assert.deepEqual(x.tables,savedBefore,'Existing quotation discounts and archived revisions remain intact');
  }

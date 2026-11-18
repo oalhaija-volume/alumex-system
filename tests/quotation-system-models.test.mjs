@@ -53,7 +53,7 @@ for(const [direction,systemModel]of [['Sliding','A16'],['Sliding','A16 Pro'],['S
   assert.equal(result.lines[0].system.rate,275000);
   assert.equal(result.lines[0].system.quantity,type==='Window'?3:0.75,'Apply the existing per-window minimum before repeated quantities');
   assert.equal(result.lines[0].glass.quantity,type==='Window'?3:0.75);
-  assert.equal(result.lines[0].extras.find(extra=>extra.id==='shutter').quantity,3);
+  assert.equal(result.lines[0].extras.find(extra=>extra.id==='shutter').quantity,0.75,'Shutters use the measured area while motors retain the opening count');
   assert.equal(result.lines[0].extras.find(extra=>extra.motorFor==='shutter').quantity,3);
   assert.deepEqual({measured,selection,catalog},inputs);
  });

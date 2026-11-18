@@ -123,8 +123,8 @@ test('roller shutters and boxes still require per-opening shutter type, motor pr
  const window={...opening,opening_type:'Window',opening_direction:'Sliding',width:150,height:100,quantity:3};
  const selected={openingId:window.id,systemId:'system',extras:[{id:'shutter',quantity:999,motorPrice:80000},{id:'box',quantity:1}]};
  const result=pricing.priceQuotation([window],[selected],catalog,'actor');
- assert.deepEqual(result.lines[0].extras.map(item=>[item.id,item.quantity,item.total]),[['shutter',3,90000],['roller-shutter-motor:shutter',3,240000],['box',3,30000]]);
- assert.equal(result.total,1440000);
+ assert.deepEqual(result.lines[0].extras.map(item=>[item.id,item.quantity,item.total]),[['shutter',4.5,135000],['roller-shutter-motor:shutter',3,240000],['box',3,30000]]);
+ assert.equal(result.total,1485000);
  assert.throws(()=>pricing.priceQuotation([window],[{...selected,extras:[{id:'shutter',quantity:1}]}],catalog,'actor'),/motor price/);
  assert.throws(()=>pricing.priceQuotation([window],[{...selected,extras:[{id:'box',quantity:1}]}],catalog,'actor'),/requires roller shutters/);
 });

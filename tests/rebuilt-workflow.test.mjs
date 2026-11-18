@@ -107,14 +107,16 @@ test('operations specification projection excludes all monetary and contractual 
  assert.equal(/rate|price|total|signature|contract/i.test(JSON.stringify(safe)),false);
 });
 
-for(const template of ['residential','commercial'])test(`${template} contract generation saves the 2027 terms, approved amount and selected template`,async()=>{
+for(const template of ['residential','commercial'])test(`contract generation saves the selected ${template} terms and the approved amount`,async()=>{
  let input;
  const admin={from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{revision:2,stage:'approved',quotation:pricing.priceQuotation([opening],[choice],catalog,'approved-author')},error:null}),single:async()=>({data:{name:'Client',mobile:'07000',client_type:'individual'},error:null})};},rpc:async(name,args)=>{input=args;return {data:{},error:null};}};
  const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':{salesProject:async()=>({admin,auth:{user:{id:'actor'}},project:{id:'project',client_id:'client',project_name:'Site',project_number:'PRJ-1',address:'Baghdad',branch:'Rasafa',sales_status:'quotation_approved'}})},'@/lib/workflow/pricing':pricing,'@/lib/workflow/quotationOpenings':quotationOpenings,'@/lib/contracts/uploadedTerms':uploadedTerms});
  const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'contract',revision:2,template})}),{params:Promise.resolve({projectId:'project'})});
  assert.equal(result.status,200);assert.equal(input.p_payload.template,template);assert.equal(input.p_payload.project.branch,'Rasafa');assert.equal(input.p_payload.branch,'Rasafa');assert.equal(input.p_payload.createdBy,'actor');assert.deepEqual(input.p_payload.terms,agreementContent.agreement2027Terms(template));assert.equal(input.p_payload.agreement2027.total,551000);assert.equal(input.p_payload.agreement2027.version,'agreement-2027');
  const payments=input.p_payload.terms[2].text;
- assert.match(payments,template==='commercial'?/25%/:/50/);
+ assert.match(payments,template==='residential'?/للمشاريع السكنية.*50%/s:/للمشاريع التجارية.*25%/s);
+ assert.deepEqual(input.p_payload.agreement2027.paymentSchedule.map(stage=>stage.percent),template==='residential'?[50,50]:[100]);
+ assert.equal(Object.hasOwn(input.p_payload.agreement2027,'paymentSchedules'),false);
  assert.ok(input.p_payload.terms.some(x=>x.text.includes('عشرة سنوات')));
 });
 test('project deletion rejects unauthorized roles and missing confirmation before mutation',async()=>{
@@ -259,7 +261,7 @@ test('window and door accessories enforce compatibility and shutter-box dependen
  assert.ok(pricing.addonOptions(door,correctedCatalog).some(p=>p.id==='hydraulic'));
  const valid=[{id:'roller',quantity:1,motorPrice:10000},{id:'box',quantity:1},{id:'film',quantity:1},{id:'georgian',quantity:2.5}];
  const quote=pricing.priceQuotation([opening],[{...plainChoice,glassId:'sand',extras:valid}],correctedCatalog,'actor');
- assert.deepEqual(quote.lines[0].extras.map(e=>e.total),[10000,10000,10000,18000,25000]);
+ assert.deepEqual(quote.lines[0].extras.map(e=>e.total),[18000,10000,10000,18000,25000]);
  for(const extras of [[{id:'box',quantity:1}],[{id:'cladding',quantity:1}],[{id:'swing',quantity:1}],[{id:'skylight',quantity:1}],[{id:'hydraulic',quantity:1}],[{id:'pushout',quantity:1}],[{id:'roller',quantity:1},{id:'foam',quantity:1}]])assert.throws(()=>pricing.priceQuotation([opening],[{...plainChoice,extras}],correctedCatalog,'actor'));
  assert.throws(()=>pricing.priceQuotation([door],[{...plainChoice,extras:[{id:'tilt',quantity:1}]}],correctedCatalog,'actor'));
  assert.throws(()=>pricing.priceQuotation([opening],[{...plainChoice,extras:[{id:'saint',quantity:1}]}],correctedCatalog,'actor'));
@@ -337,14 +339,14 @@ test('repeated openings multiply system, glass and each per-opening add-on once'
  assert.throws(()=>pricing.priceQuotation([{...opening,quantity:2}],[{...choice,extras:[{id:'closer',quantity:'2'}]}],catalog,'actor'));
 });
 
-test('a requested roller shutter and motor are priced once for every repeated opening',()=>{
+test('a requested roller shutter uses measured sqm with one motor for every repeated opening',()=>{
  const shutter={id:'shutter',name:'Roller Shutter - Foam',unit:'sqm',category:'addon',unit_price:90000,is_active:true};
  const measured={...opening,quantity:3,has_roller_shutter:true};
  assert.throws(()=>pricing.priceQuotation([measured],[choice],[...catalog,shutter],'actor'),/requires roller shutters/);
  const quote=pricing.priceQuotation([measured],[{...choice,extras:[{id:'shutter',quantity:1,motorPrice:10000}]}],[...catalog,shutter],'actor');
  assert.equal(quote.lines[0].opening.has_roller_shutter,true);
- assert.equal(quote.lines[0].extras[0].unit,'item');
- assert.equal(quote.lines[0].extras[0].quantity,3);assert.equal(quote.lines[0].extras[0].total,270000);
+ assert.equal(quote.lines[0].extras[0].unit,'sqm');
+ assert.equal(quote.lines[0].extras[0].quantity,5.4);assert.equal(quote.lines[0].extras[0].total,486000);
  assert.equal(quote.lines[0].extras[1].quantity,3);assert.equal(quote.lines[0].extras[1].total,30000);
  assert.throws(()=>pricing.priceQuotation([measured],[{...choice,extras:[{id:'shutter',quantity:1}]}],[...catalog,{...shutter,is_active:false}],'actor'));
  // Unticked legacy windows remain quotable without a shutter.

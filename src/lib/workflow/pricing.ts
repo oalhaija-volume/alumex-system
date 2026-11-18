@@ -203,9 +203,9 @@ function rollerShutterMotorCharge(shutterId:string,rate:unknown,quantity:number)
  return {id:`roller-shutter-motor:${shutterId}`,name:'Roller shutter motor',unit:'item',rate,quantity,total,motorFor:shutterId};
 }
 
-// Preserve saved charge quantities except louver sqm pricing, whose minimum
-// dimensions are applied from the actual opening and repetition count. Never
-// reconstruct accessory choices or alter the recorded measurements.
+// Recalculate louver and shutter sqm quantities from their opening dimensions.
+// Louvers use pricing minimums; shutters use the measured area. Keep other
+// saved quantities and the recorded measurements unchanged.
 export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[],actor:string):QuoteSnapshot {
  const catalog=rawCatalog.map(normalizeCatalogItem);
  const quotation=structuredClone(snapshot);
@@ -215,10 +215,11 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
   const item=catalog.find(item=>item.id===charge.id&&isAvailable(item));
   if(item&&item.unit!==charge.unit)throw new Error('A catalog unit changed. Use Edit quotation to review the affected items before updating prices.');
   const louver=!!opening&&charge.unit==='sqm'&&(opening.opening_type==='Louver'||isLouver(charge)||!!item&&isLouver(item));
+  const shutter=!!opening&&(isRollerShutter(charge)||!!item&&isRollerShutter(item));
   let quantity=charge.quantity;
-  if(louver&&opening){
+  if((louver||shutter)&&opening){
    if(!Number.isFinite(Number(opening.width))||Number(opening.width)<=0||!Number.isFinite(Number(opening.height))||Number(opening.height)<=0||!Number.isInteger(opening.quantity??1)||(opening.quantity??1)<1||(opening.quantity??1)>10000)throw new Error('Complete all opening measurements first.');
-   quantity=billableOpeningArea(opening,item&&isLouver(item)?item:charge)*(opening.quantity??1);
+   quantity=(shutter?measuredOpeningArea(opening):billableOpeningArea(opening,item&&isLouver(item)?item:charge))*(opening.quantity??1);
   }
   let current=catalogCharge(charge.id,quantity,catalog);
   if(charge.rateSource!==undefined){
@@ -226,7 +227,7 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
    if(charge.rateSource!=='quotation'||(!opening&&!(standaloneCurtain&&curtain))||curtain&&opening&&opening.opening_type!=='Curtain Wall')throw new Error('Quotation-specific rates can only be applied to the opening system or standalone Curtain Wall.');
    current=quotationSystemCharge(current,item,charge.rate);
   }
-  return {...charge,...(louver?{quantity:current.quantity}:{}),rate:current.rate,total:current.total};
+  return {...charge,...(louver||shutter?{quantity:current.quantity}:{}),rate:current.rate,total:current.total};
  };
  const refreshArch=(charge:Charge,curtain:boolean,quantity:number,extras:Charge[]):Charge=>{
   if(!curtain||charge.name!=='Curtain Wall Arch'||charge.unit!=='item'||charge.quantity!==quantity||charge.rateSource!==undefined||charge.motorFor!==undefined||extras.filter(isCurtainWallArchCharge).length!==1)throw new Error(curtainWallArchReview);
@@ -239,7 +240,10 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
   const glass=line.glass?refresh(line.glass):null;
   const extras=line.extras.map(extra=>{
    if(isCurtainWallArchCharge(extra))return refreshArch(extra,line.opening.opening_type==='Curtain Wall'&&isCurtainWall(line.system),line.opening.quantity??1,line.extras);
-   if(extra.motorFor===undefined)return refresh(extra);
+   if(extra.motorFor===undefined){
+    const shutter=isRollerShutter(extra)||catalog.some(product=>product.id===extra.id&&isRollerShutter(product));
+    return refresh(extra,shutter?line.opening:undefined);
+   }
    const shutter=line.extras.find(item=>item.id===extra.motorFor&&item.motorFor===undefined&&isRollerShutter(item));
    if(!isRollerShutterMotor(extra)||!shutter||extra.id!==`roller-shutter-motor:${extra.motorFor}`||extra.unit!=='item'||extra.rateSource!==undefined||extra.quantity!==(line.opening.quantity??1)||line.extras.filter(item=>item.motorFor===extra.motorFor).length!==1)throw new Error('Review the roller shutter motor in Edit quotation before updating prices.');
    const motor=rollerShutterMotorCharge(extra.motorFor,extra.rate,extra.quantity);
@@ -281,7 +285,7 @@ export function measuredFacadeArea(measurements:SurfaceMeasurement[]) {
  if(area>1000000)throw new Error('Facade area exceeds the supported limit.');
  return Math.round(area*1000000)/1000000;
 }
-function priceExtras(extras:ExtraChoice[],allowed:CatalogItem[],catalog:CatalogItem[],area:number,excludedIds:string[]=[],openingQuantity=1){
+function priceExtras(extras:ExtraChoice[],allowed:CatalogItem[],catalog:CatalogItem[],area:number,excludedIds:string[]=[],openingQuantity=1,measuredArea=area){
  if(!Array.isArray(extras)||extras.length>30||extras.some(e=>!e||typeof e.id!=='string')||new Set(extras.map(e=>e.id)).size!==extras.length)throw new Error('Each add-on can be selected once per opening or facade service.');
  const products=extras.map(extra=>{
   const product=allowed.find(p=>p.id===extra.id);
@@ -295,7 +299,7 @@ function priceExtras(extras:ExtraChoice[],allowed:CatalogItem[],catalog:CatalogI
   const shutter=isRollerShutter(product);
   if(!shutter&&extra.motorPrice!==undefined)throw new Error('Motor prices can only be entered for roller shutter add-ons.');
   if(!shutter&&product.unit!=='sqm'&&(!Number.isFinite(extra.quantity)||extra.quantity<=0||(product.unit==='item'&&!Number.isInteger(extra.quantity))))throw new Error('Enter a valid quantity, area or length. Use whole numbers for items.');
-  const charge=catalogCharge(extra.id,shutter?openingQuantity:product.unit==='sqm'?area:extra.quantity*openingQuantity,catalog);
+  const charge=catalogCharge(extra.id,shutter?measuredArea:product.unit==='sqm'?area:extra.quantity*openingQuantity,catalog);
   return shutter?[charge,rollerShutterMotorCharge(product.id,extra.motorPrice,openingQuantity)]:[charge];
  });
 }
@@ -322,7 +326,7 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   const glass=choice.glassId?charge(choice.glassId):null;
   const glassType=curtainWallGlassType(choice.curtainWallGlassType,opening.opening_type==='Curtain Wall'&&isCurtainWall(system));
   const arch=choice.hasCurtainWallArch;
-  const extras=[...priceExtras(choice.extras,addonOptions(opening,catalog,choice.systemId),catalog,billableArea,[choice.systemId,choice.glassId??''],quantity),...priceCurtainWallArch(arch,opening.opening_type==='Curtain Wall',quantity)];
+  const extras=[...priceExtras(choice.extras,addonOptions(opening,catalog,choice.systemId),catalog,billableArea,[choice.systemId,choice.glassId??''],quantity,area),...priceCurtainWallArch(arch,opening.opening_type==='Curtain Wall',quantity)];
   if(opening.has_roller_shutter&&!extras.some(isRollerShutter))throw new Error('This window requires roller shutters. Choose a roller shutter add-on.');
   return {opening,area,system,...(systemModel!==undefined?{systemModel}:{}),glass,...(glassType!==undefined?{curtainWallGlassType:glassType}:{}),extras,total:system.total+(glass?.total??0)+extras.reduce((s,p)=>s+p.total,0)};
  });

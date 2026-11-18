@@ -30,7 +30,7 @@ const catalog=[
 ];
 const choice={openingId:'window',systemId:'system',glassId:'glass',extras:[{id:'shutter',quantity:99,motorPrice:10000}]};
 
-test('a sub-square-metre window charges one square metre for system and glass with one fixed-price shutter and motor',()=>{
+test('a small window keeps the system minimum while its shutter uses actual area and its motor uses the opening count',()=>{
  const before=structuredClone(opening);
  const quote=priceQuotation([opening],[choice],catalog,'sales');
  const line=quote.lines[0];
@@ -39,10 +39,11 @@ test('a sub-square-metre window charges one square metre for system and glass wi
  assert.deepEqual(opening,before);
  assert.equal(line.system.quantity,1);
  assert.equal(line.glass.quantity,1);
- assert.equal(line.extras[0].quantity,1);
- assert.equal(line.extras[0].unit,'item');
- assert.equal(line.total,160000);
- assert.equal(quote.total,160000);
+ assert.equal(line.extras[0].quantity,0.5);
+ assert.equal(line.extras[0].unit,'sqm');
+ assert.equal(line.extras[1].quantity,1);
+ assert.equal(line.total,145000);
+ assert.equal(quote.total,145000);
 });
 
 test('the one square metre minimum applies to every repeated window, independently of actual total area',()=>{
@@ -54,8 +55,9 @@ test('the one square metre minimum applies to every repeated window, independent
  assert.equal(billableOpeningArea(repeated),1);
  assert.equal(line.system.quantity,4);
  assert.equal(line.glass.quantity,4);
- assert.equal(line.extras[0].quantity,4);
- assert.equal(quote.total,640000);
+ assert.equal(line.extras[0].quantity,2);
+ assert.equal(line.extras[1].quantity,4);
+ assert.equal(quote.total,580000);
 });
 
 for(const [width,height,expectedArea] of [[100,100,1],[150,100,1.5]])test(`windows measuring ${expectedArea} sqm retain their measured chargeable area`,()=>{
@@ -66,8 +68,9 @@ for(const [width,height,expectedArea] of [[100,100,1],[150,100,1.5]])test(`windo
  assert.equal(quote.lines[0].area,expectedArea*3);
  assert.equal(quote.lines[0].system.quantity,expectedArea*3);
  assert.equal(quote.lines[0].glass.quantity,expectedArea*3);
- assert.equal(quote.lines[0].extras[0].quantity,3,'Shutters use the physical opening count regardless of billable area');
- assert.equal(quote.total,120000*expectedArea*3+120000);
+ assert.equal(quote.lines[0].extras[0].quantity,expectedArea*3,'Shutters use actual area across all physical openings');
+ assert.equal(quote.lines[0].extras[1].quantity,3,'Motors use the physical opening count');
+ assert.equal(quote.total,150000*expectedArea*3+30000);
 });
 
 test('item systems and item or metre accessories keep their quantities on a small repeated window',()=>{
@@ -91,7 +94,7 @@ for(const [opening_type,systemId,withGlass] of [['Door','system',true],['Curtain
  assert.equal(line.area,1.5);
  assert.equal(line.system.quantity,1.5);
  if(withGlass)assert.equal(line.glass.quantity,1.5);
- if(opening_type==='Door')assert.equal(line.extras[0].quantity,3);
+ if(opening_type==='Door')assert.equal(line.extras[0].quantity,1.5);
 });
 
 test('small facade services and standalone items retain their explicit quantities',()=>{
@@ -107,12 +110,13 @@ test('small facade services and standalone items retain their explicit quantitie
 test('a price refresh preserves the saved billable quantities and actual measurements',()=>{
  const saved=priceQuotation([{...opening,quantity:4}],[choice],catalog,'sales');
  const refreshed=repriceQuotation(saved,catalog.map(item=>({...item,unit_price:item.unit_price*2})),'sales');
- assert.equal(refreshed.total,1240000);
+ assert.equal(refreshed.total,1120000);
  assert.equal(refreshed.lines[0].system.quantity,4);
  assert.equal(refreshed.lines[0].glass.quantity,4);
- assert.equal(refreshed.lines[0].extras[0].quantity,4);
+ assert.equal(refreshed.lines[0].extras[0].quantity,2);
+ assert.equal(refreshed.lines[0].extras[1].quantity,4);
  assert.equal(refreshed.lines[0].area,2);
- assert.equal(saved.total,640000);
+ assert.equal(saved.total,580000);
 });
 
 test('area bands use actual area per physical opening and cover all boundaries',()=>{

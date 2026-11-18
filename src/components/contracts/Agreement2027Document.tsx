@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- Actual company/team signatures are private PNGs saved with the contract. */
 import type { ReactNode } from 'react';
 import type { ContractSnapshot } from '@/lib/workflow/types';
+import { contractDeliverySummary } from '@/lib/contracts/deliveryDuration';
 import { alumexSystemLabel } from '@/lib/workflow/alumexModels';
 import { agreementApprovalRoles, type Agreement2027Snapshot, type AgreementApprovalRole } from '@/lib/contracts/agreement2027Types';
 import { OpeningSchedule } from '@/components/workflow/CommercialDocument';
@@ -36,7 +37,7 @@ function Handover({ contract, agreement, signedAt }: { contract: ContractSnapsho
   <InfoGrid items={[
    ['اسم المشروع', contract.project.name], ['رقم عقد المشروع', contract.number], ['تاريخ التحويل', date(fields.handoverDate)],
    ['تاريخ توقيع العقد', date(signedAt)], ['حالة المشروع عند التوقيع', stateLabels[fields.stateAtSigning] ?? fields.stateAtSigning],
-   ['مدة المشروع', '60 يوم عمل وفق شروط العقد'], ['مهندس المبيعات', fields.salesEngineerName], ['تصنيف العميل', stateLabels[fields.clientClassification] ?? fields.clientClassification],
+   ['مدة المشروع', contractDeliverySummary(contract.terms)], ['مهندس المبيعات', fields.salesEngineerName], ['تصنيف العميل', stateLabels[fields.clientClassification] ?? fields.clientClassification],
   ]} />
   <Heading>معلومات المشروع التفصيلية</Heading>
   <InfoGrid items={[

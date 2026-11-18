@@ -1,7 +1,7 @@
 "use client";
 import { isOfflineDevice } from "@/lib/offline/device";
 
-import { projectGovernorates, normalizeProjectGovernorate, type ProjectBranch, type ProjectGovernorate } from '@/lib/intake/projectBranch';
+import { projectGovernoratesForActor, normalizeProjectGovernorate, type ProjectBranch, type ProjectGovernorate } from '@/lib/intake/projectBranch';
 import { outdoorProjectBranches, normalizeOutdoorProjectBranch, outdoorSalesBranch } from '@/lib/intake/outdoorRotation';
 import { canAccessProjectBranch, hasGlobalProjectAccess } from '@/lib/auth/projectBranchAccess';
 import { buildingTypes,buildingTypeLabels,normalizeBuildingType,type BuildingType } from '@/lib/intake/buildingType';
@@ -99,7 +99,7 @@ export function OutdoorIntake({ initialEmployeeState = null,onRegistered }: { in
     let governorate:ProjectGovernorate|null=null;
     try{
       branch=normalizeOutdoorProjectBranch(employeeState.actor,projectBranch);
-      governorate=normalizeProjectGovernorate(branch,projectGovernorate);
+      governorate=normalizeProjectGovernorate(branch,projectGovernorate,employeeState.actor);
     }catch(cause){
       setError((cause as Error).message);
       return;
@@ -209,7 +209,7 @@ export function OutdoorIntake({ initialEmployeeState = null,onRegistered }: { in
             <label htmlFor="project-governorate" className="block text-sm font-medium text-slate-800">{term('Governorate')} {term('(required)')}</label>
             <select id="project-governorate" required value={projectGovernorate} onChange={event=>{setProjectGovernorate(event.target.value as ProjectGovernorate|'');setError('');}} className="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
               <option value="">{term('Choose a governorate')}</option>
-              {projectGovernorates.map(governorate=><option key={governorate} value={governorate} lang="ar">{governorate}</option>)}
+              {projectGovernoratesForActor(employeeState?.actor).map(governorate=><option key={governorate} value={governorate} lang="ar">{governorate}</option>)}
             </select>
           </div>}
         </fieldset>

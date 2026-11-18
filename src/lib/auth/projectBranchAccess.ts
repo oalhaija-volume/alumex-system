@@ -2,6 +2,7 @@ type ProjectBranchActor = { role: string; branch?: string | null };
 type ProjectBranchRow = {
   branch?: string | null;
   governorate?: string | null;
+  governorate_office?: 'Karkh' | null;
   created_by?: string | null;
   assigned_outdoor_sales_id?: string | null;
 };
@@ -20,9 +21,10 @@ export function canAccessProjectBranch(
   return branches === null || branches.includes(projectBranch ?? "");
 }
 
-// Older Najaf records may still use the Governorates branch. Their geography
-// must enforce the same privacy boundary as projects registered under Najaf.
-export function effectiveProjectBranch(project: Pick<ProjectBranchRow, 'branch' | 'governorate'>): string | null | undefined {
+// New Karkh Indoor registrations carry an immutable office marker. Unmarked
+// historical Najaf records retain the dedicated office's privacy boundary.
+export function effectiveProjectBranch(project: Pick<ProjectBranchRow, 'branch' | 'governorate' | 'governorate_office'>): string | null | undefined {
+  if (project.branch === 'Governorates' && project.governorate === 'النجف' && project.governorate_office === 'Karkh') return 'Governorates';
   const governorate = typeof project.governorate === 'string' ? project.governorate.trim().toLowerCase() : null;
   return project.branch === 'Governorates' && (governorate === 'النجف' || governorate === 'نجف' || governorate === 'najaf')
     ? 'Najaf' : project.branch;

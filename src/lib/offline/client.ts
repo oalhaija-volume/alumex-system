@@ -46,7 +46,8 @@ export async function updateSavedIndoorSales(actorId:string,assignment:Pick<Fiel
 // Keep unsynced content, but refresh the current assignment before allowing a
 // second local edit. A pending rename or opening must not retain a former team.
 function withCurrentProjectAccess(local:FieldProject,remote:FieldProject):FieldProject {
- return {...local,branch:remote.branch,governorate:remote.governorate,project_log_only:remote.project_log_only,
+ return {...local,branch:remote.branch,governorate:remote.governorate,
+  ...('governorate_office' in remote||'governorate_office' in local?{governorate_office:remote.governorate_office}:{}),project_log_only:remote.project_log_only,
   ...('client_name' in remote?{client_name:remote.client_name,client_id:remote.client_id}:{}),
   ...('assigned_outdoor_sales_id' in remote?{assigned_outdoor_sales_id:remote.assigned_outdoor_sales_id}:{}),
   ...('assignedOutdoorSales' in remote?{assignedOutdoorSales:remote.assignedOutdoorSales}:{}),
@@ -192,7 +193,7 @@ export async function syncFieldChanges(){
    }
    await updateFieldState(id,s=>{
     const queue=s!.queue.filter(c=>c.id!==change.id);const stillPending=queue.some(c=>c.projectId===change.projectId);
-    return {...s!,queue,projects:s!.projects.map(p=>p.id===change.projectId?{...p,...(!stillPending?result.project:{}),...('branch' in result.project?{branch:result.project.branch}:{}),...('governorate' in result.project?{governorate:result.project.governorate}:{}),measurement_attempts:(p.measurement_attempts??[]).map(entry=>entry.id===change.id?{...entry,pending:false}:entry),project_number:result.project.project_number,serverUpdatedAt:result.project.updated_at,pending:stillPending}:p),syncedAt:new Date().toISOString()};
+    return {...s!,queue,projects:s!.projects.map(p=>p.id===change.projectId?{...p,...(!stillPending?result.project:{}),...('branch' in result.project?{branch:result.project.branch}:{}),...('governorate' in result.project?{governorate:result.project.governorate}:{}),...('governorate_office' in result.project?{governorate_office:result.project.governorate_office}:{}),measurement_attempts:(p.measurement_attempts??[]).map(entry=>entry.id===change.id?{...entry,pending:false}:entry),project_number:result.project.project_number,serverUpdatedAt:result.project.updated_at,pending:stillPending}:p),syncedAt:new Date().toISOString()};
    });
   }
  };
@@ -206,7 +207,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
   if(action==='register'){
    const client=payload.client as Record<string,unknown>,project=payload.project as Record<string,unknown>;
    const branch=normalizeOutdoorProjectBranch(s.actor,project.branch??outdoorSalesBranch(s.actor)??s.actor.branch);
-   const governorate=normalizeProjectGovernorate(branch,project.governorate);
+   const governorate=normalizeProjectGovernorate(branch,project.governorate,s.actor);
    const buildingType=normalizeBuildingType(project.buildingType,s.actor.role==='Outdoor Sales');
    const readinessNote=normalizeReadinessNote(s.actor.role,project.structureReadiness,project.readinessNote);
    const legacyOutdoorSalesId=normalizeLegacyOutdoorSalesId(project.legacyOutdoorSalesId,s.actor.role);
@@ -223,7 +224,7 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if((s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')&&!assigned)throw new Error('Choose yourself or an Outdoor Sales employee to collect the initial measurements.');
    if(assigned&&!selfAssigned&&!s.outdoorSales?.some(e=>e.id===assigned&&canAccessProjectBranch({role:'Outdoor Sales',branch:e.branch},branch)))throw new Error('Choose an employee from the project branch.');
    const location=parseProjectLocation(project.locationLatitude,project.locationLongitude);
-   p={location_latitude:location.latitude,location_longitude:location.longitude,building_type:buildingType,branch,governorate,...(legacyOutdoorSalesId?{legacy_outdoor_sales_id:legacyOutdoorSalesId,owner_id:legacyOutdoorSalesId,sales_engineer_id:legacyOutdoorSalesId,legacyOutdoorSalesOwner:legacyOwner?.name??null}:{}),assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.id:null,followUpOwner:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
+   p={location_latitude:location.latitude,location_longitude:location.longitude,building_type:buildingType,branch,governorate,...(branch==='Governorates'&&governorate==='النجف'?{governorate_office:'Karkh' as const}:{}),...(legacyOutdoorSalesId?{legacy_outdoor_sales_id:legacyOutdoorSalesId,owner_id:legacyOutdoorSalesId,sales_engineer_id:legacyOutdoorSalesId,legacyOutdoorSalesOwner:legacyOwner?.name??null}:{}),assigned_outdoor_sales_id:assigned||null,assignedOutdoorSales:selfAssigned?s.actor.name:s.outdoorSales?.find(e=>e.id===assigned)?.name??null,assignedToYou:assigned===s.actor.id,original_creator_role:s.actor.role,id:projectId,project_name:String(client.clientName),project_number:'Pending sync',address:String(project.address??''),phone:String(client.mobile),structure_readiness:String(project.structureReadiness),sales_status:'new_lead',next_follow_up_at:null,follow_up_type:null,follow_up_detail:null,follow_up_owner_id:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.id:null,followUpOwner:(s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.name:null,project_notes:null,readiness_note:readinessNote,created_at:change.recordedAt,created_by:s.actor.id,registeredBy:s.actor.name,updated_at:change.recordedAt,pending:true};projects.push(p);
   }else{
    if(p?.project_log_only)throw new Error('This project is available in your log for reference only.');
    if(!canAccessFieldProject(s,p))throw new Error('Project is not available to this employee.');

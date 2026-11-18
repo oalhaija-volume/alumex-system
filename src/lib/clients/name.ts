@@ -1,7 +1,7 @@
 import { canAccessProjectBranch, effectiveProjectBranch } from '@/lib/auth/projectBranchAccess';
 
 export function canRenameClient(
-  project: { branch?: string | null; governorate?: string | null; project_log_only?: boolean },
+  project: { branch?: string | null; governorate?: string | null; governorate_office?: 'Karkh' | null; project_log_only?: boolean },
   actor: { role: string; branch?: string | null },
 ) {
   return !project.project_log_only

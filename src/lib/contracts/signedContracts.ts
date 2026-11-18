@@ -57,6 +57,7 @@ export function signedContractRecord(
       client_name: client.client_name,
       branch: project.branch,
       governorate: project.governorate,
+      governorate_office: project.governorate_office,
       project_name: project.project_name,
       project_number: project.project_number,
       address: project.address,

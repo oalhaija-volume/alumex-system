@@ -12,7 +12,7 @@ export async function GET() {
   // stay in the sales workspace behind its own role and project checks.
   const admin = createAdminClient();
   let query = admin.from('projects')
-    .select('id,branch,governorate,project_name,project_number,structure_readiness,sales_status,status,created_at,created_by,assigned_outdoor_sales_id,updated_at,measurement_delayed,client_cancelled_at')
+    .select('id,branch,governorate,governorate_office,project_name,project_number,structure_readiness,sales_status,status,created_at,created_by,assigned_outdoor_sales_id,updated_at,measurement_delayed,client_cancelled_at')
     .is('archived_at', null).order('updated_at', { ascending: false });
   if (auth.role === 'Outdoor Sales') {
     query = query.or(outdoorProjectFilter({id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}));

@@ -10,7 +10,7 @@ export async function GET(){
  const auth=await requireRole([...leadershipRoles,'Operations Manager','Project Manager']);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const admin=createAdminClient();
  const actor={role:auth.role,branch:auth.profile?.branch};
- let projectQuery=admin.from('projects').select('id,branch,governorate,project_number,project_name,address,location_latitude,location_longitude,client_id');
+ let projectQuery=admin.from('projects').select('id,branch,governorate,governorate_office,project_number,project_name,address,location_latitude,location_longitude,client_id');
  const branches=projectBranchesForActor(actor);
  if(branches!==null)projectQuery=projectQuery.in('branch',branches.includes('Najaf')?[...branches,'Governorates']:branches);
  const available=await projectQuery;
@@ -33,7 +33,7 @@ export async function POST(request:Request){
  const auth=await requireRole(['Admin','CEO','Company Owner','Operations Manager']);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const body=await request.json().catch(()=>null);if(typeof body?.projectId!=='string'||!Number.isInteger(body.revision))return NextResponse.json({error:'Invalid project.'},{status:400});
  const admin=createAdminClient();
- const project=await admin.from('projects').select('branch,governorate').eq('id',body.projectId).maybeSingle();
+ const project=await admin.from('projects').select('branch,governorate,governorate_office').eq('id',body.projectId).maybeSingle();
  if(project.error||!project.data||!canAccessProjectRow({role:auth.role,branch:auth.profile?.branch},project.data))return NextResponse.json({error:'Project not found.'},{status:404});
  const result=await admin.rpc('advance_sales_flow',{p_project:body.projectId,p_action:'accept',p_revision:body.revision,p_payload:{},p_actor:auth.user.id});
  // The RPC returns commercial data internally; the response deliberately does not.

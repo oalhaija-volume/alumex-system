@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   const actor={role:auth.role,branch:auth.profile?.branch,outdoorRotationStartBranch:auth.profile?.outdoor_rotation_start_branch};
   try{branch=normalizeOutdoorProjectBranch(actor,body?.project?.branch===undefined?(outdoorSalesBranch(actor)??auth.profile?.branch):body.project.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   let governorate;
-  try{governorate=normalizeProjectGovernorate(branch,body?.project?.governorate);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+  try{governorate=normalizeProjectGovernorate(branch,body?.project?.governorate,actor);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   let legacyOutdoorSalesId;
   try{legacyOutdoorSalesId=normalizeLegacyOutdoorSalesId(body?.project?.legacyOutdoorSalesId,auth.role);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   const assignee=body?.project?.assignedOutdoorSalesId;

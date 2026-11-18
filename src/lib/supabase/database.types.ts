@@ -261,6 +261,7 @@ export type Database = {
           project_type: string | null;
           branch: ProjectBranch | null;
           governorate: ProjectGovernorate | null;
+          governorate_office: "Karkh" | null;
           sales_engineer_id: string | null;
           measurement_assignment_id: string | null;
           assigned_outdoor_sales_id: string | null;
@@ -342,6 +343,7 @@ export type Database = {
           project_type?: string | null;
           branch?: ProjectBranch | null;
           governorate?: ProjectGovernorate | null;
+          governorate_office?: "Karkh" | null;
           sales_engineer_id?: string | null;
           measurement_assignment_id?: string | null;
           assigned_outdoor_sales_id?: string | null;

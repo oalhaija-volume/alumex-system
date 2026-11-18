@@ -7,6 +7,7 @@ type Project = {
   project_log_only?: boolean;
   branch?: string | null;
   governorate?: string | null;
+  governorate_office?: 'Karkh' | null;
 };
 
 export function canRenameProject(project: Project, actor: OutdoorTeamActor & { branch?: string | null }) {

@@ -9,7 +9,7 @@ import { signedContractBranches, signedContractRecord, type SignedContractRow, t
 import type { FieldActor } from '@/lib/offline/types';
 
 const pageSize = 200;
-const summaryFields = 'project_id,revision,signed_at,contract_number:contract->>number,contract_total:contract->quotation->>total,contract_currency:contract->quotation->>currency,signer:evidence->>signer,method:evidence->>method,project:projects!inner(id,client_id,branch,governorate,project_name,project_number,address,structure_readiness,sales_status,status,next_follow_up_at,project_notes,created_at,created_by,updated_at)';
+const summaryFields = 'project_id,revision,signed_at,contract_number:contract->>number,contract_total:contract->quotation->>total,contract_currency:contract->quotation->>currency,signer:evidence->>signer,method:evidence->>method,project:projects!inner(id,client_id,branch,governorate,governorate_office,project_name,project_number,address,structure_readiness,sales_status,status,next_follow_up_at,project_notes,created_at,created_by,updated_at)';
 
 export async function GET() {
   const auth = await requireRole(quotationRoles);

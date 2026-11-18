@@ -84,7 +84,8 @@ export async function POST(request:Request){
   const actor={id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorRotationStartBranch:auth.profile?.outdoor_rotation_start_branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds};
   let branch;
   try{branch=normalizeProjectBranch(p.branch===undefined?(outdoorSalesBranch(actor)??auth.profile?.branch):p.branch);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
-  const retiredNajaf=branch==='Governorates'&&effectiveProjectBranch({branch,governorate:p.governorate})==='Najaf';
+  const karkhIndoorNajaf=actor.role==='Indoor Sales'&&actor.branch==='Karkh'&&branch==='Governorates'&&p.governorate==='النجف';
+  const retiredNajaf=!karkhIndoorNajaf&&branch==='Governorates'&&effectiveProjectBranch({branch,governorate:p.governorate})==='Najaf';
   // An old receipt cannot grant access across Najaf's geographic boundary.
   if(retiredNajaf&&!canAccessProjectRow(actor,{branch,governorate:p.governorate,created_by:auth.user.id}))return NextResponse.json({error:'Choose the project governorate.'},{status:400});
   let creationError:string|null=null;
@@ -101,7 +102,7 @@ export async function POST(request:Request){
   if(retiredNajaf){
    governorate=p.governorate;
   }else{
-   try{governorate=normalizeProjectGovernorate(branch,p.governorate);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
+   try{governorate=normalizeProjectGovernorate(branch,p.governorate,actor);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
   }
   let legacyOutdoorSalesId;
   try{legacyOutdoorSalesId=normalizeLegacyOutdoorSalesId(p.legacyOutdoorSalesId,auth.role);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
@@ -131,7 +132,7 @@ export async function POST(request:Request){
  const admin=createAdminClient();
  // SQL validates the active actor and creator/branch access before any replay.
  if(!hasGlobalProjectAccess(auth.role)){
-  const project=await admin.from('projects').select('branch,governorate,created_by,assigned_outdoor_sales_id').eq('id',body.projectId).maybeSingle();
+  const project=await admin.from('projects').select('branch,governorate,governorate_office,created_by,assigned_outdoor_sales_id').eq('id',body.projectId).maybeSingle();
   if(project.error)return NextResponse.json({error:'Unable to verify project access.'},{status:503});
   if(project.data&&!canAccessProjectRow({id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds},project.data))return NextResponse.json({error:'Project not found.'},{status:404});
  }
@@ -154,6 +155,7 @@ export async function POST(request:Request){
   const actor={id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds};
   const visibleArchive=hasGlobalProjectAccess(auth.role)||(previous&&typeof previous==='object'&&!Array.isArray(previous)
    &&canAccessProjectRow(actor,{branch:typeof previous.branch==='string'?previous.branch:null,governorate:typeof previous.governorate==='string'?previous.governorate:null,
+    governorate_office:previous.governorate_office==='Karkh'?'Karkh':null,
     created_by:typeof previous.created_by==='string'?previous.created_by:null,assigned_outdoor_sales_id:typeof previous.assigned_outdoor_sales_id==='string'?previous.assigned_outdoor_sales_id:null}));
   if(!archived.error&&archived.data&&visibleArchive)return NextResponse.json({code:'project_deleted',error:'This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.'},{status:410,headers:{'Cache-Control':'no-store'}});
  }

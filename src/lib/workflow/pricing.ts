@@ -1,4 +1,5 @@
 import type { ProjectBranch, ProjectGovernorate } from '@/lib/intake/projectBranch';
+import type { OpeningSizeChange } from './openingSizeChanges';
 import { catalogKind, compatibleAddon, compatibleGlass, isAvailable, isCurtainWall, isCurtainWallArch, isLouver, isPushout, isRollerShutter, isShutterBox, normalizeCatalogItem } from './catalogRules';
 import { alumexSystemLabel, validateAlumexSystemModel, type AlumexSystemModel } from './alumexModels';
 export { alumexSystemLabel, isLouver };
@@ -12,7 +13,8 @@ export type AdditionalChoice = {id:string;quantity:number;unitRate?:number;curta
 export type Charge = {id:string;name:string;unit:string;rate:number;quantity:number;total:number;rateSource?:'quotation';motorFor?:string};
 export type StandaloneCharge = Charge & {curtainWallGlassType?:CurtainWallGlassType;measurements?:SurfaceMeasurement[];extras?:Charge[];projectAddon?:true};
 export type QuoteLine = {opening:MeasuredOpening;system:Charge;systemModel?:AlumexSystemModel;glass:Charge|null;curtainWallGlassType?:CurtainWallGlassType;extras:Charge[];area:number;total:number};
-export type QuoteSnapshot = {excludedOpeningIds?:string[];facadeMeasurements?:MeasuredOpening[];branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;discount?:{percent:5;subtotal:number;amount:number};total:number;currency:"IQD";createdAt:string;preparedBy:string};
+export type QuotationPricingPolicy = {curtainWallMinimumRate:number};
+export type QuoteSnapshot = {pricingPolicy?:QuotationPricingPolicy;openingSizeChanges?:OpeningSizeChange[];excludedOpeningIds?:string[];facadeMeasurements?:MeasuredOpening[];branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;lines:QuoteLine[];additionalItems?:StandaloneCharge[];skylightsPricedSeparately?:boolean;version?:number;discount?:{percent:5;subtotal:number;amount:number};total:number;currency:"IQD";createdAt:string;preparedBy:string};
 // Keep charge rates intact and deduct the discount once from the whole quotation.
 // Reconstructing the subtotal also makes removal and repeated edits non-stacking.
 export function applyQuotationDiscount(snapshot:QuoteSnapshot,discountPercent:unknown=0):QuoteSnapshot {
@@ -33,6 +35,18 @@ export function applyQuotationDiscount(snapshot:QuoteSnapshot,discountPercent:un
 }
 export const money = (n:number) => new Intl.NumberFormat('en-IQ',{maximumFractionDigits:0}).format(n)+' IQD';
 export const QUOTATION_SYSTEM_RATE_MIN = 240_000;
+// Exceptions belong to a saved quotation and are supplied by trusted server
+// state. Normal sales requests cannot create or lower this authorization.
+export function normalizeQuotationPricingPolicy(input:unknown):QuotationPricingPolicy|undefined {
+ if(input===undefined)return undefined;
+ if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('The saved quotation pricing authorization is invalid.');
+ const rate=(input as Record<string,unknown>).curtainWallMinimumRate;
+ if(typeof rate!=='number'||!Number.isSafeInteger(rate)||rate<1||rate>QUOTATION_SYSTEM_RATE_MIN)throw new Error('The saved quotation pricing authorization is invalid.');
+ return {curtainWallMinimumRate:rate};
+}
+export function quotationCurtainMinimumRate(policy?:QuotationPricingPolicy) {
+ return normalizeQuotationPricingPolicy(policy)?.curtainWallMinimumRate??QUOTATION_SYSTEM_RATE_MIN;
+}
 // Pause new discount choices while retaining calculations for saved documents.
 export const QUOTATION_DISCOUNTS_ENABLED = false;
 // Recommended selling targets are separate from the sales override minimum.
@@ -185,10 +199,11 @@ function catalogCharge(id:string,quantity:number,catalog:CatalogItem[]):Charge {
  if(!Number.isSafeInteger(total)||total<=0)throw new Error(`Invalid amount for ${item.name}.`);
  return {id:item.id,name:item.name,unit:item.unit,rate:Number(item.unit_price),quantity,total};
 }
-function quotationSystemCharge(charge:Charge,product:CatalogItem|undefined,rate:unknown):Charge {
+function quotationSystemCharge(charge:Charge,product:CatalogItem|undefined,rate:unknown,policy?:QuotationPricingPolicy):Charge {
  const curtain=isQuotationCurtainRateEditable(product);
  if(!isQuotationSystemRateEditable(product)&&!curtain)throw new Error('Quotation-specific rates are available only for active Alumex systems or Curtain Wall priced per m².');
- if(typeof rate!=='number'||!Number.isSafeInteger(rate)||rate<QUOTATION_SYSTEM_RATE_MIN)throw new Error(`Enter ${curtain?'a Curtain Wall':'an Alumex system'} rate of at least ${QUOTATION_SYSTEM_RATE_MIN.toLocaleString('en-US')} IQD, using whole IQD.`);
+ const minimum=curtain?quotationCurtainMinimumRate(policy):QUOTATION_SYSTEM_RATE_MIN;
+ if(typeof rate!=='number'||!Number.isSafeInteger(rate)||rate<minimum)throw new Error(`Enter ${curtain?'a Curtain Wall':'an Alumex system'} rate of at least ${minimum.toLocaleString('en-US')} IQD, using whole IQD.`);
  const total=Math.round(charge.quantity*rate);
  if(!Number.isSafeInteger(total)||total<=0)throw new Error(`Invalid amount for ${charge.name}.`);
  return {...charge,rate,total,rateSource:'quotation'};
@@ -207,6 +222,7 @@ function rollerShutterMotorCharge(shutterId:string,rate:unknown,quantity:number)
 // Louvers use pricing minimums; shutters use the measured area. Keep other
 // saved quantities and the recorded measurements unchanged.
 export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[],actor:string):QuoteSnapshot {
+ const pricingPolicy=normalizeQuotationPricingPolicy(snapshot.pricingPolicy);
  const catalog=rawCatalog.map(normalizeCatalogItem);
  const quotation=structuredClone(snapshot);
  const refresh=<T extends Charge>(charge:T,opening?:MeasuredOpening,standaloneCurtain=false):T=>{
@@ -225,7 +241,7 @@ export function repriceQuotation(snapshot:QuoteSnapshot,rawCatalog:CatalogItem[]
   if(charge.rateSource!==undefined){
    const curtain=isQuotationCurtainRateEditable(item);
    if(charge.rateSource!=='quotation'||(!opening&&!(standaloneCurtain&&curtain))||curtain&&opening&&opening.opening_type!=='Curtain Wall')throw new Error('Quotation-specific rates can only be applied to the opening system or standalone Curtain Wall.');
-   current=quotationSystemCharge(current,item,charge.rate);
+   current=quotationSystemCharge(current,item,charge.rate,pricingPolicy);
   }
   return {...charge,...(louver||shutter?{quantity:current.quantity}:{}),rate:current.rate,total:current.total};
  };
@@ -303,7 +319,8 @@ function priceExtras(extras:ExtraChoice[],allowed:CatalogItem[],catalog:CatalogI
   return shutter?[charge,rollerShutterMotorCharge(product.id,extra.motorPrice,openingQuantity)]:[charge];
  });
 }
-export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[],rawCatalog:CatalogItem[],actor:string,additionalItems:AdditionalChoice[]=[],discountPercent:unknown=0):QuoteSnapshot {
+export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[],rawCatalog:CatalogItem[],actor:string,additionalItems:AdditionalChoice[]=[],discountPercent:unknown=0,policy?:QuotationPricingPolicy):QuoteSnapshot {
+ const pricingPolicy=normalizeQuotationPricingPolicy(policy);
  const catalog=rawCatalog.map(normalizeCatalogItem);
  const measured=quotableOpenings(openings);
  if(!Array.isArray(choices)||choices.some(c=>!c)||choices.length!==measured.length||new Set(choices.map(c=>c.openingId)).size!==measured.length)throw new Error('Choose a system for every opening. Skylights are priced in the calculator.');
@@ -320,7 +337,7 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   const charge=(id:string)=>catalogCharge(id,catalog.find(p=>p.id===id)?.unit==='sqm'?billableArea:quantity,catalog);
   if(!systemOptions(opening,catalog).some(p=>p.id===choice.systemId))throw new Error('Choose a compatible system for this structural type.');
   const catalogSystem=charge(choice.systemId);
-  const system=choice.systemRate===undefined?catalogSystem:quotationSystemCharge(catalogSystem,catalog.find(product=>product.id===choice.systemId),choice.systemRate);
+  const system=choice.systemRate===undefined?catalogSystem:quotationSystemCharge(catalogSystem,catalog.find(product=>product.id===choice.systemId),choice.systemRate,pricingPolicy);
   const systemModel=validateAlumexSystemModel(choice.systemModel,opening,catalog.find(product=>product.id===choice.systemId));
   if(choice.glassId&&!glassOptions(opening,catalog,choice.systemId).some(p=>p.id===choice.glassId))throw new Error('Choose a compatible glass option.');
   const glass=choice.glassId?charge(choice.glassId):null;
@@ -338,12 +355,12 @@ export function priceQuotation(openings:MeasuredOpening[],choices:OpeningChoice[
   const quantity=facade?measuredFacadeArea(item.measurements??[]):item.quantity;
   const catalogBase=item.id===CURTAIN_WALL_ARCH_ID?curtainWallArchCharge(quantity):catalogCharge(item.id,quantity,catalog);
   if(item.unitRate!==undefined&&!isQuotationCurtainRateEditable(product))throw new Error('Standalone quotation rates are available only for active Curtain Wall priced per m².');
-  const base=item.unitRate===undefined?catalogBase:quotationSystemCharge(catalogBase,product,item.unitRate);
+  const base=item.unitRate===undefined?catalogBase:quotationSystemCharge(catalogBase,product,item.unitRate,pricingPolicy);
   const glassType=curtainWallGlassType(item.curtainWallGlassType,isCurtainWall(product));
   const extras=[...priceExtras(item.extras??[],facadeAddonOptions(product,catalog),catalog,quantity),...priceCurtainWallArch(item.hasCurtainWallArch,isCurtainWall(product),1)];
   return {...base,...(glassType!==undefined?{curtainWallGlassType:glassType}:{}),...(catalogKind(product)==='addon'?{projectAddon:true as const}:{}),...(facade?{measurements:item.measurements!.map(s=>({label:s.label.trim(),width:s.width,height:s.height,quantity:s.quantity}))}:{}),...(extras.length?{extras}:{} )};
  });
  const total=lines.reduce((sum,line)=>sum+line.total,0)+additional.reduce((sum,item)=>sum+item.total+(item.extras?.reduce((s,e)=>s+e.total,0)??0),0);
  if(!Number.isSafeInteger(total)||total<=0)throw new Error('Add a measured opening, facade service or standalone product before quoting.');
- return applyQuotationDiscount({lines,additionalItems:additional,...(openings.some(o=>o.opening_type==='Facade')?{facadeMeasurements:openings.filter(o=>o.opening_type==='Facade')}:{ }),...(openings.some(o=>o.opening_type==='Skylight')?{skylightsPricedSeparately:true}:{}),total,currency:'IQD',createdAt:new Date().toISOString(),preparedBy:actor},discountPercent);
+ return applyQuotationDiscount({...(pricingPolicy?{pricingPolicy}:{}),lines,additionalItems:additional,...(openings.some(o=>o.opening_type==='Facade')?{facadeMeasurements:openings.filter(o=>o.opening_type==='Facade')}:{ }),...(openings.some(o=>o.opening_type==='Skylight')?{skylightsPricedSeparately:true}:{}),total,currency:'IQD',createdAt:new Date().toISOString(),preparedBy:actor},discountPercent);
 }

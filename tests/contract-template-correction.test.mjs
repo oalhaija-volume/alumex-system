@@ -13,6 +13,11 @@ function load(path,dependencies={}) {
  return exports;
 }
 
+const catalogRules=load('../src/lib/workflow/catalogRules.ts');
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':catalogRules});
+const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules,'./alumexModels':alumexModels});
+const openingSizeChanges=load('../src/lib/workflow/openingSizeChanges.ts',{'./pricing':pricing});
+
 const terms=JSON.parse(readFileSync(new URL('../src/lib/contracts/uploadedTerms.json',import.meta.url),'utf8'));
 const uploadedTerms=load('../src/lib/contracts/uploadedTerms.ts',{'./uploadedTerms.json':{default:terms}});
 const projectId='153aa1d1-b650-40b1-8fc1-d1bd45ab224f';
@@ -48,7 +53,7 @@ function setup({flow=savedFlow,projectPatch={},denied=null,rpcError=null}={}) {
    assert.equal(id,projectId);assert.equal(scope,'commercial');
    return denied?{response:denied}:{admin,auth:{role:'Indoor Sales',user:{id:'correcting-employee'}},project:site};
   }},
-  '@/lib/workflow/pricing':{},'@/lib/workflow/quotationOpenings':{},
+  '@/lib/workflow/pricing':{},'@/lib/workflow/quotationOpenings':{},'@/lib/workflow/openingSizeChanges':openingSizeChanges,
  });
  const submit=body=>api.POST(new Request('http://localhost:3003/api/sales-flow/'+projectId,{
   method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'change-contract-template',revision:4,template:'residential',confirmed:true,...body}),

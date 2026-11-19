@@ -118,6 +118,7 @@ for (const action of ['save', 'contract']) {
       '@/lib/contracts/uploadedTerms': { uploadedContractTerms: () => [] },
       '@/lib/contracts/agreement2027Server': {agreement2027Terms:()=>[],loadAgreement2027Snapshot:async(admin,id,quotation)=>({version:'agreement-2027',total:quotation.total,fields:{clientLegalName:'Client',directPhone:'07700000000',clientClassification:'فرد'}})},
       '@/lib/workflow/pricing': { priceQuotation: () => ({ lines: [], total: 100, currency: 'IQD' }) },
+      '@/lib/workflow/openingSizeChanges': load('lib/workflow/openingSizeChanges.ts', { './pricing': { priceQuotation: () => ({ lines: [], total: 100, currency: 'IQD' }) } }),
       '@/lib/workflow/quotationOpenings': { quotationOpenings: () => [], normalizeExcludedOpeningIds: load('lib/workflow/quotationOpenings.ts').normalizeExcludedOpeningIds },
     });
     const result = await route.POST(new Request('http://localhost:3003/api/sales-flow/basra', {

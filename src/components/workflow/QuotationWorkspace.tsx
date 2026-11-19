@@ -4,13 +4,14 @@ import type { BuildingType } from '@/lib/intake/buildingType';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import Link from 'next/link';
 import { useState } from 'react';
-import { applyQuotationDiscount,quotationAdditionalChoices,recordedFacadeAreas,defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,priceQuotation,isQuotationSystemRateEditable,isRollerShutterMotor,QUOTATION_SYSTEM_RATE_MIN,QUOTATION_DISCOUNTS_ENABLED,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice,type QuoteSnapshot } from '@/lib/workflow/pricing';
+import { applyQuotationDiscount,quotationAdditionalChoices,recordedFacadeAreas,defaultSystem,systemOptions,glassOptions,addonOptions,quotableOpenings,isQuotationSystemRateEditable,isRollerShutterMotor,quotationCurtainMinimumRate,QUOTATION_SYSTEM_RATE_MIN,QUOTATION_DISCOUNTS_ENABLED,type CatalogItem,type MeasuredOpening,type OpeningChoice,type AdditionalChoice,type QuoteSnapshot } from '@/lib/workflow/pricing';
 import { StandaloneItems } from './StandaloneItems';
 import { CurtainWallGlassTypeField } from './CurtainWallGlassTypeField';
 import { AlumexSystemModelField } from './AlumexSystemModelField';
 import { alumexSystemModelOptions } from '@/lib/workflow/alumexModels';
 import { isShutterBox, isRollerShutter, isCurtainWallArch, isPushout, isLouver, normalizeCatalogItem } from '@/lib/workflow/catalogRules';
 import { quotationOpenings } from '@/lib/workflow/quotationOpenings';
+import { applyOpeningSizeChanges,normalizeOpeningSizeChanges,priceQuotationWithSizeChanges,type OpeningSizeChange,type OpeningSizeHistory } from '@/lib/workflow/openingSizeChanges';
 import type { RegistrationOpening } from '@/lib/measurements/registrationOpening';
 import type { QuotationRevision,SalesFlow } from '@/lib/workflow/types';
 import { applyQuotationGroupRate,quotationRateGroups,type QuotationRateGroupId } from '@/lib/quotations/groupRates';
@@ -18,25 +19,29 @@ import {MeasurementReports} from "@/components/measurements/MeasurementReports";
 import { ProjectRecord } from './ProjectRecord';
 import { QuotationOpeningForm } from './QuotationOpeningForm';
 import { QuotationFacadeForm } from './QuotationFacadeForm';
+import { OpeningSizeEditor,type OpeningSizePreview } from './OpeningSizeEditor';
 import { discountedSystemRate,measuredOpeningArea,billableOpeningArea,openingSellingBand,openingMinimumSellingRate,quotationSellingSuggestion,isQuotationCurtainRateEditable } from '@/lib/workflow/pricing';
 import { OpeningAreaBadge,OpeningSellingLegend } from './OpeningAreaIndicator';
 import { ContractPaymentPreview } from '@/components/contracts/ContractPaymentPreview';
 import { DocumentHeader,DocumentParties,OpeningSchedule,DocumentFooter,DocumentPaper } from './CommercialDocument';
 import { api,button,card,field,Notice,secondary,useResource,Workspace } from './ui';
 
-type QuoteData={project:{additional_openings_state?:'requested'|'submitted'|null;building_type?:BuildingType|null;branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;project_name:string;project_number:string;address:string;sales_status:string};client:{name:string;mobile:string;client_type?:string};openings:MeasuredOpening[];catalog:CatalogItem[];flow:SalesFlow|null;history:QuotationRevision[]};
+type QuoteData={project:{additional_openings_state?:'requested'|'submitted'|null;building_type?:BuildingType|null;branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;project_name:string;project_number:string;address:string;sales_status:string};client:{name:string;mobile:string;client_type?:string};openings:MeasuredOpening[];catalog:CatalogItem[];flow:SalesFlow|null;history:QuotationRevision[];sizeHistory?:OpeningSizeHistory[];sizeHistoryError?:string};
 const quantityLabel=(unit?:string)=>unit==='sqm'?'Area (m²)':unit==='meter'?'Length (m)':'Quantity';
 type PricePreview={quotation:QuoteSnapshot;priceKey:string;revision:number};
 const pricePreviewConflicts=new Set(['Catalog prices changed. Preview the updated prices again before saving.','The project changed. Reload and try again.']);
 
 function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;projectId:string;reload:(error?:string)=>Promise<void>;clearActionError:()=>void}) {
- const { term,formatMoney,formatNumber,errorMessage } = useI18n();
- const rateLabel=(p:CatalogItem)=>p.unit_price>0?`${formatMoney(p.unit_price)} / ${term(p.unit)}`:term('Price required');
+ const { term,formatMoney,formatNumber,formatDateTime,errorMessage } = useI18n();
+ const rateLabel=(p:CatalogItem,rate=p.unit_price)=>rate>0?`${formatMoney(rate)} / ${term(p.unit)}`:term('Price required');
  const {flow}=data;
+ const pricingPolicy=flow?.quotation.pricingPolicy;
  const catalog=data.catalog.map(normalizeCatalogItem);
  const [newOpenings,setNewOpenings]=useState<RegistrationOpening[]>([]);
+ const [openingSizeChanges,setOpeningSizeChanges]=useState<OpeningSizeChange[]>([]);
+ const [editingSizeId,setEditingSizeId]=useState<string|null>(null);
  const [excludedOpeningIds,setExcludedOpeningIds]=useState<string[]>(()=>flow?.quotation.excludedOpeningIds??[]);
- const measured=quotationOpenings(data.openings,newOpenings);
+ const measured=quotationOpenings(applyOpeningSizeChanges(data.openings,openingSizeChanges),newOpenings);
  const allOpenings=quotableOpenings(measured);
  const activeMeasured=measured.filter(opening=>!excludedOpeningIds.includes(opening.id));
  const openings=quotableOpenings(activeMeasured);
@@ -49,11 +54,24 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
    return {id:e.id,quantity:isRollerShutter(e)?1:e.unit==='sqm'?e.quantity:e.quantity/(saved.opening.quantity??1),...(motor?{motorPrice:motor.rate}:{})};
   })??[]};
  }));
+ // Retained prices are display values, not new sales overrides. Keep the raw
+ // choices intact so saving a size correction preserves catalog rate sources.
+ const sizeSources=new Map(openingSizeChanges.flatMap(change=>[[change.openingId,change.openingId],...(change.splitOpeningId?[[change.splitOpeningId,change.openingId]]:[])] as [string,string][]));
+ const effectiveChoices=choices.map(choice=>{
+  if(choice.systemRate!==undefined)return choice;
+  const sourceId=sizeSources.get(choice.openingId);
+  const saved=sourceId?flow?.quotation.lines.find(line=>line.opening.id===sourceId):undefined;
+  const product=catalog.find(product=>product.id===choice.systemId);
+  const opening=openings.find(opening=>opening.id===choice.openingId);
+  if(!saved||!product||saved.system.id!==product.id||saved.system.unit!==product.unit
+   ||!isQuotationSystemRateEditable(product)&&!(opening?.opening_type==='Curtain Wall'&&isQuotationCurtainRateEditable(product)))return choice;
+  return {...choice,systemRate:saved.system.rate};
+ });
  const activeChoices=choices.filter(choice=>openings.some(opening=>opening.id===choice.openingId));
  const [additionalItems,setAdditionalItems]=useState<AdditionalChoice[]>(()=>flow?quotationAdditionalChoices(flow.quotation):[]);
  const [groupRateInputs,setGroupRateInputs]=useState<Partial<Record<QuotationRateGroupId,string>>>({});
  const [appliedGroupRates,setAppliedGroupRates]=useState<Partial<Record<QuotationRateGroupId,{rate:number;members:string}>>>({});
- const rateGroups=quotationRateGroups(openings,choices,additionalItems,catalog);
+ const rateGroups=quotationRateGroups(openings,effectiveChoices,additionalItems,catalog,pricingPolicy);
  const hasUnappliedGroupRates=rateGroups.some(group=>group.count>0&&(groupRateInputs[group.id]?.trim()??'')!=='');
  const [discountPercent,setDiscountPercent]=useState<0|5>(QUOTATION_DISCOUNTS_ENABLED?flow?.quotation.discount?.percent??0:0);
  const [editing,setEditing]=useState(!flow);
@@ -74,7 +92,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const [template,setTemplate]=useState<'residential'|'commercial'|''>('');
  const waiting=data.project.additional_openings_state==='requested';
  const needsRevision=!!data.project.additional_openings_state;
- const canEdit=!waiting&&!['contract_signed','transferred_to_operations','cancelled','lost','closed'].includes(data.project.sales_status)&&(!flow||(!flow.signed_at&&['quotation','approved','contract'].includes(flow.stage)));
+ const canEdit=!waiting&&!['contract_signed','transferred_to_operations','cancelled','lost','closed'].includes(data.project.sales_status)&&(!flow||(!flow.signed_at&&!flow.evidence&&!flow.accepted_at&&!flow.accepted_by&&['quotation','approved','contract'].includes(flow.stage)));
  const canUpdatePrices=!!flow&&canEdit&&!needsRevision&&viewVersion==='current'&&!['contract_signed','transferred_to_operations','cancelled','lost','closed'].includes(data.project.sales_status);
  const archived=viewVersion==='current'?undefined:data.history?.find(h=>String(h.version)===viewVersion);
  const shown=archived?.quotation??flow?.quotation;
@@ -82,7 +100,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  let draftTotal:number|undefined;
  let draftQuotation:QuoteSnapshot|undefined;
  let pricingError='';
- if(editing){try{draftQuotation=priceQuotation(activeMeasured,activeChoices,catalog,'preview',additionalItems,discountPercent);draftTotal=draftQuotation.total;}catch(e){pricingError=(e as Error).message;}}
+ if(editing){try{draftQuotation=priceQuotationWithSizeChanges(activeMeasured,activeChoices,catalog,'preview',additionalItems,discountPercent,flow?.quotation,openingSizeChanges,pricingPolicy);draftTotal=draftQuotation.total;}catch(e){pricingError=(e as Error).message;}}
  const discountChanged=QUOTATION_DISCOUNTS_ENABLED&&discountPercent!==(flow?.quotation.discount?.percent??0);
  let discountPreview:QuoteSnapshot|undefined;
  if(flow&&canUpdatePrices&&!editing){try{discountPreview=applyQuotationDiscount(flow.quotation,discountPercent);}catch{/* Invalid saved amounts cannot be discounted. */}}
@@ -91,7 +109,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
  const targetRates=new Map(sellingSuggestion?.openingRates.map(opening=>[opening.openingId,opening.rate]));
  const suggestedChoices=sellingSuggestion?choices.map(choice=>targetRates.has(choice.openingId)?{...choice,systemRate:targetRates.get(choice.openingId)}:choice):choices;
  let suggestedQuotation:QuoteSnapshot|undefined;
- if(sellingSuggestion?.canApply){try{suggestedQuotation=priceQuotation(activeMeasured,suggestedChoices.filter(choice=>openings.some(opening=>opening.id===choice.openingId)),catalog,'preview',additionalItems,discountPercent);}catch{/* Incomplete selections remain editable. */}}
+ if(sellingSuggestion?.canApply){try{suggestedQuotation=priceQuotationWithSizeChanges(activeMeasured,suggestedChoices.filter(choice=>openings.some(opening=>opening.id===choice.openingId)),catalog,'preview',additionalItems,discountPercent,flow?.quotation,openingSizeChanges,pricingPolicy);}catch{/* Incomplete selections remain editable. */}}
  const suggestedPricing=suggestedQuotation?quotationSellingSuggestion(suggestedQuotation,catalog):sellingSuggestion?.canApply===false?sellingSuggestion:null;
  function applySuggestedRate(){
   if(!sellingSuggestion?.canApply||busy||pricePreview)return;
@@ -113,7 +131,7 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   const group=rateGroups.find(group=>group.id===groupId);
   if(busy||!canEdit||!value.trim()||!group?.count)return;
   try{
-   const updated=applyQuotationGroupRate(groupId,Number(value),openings,choices,additionalItems,catalog);
+   const updated=applyQuotationGroupRate(groupId,Number(value),openings,choices,additionalItems,catalog,pricingPolicy);
    setChoices(updated.choices);setAdditionalItems(updated.additionalItems);
    setGroupRateInputs(inputs=>{const next={...inputs};delete next[groupId];return next;});
    setAppliedGroupRates(groups=>({...groups,[groupId]:{rate:Number(value),members:JSON.stringify([group.openingIds,group.additionalItemIds])}}));
@@ -125,8 +143,42 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   section?.scrollIntoView({block:'start'});
   section?.focus({preventScroll:true});
  }
+ function changedSizeChoices(change:OpeningSizeChange){
+  const previous=openingSizeChanges.find(row=>row.openingId===change.openingId);
+  const source=choices.find(choice=>choice.openingId===change.openingId);
+  const previousSplit=previous?.splitOpeningId?choices.find(choice=>choice.openingId===previous.splitOpeningId):undefined;
+  const rows=choices.filter(choice=>choice.openingId!==previous?.splitOpeningId);
+  if(change.splitOpeningId&&source)rows.push({...structuredClone(previousSplit??source),openingId:change.splitOpeningId});
+  return rows;
+ }
+ function previewSize(change:OpeningSizeChange):OpeningSizePreview|undefined{
+  try{
+   const changes=[...openingSizeChanges.filter(row=>row.openingId!==change.openingId),change];
+   const candidate=quotationOpenings(applyOpeningSizeChanges(data.openings,changes),newOpenings).filter(opening=>!excludedOpeningIds.includes(opening.id));
+   const candidateChoices=changedSizeChoices(change).filter(choice=>quotableOpenings(candidate).some(opening=>opening.id===choice.openingId));
+   const quote=priceQuotationWithSizeChanges(candidate,candidateChoices,catalog,'preview',additionalItems,discountPercent,flow?.quotation,changes,pricingPolicy);
+   return {quotationTotal:quote.total,openingTotal:quote.lines.filter(line=>line.opening.id===change.openingId||line.opening.id===change.splitOpeningId).reduce((total,line)=>total+line.total,0)};
+  }catch{return undefined;}
+ }
+ function closeSizeEditor(){
+  const openingId=editingSizeId;
+  setEditingSizeId(null);
+  if(openingId)document.getElementById(`quotation-edit-size-${openingId}`)?.focus({preventScroll:true});
+ }
+ function applySize(change:OpeningSizeChange){
+  const changes=normalizeOpeningSizeChanges(data.openings,[...openingSizeChanges.filter(row=>row.openingId!==change.openingId),change]);
+  setChoices(changedSizeChoices(change));setOpeningSizeChanges(changes);setApproved(false);setError('');clearActionError();closeSizeEditor();
+ }
+ function undoSize(openingId:string){
+  const change=openingSizeChanges.find(row=>row.openingId===openingId);
+  if(busy||!change)return;
+  setChoices(rows=>rows.filter(choice=>choice.openingId!==change.splitOpeningId));
+  setOpeningSizeChanges(rows=>rows.filter(row=>row.openingId!==openingId));
+  setApproved(false);setError('');clearActionError();
+  if(editingSizeId===openingId)closeSizeEditor();
+ }
  function removeOpening(opening:MeasuredOpening){
-  if(busy)return;
+  if(busy||editingSizeId||openingSizeChanges.some(change=>change.openingId===opening.id||change.splitOpeningId===opening.id))return;
   clearActionError();setError('');setApproved(false);
   if(newOpenings.some(row=>row.id===opening.id)){
    setNewOpenings(rows=>rows.filter(row=>row.id!==opening.id));setChoices(rows=>rows.filter(choice=>choice.openingId!==opening.id));
@@ -148,10 +200,10 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
   setAddingFacade(false);
  }
  async function act(action:string){
-  if(busy||pricePreview||action==='save'&&hasUnappliedGroupRates||action==='contract'&&!template)return;
+  if(busy||pricePreview||action==='save'&&(hasUnappliedGroupRates||!!editingSizeId)||action==='contract'&&!template)return;
   setBusy(true);setError('');clearActionError();
   try{
-   const payload=action==='contract'?{action,revision:flow?.revision??0,template}:{action,choices:activeChoices,excludedOpeningIds,additionalItems,newOpenings,discountPercent,revision:flow?.revision??0,confirmed:approved,template,replaceUnsignedContract:replaceContract};
+   const payload=action==='contract'?{action,revision:flow?.revision??0,template}:{action,choices:activeChoices,excludedOpeningIds,additionalItems,newOpenings,...(action==='save'&&openingSizeChanges.length?{openingSizeChanges}:{}),discountPercent,revision:flow?.revision??0,confirmed:approved,template,replaceUnsignedContract:replaceContract};
    await api(`/api/sales-flow/${projectId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
    await reload();
   }catch(e){setError((e as Error).message);}finally{setBusy(false);}
@@ -225,25 +277,34 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     const editableAlumexRate=!!system&&isQuotationSystemRateEditable(system);
     const editableCurtainRate=opening.opening_type==='Curtain Wall'&&isQuotationCurtainRateEditable(system);
     const editableRate=editableAlumexRate||editableCurtainRate;
-    const minimumRate=QUOTATION_SYSTEM_RATE_MIN;
-    const systemRate=choice.systemRate??Number(system?.unit_price);
+    const minimumRate=editableCurtainRate?quotationCurtainMinimumRate(pricingPolicy):QUOTATION_SYSTEM_RATE_MIN;
+    const effectiveChoice=effectiveChoices.find(row=>row.openingId===opening.id)??choice;
+    const systemRate=effectiveChoice.systemRate??Number(system?.unit_price);
     const invalidRate=editableRate&&choice.systemRate!==undefined&&(!Number.isSafeInteger(systemRate)||systemRate<minimumRate);
     const isNew=newOpenings.some(o=>o.id===opening.id);
+    const originalOpening=data.openings.find(row=>row.id===opening.id);
+    const sizeChange=openingSizeChanges.find(change=>change.openingId===opening.id);
+    const relatedSizeChange=openingSizeChanges.find(change=>change.openingId===opening.id||change.splitOpeningId===opening.id);
+    const effectiveLine=relatedSizeChange?draftQuotation?.lines.find(line=>line.opening.id===opening.id):undefined;
+    const currentSizePreview=draftQuotation?{quotationTotal:draftQuotation.total,openingTotal:draftQuotation.lines.filter(line=>line.opening.id===opening.id||line.opening.id===sizeChange?.splitOpeningId).reduce((total,line)=>total+line.total,0)}:undefined;
     const area=measuredOpeningArea(opening);
     const band=editableAlumexRate?openingSellingBand(area,discountedSystemRate(systemRate,discountPercent),opening):undefined;
     const louver=opening.opening_type==='Louver'||!!system&&isLouver(system);
     const minimumApplied=billableOpeningArea(opening,system)>area&&[choice.systemId,choice.glassId,...choice.extras.map(extra=>extra.id)].some(id=>catalog.some(item=>item.id===id&&item.unit==='sqm'&&!isRollerShutter(item)));
     return <section key={opening.id} data-area-band={band} data-opening-id={opening.id} className={`${card} quotation-opening${band?` opening-area-${band}`:''}`} aria-label={term('Opening {number}',{number:formatNumber(index+1)})}>
-     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Opening {number}',{number:formatNumber(index+1)})} · {term(opening.opening_type)} {opening.opening_direction?term(opening.opening_direction):''}{opening.has_arch?` · ${term('Arch')}`:''}</h2>{editableAlumexRate?<OpeningAreaBadge area={area} rate={systemRate} opening={opening} discountPercent={discountPercent}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}<button type="button" aria-label={term('Remove opening {number} from quotation',{number:formatNumber(index+1)})} className="min-h-11 rounded-md px-3 text-sm font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700" onClick={()=>removeOpening(opening)}>{term('Remove from quotation')}</button></div>
+     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Opening {number}',{number:formatNumber(index+1)})} · {term(opening.opening_type)} {opening.opening_direction?term(opening.opening_direction):''}{opening.has_arch?` · ${term('Arch')}`:''}</h2>{editableAlumexRate?<OpeningAreaBadge area={area} rate={systemRate} opening={opening} discountPercent={discountPercent}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}<div className="flex flex-wrap gap-2">{originalOpening&&<button id={`quotation-edit-size-${opening.id}`} type="button" disabled={needsRevision||!!editingSizeId&&editingSizeId!==opening.id||addingOpening||addingFacade||openingSizeChanges.length>=100&&!sizeChange} aria-label={term('Edit size of opening {number}',{number:formatNumber(index+1)})} aria-expanded={editingSizeId===opening.id} aria-controls={`quotation-size-editor-${opening.id}`} className={`${secondary} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700`} onClick={()=>{setEditingSizeId(opening.id);setError('');clearActionError();}}>{term('Edit size')}</button>}<button type="button" disabled={!!editingSizeId||!!relatedSizeChange} aria-label={term('Remove opening {number} from quotation',{number:formatNumber(index+1)})} className="min-h-11 rounded-md px-3 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700" onClick={()=>removeOpening(opening)}>{term('Remove from quotation')}</button></div></div>
      <p className="mt-2 text-sm text-slate-500">{term("Floor")} {term(opening.floor)} · {opening.work_area==='internal'?`${term('Internal works')} · ${term(opening.room)}`:term(opening.room)} · {formatNumber(opening.width)} × {formatNumber(opening.height)} {term("cm")} · {term("Quantity")}: {formatNumber(opening.quantity??1)}{isNew?` · ${term('Not saved yet')}`:''}</p>
+     {sizeChange&&<div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"><p className="font-semibold">{term('Size change pending')}</p><p className="mt-1"><bdi dir="ltr">{formatNumber(sizeChange.previousWidth)} × {formatNumber(sizeChange.previousHeight)} → {formatNumber(sizeChange.width)} × {formatNumber(sizeChange.height)}</bdi> {term('cm')} · {term('Openings affected: {count}',{count:formatNumber(sizeChange.quantity)})}</p><p className="mt-1 whitespace-pre-wrap break-words">{term('Reason')}: {sizeChange.reason}</p><p className="mt-2 text-xs">{term('Save the quotation to keep this change. Undo the size change before removing this opening.')}</p><button type="button" disabled={!!editingSizeId} className="mt-2 min-h-11 rounded-md px-3 font-semibold underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-800 disabled:opacity-50" aria-label={term('Undo size change for opening {number}',{number:formatNumber(index+1)})} onClick={()=>undoSize(opening.id)}>{term('Undo size change')}</button></div>}
+     {!originalOpening&&relatedSizeChange&&<p className="mt-3 text-sm font-medium text-amber-900">{term('Separate entry for the resized openings. Save the quotation to keep this change.')}</p>}
+     {originalOpening&&editingSizeId===opening.id&&<div id={`quotation-size-editor-${opening.id}`}><OpeningSizeEditor key={opening.id} opening={originalOpening} change={sizeChange} currentPreview={currentSizePreview} preview={previewSize} onApply={applySize} onCancel={closeSizeEditor}/></div>}
      {minimumApplied&&<p className="mt-2 text-xs text-slate-600">{term(louver?'Louver pricing uses a minimum of 100 cm for each dimension. Actual dimensions are unchanged.':'Minimum billable area: 1 m² per window.')} {term('Billable area: {area} m²',{area:formatNumber(billableOpeningArea(opening,system)*(opening.quantity??1))})}</p>}
      <div className="mt-5 grid gap-4 sm:grid-cols-2">
       <label className="text-sm">{term("System / product")}<select aria-label={term("System / product")} value={choice.systemId} onChange={event=>{
        const systemId=event.target.value;
        const allowedModels=alumexSystemModelOptions(opening,catalog.find(product=>product.id===systemId));
        edit(opening.id,{systemId,systemRate:undefined,glassId:'',extras:[],systemModel:choice.systemModel&&allowedModels.includes(choice.systemModel)?choice.systemModel:undefined});
-      }} className={field}><option value="">{term("Choose system")}</option>{systemOptions(opening,catalog).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
-      <label className="text-sm">{term("Glass")}<select aria-label={term("Glass")} value={choice.glassId} onChange={e=>edit(opening.id,{glassId:e.target.value,extras:choice.extras.filter(x=>x.id!==e.target.value)})} className={field}><option value="">{term("Standard glass included")}</option>{glassOptions(opening,catalog,choice.systemId).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
+      }} className={field}><option value="">{term("Choose system")}</option>{systemOptions(opening,catalog).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p,effectiveLine?.system.id===p.id?effectiveLine.system.rate:p.unit_price)}</option>)}</select></label>
+      <label className="text-sm">{term("Glass")}<select aria-label={term("Glass")} value={choice.glassId} onChange={e=>edit(opening.id,{glassId:e.target.value,extras:choice.extras.filter(x=>x.id!==e.target.value)})} className={field}><option value="">{term("Standard glass included")}</option>{glassOptions(opening,catalog,choice.systemId).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p,effectiveLine?.glass?.id===p.id?effectiveLine.glass.rate:p.unit_price)}</option>)}</select></label>
       {!!modelOptions.length&&<div className="sm:col-span-2"><AlumexSystemModelField options={modelOptions} value={choice.systemModel} onChange={value=>edit(opening.id,{systemModel:value})}/></div>}
       {opening.opening_type==='Curtain Wall'&&<div className="sm:col-span-2"><CurtainWallGlassTypeField value={choice.curtainWallGlassType} onChange={value=>edit(opening.id,{curtainWallGlassType:value})}/></div>}
       {editableRate&&<div className="sm:col-span-2">
@@ -256,12 +317,12 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
      {opening.has_roller_shutter&&<div className="mt-5 rounded-md border border-blue-200 bg-blue-50 p-4">
       <p className="mb-3 text-sm font-semibold text-blue-900">{term('Roller shutter requested for this window')}</p>
       <label className="block text-sm">{term('Roller shutter type')}<select aria-label={term('Roller shutter type')} value={choice.extras.find(e=>catalog.some(p=>p.id===e.id&&isRollerShutter(p)))?.id??''} className={field} onChange={event=>edit(opening.id,{extras:[...choice.extras.filter(e=>!catalog.some(p=>p.id===e.id&&(isRollerShutter(p)||(!event.target.value&&isShutterBox(p))))),...(event.target.value?[{id:event.target.value,quantity:1}]:[])]})}>
-       <option value="">{term('Choose roller shutter type')}</option>{addonOptions(opening,catalog,choice.systemId).filter(isRollerShutter).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}
+       <option value="">{term('Choose roller shutter type')}</option>{addonOptions(opening,catalog,choice.systemId).filter(isRollerShutter).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p,effectiveLine?.extras.find(extra=>extra.id===p.id)?.rate??p.unit_price)}</option>)}
       </select></label>
      </div>}
      <div className="mt-5"><label className="text-sm">{term("Add an extra")}<select aria-label={term("Add an extra")} value="" onChange={e=>{if(e.target.value)edit(opening.id,{extras:[...choice.extras,{id:e.target.value,quantity:1}]});}} className={field}><option value="">{term("Choose add-on")}</option>{addonOptions(opening,catalog,choice.systemId).filter(p=>p.id!==choice.systemId&&p.id!==choice.glassId&&!choice.extras.some(e=>e.id===p.id)&&(!isShutterBox(p)||choice.extras.some(e=>catalog.some(c=>c.id===e.id&&isRollerShutter(c))))&&(!isRollerShutter(p)||!choice.extras.some(e=>catalog.some(c=>c.id===e.id&&isRollerShutter(c))))).map(p=><option key={p.id} value={p.id}>{term(p.name)} · {rateLabel(p)}</option>)}</select></label>
-      {choice.extras.map(extra=>{const p=catalog.find(p=>p.id===extra.id);const maximumMotorPrice=Math.floor(Number.MAX_SAFE_INTEGER/(opening.quantity??1));const invalidMotorPrice=p&&isRollerShutter(p)&&(!Number.isSafeInteger(extra.motorPrice)||(extra.motorPrice??0)<1||(extra.motorPrice??0)>maximumMotorPrice);return <div key={extra.id} className="mt-3 flex flex-wrap items-center gap-3 rounded-md bg-slate-50 p-3">
-       <span className="w-full min-w-0 text-sm sm:w-auto sm:flex-1">{term(p?.name??'Unavailable item')}{p&&isRollerShutter(p)?<span className="block text-xs text-slate-500">{term('Shutter area: {area} m² · {price} per m²',{area:formatNumber(area*(opening.quantity??1)),price:formatMoney(p.unit_price)})}</span>:p?.unit==='sqm'&&<span className="block text-xs text-slate-500">{term(minimumApplied?'Uses this opening’s billable area':'Uses this opening’s area')}</span>}</span>
+      {choice.extras.map(extra=>{const p=catalog.find(p=>p.id===extra.id);const extraRate=effectiveLine?.extras.find(charge=>charge.id===extra.id)?.rate??p?.unit_price;const maximumMotorPrice=Math.floor(Number.MAX_SAFE_INTEGER/(opening.quantity??1));const invalidMotorPrice=p&&isRollerShutter(p)&&(!Number.isSafeInteger(extra.motorPrice)||(extra.motorPrice??0)<1||(extra.motorPrice??0)>maximumMotorPrice);return <div key={extra.id} className="mt-3 flex flex-wrap items-center gap-3 rounded-md bg-slate-50 p-3">
+       <span className="w-full min-w-0 text-sm sm:w-auto sm:flex-1">{term(p?.name??'Unavailable item')}{p&&isRollerShutter(p)?<span className="block text-xs text-slate-500">{term('Shutter area: {area} m² · {price} per m²',{area:formatNumber(area*(opening.quantity??1)),price:formatMoney(extraRate??p.unit_price)})}</span>:p?.unit==='sqm'&&<span className="block text-xs text-slate-500">{term(minimumApplied?'Uses this opening’s billable area':'Uses this opening’s area')}</span>}</span>
        {p&&isShutterBox(p)&&<p className="w-full text-xs text-slate-500">{term('Optional with roller shutters when the structure has no concealed shutter recess.')}</p>}
        {p?.unit!=='sqm'&&(!p||!isRollerShutter(p))&&<label className="text-xs">{term(quantityLabel(p?.unit))}<input aria-label={term('{name} quantity',{name:term(p?.name)})} type="number" min={p?.unit==='item'?1:0.01} max="1000000" step={p?.unit==='item'?1:0.01} value={extra.quantity||''} className={`${field} max-w-28`} onChange={e=>edit(opening.id,{extras:choice.extras.map(x=>x.id===extra.id?{...x,quantity:Number(e.target.value)}:x)})}/></label>}
        <button type="button" className="min-h-11 px-3 text-sm text-red-700" onClick={()=>edit(opening.id,{extras:choice.extras.filter(x=>x.id!==extra.id&&!(p&&isRollerShutter(p)&&catalog.some(c=>c.id===x.id&&isShutterBox(c))))})}>{term("Remove")}</button>
@@ -283,9 +344,9 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     })}</ul>
    </section>}
    {data.openings.some(o=>o.opening_type==='Skylight')&&<p className="rounded-lg bg-blue-50 p-4 text-sm">{term('Skylights are priced separately in the calculator and are not included in this quotation.')} <Link href="/skylight" className="font-semibold underline">{term('Open skylight calculator')}</Link> · <Link href={`/initial-measurements/${projectId}`} className="font-semibold underline">{term('View skylight photos and drawings')}</Link></p>}
-   {addingOpening?<QuotationOpeningForm onAdd={addOpening} onCancel={()=>setAddingOpening(false)}/>:<button type="button" disabled={newOpenings.length>=100||addingFacade} onClick={()=>setAddingOpening(true)} className={secondary}>{term("+ Add opening")}</button>}
+   {addingOpening?<QuotationOpeningForm onAdd={addOpening} onCancel={()=>setAddingOpening(false)}/>:<button type="button" disabled={newOpenings.length>=100||addingFacade||!!editingSizeId} onClick={()=>setAddingOpening(true)} className={secondary}>{term("+ Add opening")}</button>}
    {(data.project.building_type==='commercial_building'||facades.length>0)&&<section className={card} aria-label={term('Recorded facade dimensions')}>
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Recorded facade dimensions')}</h2>{!addingFacade&&<button type="button" disabled={newOpenings.length>=100||facades.length>=1000||addingOpening} onClick={()=>setAddingFacade(true)} className={secondary}>{term('+ Add facade')}</button>}</div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{term('Recorded facade dimensions')}</h2>{!addingFacade&&<button type="button" disabled={newOpenings.length>=100||facades.length>=1000||addingOpening||!!editingSizeId} onClick={()=>setAddingFacade(true)} className={secondary}>{term('+ Add facade')}</button>}</div>
     {!!facades.length&&<table className="mt-3 w-full table-fixed text-start text-sm"><thead><tr>{['Facade','Width (cm)','Length (cm)'].map(label=><th key={label} className="py-2 text-start">{term(label)}</th>)}<th className="w-14"><span className="sr-only">{term('Actions')}</span></th></tr></thead><tbody>{facades.map(facade=>{
      const isNew=newOpenings.some(opening=>opening.id===facade.id);
      return <tr key={facade.id} className="border-t border-slate-200"><th scope="row" className="break-words py-3 text-start">{term('Facade {number}',{number:String(facade.facade_number)})}{isNew&&<span className="block text-xs font-normal text-slate-500">{term('Not saved yet')}</span>}</th><td className="break-words">{formatNumber(facade.width)}</td><td className="break-words">{formatNumber(facade.height)}</td><td>{isNew&&<button type="button" aria-label={term('Remove new facade {number}',{number:String(facade.facade_number)})} className="min-h-11 px-1 text-xs font-semibold text-red-700" onClick={()=>setNewOpenings(rows=>rows.filter(opening=>opening.id!==facade.id))}>{term('Remove')}</button>}</td></tr>;
@@ -294,14 +355,16 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     <p className="mt-3 text-sm leading-6 text-slate-600">{term(newOpenings.some(opening=>opening.structuralType==='Facade')?'To include new facades in a service price, use its Use recorded facade dimensions button below.':'Choose a facade service below to price the recorded areas.')}</p>
     {['new_lead','ready_for_quotation'].includes(data.project.sales_status??'')&&!data.project.additional_openings_state&&<Link href={`/initial-measurements/${projectId}`} className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-blue-700 underline print:hidden">{term('Review measurements')}</Link>}
    </section>}
-   <StandaloneItems recordedAreas={recordedFacadeAreas(measured)} focusRequest={productPickerRequest} items={additionalItems} catalog={catalog} onChange={setAdditionalItems}/>
+   <StandaloneItems recordedAreas={recordedFacadeAreas(measured)} focusRequest={productPickerRequest} items={additionalItems} catalog={catalog} onChange={setAdditionalItems} pricingPolicy={pricingPolicy}/>
    <div id={`quotation-save-${projectId}`} tabIndex={-1} role="region" aria-label={term('Save quotation')} className={`${card} scroll-mt-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700`}>
     <div className="flex flex-wrap justify-between gap-3"><div><p className="text-sm font-semibold">{flow?term("Revised total"):term("Quotation total")}</p>{flow&&<p className="mt-1 text-xs text-slate-500">{term("Currently saved:")} {formatMoney(flow.quotation.total)}</p>}</div><p className="text-xl font-semibold" aria-label={term("Draft total")}>{draftTotal===undefined?term("Complete selections"):formatMoney(draftTotal)}</p></div>
     {pricingError&&<p role="status" className="mt-3 text-sm text-amber-800">{errorMessage(pricingError)}</p>}
     {hasUnappliedGroupRates&&<p role="status" className="mt-3 text-sm text-amber-800">{term('Apply the group prices or clear those fields before saving.')}</p>}
     {flow?.stage==='contract'&&<label className="mt-5 flex items-start gap-3 rounded-md bg-amber-50 p-4 text-sm leading-6 text-amber-900"><input type="checkbox" checked={replaceContract} onChange={e=>setReplaceContract(e.target.checked)} className="mt-1"/>{term("Replace the unsigned contract. The previous document will be kept in history, and the revised quotation must be approved before a new contract can be generated.")}</label>}
-    <div className="mt-5 flex flex-wrap gap-3"><button disabled={draftTotal===undefined||hasUnappliedGroupRates||addingOpening||addingFacade||(flow?.stage==='contract'&&!replaceContract)} onClick={()=>void act('save')} className={button}>{busy?term("Saving…"):flow?term("Save revised quotation"):term("Generate quotation")}</button>{flow&&<button className={secondary} onClick={()=>void cancel()}>{term("Cancel changes")}</button>}</div>
+    {!!openingSizeChanges.length&&<p role="status" className="mt-3 text-sm leading-6 text-amber-900">{term('Saving also updates the current opening dimensions. Previous measurements and documents remain in history, and client approval is required again.')}</p>}
+    <div className="mt-5 flex flex-wrap gap-3"><button disabled={draftTotal===undefined||hasUnappliedGroupRates||addingOpening||addingFacade||!!editingSizeId||(flow?.stage==='contract'&&!replaceContract)} onClick={()=>void act('save')} className={button}>{busy?term("Saving…"):flow?term("Save revised quotation"):term("Generate quotation")}</button>{flow&&<button className={secondary} onClick={()=>void cancel()}>{term("Cancel changes")}</button>}</div>
     {(addingOpening||addingFacade)&&<p className="mt-3 text-sm text-slate-500">{term(addingFacade?'Add or cancel the facade form before saving.':'Add or cancel the opening form before saving.')}</p>}
+    {editingSizeId&&<p className="mt-3 text-sm text-slate-600">{term('Apply or cancel the size edit before saving the quotation.')}</p>}
    </div>
   </fieldset>:null}
   {flow&&<section className="mt-6">
@@ -359,6 +422,20 @@ function QuoteEditor({data,projectId,reload,clearActionError}:{data:QuoteData;pr
     </section>}
     {!editing&&!busy&&!pricePreview&&!discountChanged&&flow.contract&&<Link href={`/contract/${projectId}`} className={button}>{term("Open contract →")}</Link>}
    </div>
+  </section>}
+  {(!!data.sizeHistory?.length||!!data.sizeHistoryError)&&<section aria-label={term('Opening size history')} className={`${card} mt-6 print:hidden`}>
+   <h2 className="font-semibold text-slate-900">{term('Opening size history')}</h2>
+   <p className="mt-2 text-sm leading-6 text-slate-600">{term('Original and revised dimensions are kept with the employee, date, and reason for each change.')}</p>
+   {data.sizeHistoryError&&<p role="status" className="mt-3 text-sm text-amber-900">{errorMessage(data.sizeHistoryError)}</p>}
+   <ol className="mt-4 divide-y divide-slate-200">{data.sizeHistory?.map(entry=>{
+    const openingNumber=allOpenings.findIndex(opening=>opening.id===entry.opening_id);
+    return <li key={entry.id} className="space-y-2 py-4 text-sm leading-6 text-slate-700">
+     <p className="font-semibold text-slate-900">{openingNumber>=0?term('Opening {number}',{number:formatNumber(openingNumber+1)}):term('Opening')} · <bdi dir="ltr">{formatNumber(Number(entry.previous_width))} × {formatNumber(Number(entry.previous_height))} → {formatNumber(Number(entry.width))} × {formatNumber(Number(entry.height))}</bdi> {term('cm')}</p>
+     <p>{term('Openings affected: {count}',{count:formatNumber(entry.quantity)})} · {term('Revision {number}',{number:formatNumber(entry.quotation_version)})}</p>
+     <p className="whitespace-pre-wrap break-words">{term('Reason')}: {entry.reason}</p>
+     <p className="text-xs text-slate-600">{entry.changed_by_name??term('Employee')} · {formatDateTime(entry.changed_at)}</p>
+    </li>;
+   })}</ol>
   </section>}
  </>;
 }

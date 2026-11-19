@@ -19,6 +19,7 @@ function load(path,dependencies={}) {
 const catalogRules=load('../src/lib/workflow/catalogRules.ts');
 const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':catalogRules});
 const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules,'./alumexModels':alumexModels});
+const openingSizeChanges=load('../src/lib/workflow/openingSizeChanges.ts',{'./pricing':pricing});
 const groupRates=load('../src/lib/quotations/groupRates.ts',{'@/lib/workflow/pricing':pricing,'@/lib/workflow/catalogRules':catalogRules});
 const itemGroups=load('../src/lib/quotations/itemGroups.ts',{'../workflow/catalogRules':catalogRules,'@/lib/workflow/catalogRules':catalogRules});
 const messages=Object.fromEntries(['en','ar'].map(locale=>[locale,JSON.parse(readFileSync(new URL(`../messages/${locale}.json`,import.meta.url),'utf8'))]));
@@ -60,7 +61,7 @@ function i18n(locale) {
 }
 function components(locale) {
  const translations=i18n(locale);
- const shared={'react':React,'react/jsx-runtime':jsxRuntime,'@/components/i18n/I18nProvider':{useI18n:()=>translations},'@/lib/workflow/pricing':pricing};
+ const shared={'react':React,'react/jsx-runtime':jsxRuntime,'@/components/i18n/I18nProvider':{useI18n:()=>translations},'@/lib/workflow/pricing':pricing,'@/lib/workflow/openingSizeChanges':openingSizeChanges};
  const indicators=load('../src/components/workflow/OpeningAreaIndicator.tsx',shared);
  const document=load('../src/components/workflow/CommercialDocument.tsx',{...shared,'@/lib/quotations/itemGroups':itemGroups,'./OpeningAreaIndicator':indicators});
  return {translations,shared,indicators,document};
@@ -126,7 +127,7 @@ for(const locale of ['en','ar'])for(const discount of [0,5])test(`${locale} acti
   const {QuotationWorkspace}=load('../src/components/workflow/QuotationWorkspace.tsx',{
    ...shared,'next/link':({children,href})=>React.createElement('a',{href},children),'@/lib/workflow/catalogRules':catalogRules,'@/lib/quotations/groupRates':groupRates,'@/lib/workflow/alumexModels':alumexModels,'@/components/contracts/ContractPaymentPreview':{ContractPaymentPreview:empty},
    '@/lib/workflow/quotationOpenings':{quotationOpenings:(existing,added)=>{assert.deepEqual(added,[]);return existing;}},
-   './StandaloneItems':{StandaloneItems:empty},'./AlumexSystemModelField':{AlumexSystemModelField:empty},'./CurtainWallGlassTypeField':load('../src/components/workflow/CurtainWallGlassTypeField.tsx',{...shared,'./ui':{field:'field'}}),'./CurtainWallArchOption':{CurtainWallArchOption:empty},'@/components/measurements/MeasurementReports':{MeasurementReports:empty},'./ProjectRecord':{ProjectRecord:empty},'./QuotationOpeningForm':{QuotationOpeningForm:empty},'./QuotationFacadeForm':{QuotationFacadeForm:empty},'./OpeningAreaIndicator':indicators,'./CommercialDocument':document,
+   './OpeningSizeEditor':{OpeningSizeEditor:empty},'./StandaloneItems':{StandaloneItems:empty},'./AlumexSystemModelField':{AlumexSystemModelField:empty},'./CurtainWallGlassTypeField':load('../src/components/workflow/CurtainWallGlassTypeField.tsx',{...shared,'./ui':{field:'field'}}),'./CurtainWallArchOption':{CurtainWallArchOption:empty},'@/components/measurements/MeasurementReports':{MeasurementReports:empty},'./ProjectRecord':{ProjectRecord:empty},'./QuotationOpeningForm':{QuotationOpeningForm:empty},'./QuotationFacadeForm':{QuotationFacadeForm:empty},'./OpeningAreaIndicator':indicators,'./CommercialDocument':document,
    './ui':{button:'button',card:'card',field:'field',secondary:'secondary',Notice:empty,Workspace:({children})=>React.createElement('main',null,children),useResource:()=>({data,loading:false,error:'',reload:()=>{throw Error('Rendering must not write or fetch data');}}),api:()=>{throw Error('Rendering must not write or fetch data');}},
   });
   return renderToStaticMarkup(React.createElement(QuotationWorkspace,{projectId:'project-fixture'}));

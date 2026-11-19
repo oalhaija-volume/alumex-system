@@ -7,6 +7,10 @@ function load(path,deps={}){
  const exports={};new Function('require','exports',source)(name=>{if(name==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts',{});if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');assert.ok(name in deps,name);return deps[name];},exports);return exports;
 }
 const permissions=load('../src/lib/auth/permissions.ts');
+const catalogRules=load('../src/lib/workflow/catalogRules.ts');
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':catalogRules});
+const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules,'./alumexModels':alumexModels});
+const openingSizeChanges=load('../src/lib/workflow/openingSizeChanges.ts',{'./pricing':pricing});
 const stages=load('../src/lib/workflow/stages.ts');
 const json={NextResponse:{json:(body,options)=>({body,status:options?.status??200})}};
 const id='11111111-1111-4111-8111-111111111111';
@@ -21,7 +25,7 @@ for(const owner of ['creator','assigned'])test(`Outdoor Sales ${owner} cannot ca
   'next/server':json,'@/lib/auth/adminServer':{requireRole:async()=>({ok:true,role:'Outdoor Sales',user:{id:owner}})},
   '@/lib/supabase/config':{hasSupabaseServiceRoleKey:()=>true},'@/lib/supabase/admin':{createAdminClient:()=>{reads++;throw Error('Forbidden database access');}},
  });
- const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':access,'@/lib/contracts/uploadedTerms':{},'@/lib/workflow/pricing':{},'@/lib/workflow/quotationOpenings':{}});
+ const route=load('../src/app/api/sales-flow/[projectId]/route.ts',{'next/server':json,'@/lib/workflow/access':access,'@/lib/contracts/uploadedTerms':{},'@/lib/workflow/pricing':{},'@/lib/workflow/quotationOpenings':{},'@/lib/workflow/openingSizeChanges':openingSizeChanges});
  const context={params:Promise.resolve({projectId:id})};
  assert.equal((await route.GET(new Request('https://example.test'),context)).status,403);
  for(const action of ['save','approve','contract','sign']){

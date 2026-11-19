@@ -1,13 +1,13 @@
 import { normalizeCatalogItem } from '@/lib/workflow/catalogRules';
-import { isQuotationCurtainRateEditable, isQuotationSystemRateEditable, QUOTATION_SYSTEM_RATE_MIN, type AdditionalChoice, type CatalogItem, type MeasuredOpening, type OpeningChoice } from '@/lib/workflow/pricing';
+import { isQuotationCurtainRateEditable, isQuotationSystemRateEditable, quotationCurtainMinimumRate, QUOTATION_SYSTEM_RATE_MIN, type AdditionalChoice, type CatalogItem, type MeasuredOpening, type OpeningChoice, type QuotationPricingPolicy } from '@/lib/workflow/pricing';
 
 export type QuotationRateGroupId='sliding'|'hinged'|'curtain-wall';
 export type QuotationRateGroup={id:QuotationRateGroupId;openingIds:string[];additionalItemIds:string[];count:number;rate?:number;minimum:number};
 
-export function quotationRateGroups(openings:MeasuredOpening[],choices:OpeningChoice[],additionalItems:AdditionalChoice[],catalog:CatalogItem[]):QuotationRateGroup[]{
+export function quotationRateGroups(openings:MeasuredOpening[],choices:OpeningChoice[],additionalItems:AdditionalChoice[],catalog:CatalogItem[],pricingPolicy?:QuotationPricingPolicy):QuotationRateGroup[]{
  const products=new Map(catalog.map(product=>[product.id,normalizeCatalogItem(product)]));
  const selections=new Map(choices.map(choice=>[choice.openingId,choice]));
- const groups:QuotationRateGroup[]=['sliding','hinged','curtain-wall'].map(id=>({id:id as QuotationRateGroupId,openingIds:[],additionalItemIds:[],count:0,minimum:QUOTATION_SYSTEM_RATE_MIN}));
+ const groups:QuotationRateGroup[]=['sliding','hinged','curtain-wall'].map(id=>({id:id as QuotationRateGroupId,openingIds:[],additionalItemIds:[],count:0,minimum:id==='curtain-wall'?quotationCurtainMinimumRate(pricingPolicy):QUOTATION_SYSTEM_RATE_MIN}));
  const rates=new Map<QuotationRateGroupId,number[]>();
  function add(group:QuotationRateGroup,rate:number){group.count++;const values=rates.get(group.id)??[];values.push(rate);rates.set(group.id,values);}
  for(const opening of openings){
@@ -33,8 +33,8 @@ export function quotationRateGroups(openings:MeasuredOpening[],choices:OpeningCh
  return groups;
 }
 
-export function applyQuotationGroupRate(groupId:QuotationRateGroupId,rate:number,openings:MeasuredOpening[],choices:OpeningChoice[],additionalItems:AdditionalChoice[],catalog:CatalogItem[]):{choices:OpeningChoice[];additionalItems:AdditionalChoice[]}{
- const group=quotationRateGroups(openings,choices,additionalItems,catalog).find(group=>group.id===groupId);
+export function applyQuotationGroupRate(groupId:QuotationRateGroupId,rate:number,openings:MeasuredOpening[],choices:OpeningChoice[],additionalItems:AdditionalChoice[],catalog:CatalogItem[],pricingPolicy?:QuotationPricingPolicy):{choices:OpeningChoice[];additionalItems:AdditionalChoice[]}{
+ const group=quotationRateGroups(openings,choices,additionalItems,catalog,pricingPolicy).find(group=>group.id===groupId);
  if(!group)throw new Error('Choose a valid quotation rate group.');
  if(!Number.isSafeInteger(rate)||rate<group.minimum)throw new Error(`Enter ${groupId==='curtain-wall'?'a Curtain Wall':'an Alumex system'} rate of at least ${group.minimum.toLocaleString('en-US')} IQD, using whole IQD.`);
  const openingIds=new Set(group.openingIds),additionalItemIds=new Set(group.additionalItemIds);

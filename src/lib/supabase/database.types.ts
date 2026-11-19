@@ -92,6 +92,12 @@ export type Database = {
         | "document";
     };
     Tables: {
+      opening_size_history: {
+        Row: {id:string;project_id:string;opening_id:string;source_opening_id:string;previous_width:number;previous_height:number;previous_quantity:number;width:number;height:number;quantity:number;reason:string;changed_by:string;changed_at:string;quotation_version:number};
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       measurement_completion_reports: {
         Row: {id:string;project_id:string;note:string;photo:string|null;has_photo:boolean;recorded_by:string|null;recorded_by_name:string;recorded_at:string};
         Insert: {id:string;project_id:string;note?:string;photo?:string|null;recorded_by?:string|null;recorded_by_name:string;recorded_at:string};
@@ -1523,6 +1529,7 @@ export type Database = {
       sync_field_change: { Args: { p_operation: string; p_actor: string; p_project: string; p_action: string; p_payload: Json; p_recorded_at: string; p_expected_updated_at: string | null }; Returns: Json };
       commercial_privacy_ready: { Args: Record<string, never>; Returns: boolean };
       advance_sales_flow: { Args: { p_project: string; p_action: string; p_revision: number; p_payload: Json; p_actor: string }; Returns: Database["public"]["Tables"]["sales_workflows"]["Row"] };
+      save_quotation_with_opening_sizes: { Args: { p_project: string; p_revision: number; p_payload: Json; p_actor: string }; Returns: Database["public"]["Tables"]["sales_workflows"]["Row"] };
       delete_projects_as_admin: {
         Args: {
           target_project_ids: string[];

@@ -13,6 +13,11 @@ function load(path,dependencies={}) {
  return exports;
 }
 
+const catalogRules=load('../src/lib/workflow/catalogRules.ts');
+const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':catalogRules});
+const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules,'./alumexModels':alumexModels});
+const openingSizeChanges=load('../src/lib/workflow/openingSizeChanges.ts',{'./pricing':pricing});
+
 const projectId='153aa1d1-b650-40b1-8fc1-d1bd45ab224f';
 const project={id:projectId,project_number:'PRJ-202611-0008',sales_status:'contract_generated',branch:'Karkh',additional_openings_state:null};
 const quotation={version:2,lines:[],additionalItems:[],total:25710534,currency:'IQD',preparedBy:'quote-creator',createdAt:'2026-11-01T09:00:00Z'};
@@ -41,7 +46,7 @@ function setup({flow=savedFlow,projectPatch={},denied=null,rpcError=null,rpcThro
    assert.equal(id,projectId);assert.equal(scope,'commercial');
    return denied?{response:denied}:{admin,auth:{role:'Indoor Sales',user:{id:'recording-employee'}},project:site};
   }},
-  '@/lib/workflow/pricing':{},'@/lib/workflow/quotationOpenings':{},
+  '@/lib/workflow/pricing':{},'@/lib/workflow/quotationOpenings':{},'@/lib/workflow/openingSizeChanges':openingSizeChanges,
  });
  const submitRaw=body=>route.POST(new Request('http://localhost:3003/api/sales-flow/'+projectId,{
   method:'POST',headers:{'Content-Type':'application/json'},body,

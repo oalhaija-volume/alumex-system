@@ -151,10 +151,15 @@ export async function POST(request:Request,context:Context){
     if(creator.data.branch!=='Karkh'&&creator.data.branch!=='Rasafa'&&creator.data.branch!=='Najaf')throw new Error('Ask Admin to assign your branch before generating a contract.');
     branch=creator.data.branch;
    }
+   const [{formatWorkflowContractNumber},{effectiveProjectBranch}]=await Promise.all([
+    import('@/lib/contracts/numbering'),import('@/lib/auth/projectBranchAccess')
+   ]);
+   const numberBranch=auth.role==='Indoor Sales'||auth.role==='Sales Manager'?branch:effectiveProjectBranch(project);
+   const number=formatWorkflowContractNumber(numberBranch,project.project_number,revision as number);
    const {loadAgreement2027Snapshot,agreement2027Terms}=await import('@/lib/contracts/agreement2027Server');
    const agreement2027=await loadAgreement2027Snapshot(admin,projectId,flow.quotation,kind,auth.user.id);
    const client={name:agreement2027.fields.clientLegalName,mobile:agreement2027.fields.directPhone||null,client_type:agreement2027.fields.clientClassification==='شركة'?'company':'individual'};
-   payload={number:`CT-${project.project_number}-${revision}`,createdAt:new Date().toISOString(),createdBy:auth.user.id,branch,client,project:{branch:project.branch,governorate:project.governorate??null,name:project.project_name,number:project.project_number,address:project.address},terms:agreement2027Terms(kind),template:kind,agreement2027} as unknown as Json;
+   payload={number,createdAt:new Date().toISOString(),createdBy:auth.user.id,branch,client,project:{branch:project.branch,governorate:project.governorate??null,name:project.project_name,number:project.project_number,address:project.address},terms:agreement2027Terms(kind),template:kind,agreement2027} as unknown as Json;
   }
   if(action==='sign'){
    if(flow?.stage!=='contract')throw new Error('Only an unsigned generated contract can be signed.');

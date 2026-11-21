@@ -83,7 +83,7 @@ function Specifications({ contract, agreement }: { contract: ContractSnapshot; a
  const specs = new Map(agreement.openingSpecifications.map(spec => [spec.openingId, spec]));
  return <section data-agreement-section="specifications" className="my-5 space-y-4">
   <p className="leading-8">تُعتمد المقاطع والمنتجات والمواصفات المختارة والأسعار الفعلية في عرض السعر المعتمد المرفق بهذا العقد، بما في ذلك جميع الإضافات المشمولة فيه.</p>
-  <OpeningSchedule quote={contract.quotation} />
+  <OpeningSchedule quote={contract.quotation} areaBasis="billable" />
   {!!agreement.openingSpecifications.length && <section><h4 className="mb-3 font-semibold">تفاصيل المواصفات والمخططات لكل فقرة</h4><div className="grid gap-3 sm:grid-cols-2">{contract.quotation.lines.map((line, index) => {
    const spec = specs.get(line.opening.id);
    return <section key={line.opening.id} className="min-w-0 space-y-2 rounded border border-slate-200 p-3 text-xs leading-7 print:break-inside-avoid"><h5 className="font-semibold">الفقرة {index + 1}: <bdi dir="ltr">{alumexSystemLabel(line.system.name,line.systemModel)}</bdi></h5>{spec?.technicalDescription && <p className="whitespace-pre-wrap">{spec.technicalDescription}</p>}<p>لون الألمنيوم: {value(spec?.aluminumColor)}</p><p>لون الزجاج: {value(spec?.glassColor)}</p><p>الإطار الأرضي / عتب الباب: {value(spec?.bottomFrame)}</p><p className="whitespace-pre-wrap">ملاحظات: {value(spec?.notes)}</p></section>;

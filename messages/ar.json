@@ -1278,6 +1278,7 @@
     "generating": "جاري الإنشاء..."
   },
   "terms": {
+    "Billable area": "المساحة المحتسبة للتسعير",
     "The saved quotation pricing authorization is invalid.": "التخويل المحفوظ لتسعير عرض السعر غير صالح.",
     "Enter a Curtain Wall rate of at least 210,000 IQD, using whole IQD.": "أدخل سعر الكيرتن لا يقل عن 210,000 د.ع، بأعداد صحيحة دون كسور.",
     "Complete the quotation selections to preview the revised prices.": "أكمل اختيارات عرض السعر لمعاينة الأسعار المعدّلة.",

@@ -36,7 +36,7 @@ test.beforeAll(async () => {
   }, (error: Error | null, stats: Stats) => error ? reject(error) : stats.hasErrors() ? reject(new Error(stats.toString({ all: false, errors: true }))) : accept()));
 });
 
-for (const locale of ['en', 'ar'] as const) for (const clientType of ['individual', 'company'] as const) for (const kind of ['residential', 'commercial'] as const) for (const total of [1_000_001, 20_000_001]) {
+for (const locale of ['en', 'ar'] as const) for (const clientType of ['individual', 'company'] as const) for (const kind of ['residential', 'commercial'] as const) for (const total of [1_000_001, 15_000_000, 20_000_001]) {
   test(`${locale}: ${clientType} client explicitly chooses ${kind} with approved total ${total}`, async ({ page, context, request }) => {
     const messages = locale === 'en' ? en : ar;
     const term = (key: string) => (messages.terms as Record<string, string>)[key] ?? key;
@@ -48,6 +48,7 @@ for (const locale of ['en', 'ar'] as const) for (const clientType of ['individua
     const client = { name: 'Approved client', mobile: '07700000000', client_type: clientType };
     const project = { id: projectId, project_name: 'Contract choice fixture', project_number: 'PRJ-CONTRACT-CHOICE', address: 'Saved project address', branch: 'Karkh' as const, sales_status: 'quotation_approved', structure_readiness: 'ready', created_by: actor.id, registeredBy: actor.name, created_at: '2026-11-15T09:00:00Z', updated_at: '2026-11-16T09:00:00Z' };
     let flow: SalesFlow = { project_id: projectId, revision: 3, stage: 'approved', quotation: structuredClone(quotation), contract: null, signed_at: null, evidence: null };
+    let approvedRevision = 3;
     const posts: { action: string; revision: number; template: 'residential' | 'commercial' }[] = [];
     const errors: string[] = [], unexpected: string[] = [];
     const login = await request.get('/login'); expect(login.status()).toBe(200);
@@ -61,12 +62,12 @@ for (const locale of ['en', 'ar'] as const) for (const clientType of ['individua
       if (url.pathname === '/qa/contract-generation-payments.js') return route.fulfill({ contentType: 'text/javascript', body: readFileSync(resolve(output, 'component.js')) });
       if (url.pathname === endpoint && req.method() === 'POST') {
         const body = req.postDataJSON();
-        assert.deepEqual(body, { action: 'contract', revision: 3, template: kind });
+        assert.deepEqual(body, { action: 'contract', revision: approvedRevision, template: kind });
         assert.equal(flow.stage, 'approved');
         const fields = emptyAgreement2027Fields();
         fields.clientLegalName = client.name; fields.directPhone = client.mobile; fields.clientClassification = clientType === 'company' ? 'شركة' : 'فرد';
-        const contract: ContractSnapshot = { number: 'CT-PRJ-CONTRACT-CHOICE-3', createdAt: '2026-11-16T10:00:00Z', createdBy: actor.id, template: body.template, branch: 'Karkh', client: structuredClone(client), project: { name: project.project_name, number: project.project_number, address: project.address, branch: project.branch }, quotation: structuredClone(flow.quotation), terms: agreement2027Terms(body.template), agreement2027: buildAgreement2027Snapshot(flow.quotation, body.template, fields) };
-        flow = { ...flow, revision: 4, stage: 'contract', contract }; project.sales_status = 'contract_generated'; posts.push(body);
+        const contract: ContractSnapshot = { number: `CT-PRJ-CONTRACT-CHOICE-${approvedRevision}`, createdAt: '2026-11-16T10:00:00Z', createdBy: actor.id, template: body.template, branch: 'Karkh', client: structuredClone(client), project: { name: project.project_name, number: project.project_number, address: project.address, branch: project.branch }, quotation: structuredClone(flow.quotation), terms: agreement2027Terms(body.template), agreement2027: buildAgreement2027Snapshot(flow.quotation, body.template, fields) };
+        flow = { ...flow, revision: approvedRevision + 1, stage: 'contract', contract }; project.sales_status = 'contract_generated'; posts.push(body);
         return route.fulfill({ json: { flow } });
       }
       if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method())) { unexpected.push(req.method() + ' ' + url.pathname); return route.fulfill({ status: 405, json: { error: 'Unexpected business write blocked' } }); }
@@ -87,13 +88,15 @@ for (const locale of ['en', 'ar'] as const) for (const clientType of ['individua
     await expect(preview).toHaveCount(0);
     await expect(select.locator('option')).toHaveText([term('Choose contract type'), term('Residential contract'), term('Commercial contract')]);
     expect(posts).toHaveLength(0);
-    // Both choices are independent of whether this client is a person/company.
+    // A client's individual/company classification never chooses the contract.
     const alternate = kind === 'residential' ? 'commercial' : 'residential';
     await select.selectOption(alternate); await expect(preview).toBeVisible(); await expect(generate).toBeEnabled();
+    await expect(preview.locator('[data-contract-payment-stage]')).toHaveCount(agreement2027PaymentSchedule(total, alternate).length);
     await select.selectOption(''); await expect(preview).toHaveCount(0); await expect(generate).toBeDisabled();
     await select.selectOption(kind);
     const stages = agreement2027PaymentSchedule(quotation.total, kind);
     expect(stages.map(stage => stage.percent)).toEqual(kind === 'residential' ? [50, 50] : total < 15000000 ? [100] : [25, 25, 25, 15, 10]);
+    expect(stages.reduce((sum, stage) => sum + stage.amount, 0)).toBe(total);
     await expect(preview).toContainText(money(total));
     await expect(preview.locator('[data-contract-payment-stage]')).toHaveCount(stages.length);
     for (const stage of stages) {
@@ -103,25 +106,43 @@ for (const locale of ['en', 'ar'] as const) for (const clientType of ['individua
     }
     await expect(preview.getByText(term('Commercial contracts below 15,000,000 IQD require 100% at signing.'), { exact: true })).toHaveCount(kind === 'commercial' && total < 15000000 ? 1 : 0);
     if (locale === 'en') expect(await preview.textContent()).not.toMatch(/[\u0600-\u06ff]/);
+    if (clientType === 'company' && kind === 'commercial' && total === 15_000_000) {
+      // Reopening a newer approval requires a fresh decision. Quotation pages
+      // fetch on load rather than polling when the browser regains focus.
+      approvedRevision = 4;
+      flow = { ...flow, revision: approvedRevision };
+      await page.reload();
+      await expect(select).toHaveValue(''); await expect(generate).toBeDisabled();
+      await expect(preview).toHaveCount(0);
+      await select.selectOption(kind);
+      await expect(preview.locator('[data-contract-payment-stage]')).toHaveCount(stages.length);
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await generation.screenshot({ path: test.info().outputPath('before-generation-payment-preview.png') });
     expect(posts).toHaveLength(0);
     await generate.click();
     await expect(page.getByRole('link', { name: term('Open contract →'), exact: true })).toBeVisible();
-    expect(posts).toEqual([{ action: 'contract', revision: 3, template: kind }]);
+    expect(posts).toEqual([{ action: 'contract', revision: approvedRevision, template: kind }]);
     expect(flow.quotation).toEqual(quotation); expect(flow.contract!.quotation).toEqual(quotation);
     expect(flow.contract!.template).toBe(kind); expect(flow.contract!.client.client_type).toBe(clientType);
     expect(flow.contract!.agreement2027!.paymentSchedule).toEqual(stages);
+    expect(Object.hasOwn(flow.contract!.agreement2027!, 'paymentSchedules')).toBe(false);
+    expect(flow.contract!.terms[2].text).toContain(kind === 'residential' ? 'للمشاريع السكنية' : 'للمشاريع التجارية');
+    expect(flow.contract!.terms[2].text).not.toContain(kind === 'residential' ? 'للمشاريع التجارية' : 'للمشاريع السكنية');
     const saved = structuredClone(flow.contract!);
 
     await page.goto(`/contract/${projectId}`);
     const payments = page.locator('[data-agreement-section="payments"]');
     await expect(payments).toBeVisible();
+    await expect(page.locator('[data-agreement-section="handover"]')).not.toContainText('سكني وتجاري');
+    await expect(payments.getByRole('table')).toHaveCount(1);
     await expect(payments.locator('[data-payment-stage]')).toHaveCount(stages.length);
     for (const stage of stages) {
       const row = payments.locator(`[data-payment-stage="${stage.id}"]`);
       await expect(row).toContainText(`${stage.percent}%`); await expect(row).toContainText(number(stage.amount)); await expect(row).toContainText(stage.trigger);
     }
+    await expect(page.locator('[data-agreement-clause="3"]')).toContainText(kind === 'residential' ? 'للمشاريع السكنية' : 'للمشاريع التجارية');
+    await expect(page.locator('[data-agreement-clause="3"]')).not.toContainText(kind === 'residential' ? 'للمشاريع التجارية' : 'للمشاريع السكنية');
     await payments.screenshot({ path: test.info().outputPath('saved-contract-payment-schedule.png') });
     await page.reload(); await expect(payments).toBeVisible();
     expect(flow.contract).toEqual(saved); expect(flow.quotation.total).toBe(total); expect(posts).toHaveLength(1);

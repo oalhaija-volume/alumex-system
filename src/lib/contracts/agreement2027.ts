@@ -1,4 +1,4 @@
-import { agreement2027PaymentSchedule, arabicDinarAmount, agreement2027Readiness, agreement2027SpecificationNotes } from './agreement2027Content';
+import { agreement2027PaymentSchedule, agreement2027PaymentSchedules, arabicDinarAmount, agreement2027Readiness, agreement2027SpecificationNotes } from './agreement2027Content';
 import { AGREEMENT_2027_VERSION, agreementApprovalRoles, agreementSamples, type Agreement2027Fields, type Agreement2027Snapshot, type AgreementOpeningSpecification } from './agreement2027Types';
 import type { QuoteSnapshot } from '../workflow/pricing';
 import type { ContractSnapshot } from '../workflow/types';
@@ -75,7 +75,14 @@ export function normalizeAgreement2027Fields(value: unknown): Agreement2027Field
 export function isAgreement2027(contract: Pick<ContractSnapshot,'agreement2027'> | null | undefined): contract is ContractSnapshot & {agreement2027:Agreement2027Snapshot} {
  return contract?.agreement2027?.version===AGREEMENT_2027_VERSION;
 }
-export function buildAgreement2027Snapshot(quotation: Pick<QuoteSnapshot,'total'>,kind:'residential'|'commercial',fields: Agreement2027Fields,openingSpecifications: AgreementOpeningSpecification[]=[]): Agreement2027Snapshot {
+export function buildAgreement2027Snapshot(quotation: Pick<QuoteSnapshot,'total'>,kind:'residential'|'commercial'|'unified',fields: Agreement2027Fields,openingSpecifications: AgreementOpeningSpecification[]=[]): Agreement2027Snapshot {
  const normalized=normalizeAgreement2027Fields(fields);
- return {version:AGREEMENT_2027_VERSION,sourceDocument:'عقد اتفاق 2027.pdf',fields:normalized,total:quotation.total,amountInWords:arabicDinarAmount(quotation.total),paymentSchedule:agreement2027PaymentSchedule(quotation.total,kind),openingSpecifications:openingSpecifications.map(specification=>({...specification})),readiness:{measurement:[...agreement2027Readiness.measurement],installation:[...agreement2027Readiness.installation],notes:[...agreement2027Readiness.notes]},specificationNotes:[...agreement2027SpecificationNotes]};
+ return {
+  version:AGREEMENT_2027_VERSION,sourceDocument:'عقد اتفاق 2027.pdf',...(kind==='unified'?{}:{documentLayout:'source-pdf-2027' as const,selectedProductsOnly:true as const,compactLayout:true as const}),fields:normalized,total:quotation.total,amountInWords:arabicDinarAmount(quotation.total),
+  paymentSchedule:kind==='unified'?[]:agreement2027PaymentSchedule(quotation.total,kind),
+  ...(kind==='unified'?{paymentSchedules:agreement2027PaymentSchedules(quotation.total)}:{}),
+  openingSpecifications:openingSpecifications.map(specification=>({...specification})),
+  readiness:{measurement:[...agreement2027Readiness.measurement],installation:[...agreement2027Readiness.installation],notes:[...agreement2027Readiness.notes]},
+  specificationNotes:[...agreement2027SpecificationNotes],
+ };
 }

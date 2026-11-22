@@ -115,8 +115,8 @@ for(const template of ['residential','commercial'])test(`contract generation sav
  const result=await route.POST(new Request('https://example.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'contract',revision:2,template})}),{params:Promise.resolve({projectId:'project'})});
  assert.equal(result.status,200);assert.equal(input.p_payload.template,template);assert.equal(input.p_payload.project.branch,'Rasafa');assert.equal(input.p_payload.branch,'Rasafa');assert.equal(input.p_payload.createdBy,'actor');assert.deepEqual(input.p_payload.terms,agreementContent.agreement2027Terms(template));assert.equal(input.p_payload.agreement2027.total,551000);assert.equal(input.p_payload.agreement2027.version,'agreement-2027');
  const payments=input.p_payload.terms[2].text;
- assert.match(payments,template==='residential'?/للمشاريع السكنية.*50%/s:/للمشاريع التجارية.*25%/s);
- assert.deepEqual(input.p_payload.agreement2027.paymentSchedule.map(stage=>stage.percent),template==='residential'?[50,50]:[100]);
+ assert.match(payments,template==='residential'?/للمشاريع السكنية.*50%/s:/للمشاريع التجارية.*30%/s);
+ assert.deepEqual(input.p_payload.agreement2027.paymentSchedule.map(stage=>stage.percent),[100]);
  assert.equal(Object.hasOwn(input.p_payload.agreement2027,'paymentSchedules'),false);
  assert.ok(input.p_payload.terms.some(x=>x.text.includes('عشرة سنوات')));
 });

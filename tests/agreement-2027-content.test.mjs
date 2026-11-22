@@ -9,22 +9,21 @@ const source = ts.transpileModule(readFileSync(new URL('../src/lib/contracts/agr
 }).outputText;
 const contentExports = {};
 new Function('exports', source)(contentExports);
-const { agreement2027Terms, agreement2027PaymentSchedule, arabicDinarAmount, agreement2027Readiness, agreement2027SpecificationNotes, productTechnicalDescription } = contentExports;
+const { agreement2027Terms, agreement2027PaymentSchedule, agreement2027PaymentSchedules, arabicDinarAmount, agreement2027Readiness, agreement2027SpecificationNotes, productTechnicalDescription } = contentExports;
 
-test('residential contracts always require half at signing and half before installation, including below fifteen million', () => {
- for (const total of [0, 1, 14_999_999, 15_000_000, 25_000_000]) {
+test('residential contracts at or above fifteen million follow the source PDF: half at signing and half when the goods are ready', () => {
+ for (const total of [15_000_000, 25_000_000]) {
   const result = agreement2027PaymentSchedule(total, 'residential');
   assert.deepEqual(result.map(stage => [stage.id, stage.percent]), [['signing', 50], ['before-installation', 50]]);
   assert.equal(result.reduce((sum, stage) => sum + stage.amount, 0), total);
   assert.match(result[0].trigger, /توقيع العقد/);
-  assert.match(result[1].trigger, /قبل المباشرة بأعمال التركيب/);
-  assert.doesNotMatch(result[1].trigger, /جهوزية|سبعة أيام/);
+  assert.match(result[1].trigger, /جهوزية البضاعة.*سبعة أيام/);
  }
 });
 
-test('commercial contracts below fifteen million retain the old whole-amount upfront exception', () => {
-  for (const total of [0, 1, 14_999_999]) {
-   const result = agreement2027PaymentSchedule(total, 'commercial');
+test('the source PDF whole-amount upfront exception applies to either contract type below fifteen million', () => {
+  for (const kind of ['residential', 'commercial']) for (const total of [0, 1, 14_999_999]) {
+   const result = agreement2027PaymentSchedule(total, kind);
    assert.equal(result.length, 1);
    assert.deepEqual({ id: result[0].id, percent: result[0].percent, amount: result[0].amount }, { id: 'signing', percent: 100, amount: total });
    assert.match(result[0].trigger, /توقيع العقد/);
@@ -34,8 +33,8 @@ test('commercial contracts below fifteen million retain the old whole-amount upf
 test('fifteen million exactly follows the selected residential or restored commercial schedule', () => {
  assert.deepEqual(agreement2027PaymentSchedule(15_000_000, 'residential').map(stage => [stage.percent, stage.amount]), [[50, 7_500_000], [50, 7_500_000]]);
  assert.deepEqual(agreement2027PaymentSchedule(15_000_000, 'commercial').map(stage => [stage.id, stage.percent, stage.amount]), [
-  ['signing', 25, 3_750_000], ['profiles-delivered', 25, 3_750_000], ['profiles-installed', 25, 3_750_000],
-  ['glass-delivered', 15, 2_250_000], ['before-finishing', 10, 1_500_000],
+  ['signing', 30, 4_500_000], ['profiles-delivered', 20, 3_000_000], ['profiles-installed', 10, 1_500_000],
+  ['glass-delivered', 20, 3_000_000], ['glass-installed', 15, 2_250_000], ['before-finishing', 5, 750_000],
  ]);
 });
 
@@ -49,29 +48,64 @@ test('whole-IQD installments reconcile to the approved amount, including roundin
   }
  }
  assert.deepEqual(agreement2027PaymentSchedule(15_000_001, 'residential').map(stage => stage.amount), [7_500_001, 7_500_000]);
- assert.equal(agreement2027PaymentSchedule(15_000_001, 'commercial').at(-1).amount, 1_500_001);
+ assert.equal(agreement2027PaymentSchedule(15_000_001, 'commercial').at(-1).amount, 750_001);
 });
 
-test('commercial milestones match the old contract with glass paid before installation and final payment before finishing', () => {
+test('one agreement includes both existing payment policies without combining their payable amounts', () => {
+ for (const total of [0, 1, 14_999_999, 15_000_000, 25_000_001, Number.MAX_SAFE_INTEGER]) {
+  const schedules = agreement2027PaymentSchedules(total);
+  assert.deepEqual(schedules.map(schedule => schedule.id), ['residential', 'commercial']);
+  assert.match(schedules[0].label, /السكنية/);
+  assert.match(schedules[1].label, /التجارية/);
+  for (const schedule of schedules) {
+   assert.deepEqual(schedule.stages, agreement2027PaymentSchedule(total, schedule.id));
+   assert.equal(schedule.stages.reduce((sum, stage) => sum + stage.percent, 0), 100);
+   assert.equal(schedule.stages.reduce((sum, stage) => sum + BigInt(stage.amount), BigInt(0)), BigInt(total));
+  }
+  assert.deepEqual(schedules[0].stages.map(stage => stage.percent), total < 15_000_000 ? [100] : [50, 50]);
+  assert.deepEqual(schedules[1].stages.map(stage => stage.percent), total < 15_000_000 ? [100] : [30, 20, 10, 20, 15, 5]);
+ }
+});
+
+test('the historical unified terms contain both payment branches and retain the source PDF shared minimum-value note', () => {
+ const terms = agreement2027Terms();
+ assert.deepEqual(terms, agreement2027Terms('unified'));
+ assert.deepEqual(terms, agreement2027Terms(undefined));
+ assert.equal(terms.length, 19);
+ const payments = terms[2].text.split('\n');
+ for (const kind of ['residential', 'commercial']) {
+  const branch = agreement2027Terms(kind)[2].text.split('\n')[1];
+  assert.ok(payments.includes(branch), `The ${kind} payment policy must be retained in full`);
+ }
+ const exception = payments.find(paragraph => paragraph.includes('15,000,000'));
+ assert.match(exception, /100%/);
+ assert.doesNotMatch(exception, /للمشاريع التجارية فقط/);
+ assert.equal(payments.filter(paragraph => paragraph.includes('كفالة')).length, 1);
+ assert.match(terms[2].text, /جهوزية البضاعة.*سبعة أيام/s);
+ assert.match(terms[2].text, /65%.*فواتير إنجاز مرحلية.*سبعة أيام/s);
+ assert.deepEqual(terms.filter((_, index) => index !== 2), agreement2027Terms('residential').filter((_, index) => index !== 2));
+});
+
+test('commercial milestones match all six installments in the source PDF and retain the seven-day invoice period', () => {
  const schedule = agreement2027PaymentSchedule(25_000_000, 'commercial');
- assert.deepEqual(schedule.map(stage => stage.percent), [25, 25, 25, 15, 10]);
+ assert.deepEqual(schedule.map(stage => stage.percent), [30, 20, 10, 20, 15, 5]);
  assert.match(schedule[1].trigger, /توريد بروفيلات الألمنيوم إلى الموقع/);
- assert.match(schedule[2].trigger, /الانتهاء من نصب هيكل بروفيلات الألمنيوم/);
- assert.match(schedule[3].trigger, /توريد الزجاج.*قبل التركيب/);
+ assert.match(schedule[2].trigger, /تركيب شبكة بروفيلات الألمنيوم/);
+ assert.match(schedule[3].trigger, /توريد الزجاج/);
+ assert.match(schedule[4].trigger, /تركيب الزجاج/);
  assert.match(schedule.at(-1).trigger, /قبل التشطيب النهائي.*سلكون.*البرشر.*الكاب/);
- assert.ok(schedule.every(stage => !stage.trigger.includes('سبعة أيام')));
- const original = JSON.parse(readFileSync(new URL('../src/lib/contracts/uploadedTerms.json', import.meta.url), 'utf8')).commercial.find(section => section.title === 'payment terms').text;
- assert.deepEqual([...original.matchAll(/(\d+)%/g)].map(match => Number(match[1])), [25, 25, 25, 15, 100]);
+ assert.ok(schedule.slice(1, 5).every(stage => /سبعة أيام.*المستندات المؤيدة/.test(stage.trigger)));
 });
 
 test('invalid amounts and template kinds cannot produce a financial contract representation', () => {
  for (const value of [-1, -0.5, 1.1, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1, '15000000', null, undefined, true, {}, []]) {
   assert.throws(() => agreement2027PaymentSchedule(value, 'residential'), /whole IQD/);
+  assert.throws(() => agreement2027PaymentSchedules(value), /whole IQD/);
   assert.throws(() => arabicDinarAmount(value), /whole IQD/);
  }
  for (const kind of ['', null, undefined, 'Residential', 'other']) {
   assert.throws(() => agreement2027PaymentSchedule(25_000_000, kind), /contract template/);
-  assert.throws(() => agreement2027Terms(kind), /contract template/);
+  if (kind !== undefined) assert.throws(() => agreement2027Terms(kind), /contract template/);
  }
 });
 
@@ -109,7 +143,7 @@ test('all nineteen source clauses retain the client-first and company-second obl
   assert.match(terms.at(-1).text, /تسعة عشر بنداً/);
   assert.match(terms[2].text, /الفريق الأول.*للفريق الثاني/);
   if (kind === 'commercial') assert.match(terms[2].text, /15,000,000.*100%/s);
-  else assert.doesNotMatch(terms[2].text, /15,000,000|100%|جهوزية البضاعة/);
+  else { assert.match(terms[2].text, /15,000,000.*100%/s); assert.match(terms[2].text, /جهوزية البضاعة/); }
   assert.match(terms[2].text, /كفالة.*عشرة سنوات.*تسديد كافة المستحقات/);
   assert.match(terms[3].text, /عرض السعر المعتمد المرفق بالعقد/);
   assert.match(terms[4].text, /غير قابلة للاسترداد/);
@@ -126,9 +160,9 @@ test('all nineteen source clauses retain the client-first and company-second obl
   assert.match(terms[16].text, /المحاكم العراقية المختصة في العاصمة بغداد/);
   assert.match(terms[17].text, /غير خاضع لأي تخفيض.*عرض سعر جديد.*واتساب.*إيجاب وقبول/s);
  }
- assert.match(agreement2027Terms('commercial')[2].text, /25%.*25%.*25%.*15%.*10%/s);
- assert.match(agreement2027Terms('residential')[2].text, /50%.*توقيع العقد.*50%.*قبل المباشرة بأعمال التركيب/s);
- for (const kind of ['residential', 'commercial']) {
+ assert.match(agreement2027Terms('commercial')[2].text, /30%.*20%.*10%.*20%.*15%.*5%/s);
+ assert.match(agreement2027Terms('residential')[2].text, /50%.*توقيع العقد.*50%.*جهوزية البضاعة.*سبعة أيام/s);
+ for (const kind of ['residential', 'commercial', 'unified']) {
   const unchangedClauses = agreement2027Terms(kind).filter((_, index) => index !== 2);
   assert.equal(createHash('sha256').update(JSON.stringify(unchangedClauses)).digest('hex'), 'e9f32d273716bf73282d02263abe469b6d16718c9d3e75a87936f1585c1fec50', 'The other eighteen agreement clauses must remain unchanged');
  }
@@ -145,7 +179,14 @@ test('terms and payment results are independent snapshots and do not rewrite ear
  assert.equal(agreement2027Terms('commercial').length, 19);
  const schedule = agreement2027PaymentSchedule(25_000_000, 'commercial');
  schedule[0].amount = 1;
- assert.equal(agreement2027PaymentSchedule(25_000_000, 'commercial')[0].amount, 6_250_000);
+ assert.equal(agreement2027PaymentSchedule(25_000_000, 'commercial')[0].amount, 7_500_000);
+ const unified = agreement2027PaymentSchedules(25_000_000);
+ unified[0].stages[0].amount = 1;
+ unified[1].stages[0].trigger = 'Changed';
+ assert.deepEqual(agreement2027PaymentSchedules(25_000_000).map(schedule => schedule.stages), ['residential', 'commercial'].map(kind => agreement2027PaymentSchedule(25_000_000, kind)));
+ const unifiedTerms = agreement2027Terms();
+ unifiedTerms[2].text = 'Changed';
+ assert.match(agreement2027Terms()[2].text, /للمشاريع السكنية.*للمشاريع التجارية/s);
  assert.equal(readFileSync(new URL('../src/lib/contracts/uploadedTerms.json', import.meta.url), 'utf8'), legacy);
 });
 

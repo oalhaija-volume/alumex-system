@@ -47,15 +47,33 @@ function ContractContent({projectId,project,flow,contract,onFlow,setError,setNot
  const [method,setMethod]=useState<SignedEvidence['method']>('digital');
  const [file,setFile]=useState<File|null>(null);
  const [busy,setBusy]=useState(false);
+ const [printing,setPrinting]=useState(false);
  const [editingType,setEditingType]=useState(false);
- const [template,setTemplate]=useState(contract.template??'');
+ const [template,setTemplate]=useState<'residential'|'commercial'|''>(contract.template==='residential'||contract.template==='commercial'?contract.template:'');
  const [editingDetails,setEditingDetails]=useState(false);
  const [agreementFields,setAgreementFields]=useState<Agreement2027Fields|null>(()=>contract.agreement2027?.fields??null);
  const agreement=contract.agreement2027?.version==='agreement-2027'?contract.agreement2027:undefined;
- const canChangeType=flow.stage==='contract'&&!flow.signed_at&&!flow.evidence&&!flow.accepted_at&&!flow.accepted_by&&project.sales_status==='contract_generated'&&!project.additional_openings_state;
+ const sourceDocument=agreement?.documentLayout==='source-pdf-2027'&&(contract.template==='residential'||contract.template==='commercial');
+ const canEditContract=flow.stage==='contract'&&!flow.signed_at&&!flow.evidence&&!flow.accepted_at&&!flow.accepted_by&&project.sales_status==='contract_generated'&&!project.additional_openings_state;
+ const canChangeType=canEditContract&&contract.template!=='unified';
  function changeMethod(next:SignedEvidence['method']){
   if(next===method)return;
   setMethod(next);setConsent(false);setError('');
+ }
+ async function printContract(){
+  if(busy||printing||editingDetails)return;
+  setPrinting(true);setError('');
+  try{
+   if(sourceDocument){
+    await document.fonts.ready;
+    const images=Array.from(document.querySelectorAll<HTMLImageElement>('.commercial-document img'));
+    await Promise.all(images.map(image=>image.decode()));
+    if(images.some(image=>!image.complete||image.naturalWidth===0))throw new Error('Contract artwork did not finish loading.');
+   }
+   window.print();
+  }catch{
+   setError(text('The complete contract could not be prepared for printing. Reload the page and try again.','تعذر تجهيز العقد كاملاً للطباعة. أعد تحميل الصفحة ثم حاول مرة أخرى.'));
+  }finally{setPrinting(false);}
  }
 
  async function changeContractType(){
@@ -68,7 +86,7 @@ function ContractContent({projectId,project,flow,contract,onFlow,setError,setNot
   finally{setBusy(false);}
  }
  async function saveContractDetails(){
-  if(busy||!canChangeType||!agreementFields||!agreement)return;
+  if(busy||!canEditContract||!agreementFields||!agreement)return;
   setBusy(true);setError('');setNotice('');
   try{
    const result=await api<{flow:SalesFlow}>(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save-contract-details',revision:flow.revision,details:agreementFields,confirmed:true})});
@@ -91,13 +109,14 @@ function ContractContent({projectId,project,flow,contract,onFlow,setError,setNot
  }
  return <>
   <div className="mb-4 flex flex-wrap justify-end gap-3 print:hidden">
+   {sourceDocument&&flow.signed_at&&flow.evidence?.method==='upload'&&<a href={endpoint+'?download=signed'} className={secondary}>{term('Download signed copy')}</a>}
    {!flow.signed_at&&<Link href={`/quotation/${projectId}`} className={secondary}>{term('Revise quotation')}</Link>}
-   {canChangeType&&agreement&&<button type="button" disabled={busy} className={secondary} onClick={()=>{setEditingDetails(true);setError('');setNotice('');}}>{text('Complete contract details','استكمال بيانات العقد')}</button>}
+   {canEditContract&&agreement&&<button type="button" disabled={busy||printing} className={secondary} onClick={()=>{setEditingDetails(true);setError('');setNotice('');}}>{text('Complete contract details','استكمال بيانات العقد')}</button>}
    {canChangeType&&<button type="button" disabled={busy||editingDetails} className={secondary} onClick={()=>{setEditingType(true);setError('');setNotice('');}}>{term('Change contract type')}</button>}
-   <button type="button" disabled={busy||editingDetails} className={secondary} onClick={()=>window.print()}>{term('Print contract')}</button>
+   <button type="button" disabled={busy||printing||editingDetails} className={secondary} onClick={()=>void printContract()}>{printing?text('Preparing contract…','جارٍ تجهيز العقد…'):term('Print contract')}</button>
   </div>
-  {canChangeType&&agreement&&<p className="mb-5 text-sm leading-6 text-slate-600 print:hidden">{text('Project details and approved quotation prices are filled automatically. Review the contract and complete any applicable contact, handover, sample and stage-date fields before signing.','تُعبّأ بيانات المشروع وأسعار عرض السعر المعتمد تلقائياً. راجع العقد واستكمل بيانات الاتصال والتحويل والعينات ومواعيد المراحل التي تنطبق على المشروع قبل التوقيع.')}</p>}
-  {canChangeType&&agreementFields&&editingDetails&&<section data-agreement-fields-form aria-label={text('Contract details','بيانات العقد')} className={`${card} mb-6 space-y-5 print:hidden`}>
+  {canEditContract&&agreement&&<p className="mb-5 text-sm leading-6 text-slate-600 print:hidden">{text('Project details and approved quotation prices are filled automatically. Review the contract and complete any applicable contact, handover, sample and stage-date fields before signing.','تُعبّأ بيانات المشروع وأسعار عرض السعر المعتمد تلقائياً. راجع العقد واستكمل بيانات الاتصال والتحويل والعينات ومواعيد المراحل التي تنطبق على المشروع قبل التوقيع.')}</p>}
+  {canEditContract&&agreementFields&&editingDetails&&<section data-agreement-fields-form aria-label={text('Contract details','بيانات العقد')} className={`${card} mb-6 space-y-5 print:hidden`}>
    <h2 className="text-lg font-semibold">{text('Complete contract details','استكمال بيانات العقد')}</h2>
    <fieldset disabled={busy} className="min-w-0"><Agreement2027FieldsForm value={agreementFields} onChange={setAgreementFields} disabled={busy}/></fieldset>
    <div className="flex flex-wrap gap-3"><button type="button" disabled={busy} onClick={()=>void saveContractDetails()} className={button}>{busy?term('Saving…'):text('Save contract details','حفظ بيانات العقد')}</button><button type="button" disabled={busy} onClick={()=>{setEditingDetails(false);setAgreementFields(contract.agreement2027?.fields??null);setError('');}} className={secondary}>{term('Cancel changes')}</button></div>
@@ -115,17 +134,17 @@ function ContractContent({projectId,project,flow,contract,onFlow,setError,setNot
    </label>
    <div className="mt-5 flex flex-wrap gap-3">
     <button type="button" disabled={busy||!template||template===contract.template} onClick={()=>void changeContractType()} className={button}>{busy?term('Saving…'):term('Save contract type')}</button>
-    <button type="button" disabled={busy} onClick={()=>{setEditingType(false);setTemplate(contract.template??'');setError('');}} className={secondary}>{term('Cancel changes')}</button>
+    <button type="button" disabled={busy} onClick={()=>{setEditingType(false);setTemplate(contract.template==='residential'||contract.template==='commercial'?contract.template:'');setError('');}} className={secondary}>{term('Cancel changes')}</button>
    </div>
   </section>}
   <div className={editingDetails?'print:hidden':undefined}><DocumentPaper>
-   <DocumentHeader kind="Contract" number={contract.number} createdAt={contract.createdAt}/>
-   {agreement?<Agreement2027Document contract={contract} signedAt={flow.signed_at}/>:<>
+   {!sourceDocument&&<DocumentHeader kind="Contract" number={contract.number} createdAt={contract.createdAt}/>}
+   {agreement?<Agreement2027Document contract={contract} signedAt={flow.signed_at} evidence={flow.evidence}/>:<>
     <DocumentParties client={contract.client} project={{...contract.project,branch:contract.branch??contract.project.branch}}/>
     <p className="document-note">{contract.template==='commercial'?term('Commercial supply & installation contract / عقد بيع وتركيب ألمنيوم — مشروع تجاري'):contract.template==='residential'?term('Residential supply & installation contract / عقد بيع وتركيب ألمنيوم — مشروع سكني'):term('Supply & installation contract / عقد بيع وتركيب ألمنيوم')}</p>
     <ContractTerms terms={contract.terms}/><OpeningSchedule quote={contract.quotation} areaBasis="billable"/>
    </>}
-   <section dir={agreement?'rtl':undefined} lang={agreement?'ar':undefined} className="mt-9 break-inside-avoid border-t border-slate-200 pt-6">
+   {!sourceDocument&&<section dir={agreement?'rtl':undefined} lang={agreement?'ar':undefined} className="mt-9 break-inside-avoid border-t border-slate-200 pt-6">
     <div className="document-company-signature"><h3>{agreement?'الفريق الثاني: شركة خبراء الومكس لصناعة وتجارة الألمنيوم المحدودة':term('For Alumex Experts / الطرف الأول')}</h3>{agreement&&<><p>المدير المفوض: المهندس فيض حيدر علي الدباج، أو من ينوب عنه من موظفي الشركة المخولين بتوقيع العقود.</p><p>اسم الموظف: {agreement.fields.companyRepresentativeName||'____________________'}</p><p>المسمى الوظيفي: {agreement.fields.companyRepresentativeTitle||'____________________'}</p><p>تاريخ التوقيع: <bdi dir="ltr">{agreement.fields.companyRepresentativeDate||'____________________'}</bdi></p>{agreement.fields.companyRepresentativeSignature&&<img src={agreement.fields.companyRepresentativeSignature} alt="توقيع ممثل الشركة" className="mt-3 max-h-32 max-w-full object-contain"/>}</>}<p>{agreement?'التوقيع المخوّل وختم الشركة':term('Authorized signature & company stamp')}</p><div/></div>
     <h3 className="font-semibold">{agreement?'توقيع العميل / الفريق الأول':term('Client signature / الطرف الثاني')}</h3>
     {flow.signed_at?<>
@@ -134,12 +153,12 @@ function ContractContent({projectId,project,flow,contract,onFlow,setError,setNot
      {flow.evidence?.signature&&<div className="mt-3"><img alt={term('Client signature')} src={flow.evidence.signature} className="max-h-40 max-w-full"/></div>}
      {flow.evidence?.method==='upload'&&<a href={`${endpoint}?download=signed`} className="mt-4 inline-block text-blue-600 print:hidden">{term('Download signed copy')}</a>}
     </>:<div className="mt-8 h-16 border-b border-slate-400"><p className="text-sm text-slate-400">{agreement?'الاسم: ____________________ التاريخ: ____________________':term('Name: ____________________ Date: ____________________')}</p></div>}
-   </section>
-   <DocumentFooter reference={contract.number}/>
+   </section>}
+   {!sourceDocument&&<DocumentFooter reference={contract.number}/>}
   </DocumentPaper></div>
-  {flow.signed_at?<p role="status" className="mt-6 rounded-md bg-green-50 p-5 text-green-800 print:hidden">{term('Signed contract saved. The project is now available in Operations.')}</p>:project.additional_openings_state?<p role="status" className="mt-6 rounded-md bg-amber-50 p-4 text-amber-900 print:hidden">{term('Complete the additional measurements and save a quotation revision before continuing.')}</p>:canChangeType&&<section className={`${card} mt-6 print:hidden`}>
+  {flow.signed_at?<p role="status" className="mt-6 rounded-md bg-green-50 p-5 text-green-800 print:hidden">{term('Signed contract saved. The project is now available in Operations.')}</p>:project.additional_openings_state?<p role="status" className="mt-6 rounded-md bg-amber-50 p-4 text-amber-900 print:hidden">{term('Complete the additional measurements and save a quotation revision before continuing.')}</p>:canEditContract&&<section className={`${card} mt-6 print:hidden`}>
    <h2 className="mb-5 text-xl font-semibold">{term('Complete signing')}</h2>
-   <fieldset disabled={busy||editingDetails} className="min-w-0">
+   <fieldset disabled={busy||printing||editingDetails} className="min-w-0">
     <div className="mb-6 flex flex-wrap gap-3">
      <button type="button" aria-pressed={method==='digital'} className={method==='digital'?button:secondary} onClick={()=>changeMethod('digital')}>{term('Sign digitally')}</button>
      <button type="button" aria-pressed={method==='upload'} className={method==='upload'?button:secondary} onClick={()=>changeMethod('upload')}>{term('Upload signed hard copy')}</button>

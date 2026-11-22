@@ -70,7 +70,7 @@ export async function POST(request:Request,context:Context){
    if(!flow?.contract||flow.stage!=='contract'||project.sales_status!=='contract_generated'||flow.contract.agreement2027?.version!=='agreement-2027')return NextResponse.json({error:'Only an unsigned 2027 contract can have its details changed.'},{status:409});
    if(body.confirmed!==true)throw new Error('Confirm that you want to save the contract details.');
    const kind=flow.contract.template;
-   if(kind!=='residential'&&kind!=='commercial')throw new Error('Choose the residential or commercial contract template.');
+   if(kind!=='residential'&&kind!=='commercial'&&kind!=='unified')throw new Error('The saved contract template is invalid.');
    const {normalizeAgreement2027Fields}=await import('@/lib/contracts/agreement2027Server');
    const fields=normalizeAgreement2027Fields(body.details);
    const agreement={...flow.contract.agreement2027,fields};
@@ -81,14 +81,21 @@ export async function POST(request:Request,context:Context){
   if(action==='change-contract-template'){
    if(flow?.signed_at||flow?.evidence||flow?.accepted_at||flow?.accepted_by||['contract_signed','transferred_to_operations'].includes(project.sales_status))return NextResponse.json({error:'Signed contracts cannot be changed.'},{status:409});
    if(!flow?.contract||flow.stage!=='contract'||project.sales_status!=='contract_generated')return NextResponse.json({error:'Only an unsigned generated contract can have its type changed.'},{status:409});
+   if(flow.contract.template==='unified')return NextResponse.json({error:'The saved unified agreement cannot be changed to a single contract type.'},{status:409});
    const kind=body.template;
    if(kind!=='residential'&&kind!=='commercial')throw new Error('Choose the residential or commercial contract template.');
    if(body.confirmed!==true)throw new Error('Confirm that you want to change the contract type.');
    if(kind===flow.contract.template)throw new Error('Choose a different contract type.');
    if(flow.contract.agreement2027?.version==='agreement-2027'){
-    const {buildAgreement2027Snapshot,agreement2027Terms}=await import('@/lib/contracts/agreement2027Server');
-    const agreement={...buildAgreement2027Snapshot(flow.contract.quotation,kind,flow.contract.agreement2027.fields,flow.contract.agreement2027.openingSpecifications),readiness:flow.contract.agreement2027.readiness,specificationNotes:flow.contract.agreement2027.specificationNotes};
-    const result=await admin.rpc('update_agreement_contract',{p_project:projectId,p_revision:revision as number,p_agreement:agreement as unknown as Json,p_terms:agreement2027Terms(kind) as unknown as Json,p_template:kind,p_actor:auth.user.id});
+    const savedAgreement=flow.contract.agreement2027;
+    const source=savedAgreement.documentLayout==='source-pdf-2027';
+    const {agreement2027PaymentSchedule,agreement2027Terms}=await import('@/lib/contracts/agreement2027Content');
+    const {legacyAgreement2027PaymentSchedule,legacyAgreement2027Terms}=await import('@/lib/contracts/agreement2027LegacyPolicy');
+    // A type correction replaces its payment branch, retaining the issued
+    // layout, manual details and all other saved contract information.
+    const agreement={...savedAgreement,paymentSchedule:source?agreement2027PaymentSchedule(savedAgreement.total,kind):legacyAgreement2027PaymentSchedule(savedAgreement.total,kind)};
+    const terms=source?flow.contract.terms.map((section,index)=>index===2?agreement2027Terms(kind)[2]:section):legacyAgreement2027Terms(flow.contract.terms,kind);
+    const result=await admin.rpc('update_agreement_contract',{p_project:projectId,p_revision:revision as number,p_agreement:agreement as unknown as Json,p_terms:terms as unknown as Json,p_template:kind,p_actor:auth.user.id});
     if(result.error)throw new Error(result.error.message);
     return NextResponse.json({flow:result.data},{headers:{'Cache-Control':'no-store'}});
    }
@@ -158,7 +165,7 @@ export async function POST(request:Request,context:Context){
    const number=formatWorkflowContractNumber(numberBranch,project.project_number,revision as number);
    const {loadAgreement2027Snapshot,agreement2027Terms}=await import('@/lib/contracts/agreement2027Server');
    const agreement2027=await loadAgreement2027Snapshot(admin,projectId,flow.quotation,kind,auth.user.id);
-   const client={name:agreement2027.fields.clientLegalName,mobile:agreement2027.fields.directPhone||null,client_type:agreement2027.fields.clientClassification==='شركة'?'company':'individual'};
+   const client={name:agreement2027.fields.clientLegalName,mobile:agreement2027.fields.directPhone||null,client_type:agreement2027.fields.clientClassification==='شركة'?'company':agreement2027.fields.clientClassification==='فرد'?'individual':null};
    payload={number,createdAt:new Date().toISOString(),createdBy:auth.user.id,branch,client,project:{branch:project.branch,governorate:project.governorate??null,name:project.project_name,number:project.project_number,address:project.address},terms:agreement2027Terms(kind),template:kind,agreement2027} as unknown as Json;
   }
   if(action==='sign'){

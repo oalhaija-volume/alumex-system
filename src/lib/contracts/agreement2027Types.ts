@@ -17,14 +17,19 @@ export type Agreement2027Fields = {
  phases: AgreementPhase[];
 };
 export type AgreementPaymentStage = { id: string; label: string; percent: number; amount: number; trigger: string };
+export type AgreementPaymentSchedule = { id: 'residential' | 'commercial'; label: string; stages: AgreementPaymentStage[] };
 export type AgreementOpeningSpecification = { openingId: string; aluminumColor: string; glassColor: string; bottomFrame: string; notes: string; technicalDescription?: string };
 export type Agreement2027Snapshot = {
  version: typeof AGREEMENT_2027_VERSION;
  sourceDocument: 'عقد اتفاق 2027.pdf';
+ documentLayout?: 'source-pdf-2027';
+ selectedProductsOnly?: true;
+ compactLayout?: true;
  fields: Agreement2027Fields;
  total: number;
  amountInWords: string;
  paymentSchedule: AgreementPaymentStage[];
+ paymentSchedules?: AgreementPaymentSchedule[];
  openingSpecifications: AgreementOpeningSpecification[];
  readiness: { measurement: string[]; installation: string[]; notes: string[] };
  specificationNotes: string[];

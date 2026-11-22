@@ -1,4 +1,4 @@
-import type { AgreementPaymentStage } from './agreement2027Types';
+import type { AgreementPaymentSchedule, AgreementPaymentStage } from './agreement2027Types';
 
 type ContractKind = 'residential' | 'commercial';
 type ContractSection = { title: string; text: string };
@@ -14,19 +14,22 @@ function validAmount(total: number): void {
 export function agreement2027PaymentSchedule(total: number, kind: ContractKind): AgreementPaymentStage[] {
  validAmount(total);
  if (kind !== 'residential' && kind !== 'commercial') throw new Error('Choose the residential or commercial contract template.');
- const definitions = kind === 'residential'
+ // The minimum-value exception is a common note beneath both policies in
+ // the source PDF, so it applies to either selected contract type.
+ const definitions = total < 15_000_000
+  ? [{ id: 'signing', label: 'الدفعة الكاملة', percent: 100, trigger: 'عند توقيع العقد؛ لأن القيمة الإجمالية أقل من 15,000,000 دينار عراقي.' }]
+  : kind === 'residential'
   ? [
     { id: 'signing', label: 'الدفعة الأولى', percent: 50, trigger: 'عند توقيع العقد.' },
-    { id: 'before-installation', label: 'الدفعة الثانية والأخيرة', percent: 50, trigger: 'قبل المباشرة بأعمال التركيب في الموقع، وحسب الفاتورة النهائية وفقاً لذرعة واقع الحال.' },
+    { id: 'before-installation', label: 'الدفعة الثانية والأخيرة', percent: 50, trigger: 'عند جهوزية البضاعة في مصنع الفريق الثاني خلال مدة أقصاها سبعة أيام من تاريخ إخبار الفريق الأول، وحسب الفاتورة النهائية وفقاً لذرعة واقع الحال.' },
    ]
-  : total < 15_000_000
-   ? [{ id: 'signing', label: 'الدفعة الكاملة', percent: 100, trigger: 'عند توقيع العقد؛ لأن القيمة الإجمالية أقل من 15,000,000 دينار عراقي.' }]
-   : [
-    { id: 'signing', label: 'الدفعة الأولى', percent: 25, trigger: 'عند توقيع العقد.' },
-    { id: 'profiles-delivered', label: 'توريد بروفيلات الألمنيوم', percent: 25, trigger: 'عند توريد بروفيلات الألمنيوم إلى الموقع.' },
-    { id: 'profiles-installed', label: 'تركيب شبكة البروفيلات', percent: 25, trigger: 'عند الانتهاء من نصب هيكل بروفيلات الألمنيوم في الموقع.' },
-    { id: 'glass-delivered', label: 'توريد الزجاج', percent: 15, trigger: 'عند توريد الزجاج إلى الموقع وقبل التركيب.' },
-    { id: 'before-finishing', label: 'الدفعة الأخيرة', percent: 10, trigger: 'بعد تركيب الزجاج وقبل التشطيب النهائي للسلكون والبرشر والكاب وما يرتبط بها من أعمال، حسب الفاتورة النهائية وفقاً لذرعة واقع الحال.' },
+  : [
+    { id: 'signing', label: 'الدفعة الأولى', percent: 30, trigger: 'عند توقيع العقد.' },
+    { id: 'profiles-delivered', label: 'توريد بروفيلات الألمنيوم', percent: 20, trigger: 'عند توريد بروفيلات الألمنيوم إلى الموقع، مقابل فاتورة إنجاز مرحلية تستحق خلال سبعة أيام من تقديمها والمستندات المؤيدة.' },
+    { id: 'profiles-installed', label: 'تركيب شبكة البروفيلات', percent: 10, trigger: 'عند تركيب شبكة بروفيلات الألمنيوم في الموقع، مقابل فاتورة إنجاز مرحلية تستحق خلال سبعة أيام من تقديمها والمستندات المؤيدة.' },
+    { id: 'glass-delivered', label: 'توريد الزجاج', percent: 20, trigger: 'عند توريد الزجاج إلى الموقع، مقابل فاتورة إنجاز مرحلية تستحق خلال سبعة أيام من تقديمها والمستندات المؤيدة.' },
+    { id: 'glass-installed', label: 'تركيب الزجاج', percent: 15, trigger: 'عند تركيب الزجاج في الموقع، مقابل فاتورة إنجاز مرحلية تستحق خلال سبعة أيام من تقديمها والمستندات المؤيدة.' },
+    { id: 'before-finishing', label: 'الدفعة الأخيرة', percent: 5, trigger: 'بعد تركيب الزجاج وقبل التشطيب النهائي للسلكون والبرشر والكاب وما يرتبط بها من أعمال، حسب الفاتورة النهائية وفقاً لذرعة واقع الحال.' },
    ];
  let allocated = 0;
  return definitions.map((stage, index) => {
@@ -37,6 +40,15 @@ export function agreement2027PaymentSchedule(total: number, kind: ContractKind):
   allocated += amount;
   return { ...stage, amount };
  });
+}
+
+// Both schedules describe the applicable terms within one agreement. They are
+// alternatives for the same approved value, not two amounts payable together.
+export function agreement2027PaymentSchedules(total: number): AgreementPaymentSchedule[] {
+ return [
+  { id: 'residential', label: 'المشاريع السكنية', stages: agreement2027PaymentSchedule(total, 'residential') },
+  { id: 'commercial', label: 'المشاريع التجارية', stages: agreement2027PaymentSchedule(total, 'commercial') },
+ ];
 }
 
 const units = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة'];
@@ -115,12 +127,12 @@ const sharedTerms: readonly ContractSection[] = [
  { title: 'التاسع عشر: عدد بنود العقد', text: 'عدد بنود العقد تسعة عشر بنداً، بما فيهم هذا البند.' },
 ];
 
-export function agreement2027Terms(kind: ContractKind): ContractSection[] {
- if (kind !== 'residential' && kind !== 'commercial') throw new Error('Choose the residential or commercial contract template.');
- const paymentTerms = kind === 'residential'
-  ? 'للمشاريع السكنية: يلتزم الفريق الأول بدفع نسبة (50%) من القيمة الإجمالية للعقد إلى الفريق الثاني عند توقيع العقد، وبدفع نسبة (50%) قبل المباشرة بأعمال التركيب في الموقع، وبذلك يكون الفريق الأول قد سدد كامل المبلغ المتبقي في ذمته حسب الفاتورة النهائية الصادرة من قبل الفريق الثاني وفقاً لذرعة واقع الحال.'
-  : 'للمشاريع التجارية: يلتزم الفريق الأول بدفع نسبة (25%) من القيمة الإجمالية للعقد إلى الفريق الثاني عند توقيع العقد، وبدفع نسبة (25%) عند توريد بروفيلات الألمنيوم إلى الموقع، وبدفع نسبة (25%) عند الانتهاء من نصب هيكل بروفيلات الألمنيوم في الموقع، وبدفع نسبة (15%) عند توريد الزجاج إلى الموقع وقبل التركيب، وبدفع كامل المبلغ المتبقي بنسبة (10%) بعد تركيب الزجاج وقبل التشطيب النهائي للسلكون والبرشر والكاب وما يرتبط بها من أعمال، حسب الفاتورة النهائية الصادرة من قبل الفريق الثاني وفقاً لذرعة واقع الحال.';
- const upfrontException = kind === 'commercial' ? '\nفي حال كانت القيمة الإجمالية للعقد أقل من (15,000,000) خمسة عشر مليون دينار عراقي تدفع الدفعة كاملة بنسبة (100%) عند توقيع العقد.' : '';
+export function agreement2027Terms(kind: ContractKind | 'unified' = 'unified'): ContractSection[] {
+ if (kind !== 'residential' && kind !== 'commercial' && kind !== 'unified') throw new Error('Choose a supported contract template.');
+ const residentialPayments = 'للمشاريع السكنية — الأعمال التي يتم تجهيزها بالكامل داخل مصنع الفريق الثاني لا سيما الأبواب والشبابيك: يلتزم الفريق الأول بدفع نسبة (50%) من القيمة الإجمالية للعقد إلى الفريق الثاني عند توقيع العقد، وبدفع نسبة (50%) عند جهوزية البضاعة في مصنع الفريق الثاني خلال مدة أقصاها سبعة أيام من تاريخ إخبار الفريق الأول، وبذلك يكون الفريق الأول قد سدد كامل المبلغ المتبقي في ذمته حسب الفاتورة النهائية الصادرة من قبل الفريق الثاني وفقاً لذرعة واقع الحال.';
+ const commercialPayments = 'للمشاريع التجارية والمؤسسات الكبيرة بما يخص أعمال مقاطع الكيرتن وول (CURTAIN WALL) والسكاي لايت (SKYLIGHT): يلتزم الفريق الأول بدفع نسبة (30%) من القيمة الإجمالية للعقد إلى الفريق الثاني عند التوقيع. الدفعات اللاحقة بنسبة (65%) تستحق استناداً إلى فواتير إنجاز مرحلية والمستندات المؤيدة، وتسدد خلال مدة أقصاها سبعة أيام من تقديمها، وفق المراحل الآتية: (20%) عند توريد بروفيلات الألمنيوم إلى الموقع، (10%) عند تركيب شبكة بروفيلات الألمنيوم في الموقع، (20%) عند توريد الزجاج إلى الموقع، (15%) عند تركيب الزجاج في الموقع. الدفعة الأخيرة بنسبة (5%) بعد تركيب الزجاج وقبل التشطيب النهائي للسلكون والبرشر والكاب وما يرتبط بها من أعمال، حسب الفاتورة النهائية الصادرة من قبل الفريق الثاني وفقاً لذرعة واقع الحال.';
+ const paymentTerms = kind === 'unified' ? `${residentialPayments}\n${commercialPayments}` : kind === 'residential' ? residentialPayments : commercialPayments;
+ const upfrontException = '\nفي حال كانت القيمة الإجمالية للعقد أقل من (15,000,000) خمسة عشر مليون دينار عراقي تدفع الدفعة كاملة بنسبة (100%) عند توقيع العقد.';
  return sharedTerms.map((section, index) => index === 2 ? {
   ...section,
   text: `يتعهد الفريق الأول بدفع قيمة العقد المبينة رقماً وكتابةً في هذا العقد، بالدينار العراقي، للفريق الثاني مقابل قيامه بالأعمال الموكلة إليه في العقد. مبلغ العقد قابل للنقصان أو الزيادة حسب الفاتورة النهائية للأعمال المنفذة.\n${paymentTerms}${upfrontException}\nيلتزم الفريق الثاني بتقديم كفالة مدتها عشرة سنوات بعد تسديد كافة المستحقات المالية وعند تسليم المشروع للفريق الأول وحسب شروط بطاقة الكفالة الخاصة بالفريق الثاني.\nالأسعار التفصيلية لكل بند أو وحدة موجودة في بيان الأقيسة والمواصفات المرفق بعقد الاتفاقية.`,
@@ -179,14 +191,16 @@ const technicalDescriptions: Readonly<Record<string, string>> = Object.freeze({
  'ALUMEX SKYLIGHT C W 60': 'نظام سكاي لايت؛ أبعاد المقطع الطولي 6 × 10 سم، والمقطع العرضي 6 × 6 سم، والسماكة من 1.8 إلى 3 ملم، ويحدد النظام حسب التصميم ومواصفات الزجاج المثبتة في عرض السعر المعتمد.',
  'ALUMEX PUSH OUT': 'نظام بوش آوت؛ للضرفة الواحدة، شامل إطار الألمنيوم والزجاج.',
  'ALUMEX SWING DOOR': 'نظام باب مروحة ميكانيكي؛ عرض المقطع 7 سم، وسماكته من 1.6 إلى 1.8 ملم، للضرفة الواحدة شاملاً الماكنة الميكانيكية والمقبض.',
- 'ALUMEX PHOTO CELL DOOR': 'نظام باب كهربائي؛ يتضمن النموذج خيار GEZZE الألماني للماكنة دون الزجاج والألمنيوم، وخيار EX التركي للباب الكامل شاملاً الماكنة والزجاج والألمنيوم. يعتمد الخيار المثبت في عرض السعر المعتمد.',
  'THE ADDRESS AS A18': 'نظام السحاب؛ عرض المقطع 18 سم، وسماكته من 1.8 إلى 2 ملم.',
  'THE ADDRESS AS A15': 'نظام السحاب؛ عرض المقطع 15 سم، وسماكته من 1.8 إلى 2 ملم.',
  'THE ADDRESS AH 650 660 688': 'نظام الفصالات؛ عرض المقطع 6 سم، وسماكته من 2 إلى 2.5 ملم.',
- 'THE ADDRESS CURTAIN WALL ACW 1200 1500 2800': 'نظام الواجهات الزجاجية؛ أبعاد المقطع الطولي 5 × 10.5 أو 12 أو 15 أو 26.5 سم، والمقطع العرضي 5 × 12 أو 15 سم، والسماكة من 1.8 إلى 5.5 ملم.',
 });
 
 export function productTechnicalDescription(name: string): string | undefined {
+ // Generic photocell doors and the combined Address curtain-wall family
+ // contain alternative machines or profile sizes in the reference catalog.
+ // Their exact specification must come from a saved project record or a
+ // manual entry, rather than automatically listing every unchosen variant.
  const key = name.trim().toUpperCase().replace(/[()–—-]/g, ' ').replace(/\s+/g, ' ').replace(/^ALUMEX A16(?=$| )/, 'ALUMEX 16');
  return technicalDescriptions[key];
 }

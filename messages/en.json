@@ -3218,7 +3218,13 @@
     "The installer could not be verified. Please download it again.": "The installer could not be verified. Please download it again.",
     "Verifying installer…": "Verifying installer…",
     "Downloading installer… {percent}%": "Downloading installer… {percent}%",
-    "Installer download progress": "Installer download progress"
+    "Installer download progress": "Installer download progress",
+    "If Edge says “Setup.exe isn’t commonly downloaded”": "If Edge says “Setup.exe isn’t commonly downloaded”",
+    "Use these steps only for the company-approved AlumexFlow installer downloaded from this page. The download verifies the installer checksum before saving it.": "Use these steps only for the company-approved AlumexFlow installer downloaded from this page. The download verifies the installer checksum before saving it.",
+    "Open Edge Downloads with Ctrl+J, then open the menu (⋯) beside Setup.exe.": "Open Edge Downloads with Ctrl+J, then open the menu (⋯) beside Setup.exe.",
+    "Choose these options for this file:": "Choose these options for this file:",
+    "Open Setup.exe. If Windows then displays “Windows protected your PC”, use:": "Open Setup.exe. If Windows then displays “Windows protected your PC”, use:",
+    "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled.": "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled."
   },
   "registration": {
     "title": "New client & project",

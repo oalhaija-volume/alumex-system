@@ -3218,7 +3218,13 @@
     "The installer could not be verified. Please download it again.": "تعذّر التحقق من ملف التثبيت. يرجى تنزيله مرة أخرى.",
     "Verifying installer…": "جارٍ التحقق من ملف التثبيت…",
     "Downloading installer… {percent}%": "جارٍ تنزيل ملف التثبيت… {percent}%",
-    "Installer download progress": "تقدّم تنزيل ملف التثبيت"
+    "Installer download progress": "تقدّم تنزيل ملف التثبيت",
+    "If Edge says “Setup.exe isn’t commonly downloaded”": "إذا عرض Edge رسالة «Setup.exe غير شائع التنزيل»",
+    "Use these steps only for the company-approved AlumexFlow installer downloaded from this page. The download verifies the installer checksum before saving it.": "اتبع هذه الخطوات فقط لملف تثبيت AlumexFlow المعتمد من الشركة والمنزّل من هذه الصفحة. يتم التحقق من بصمة ملف التثبيت قبل حفظه.",
+    "Open Edge Downloads with Ctrl+J, then open the menu (⋯) beside Setup.exe.": "افتح التنزيلات في Edge باستخدام Ctrl+J، ثم افتح القائمة (⋯) بجانب Setup.exe.",
+    "Choose these options for this file:": "اختر هذه الخيارات لهذا الملف:",
+    "Open Setup.exe. If Windows then displays “Windows protected your PC”, use:": "افتح Setup.exe. إذا عرض Windows بعد ذلك رسالة «قام Windows بحماية الكمبيوتر»، فاختر:",
+    "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled.": "إذا لم تظهر هذه الخيارات أو كانت مؤسستك تحظر التطبيق، اطلب من مسؤول تقنية المعلومات اعتماد ملف التثبيت هذا. أبقِ وسائل حماية Windows مفعّلة."
   },
   "registration": {
     "title": "عميل ومشروع جديد",

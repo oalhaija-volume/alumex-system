@@ -63,6 +63,16 @@ export function WindowsDownload({ release }: { release: Release }) {
       {started && <p role="status" className="mt-4 text-sm leading-6 text-slate-600">{term('Open Setup.exe when your browser finishes downloading it.')}</p>}
       <p className="mt-4 text-sm leading-6 text-slate-500">{term('This installer is unsigned. Windows may display “Unknown publisher”.')}</p>
     </section>
+    {!alreadyInstalled && <section aria-labelledby="windows-download-warning" className="rounded-lg border border-amber-200 bg-amber-50 p-5 sm:p-7">
+      <h2 id="windows-download-warning" className="text-lg font-semibold text-amber-950">{term('If Edge says “Setup.exe isn’t commonly downloaded”')}</h2>
+      <p className="mt-3 text-sm leading-7 text-amber-950">{term('Use these steps only for the company-approved AlumexFlow installer downloaded from this page. The download verifies the installer checksum before saving it.')}</p>
+      <ol className="mt-4 list-decimal space-y-3 ps-5 text-sm leading-7 text-amber-950">
+        <li>{term('Open Edge Downloads with Ctrl+J, then open the menu (⋯) beside Setup.exe.')}</li>
+        <li>{term('Choose these options for this file:')} <bdi dir="ltr" className="font-semibold">Keep → Show more → Keep anyway</bdi>.</li>
+        <li>{term('Open Setup.exe. If Windows then displays “Windows protected your PC”, use:')} <bdi dir="ltr" className="font-semibold">More info → Run anyway</bdi>.</li>
+      </ol>
+      <p className="mt-4 border-t border-amber-200 pt-4 text-sm leading-7 text-amber-950">{term('If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled.')}</p>
+    </section>}
     <section aria-labelledby="windows-install-steps" className="rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
       <h2 id="windows-install-steps" className="text-lg font-semibold">{term('Install and start working')}</h2>
       <ol className="mt-4 list-decimal space-y-4 ps-5 text-sm leading-7 text-slate-700">

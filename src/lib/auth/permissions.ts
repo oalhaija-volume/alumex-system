@@ -7,6 +7,10 @@ export function isLeadershipRole(role: string | null | undefined) {
  return leadershipRoles.some(value => value === role);
 }
 export const quotationRoles = [...leadershipRoles, 'Indoor Sales', 'Sales Manager'] as const;
+export const desktopDownloadRoles = [...leadershipRoles, 'Indoor Sales', 'Sales Manager'] as const;
+export function canDownloadDesktopApp(role: string | null | undefined) {
+ return desktopDownloadRoles.some(value => value === role);
+}
 export function canPrepareQuotation(role: string | null | undefined) {
  return quotationRoles.some(value => value === role);
 }
@@ -23,6 +27,7 @@ export function defaultRouteForRole(role: AppRole | null) {
 export function canAccessRoute(pathname: string, role: AppRole | null) {
  if(!role)return false;
  if(pathname === "/" || pathname === "/dashboard")return true;
+ if(pathname === '/downloads/windows')return canDownloadDesktopApp(role);
  if(pathname === "/project-log")return role === 'Outdoor Sales';
  if(pathname === '/signed-contracts')return canPrepareQuotation(role);
  if(/^\/(quotation|contract)\/[0-9a-f-]{36}$/i.test(pathname))return canPrepareQuotation(role);

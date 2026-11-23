@@ -13,7 +13,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { AppRole } from "@/lib/auth/permissions";
-import { canAccessRoute } from "@/lib/auth/permissions";
+import { canAccessRoute, canDownloadDesktopApp } from "@/lib/auth/permissions";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/I18nProvider";
 
@@ -62,6 +62,11 @@ export function RegistrationShell({ children, role, mobileOutdoor = false, userN
 
   function accountControls() {
     return <div className="mt-auto space-y-4 border-t border-slate-200 p-5">
+      {canDownloadDesktopApp(role) && <Link href="/downloads/windows" prefetch={false} onClick={closeMenu} aria-current={pathname === '/downloads/windows' ? 'page' : undefined}
+        className="flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg>
+        {term('Download Windows app')}
+      </Link>}
       <LanguageSwitcher />
       <FieldLogoutButton className="min-h-11 w-full rounded-md px-3 text-start text-sm text-slate-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:opacity-60" />
     </div>;

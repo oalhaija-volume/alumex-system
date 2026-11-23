@@ -5,7 +5,7 @@ import {runInNewContext} from 'node:vm';
 
 function worker(userAgent='iPhone',options={}){
  const listeners={},saved=new Map(),requests=[],background=[],cacheNames=[];
- const buckets=new Map([['alumex-field-shell-v30',saved]]),blocked=new Map();
+ const buckets=new Map([['alumex-field-shell-v31',saved]]),blocked=new Map();
  let navigations=0,storageAccesses=0,cacheDeletions=0;
  let version=1,failAsset=false,network=false,now=100000;
  const key=value=>new URL(typeof value==='string'?value:value.url,'https://example.test').pathname;
@@ -35,7 +35,7 @@ function worker(userAgent='iPhone',options={}){
   release(n,fail=false,advance=true){version=n;failAsset=fail;if(advance)now+=61000;},offline(){network=true;self.navigator.onLine=false;now+=61000;},
   block(path){let resume;const promise=new Promise(resolve=>{resume=resolve;});blocked.set(path,{promise,resume});return()=>{blocked.delete(path);resume();};},
   async settled(){await Promise.all(background);},
-  legacy(records){buckets.set('alumex-field-shell-v29',new Map(records));},
+  legacy(records){buckets.set('alumex-field-shell-v30',new Map(records));},
  };
 }
 test('installed public shell and all referenced assets reopen offline; private routes and APIs are never cached',async()=>{
@@ -64,7 +64,7 @@ test('one online launch returns current HTML and assets even inside the backgrou
  assert.ok(w.saved.has('/_next/static/app-2.js'));
  assert.ok(w.saved.has('/_next/static/styles-2.css'));
  assert.ok(w.saved.has('/_next/static/app-1.js'));
- assert.ok(w.cacheNames.every(name=>name==='alumex-field-shell-v30'));
+ assert.ok(w.cacheNames.every(name=>name==='alumex-field-shell-v31'));
  assert.equal(w.navigations,0);assert.equal(w.storageAccesses,0);assert.equal(w.cacheDeletions,0);
 });
 
@@ -102,10 +102,15 @@ test('offline launch immediately uses the old-version cache and retains its asse
  assert.equal(w.navigations,0);assert.equal(w.storageAccesses,0);assert.equal(w.cacheDeletions,0);
 });
 
-test('desktop installations never open the cached device workspace or redirect offline',async()=>{
- const w=worker('Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
- await w.install();assert.equal(w.requests.length,0);
- const response=await w.navigate('/offline?path=/projects');
- assert.equal(response.status,302);assert.equal(response.headers.get('location'),'https://example.test/dashboard');
- assert.equal(w.navigate('/dashboard'),undefined);assert.equal(w.navigate('/projects'),undefined);
+test('Windows laptops install a complete shell and reopen projects and quotations offline',async()=>{
+ const w=worker('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AlumexFlowDesktop/1.0');
+ await w.install();assert.ok(w.requests.includes('/offline'));w.offline();
+ assert.match(await (await w.navigate('/offline?path=/projects')).text(),/app-1/);
+ for(const path of ['/dashboard','/projects','/quotation/11111111-1111-4111-8111-111111111111']){
+  const response=await w.navigate(path);assert.equal(response.status,302);
+  assert.equal(response.headers.get('location'),'https://example.test/offline?path='+encodeURIComponent(path));
+ }
+ assert.equal(w.navigate('/contract/11111111-1111-4111-8111-111111111111'),undefined);
+ assert.equal(w.request('/api/offline/quotations'),undefined);
+ assert.equal(w.storageAccesses,0);assert.equal(w.cacheDeletions,0);
 });

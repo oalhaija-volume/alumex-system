@@ -4,6 +4,9 @@ import { useEffect,useState,useSyncExternalStore } from 'react';
 import { isOfflineDevice } from '@/lib/offline/device';
 import { prepareOffline,syncFieldChanges,isFieldOnline } from '@/lib/offline/client';
 import { activeFieldUser,readFieldState } from '@/lib/offline/store';
+import { prepareOfflineQuotations,syncOfflineQuotations,quotationSyncStatus } from '@/lib/offline/quotations';
+import { QuotationSyncConflicts } from './QuotationSyncConflicts';
+import { canPrepareQuotation } from '@/lib/auth/permissions';
 
 const subscribeDevice = () => () => {};
 export function OfflineStatus({quiet=false}:{quiet?:boolean}){
@@ -15,13 +18,13 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
  const [setupError,setSetupError]=useState('');
  const [shellError,setShellError]=useState('');
  const [ready,setReady]=useState(false);
+ const [quotationsReady,setQuotationsReady]=useState(false);
  const [shellReady,setShellReady]=useState(false);
  const [syncedAt,setSyncedAt]=useState<string|null>(null);
  const [refreshing,setRefreshing]=useState(false);
  useEffect(()=>{
   if(!isOfflineDevice()){
-   // Online desktop pages do not need a second download of every field record.
-   // Retained work from an older installation can still finish synchronizing.
+   // Unsupported clients can finish retained work without preparing a shell.
    void syncFieldChanges().catch(()=>{});
    if('serviceWorker' in navigator)void navigator.serviceWorker.getRegistration().then(registration=>registration?.update()).catch(()=>{});
    return;
@@ -30,8 +33,11 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
   async function refresh(){
    const state=await readFieldState().catch(()=>null);
    if(!mounted)return;
-   setOnline(isFieldOnline());setCount(state?.queue.length??0);
-   setError(state?.queue.find(c=>c.error)?.error??'');setReady(!!state);setSyncedAt(state?.syncedAt??null);
+   const quotations=quotationSyncStatus(state);
+   setOnline(isFieldOnline());setCount((state?.queue.length??0)+quotations.pending);
+   setError(state?.queue.find(c=>c.error)?.error??quotations.error??'');setReady(!!state);
+   setQuotationsReady(!!state&&(!canPrepareQuotation(state.actor.role)||!!state.quotations?.downloadedAt));
+   setSyncedAt(state?.syncedAt??null);
   }
   async function connect(force=false){
    if(connecting){forcePending ||= force;return;}
@@ -39,7 +45,7 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
    if(mounted)setRefreshing(true);
    try{
     await refresh();
-    if(navigator.onLine){await syncFieldChanges();if(activeFieldUser())await prepareOffline({background:!force});}
+    if(navigator.onLine){await syncFieldChanges();await syncOfflineQuotations();if(activeFieldUser()){await prepareOffline({background:!force});await prepareOfflineQuotations({background:!force});}}
     if(mounted)setSetupError('');
    }catch(e){if(mounted)setSetupError(e instanceof Error?e.message:'Offline setup unavailable.');}
    finally{await refresh();connecting=false;if(mounted)setRefreshing(false);if(mounted&&forcePending){forcePending=false;void connect(true);}}
@@ -53,7 +59,7 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
    (registration.active??readyRegistration.active)?.postMessage({type:'REFRESH_OFFLINE_SHELL'});
   }
   async function setup(){
-   try{const previousAccount=activeFieldUser();await Promise.all([prepareOffline({background:true}),syncFieldChanges()]);void navigator.storage?.persist?.().catch(()=>false);if(activeFieldUser()!==previousAccount)await syncFieldChanges();}
+   try{const previousAccount=activeFieldUser();await Promise.all([prepareOffline({background:true}),syncFieldChanges()]);void navigator.storage?.persist?.().catch(()=>false);if(activeFieldUser()!==previousAccount)await syncFieldChanges();await syncOfflineQuotations();if(activeFieldUser())await prepareOfflineQuotations({background:true});}
    catch(e){if(mounted)setSetupError(e instanceof Error?e.message:'Offline setup unavailable.');}
    await refresh();
   }
@@ -70,7 +76,7 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
  },[]);
  const issue=error||setupError||shellError;
  if(!showOffline)return null;
- const status=!ready?term('Preparing offline storage…'):count?term(count===1?'{count} change saved on this device · {status}':'{count} changes saved on this device · {status}',{count:formatNumber(count),status:term(online?'Sync pending':'Offline')}):!shellReady?term('Saved data ready · Preparing offline reopening…'):online?term('Synced · Offline saving ready'):term('Offline · Saved work is available on this device');
+ const status=!ready?term('Preparing offline storage…'):count?term(count===1?'{count} change saved on this device · {status}':'{count} changes saved on this device · {status}',{count:formatNumber(count),status:term(online?'Sync pending':'Offline')}):!shellReady?term('Saved data ready · Preparing offline reopening…'):!quotationsReady?term('Preparing quotation downloads for offline work…'):online?term('Synced · Offline saving ready'):term('Offline · Saved work is available on this device');
  // Keep freshness and an explicit retry visible even when routine storage
  // details are hidden. A failed download may have returned an older snapshot.
  if(quiet)return <div className="mx-auto max-w-5xl px-5 pt-3 text-sm print:hidden">
@@ -79,13 +85,15 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
    <button type="button" disabled={refreshing} onClick={()=>window.dispatchEvent(new Event('field-refresh'))} className="min-h-11 rounded-md px-3 font-semibold text-blue-700 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">{term(refreshing?'Refreshing projects…':'Refresh projects')}</button>
   </div>
   {ready&&!online&&<p role="status" className="mt-1 rounded-md bg-amber-50 p-3 leading-6 text-amber-900">{term('Showing saved projects. Connect and refresh to see the latest entries.')}</p>}
-  {issue&&<div role="alert" className="mt-2 text-red-700">{errorMessage(issue)} {error&&<button onClick={()=>void syncFieldChanges()} className="min-h-11 px-2 font-semibold underline">{term('Retry sync')}</button>}</div>}
+  {issue&&<div role="alert" className="mt-2 text-red-700">{errorMessage(issue)} {error&&<button onClick={()=>{void syncFieldChanges().then(()=>syncOfflineQuotations()).catch(()=>{});}} className="min-h-11 px-2 font-semibold underline">{term('Retry sync')}</button>}</div>}
+  <QuotationSyncConflicts/>
  </div>;
  return <div className="border-b border-slate-200 bg-white px-5 py-3 text-sm print:hidden">
   <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
    <div><p role="status" className={issue?'text-red-700':!online||count?'text-amber-800':'text-slate-600'}>{status}</p>{syncedAt&&<p className="mt-1 text-xs text-slate-500">{term('Last synced')} <time dateTime={syncedAt} dir="ltr" className="inline-block">{formatDateTime(syncedAt)}</time></p>}</div>
    <a href="/offline?path=/dashboard" className="font-semibold text-blue-600">{term('Device workspace')}</a>
   </div>
-  {issue&&<p role="alert" className="mx-auto mt-2 max-w-5xl text-xs text-red-700">{errorMessage(issue)} {error&&<button onClick={()=>void syncFieldChanges()} className="underline">{term('Retry sync')}</button>}</p>}
+  {issue&&<p role="alert" className="mx-auto mt-2 max-w-5xl text-xs text-red-700">{errorMessage(issue)} {error&&<button onClick={()=>{void syncFieldChanges().then(()=>syncOfflineQuotations()).catch(()=>{});}} className="min-h-11 px-2 underline">{term('Retry sync')}</button>}</p>}
+  <QuotationSyncConflicts/>
  </div>;
 }

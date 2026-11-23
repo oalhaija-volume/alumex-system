@@ -180,6 +180,7 @@ function apiFixture({ response = { ok: true }, status = 200 } = {}) {
   const fetch = async (url, init) => { requests.push({ url, init }); return { ok: status >= 200 && status < 300, json: async () => response }; };
   const dependencies = {
     '@/components/i18n/I18nProvider': {}, '@/lib/offline/client': { fieldFetch: fetch },
+    '@/lib/offline/device': { isOfflineDevice:()=>false },
     '@/lib/workflow/resourceLoader': loaderExports,
     '@/lib/workflow/workspaceEvents': { notifyWorkspaceChanged: committed => notices.push(committed) },
     'react': {}, 'react/jsx-runtime': {},

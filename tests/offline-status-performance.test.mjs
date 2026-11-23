@@ -4,7 +4,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import * as jsx from 'react/jsx-runtime';
 
-test('desktop status does not download an offline workspace while retained saves can still sync', async () => {
+test('unsupported clients avoid offline preparation while retained saves can still sync', async () => {
   const effects = [];
   const calls = { snapshots: 0, reads: 0, syncs: 0, workerUpdates: 0 };
   const dependencies = {
@@ -15,7 +15,10 @@ test('desktop status does not download an offline workspace while retained saves
       useSyncExternalStore: () => false,
     },
     '@/components/i18n/I18nProvider': { useI18n: () => ({ term: value => value }) },
+    '@/lib/auth/permissions': { canPrepareQuotation: role => role === 'Indoor Sales' },
     '@/lib/offline/device': { isOfflineDevice: () => false },
+    '@/lib/offline/quotations': { prepareOfflineQuotations: async()=>{}, syncOfflineQuotations: async()=>{}, quotationSyncStatus:()=>({pending:0,error:null}) },
+    './QuotationSyncConflicts': { QuotationSyncConflicts:()=>null },
     '@/lib/offline/client': {
       prepareOffline: async () => { calls.snapshots++; },
       syncFieldChanges: async () => { calls.syncs++; },

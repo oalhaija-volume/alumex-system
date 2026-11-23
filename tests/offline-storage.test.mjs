@@ -163,6 +163,17 @@ test('an aborted first opening save rejects; retry reports success only after du
   assert.equal(x.timerCount, 0);
 });
 
+for (const changedScope of [{ role: 'Indoor Sales' }, { branch: 'Rasafa' }]) test(`a committed employee scope change invalidates loaded views: ${JSON.stringify(changedScope)}`, async () => {
+  const x = storage();
+  const pending = x.store.updateFieldState(actor.id, state => ({ ...state, actor: { ...state.actor, ...changedScope } }), 'snapshot');
+  const tx = await x.open(); tx.readSuccess();
+  assert.equal(x.events.length, 0, 'Views must not invalidate before the verified snapshot commits.');
+  tx.commit(); await pending;
+  assert.deepEqual(x.events[0].detail, { source: 'snapshot', userId: actor.id, actorScopeChanged: true });
+  assert.equal(x.active, actor.id);
+  assert.deepEqual(x.records.get(actor.id).queue, original.queue);
+});
+
 test('a failed storage request rejects instead of waiting for transaction completion', async () => {
   const x = storage();
   const pending = x.store.readStoredFieldState();

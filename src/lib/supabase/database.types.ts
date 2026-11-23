@@ -92,6 +92,12 @@ export type Database = {
         | "document";
     };
     Tables: {
+      offline_quotation_receipts: {
+        Row: {operation_id:string;actor_id:string;project_id:string;action:'save'|'save-shared-prices';expected_revision:number;original_request:Json;recorded_at:string;synced_at:string;result:Json};
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       opening_size_history: {
         Row: {id:string;project_id:string;opening_id:string;source_opening_id:string;previous_width:number;previous_height:number;previous_quantity:number;width:number;height:number;quantity:number;reason:string;changed_by:string;changed_at:string;quotation_version:number};
         Insert: never;
@@ -1510,6 +1516,8 @@ export type Database = {
       };
     };
     Functions: {
+      replay_offline_quotation: { Args: {p_operation:string;p_actor:string;p_project:string;p_request:Json;p_recorded_at:string}; Returns: Json };
+      sync_offline_quotation: { Args: {p_operation:string;p_actor:string;p_project:string;p_expected_revision:number;p_payload:Json;p_request:Json;p_recorded_at:string}; Returns: Json };
       update_agreement_contract: { Args: { p_project: string; p_revision: number; p_agreement: Json; p_terms: Json; p_template: string; p_actor: string }; Returns: Json };
       rename_project_client: { Args: { p_project: string; p_actor: string; p_client_name: string; p_expected_client_name: string }; Returns: Json };
       deliver_due_follow_up_notifications: { Args: Record<PropertyKey, never>; Returns: number };

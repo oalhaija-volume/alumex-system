@@ -1,6 +1,7 @@
 "use client";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { fieldFetch,isDeviceWorkspace } from '@/lib/offline/client';
+import { isOfflineDevice } from '@/lib/offline/device';
 import type { FieldChangeDetail } from '@/lib/offline/store';
 import { createResourceLoader } from '@/lib/workflow/resourceLoader';
 import { notifyWorkspaceChanged,subscribeWorkspaceChanges } from '@/lib/workflow/workspaceEvents';
@@ -10,7 +11,9 @@ export const button='min-h-12 rounded-md bg-blue-600 px-5 py-3 text-sm font-semi
 export const secondary='min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50';
 export const card='rounded-lg border border-slate-200 bg-white p-5 sm:p-7';
 export async function api<T>(url:string,init?:RequestInit):Promise<T>{
- const response=await (url==='/api/workspace'?fieldFetch:fetch)(url,{cache:'no-store',...init});const data=await response.json();if(!response.ok)throw new Error(data.error??'Unable to complete request.');
+ const commercial=url==='/api/shared-quotations'||/^\/api\/sales-flow\/[0-9a-f-]{36}(?:\?|$)/i.test(url);
+ const transport=commercial&&isOfflineDevice()?(await import('@/lib/offline/quotations')).quotationFetch:url==='/api/workspace'?fieldFetch:fetch;
+ const response=await transport(url,{cache:'no-store',...init});const data=await response.json();if(!response.ok)throw new Error(data.error??'Unable to complete request.');
  if(url==='/api/workspace'&&init?.method?.toUpperCase()==='PATCH')notifyWorkspaceChanged(data?.pending!==true);
  return data;
 }
@@ -23,10 +26,14 @@ export function useResource<T>(url:string){
   let timer:ReturnType<typeof setTimeout>;
   let pendingForce=false;
   let actorId:string|null=null;
+  let hasData=false;
+  const quotationDetail=/^\/api\/sales-flow\//.test(url);
+  const commercial=quotationDetail||url==='/api/shared-quotations';
   const loader=createResourceLoader<T>({
    load:signal=>api<T>(url,{signal}),
    onData:result=>{
      setData(result);
+     hasData=true;
      setError('');
      if(result&&typeof result==='object'&&'actor' in result){
       const actor=result.actor;
@@ -43,11 +50,15 @@ export function useResource<T>(url:string){
   reloadResource.current=reload;
   function changed(event?:Event){
    const detail=(event as CustomEvent<FieldChangeDetail>|undefined)?.detail;
+   if(detail?.actorScopeChanged){
+    actorId=null;hasData=false;setData(null);loader.invalidate();pendingForce=true;
+   }
    // Online pages poll their API; the device workspace renders its refreshed snapshot.
-   if(detail?.source==='snapshot'&&!isDeviceWorkspace())return;
+   if(detail?.source==='snapshot'&&!detail.actorScopeChanged&&(!isDeviceWorkspace()||quotationDetail&&hasData))return;
    if(detail?.source==='account'){
     if(actorId!==null&&detail.userId===actorId)return;
     actorId=null;
+    hasData=false;
     setData(null);
    }
    // Real local edits must supersede a request that started before the edit.
@@ -64,9 +75,11 @@ export function useResource<T>(url:string){
    timer=setTimeout(()=>{pendingForce=false;void loader.refresh(true);},150);
   }
   void loader.refresh();
-  const live=url==='/api/workspace'||url==='/api/dashboard'||url==='/api/outdoor-sales-coverage'||url==='/api/signed-contracts';
-  const interval=live?setInterval(()=>{if(document.visibilityState==='visible')changed();},30000):undefined;
-  if(live){window.addEventListener('field-change',changed);window.addEventListener('focus',changed);}
+  const live=commercial||url==='/api/workspace'||url==='/api/dashboard'||url==='/api/outdoor-sales-coverage'||url==='/api/signed-contracts';
+  // Saved quotation acknowledgments refresh their view, while background polls
+  // cannot replace a form the employee is still editing.
+  const interval=live&&!commercial?setInterval(()=>{if(document.visibilityState==='visible')changed();},30000):undefined;
+  if(live){window.addEventListener('field-change',changed);if(!commercial)window.addEventListener('focus',changed);}
   const unsubscribe=live?subscribeWorkspaceChanges(workspaceChanged):()=>{};
   return()=>{
    loader.dispose();clearTimeout(timer);clearInterval(interval);unsubscribe();

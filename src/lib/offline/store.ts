@@ -9,7 +9,7 @@ const accountReads=new Map<string,AccountRead>();
 const accountWrites=new Map<string,Set<Promise<FieldState>>>();
 function invalidateRead(id:string|null){if(!id)return;const read=accountReads.get(id);if(read)read.invalidated=true;accountReads.delete(id);}
 export function activeFieldUser(){return typeof window==='undefined'?null:localStorage.getItem(ACTIVE);}
-export type FieldChangeDetail={source:'snapshot'|'account';userId:string|null};
+export type FieldChangeDetail={source:'snapshot'|'account';userId:string|null;actorScopeChanged?:boolean};
 export function setFieldUser(id:string|null){const previous=activeFieldUser();if(id)localStorage.setItem(ACTIVE,id);else localStorage.removeItem(ACTIVE);if(previous!==id){invalidateRead(previous);invalidateRead(id);window.dispatchEvent(new CustomEvent<FieldChangeDetail>('field-change',{detail:{source:'account',userId:id}}));}}
 async function database(){
  return new Promise<IDBDatabase>((resolve,reject)=>{
@@ -89,10 +89,11 @@ export async function readStoredFieldState(id=activeFieldUser()):Promise<FieldSt
 export async function readFieldState(id=activeFieldUser()):Promise<FieldState|null>{const state=await readStoredFieldState(id);return state&&id===activeFieldUser()?visibleFieldState(state):null;}
 export async function updateFieldState(id:string,change:(state:FieldState|null)=>FieldState,source?:'snapshot'):Promise<FieldState>{
  invalidateRead(id);
- const saving=accountRecord(id,'readwrite',(store,state)=>{const next=change(state);store.put(next,id);return next;});
+ let actorScopeChanged=false;
+ const saving=accountRecord(id,'readwrite',(store,state)=>{const next=change(state);actorScopeChanged=!!state&&(state.actor.role!==next.actor.role||state.actor.branch!==next.actor.branch);store.put(next,id);return next;});
  const writes=accountWrites.get(id)??new Set<Promise<FieldState>>();writes.add(saving);accountWrites.set(id,writes);
  let next:FieldState;
  try{next=await saving;}finally{writes.delete(saving);if(!writes.size)accountWrites.delete(id);}
- window.dispatchEvent(source?new CustomEvent<FieldChangeDetail>('field-change',{detail:{source,userId:id}}):new Event('field-change'));
+ window.dispatchEvent(source?new CustomEvent<FieldChangeDetail>('field-change',{detail:{source,userId:id,...(actorScopeChanged?{actorScopeChanged:true}:{})}}):new Event('field-change'));
  return visibleFieldState(next);
 }

@@ -119,7 +119,7 @@ export async function prepareOffline({background=false}:{background?:boolean}={}
    const pending=new Set([...(old?.queue.map(c=>c.projectId)??[]),...freshProjects]);
    const registrations=new Set([...(old?.queue.filter(change=>change.action==='register').map(change=>change.projectId)??[]),...freshProjects]);
    const unavailableProjectIds=['Indoor Sales','Outdoor Sales'].includes(remote.actor.role)?[...pending].filter(id=>!remoteProjects.has(id)&&(!registrations.has(id)||old?.unavailableProjectIds?.includes(id))):[];
-   return {...remote,unavailableProjectIds,archivedProjects:old?.archivedProjects??[],measurementReports:[...(remote.measurementReports??[]).filter(r=>!pending.has(r.project_id)).map(r=>retainMeasurementReport(r,old?.measurementReports??[])),...(old?.measurementReports??[]).filter(r=>pending.has(r.project_id))],followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remoteProjects.has(id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id)).map(p=>remoteProjects.has(p.id)?withCurrentProjectAccess(p,remoteProjects.get(p.id)!):p)??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)).map(o=>retainSkylightCapture(o,old?.openings??[])),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
+   return {...remote,quotations:old?.quotations,unavailableProjectIds,archivedProjects:old?.archivedProjects??[],measurementReports:[...(remote.measurementReports??[]).filter(r=>!pending.has(r.project_id)).map(r=>retainMeasurementReport(r,old?.measurementReports??[])),...(old?.measurementReports??[]).filter(r=>pending.has(r.project_id))],followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remoteProjects.has(id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id)).map(p=>remoteProjects.has(p.id)?withCurrentProjectAccess(p,remoteProjects.get(p.id)!):p)??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)).map(o=>retainSkylightCapture(o,old?.openings??[])),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
   },'snapshot');
   checkAccount();setFieldUser(remote.actor.id);context.generation=accountGeneration;context.downloaded=true;lastSnapshot={actorId:remote.actor.id,downloadedAt:Date.now()};return state;
  })();
@@ -318,7 +318,8 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
  return {projectId,pending:true};
 }
 export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>{
- // Desktop uses the live application and never creates new queued field edits.
+ // Unsupported clients use the live application. Laptops and installed apps
+ // use the same durable queue as the device workspace.
  if(!isOfflineDevice())return fetch(url,init);
  const method=init?.method??'GET';
  if(method==='PATCH' && url==='/api/workspace' && JSON.parse(String(init?.body??'{}')).action==='reactivate-project'){

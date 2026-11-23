@@ -6,6 +6,7 @@ import { normalizeExcludedOpeningIds, quotationOpenings } from '@/lib/workflow/q
 import { applyOpeningSizeChanges, normalizeOpeningSizeChanges, priceQuotationWithSizeChanges, type OpeningSizeChange, type OpeningSizeHistory } from '@/lib/workflow/openingSizeChanges';
 import type { Json } from '@/lib/supabase/database.types';
 import type { SalesFlow } from '@/lib/workflow/types';
+import type { OfflineQuotationOperation } from '@/lib/offline/quotationSyncServer';
 type Context={params:Promise<{projectId:string}>};
 const unavailable='The sales workflow database update is required. Ask the administrator to apply the prepared migration.';
 export async function GET(request:Request,context:Context){
@@ -30,7 +31,7 @@ export async function GET(request:Request,context:Context){
  }
  if(access.quotationAccess==='prices'){
   const {id,project_number,project_name,address,building_type,branch,governorate,sales_status,additional_openings_state}=project;
-  return NextResponse.json({quotationAccess:'prices',project:{id,project_number,project_name,address,building_type,branch,governorate,sales_status,additional_openings_state},client:client.data,flow:flow.data?{...flow.data,contract:null,evidence:flow.data.evidence?{recorded:true}:null}:null,openings:openings.data,catalog:catalog.data,history:[],sizeHistory:[]},{headers:{'Cache-Control':'private, no-store'}});
+  return NextResponse.json({quotationAccess:'prices',project:{id,project_number,project_name,address,building_type,branch,governorate,sales_status,additional_openings_state},client:client.data,flow:flow.data?{...flow.data,contract:null,evidence:flow.data.evidence?{recorded:true}:null}:null,openings:openings.data,catalog:catalog.data,history:[],sizeHistory:[]},{headers:{'Cache-Control':'private, no-store','X-Alumex-Actor':access.auth.user.id}});
  }
  // Old installations can continue opening quotations until the size-edit
  // migration is applied. Existing revision snapshots still remain available.
@@ -47,41 +48,67 @@ export async function GET(request:Request,context:Context){
    if(people.error)sizeHistoryError='Unable to load size change history.';
   }
  }catch{sizeHistoryError='Unable to load size change history.';}
- return NextResponse.json({project,client:client.data,flow:flow.data,openings:openings.data,catalog:catalog.data,history:history.data,sizeHistory,...(sizeHistoryError?{sizeHistoryError}:{})},{headers:{'Cache-Control':'private, no-store'}});
+ return NextResponse.json({project,client:client.data,flow:flow.data,openings:openings.data,catalog:catalog.data,history:history.data,sizeHistory,...(sizeHistoryError?{sizeHistoryError}:{})},{headers:{'Cache-Control':'private, no-store','X-Alumex-Actor':access.auth.user.id}});
 }
 export async function POST(request:Request,context:Context){
- const {projectId}=await context.params;const access=await salesProject(projectId,'commercial',true);if(access.response)return access.response;
+ let offline:OfflineQuotationOperation|null=null;
+ let offlineHelpers:typeof import('@/lib/offline/quotationSyncServer')|null=null;
+ if(request.headers&&[...request.headers.keys()].some(name=>name.toLowerCase().startsWith('x-alumex-offline-'))){
+  try{offlineHelpers=await import('@/lib/offline/quotationSyncServer');offline=offlineHelpers.offlineQuotationOperation(request.headers);}catch(cause){return NextResponse.json({error:(cause as Error).message,code:'OFFLINE_QUOTATION_INVALID'},{status:400});}
+ }
+ const {projectId}=await context.params;const access=await salesProject(projectId,'commercial',true);
+ if(access.response){
+  if(!offline)return access.response;
+  const status=access.response.status===401?401:access.response.status===503?503:403;
+  return NextResponse.json({error:status===401?'Sign in as the employee who saved this draft.':'Project access is no longer available. Your draft remains on this device.',code:status===401?'OFFLINE_QUOTATION_AUTH_REQUIRED':status===503?'OFFLINE_QUOTATION_SYNC_UNAVAILABLE':'OFFLINE_QUOTATION_ACCESS_REVOKED'},{status});
+ }
  const {admin,auth,project}=access;
- if(['cancelled','lost','closed'].includes(project.sales_status))return NextResponse.json({error:'This project is closed. Its quotation and contract history is read-only.'},{status:409});
+ if(offline&&offline.actorId!==auth.user.id)return NextResponse.json({error:'Sign in as the employee who saved this draft. Your draft remains on this device.',code:'OFFLINE_QUOTATION_ACCOUNT_MISMATCH'},{status:403});
+ let offlineRequest:Record<string,unknown>|null=null;
+ if(offline){
+  if(request.headers.get('content-type')?.includes('multipart/form-data'))return NextResponse.json({error:'Signed documents require an online connection.',code:'OFFLINE_QUOTATION_INVALID'},{status:400});
+  const received:unknown=await request.json().catch(()=>null);
+  if(!received||typeof received!=='object'||Array.isArray(received))return NextResponse.json({error:'Invalid offline quotation draft.',code:'OFFLINE_QUOTATION_INVALID'},{status:400});
+  offlineRequest=structuredClone(received) as Record<string,unknown>;
+  if(!['save','save-shared-prices'].includes(String(offlineRequest.action)))return NextResponse.json({error:'Only quotation draft saves can be synced offline.',code:'OFFLINE_QUOTATION_INVALID'},{status:400});
+  const receipt=await offlineHelpers!.replayOfflineQuotation(admin,offline,auth.user.id,projectId,offlineRequest);
+  if(receipt.error){const failure=offlineHelpers!.offlineQuotationFailure(receipt.error);return NextResponse.json({error:receipt.error.message,code:failure.code},{status:failure.status});}
+  if(receipt.data)return NextResponse.json(receipt.data,{headers:{'Cache-Control':'private, no-store','X-Alumex-Actor':auth.user.id}});
+ }
+ if(['cancelled','lost','closed'].includes(project.sales_status))return NextResponse.json({error:'This project is closed. Its quotation and contract history is read-only.',...(offline?{code:'OFFLINE_QUOTATION_LOCKED'}:{})},{status:409});
  const saved=await admin.from('sales_workflows').select('*').eq('project_id',projectId).maybeSingle();
- if(saved.error)return NextResponse.json({error:unavailable},{status:503});
+ if(saved.error)return NextResponse.json({error:unavailable,...(offline?{code:'OFFLINE_QUOTATION_SYNC_UNAVAILABLE'}:{})},{status:503});
  const flow=saved.data as unknown as SalesFlow|null;
  let body:Record<string,unknown>;let upload:File|null=null;
- if(request.headers.get('content-type')?.includes('multipart/form-data')){
+ if(offlineRequest){body=structuredClone(offlineRequest);}else if(request.headers.get('content-type')?.includes('multipart/form-data')){
   if(Number(request.headers.get('content-length'))>4*1024*1024)return NextResponse.json({error:'Maximum file size is 3 MB.'},{status:413});
   const form=await request.formData().catch(()=>null);if(!form)return NextResponse.json({error:'Invalid upload.'},{status:400});
   body={action:'sign',revision:Number(form.get('revision')),method:'upload',signer:form.get('signer'),consent:form.get('consent')==='true'};
   const file=form.get('file');upload=file instanceof File?file:null;
  }else{body=await request.json().catch(()=>({}));}
  const action=body.action;const revision=body.revision;
- if(access.quotationAccess==='prices'&&action!=='save-shared-prices')return NextResponse.json({error:'Shared access permits quotation price editing only.'},{status:403});
+ if(access.quotationAccess==='prices'&&action!=='save-shared-prices')return NextResponse.json({error:'Shared access permits quotation price editing only.',...(offline?{code:'OFFLINE_QUOTATION_ACCESS_REVOKED'}:{})},{status:403});
  if(action==='save-shared-prices'){
-  if(!Number.isInteger(revision)||revision!==flow?.revision)return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
-  if(!flow||flow.signed_at||flow.evidence||flow.accepted_at||flow.accepted_by||!['quotation','approved','contract'].includes(flow.stage)||['contract_signed','transferred_to_operations'].includes(project.sales_status))return NextResponse.json({error:'Signed contracts cannot be changed.'},{status:409});
-  if(project.additional_openings_state)return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.'},{status:409});
+  if(!Number.isInteger(revision)||revision!==flow?.revision)return NextResponse.json({error:'The project changed. Reload and try again.',...(offline?{code:'OFFLINE_QUOTATION_CONFLICT'}:{})},{status:409});
+  if(!flow||flow.signed_at||flow.evidence||flow.accepted_at||flow.accepted_by||!['quotation','approved','contract'].includes(flow.stage)||['contract_signed','transferred_to_operations'].includes(project.sales_status))return NextResponse.json({error:'Signed contracts cannot be changed.',...(offline?{code:'OFFLINE_QUOTATION_LOCKED'}:{})},{status:409});
+  if(project.additional_openings_state)return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.',...(offline?{code:'OFFLINE_QUOTATION_CONFLICT'}:{})},{status:409});
   if(flow.stage==='contract'&&body.replaceUnsignedContract!==true)return NextResponse.json({error:'Confirm that this revision replaces the unsigned contract and requires new client approval.'},{status:400});
   const catalog=await admin.from('product_price_settings').select('id,name:product_name,category,unit,unit_price,is_active').eq('is_active',true);
   if(catalog.error)return NextResponse.json({error:'Unable to load pricing.'},{status:500});
   try{
    const {reviseSharedQuotationPrices}=await import('@/lib/quotations/sharedPrices');
    const quotation=reviseSharedQuotationPrices(flow.quotation,{systemRates:body.systemRates,additionalRates:body.additionalRates},catalog.data as CatalogItem[],auth.user.id);
-   const result=await admin.rpc('advance_sales_flow',{p_project:projectId,p_action:'save',p_revision:revision as number,p_payload:quotation as unknown as Json,p_actor:auth.user.id});
+   const result=offline&&offlineRequest
+    ?await offlineHelpers!.syncOfflineQuotation(admin,offline,auth.user.id,projectId,revision as number,quotation as unknown as Json,offlineRequest)
+    :await admin.rpc('advance_sales_flow',{p_project:projectId,p_action:'save',p_revision:revision as number,p_payload:quotation as unknown as Json,p_actor:auth.user.id});
+   if(offline&&result.error){const failure=offlineHelpers!.offlineQuotationFailure(result.error);return NextResponse.json({error:result.error.message,code:failure.code},{status:failure.status});}
    if(result.error)return NextResponse.json({error:result.error.message},{status:result.error.code==='42501'?403:409});
+   if(offline)return NextResponse.json(result.data,{headers:{'Cache-Control':'private, no-store','X-Alumex-Actor':auth.user.id}});
    return NextResponse.json({ok:true},{headers:{'Cache-Control':'private, no-store'}});
-  }catch(cause){return NextResponse.json({error:cause instanceof Error?cause.message:'Unable to update quotation prices.'},{status:400});}
+  }catch(cause){const error=cause instanceof Error?cause.message:'Unable to update quotation prices.';if(offline){const failure=offlineHelpers!.offlineQuotationFailure({message:error});return NextResponse.json({error,code:failure.code},{status:failure.status});}return NextResponse.json({error},{status:400});}
  }
- if(project.additional_openings_state==='requested'||(project.additional_openings_state==='submitted'&&action!=='save'))return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.'},{status:409});
- if(!['save','approve','contract','sign','preview-prices','update-prices','set-discount','change-contract-template','save-contract-details'].includes(String(action))||!Number.isInteger(revision)||revision!==(flow?.revision??0))return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
+ if(project.additional_openings_state==='requested'||(project.additional_openings_state==='submitted'&&action!=='save'))return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.',...(offline?{code:'OFFLINE_QUOTATION_CONFLICT'}:{})},{status:409});
+ if(!['save','approve','contract','sign','preview-prices','update-prices','set-discount','change-contract-template','save-contract-details'].includes(String(action))||!Number.isInteger(revision)||revision!==(flow?.revision??0))return NextResponse.json({error:'The project changed. Reload and try again.',...(offline?{code:'OFFLINE_QUOTATION_CONFLICT'}:{})},{status:409});
  if(!QUOTATION_DISCOUNTS_ENABLED&&(action==='set-discount'||['save','preview-prices','update-prices'].includes(String(action))&&body.discountPercent===5))return NextResponse.json({error:'Quotation discounts are temporarily unavailable.'},{status:403});
  let payload:Json={};let uploadedPath:string|null=null;let sizeChanges:OpeningSizeChange[]=[];
  try{
@@ -213,12 +240,15 @@ export async function POST(request:Request,context:Context){
     payload={method:'hard_copy',signer,confirmed:true};
    }else throw new Error('Choose digital signing, upload a signed copy, or record a hard-copy signature.');
   }
-  const result=sizeChanges.length
+  const result=offline&&offlineRequest
+   ?await offlineHelpers!.syncOfflineQuotation(admin,offline,auth.user.id,projectId,revision as number,payload,offlineRequest)
+   :sizeChanges.length
    ?await admin.rpc('save_quotation_with_opening_sizes',{p_project:projectId,p_revision:revision as number,p_payload:payload,p_actor:auth.user.id})
    :await admin.rpc('advance_sales_flow',{p_project:projectId,p_action:action==='update-prices'||action==='set-discount'?'save':String(action),p_revision:revision as number,p_payload:payload,p_actor:auth.user.id});
+  if(offline&&result.error){const failure=offlineHelpers!.offlineQuotationFailure(result.error);return NextResponse.json({error:result.error.message,code:failure.code},{status:failure.status});}
   if(sizeChanges.length&&result.error?.code==='PGRST202')return NextResponse.json({error:unavailable},{status:503});
   if(result.error)throw new Error(result.error.message);
-  return NextResponse.json({flow:result.data},{headers:{'Cache-Control':'no-store'}});
+  return NextResponse.json(offline?result.data:{flow:result.data},{headers:{'Cache-Control':'no-store',...(offline?{'X-Alumex-Actor':auth.user.id}:{})}});
  }catch(cause){
   // A network error can arrive after the transaction committed. Preserve its evidence.
   if(uploadedPath){
@@ -227,6 +257,8 @@ export async function POST(request:Request,context:Context){
    if(!current.error && persisted?.evidence?.path===uploadedPath && persisted.signed_at)return NextResponse.json({flow:current.data},{headers:{'Cache-Control':'no-store'}});
    if(!current.error)await admin.storage.from('signed-contracts-private').remove([uploadedPath]);
   }
-  return NextResponse.json({error:cause instanceof Error?cause.message:'Unable to update project.'},{status:400});
+  const error=cause instanceof Error?cause.message:'Unable to update project.';
+  if(offline){const failure=offlineHelpers!.offlineQuotationFailure({message:error});return NextResponse.json({error,code:failure.code},{status:failure.status});}
+  return NextResponse.json({error},{status:400});
  }
 }

@@ -1,6 +1,6 @@
 /* Only the public shell and static assets enter Cache Storage. Account data stays in IndexedDB. */
-const CACHE = 'alumex-field-shell-v30';
-const mobileDevice = /Android|iPhone|iPad|iPod|Tablet|Silk|Windows Phone/i.test(self.navigator.userAgent);
+const CACHE = 'alumex-field-shell-v31';
+const offlineDevice = /Android|iPhone|iPad|iPod|Tablet|Silk|Windows|Macintosh|Mac OS X|X11|Linux|CrOS/i.test(self.navigator.userAgent);
 let refreshing = null;
 let refreshedAt = 0;
 
@@ -36,10 +36,10 @@ async function savedShell() {
  return (await cache.match('/offline')) || caches.match('/offline');
 }
 
-self.addEventListener('install', event => event.waitUntil((mobileDevice ? refreshShell() : Promise.resolve()).then(() => self.skipWaiting())));
+self.addEventListener('install', event => event.waitUntil((offlineDevice ? refreshShell() : Promise.resolve()).then(() => self.skipWaiting())));
 self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
 self.addEventListener('message', event => {
- if (mobileDevice && event.data?.type === 'REFRESH_OFFLINE_SHELL') event.waitUntil(refreshShell().catch(() => {}));
+ if (offlineDevice && event.data?.type === 'REFRESH_OFFLINE_SHELL') event.waitUntil(refreshShell().catch(() => {}));
 });
 self.addEventListener('fetch', event => {
  const request = event.request, url = new URL(request.url);
@@ -55,8 +55,7 @@ self.addEventListener('fetch', event => {
   return;
  }
  if (request.mode !== 'navigate') return;
- // Existing desktop installations must no longer open the saved device shell.
- if (!mobileDevice) {
+ if (!offlineDevice) {
   if (url.pathname === '/offline') event.respondWith(Promise.resolve(Response.redirect(new URL('/dashboard', self.location.origin), 302)));
   return;
  }
@@ -84,7 +83,7 @@ self.addEventListener('fetch', event => {
   })());
   return;
  }
- const fieldRoute = /^\/(?:dashboard|intake|project-log|projects|mini-crm|initial-measurements)(?:\/|$)/.test(url.pathname);
+ const fieldRoute = /^\/(?:dashboard|intake|project-log|projects|mini-crm|initial-measurements|quotation)(?:\/|$)/.test(url.pathname);
  if (!fieldRoute) return;
  event.respondWith((async () => {
   const controller = new AbortController();

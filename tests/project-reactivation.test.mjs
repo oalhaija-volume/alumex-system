@@ -19,8 +19,9 @@ test('reactivation requires confirmation, a note, and the displayed project vers
   assert.equal(normalizeReactivation(input).note,'Client changed their mind');
   for (const patch of [{confirmed:false},{note:''},{note:3},{note:'x'.repeat(2001)},{expectedUpdatedAt:''}]) assert.throws(()=>normalizeReactivation({...input,...patch}));
 });
-test('desktop cannot use the device workspace while phones and tablets retain access', () => {
-  for (const agent of ['Mozilla/5.0 (Windows NT 10.0; Win64; x64)','Mozilla/5.0 (Macintosh; Intel Mac OS X)','Mozilla/5.0 (X11; Linux x86_64)','']) assert.equal(supportsOfflineWorkspace(new Headers({'user-agent':agent})),false);
+test('laptops, phones and tablets can use the offline workspace', () => {
+  for (const agent of ['Mozilla/5.0 (Windows NT 10.0; Win64; x64)','Mozilla/5.0 (Macintosh; Intel Mac OS X)','Mozilla/5.0 (X11; Linux x86_64)']) assert.equal(supportsOfflineWorkspace(new Headers({'user-agent':agent})),true);
+  assert.equal(supportsOfflineWorkspace(new Headers()),false);
   for (const agent of ['iPhone','Android Mobile','Android Tablet','iPad']) assert.equal(supportsOfflineWorkspace(new Headers({'user-agent':agent})),true);
 });
 

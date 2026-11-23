@@ -9,6 +9,7 @@ import { DocumentHeader, DocumentParties, DocumentPaper, OpeningSchedule } from 
 import { api, button, card, field, Notice, Workspace } from './ui';
 
 type SharedQuotationData = {
+  offlineQuotation?: { pending: boolean; recordedAt: string; error?: string };
   project: {
     project_name: string;
     project_number: string;
@@ -106,6 +107,7 @@ export function SharedQuotationPrices({ projectId, data, reload, error: resource
   const reference = `QT-${project.project_number}-R${quotation?.version ?? 1}`;
   return <Workspace title={term('Quotation')} description={term('Shared quotation · Price editing')}>
     <Notice error={error || resourceError} />
+    {data.offlineQuotation?.pending && <aside role="status" className="mb-5 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900"><p className="font-semibold">{term('Quotation saved on this device. It will sync when connected.')}</p>{data.offlineQuotation.error && <a className="mt-1 inline-block min-h-11 py-2 font-semibold text-blue-700 underline print:hidden" href={`#quotation-sync-review-${projectId}`}>{term('Review saved quotation')}</a>}</aside>}
     <section className={`${card} mb-6`} aria-label={term('Project details')}>
       <p className="text-xs font-semibold text-blue-700"><bdi>{project.project_number}</bdi>{project.branch && <> · {term(project.branch)}</>}</p>
       <h2 className="mt-2 break-words text-xl font-semibold text-slate-900" dir="auto">{project.project_name}</h2>

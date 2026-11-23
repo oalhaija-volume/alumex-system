@@ -1,0 +1,20 @@
+{
+  "electron": {
+    "version": "45.4.1",
+    "filename": "electron-v45.4.1-win32-x64.zip",
+    "url": "https://github.com/electron/electron/releases/download/v45.4.1/electron-v45.4.1-win32-x64.zip",
+    "sha256": "2ba6223afa9121f42831fefe92c434334907540165294fc56697449d12e7cfe9"
+  },
+  "sevenZip": {
+    "version": "5.2.0",
+    "filename": "7zip-bin-5.2.0.tgz",
+    "url": "https://registry.npmjs.org/7zip-bin/-/7zip-bin-5.2.0.tgz",
+    "sha512": "ukTPVhqG4jNzMro2qA9HSCSSVJN3aN7tlb+hfqYCt3ER0yWroeA2VR38MNrOHLQ/cVj+DaIMad0kFCtWWowh/A=="
+  },
+  "nsis": {
+    "version": "3.0.4.2",
+    "filename": "nsis-3.0.4.2.7z",
+    "url": "https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-3.0.4.2/nsis-3.0.4.2.7z",
+    "sha256": "a2ec86beacc2f3141be3906e1eee288476916f70f1f2df8900b487365a578199"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "alumexflow-desktop",
+  "productName": "AlumexFlow Desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AlumexFlow Windows workspace with persistent offline data",
+  "main": "src/main.cjs",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "build:win": "node scripts/build-windows.mjs"
+  }
+}

@@ -1,0 +1,78 @@
+name: Build and verify Windows desktop installer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out reviewed source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          set-safe-directory: false
+      - name: Check runner Node
+        shell: pwsh
+        run: node --version
+      - name: Verify desktop security and lifecycle
+        shell: pwsh
+        run: node --test desktop/tests/*.test.cjs
+      - name: Build pinned Windows x64 installer
+        shell: pwsh
+        run: node desktop/scripts/build-windows.mjs
+      - name: Install and launch on Windows
+        shell: pwsh
+        run: |
+          $alumexDesktopRoot = Join-Path '${{ github.workspace }}' 'desktop'
+          $alumexInstaller = Get-ChildItem (Join-Path $alumexDesktopRoot 'dist/AlumexFlow-Setup-*-x64-*.exe') | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+          if (!$alumexInstaller) { throw 'Windows installer was not produced.' }
+          $alumexInstallDirectory = Join-Path $alumexDesktopRoot '.runtime/windows-install'
+          $alumexInstallerProcess = Start-Process -FilePath $alumexInstaller.FullName -ArgumentList @('/S', "/D=$alumexInstallDirectory") -PassThru -Wait
+          if ($alumexInstallerProcess.ExitCode -ne 0) { throw 'Silent installation failed.' }
+          $alumexExecutable = Join-Path $alumexInstallDirectory 'AlumexFlow.exe'
+          if (!(Test-Path $alumexExecutable)) { throw 'Installed application executable is missing.' }
+          $alumexDesktopShortcut = Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'AlumexFlow Desktop.lnk'
+          $alumexMenuShortcut = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs/AlumexFlow Desktop/AlumexFlow Desktop.lnk'
+          if (!(Test-Path $alumexDesktopShortcut) -or !(Test-Path $alumexMenuShortcut)) { throw 'Desktop or Start menu shortcut is missing.' }
+          $alumexSmokeRoot = Join-Path $alumexDesktopRoot '.runtime/windows-smoke'
+          New-Item -ItemType Directory -Path $alumexSmokeRoot -Force | Out-Null
+          $alumexApplication = Start-Process -FilePath $alumexExecutable -ArgumentList @('--smoke-test', "--smoke-root=$alumexSmokeRoot") -PassThru
+          $alumexWindowObserved = $false
+          for ($alumexAttempt = 0; $alumexAttempt -lt 100 -and !$alumexApplication.HasExited; $alumexAttempt++) {
+            $alumexApplication.Refresh()
+            if ($alumexApplication.MainWindowHandle -ne 0) { $alumexWindowObserved = $true }
+            Start-Sleep -Milliseconds 500
+          }
+          if (!$alumexApplication.WaitForExit(60000)) { throw 'Installed application smoke test timed out.' }
+          if ($alumexApplication.ExitCode -ne 0) { throw 'Installed application failed its public-login smoke test.' }
+          $alumexSmokeReport = Get-Content (Join-Path $alumexSmokeRoot 'report.json') -Raw | ConvertFrom-Json
+          if (!$alumexSmokeReport.passed -or !$alumexSmokeReport.windowVisible -or !$alumexSmokeReport.rendererSandboxed) { throw 'Window or renderer verification failed.' }
+          if (!$alumexWindowObserved) { throw 'A native application window was not observed.' }
+          [ordered]@{
+            passed = $true
+            installerExitCode = $alumexInstallerProcess.ExitCode
+            applicationExitCode = $alumexApplication.ExitCode
+            installedExecutable = $true
+            desktopShortcut = $true
+            startMenuShortcut = $true
+            nativeWindowObserved = $alumexWindowObserved
+            publicLoginLoaded = $alumexSmokeReport.appOriginLoaded
+            businessWrites = 0
+          } | ConvertTo-Json | Set-Content (Join-Path $alumexDesktopRoot 'dist/windows-install-smoke.json') -Encoding utf8
+      - name: Upload installer, checksums and verification reports
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: alumexflow-windows-x64
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.sha256
+            desktop/dist/*.json
+            desktop/.runtime/windows-smoke/report.json
+          if-no-files-found: error
+          retention-days: 14

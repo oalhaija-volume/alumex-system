@@ -39,7 +39,10 @@ export function OutdoorIntake({ initialEmployeeState = null,onRegistered }: { in
   const [error, setError] = useState("");
   const [saved, setSaved] = useState<{projectId:string;pending:boolean;registeredBy:string;createdAt?:string;legacyOutdoorSalesOwner?:string|null}|null>(null);
   const [offline,setOffline]=useState(false);
-  const [employeeState,setEmployeeState]=useState<IntakeEmployeeState|null>(initialEmployeeState);
+  const [cachedEmployeeState,setCachedEmployeeState]=useState<IntakeEmployeeState|null>(null);
+  // Refreshed server data must immediately replace the previous account or
+  // showroom branch. Device snapshots are only a fallback for offline entry.
+  const employeeState=initialEmployeeState??cachedEmployeeState;
   const [rotationDate,setRotationDate]=useState(()=>new Date());
   const [assignedOutdoorSalesId,setAssignedOutdoorSalesId]=useState('');
   const [legacyProject,setLegacyProject]=useState(false);
@@ -66,7 +69,7 @@ export function OutdoorIntake({ initialEmployeeState = null,onRegistered }: { in
     // Device-only workspaces continue to load the account's offline snapshot.
     if (initialEmployeeState) return;
     let live=true;
-    const refresh=async()=>{const state=await readFieldState().catch(()=>null);if(live)setEmployeeState(state);};
+    const refresh=async()=>{const state=await readFieldState().catch(()=>null);if(live)setCachedEmployeeState(state);};
     if(isDeviceWorkspace())void refresh();else void prepareOffline().then(refresh).catch(()=>{void refresh();});
     window.addEventListener('field-change',refresh);
     return()=>{live=false;window.removeEventListener('field-change',refresh);};

@@ -25,8 +25,9 @@ import { OpeningAreaBadge,OpeningSellingLegend } from './OpeningAreaIndicator';
 import { ContractPaymentPreview } from '@/components/contracts/ContractPaymentPreview';
 import { DocumentHeader,DocumentParties,OpeningSchedule,DocumentFooter,DocumentPaper } from './CommercialDocument';
 import { api,button,card,field,Notice,secondary,useResource,Workspace } from './ui';
+import { SharedQuotationPrices } from './SharedQuotationPrices';
 
-type QuoteData={project:{additional_openings_state?:'requested'|'submitted'|null;building_type?:BuildingType|null;branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;project_name:string;project_number:string;address:string;sales_status:string};client:{name:string;mobile:string;client_type?:string};openings:MeasuredOpening[];catalog:CatalogItem[];flow:SalesFlow|null;history:QuotationRevision[];sizeHistory?:OpeningSizeHistory[];sizeHistoryError?:string};
+type QuoteData={quotationAccess?:'full'|'prices';project:{additional_openings_state?:'requested'|'submitted'|null;building_type?:BuildingType|null;branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null;project_name:string;project_number:string;address:string;sales_status:string};client:{name:string;mobile:string;client_type?:string};openings:MeasuredOpening[];catalog:CatalogItem[];flow:SalesFlow|null;history:QuotationRevision[];sizeHistory?:OpeningSizeHistory[];sizeHistoryError?:string};
 const quantityLabel=(unit?:string)=>unit==='sqm'?'Area (m²)':unit==='meter'?'Length (m)':'Quantity';
 type PricePreview={quotation:QuoteSnapshot;priceKey:string;revision:number};
 const pricePreviewConflicts=new Set(['Catalog prices changed. Preview the updated prices again before saving.','The project changed. Reload and try again.']);
@@ -445,5 +446,6 @@ export function QuotationWorkspace({projectId}:{projectId:string}) {
  const [reset,setReset]=useState(0);
  const [actionError,setActionError]=useState('');
  async function reload(error=''){await resource.reload();setActionError(error);setReset(n=>n+1);}
- return <Workspace title={term("Quotation")} description={term("Prepare and revise the client’s quotation using measured openings and preset catalog prices.")}><ProjectRecord projectId={projectId}/><MeasurementReports projectId={projectId}/><Notice error={resource.error||actionError}/>{resource.loading?<p>{term("Loading quotation…")}</p>:resource.data?<QuoteEditor key={`${projectId}:${resource.data.flow?.revision??0}:${reset}`} data={resource.data} projectId={projectId} reload={reload} clearActionError={()=>setActionError('')}/>:null}</Workspace>;
+ if(resource.data?.quotationAccess==='prices')return <SharedQuotationPrices key={`${projectId}:${resource.data.flow?.revision??0}:${reset}`} projectId={projectId} data={resource.data} reload={reload} error={resource.error||actionError}/>;
+ return <Workspace title={term("Quotation")} description={term("Prepare and revise the client’s quotation using measured openings and preset catalog prices.")}>{resource.data&&<><ProjectRecord projectId={projectId}/><MeasurementReports projectId={projectId}/></>}<Notice error={resource.error||actionError}/>{resource.loading?<p>{term("Loading quotation…")}</p>:resource.data?<QuoteEditor key={`${projectId}:${resource.data.flow?.revision??0}:${reset}`} data={resource.data} projectId={projectId} reload={reload} clearActionError={()=>setActionError('')}/>:null}</Workspace>;
 }

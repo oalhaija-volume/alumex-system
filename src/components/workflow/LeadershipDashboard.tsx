@@ -10,7 +10,7 @@ import { DashboardProjectFilters } from './DashboardProjectFilters';
 import { matchesProjectSearch } from '@/lib/dashboard/projectSearch';
 import Link from 'next/link';
 import { Noto_Sans_Arabic } from 'next/font/google';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { isLeadershipRole } from '@/lib/auth/permissions';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import type { FieldProject, SalesWorkspaceData } from '@/lib/offline/types';
@@ -146,9 +146,10 @@ function ProjectRow({ project, data, leadership, overdue, busy, onDelete, onProj
   </article>;
 }
 
-export function LeadershipDashboard({ data, error, now, notice = '', busy = '', onDelete, onProjectSaved, onClientNameSaved, onIndoorSalesSaved }: {
+export function LeadershipDashboard({ data, error, now, notice = '', busy = '', onDelete, onProjectSaved, onClientNameSaved, onIndoorSalesSaved, sharedQuotations }: {
   data: SalesWorkspaceData; error: string; now: number; notice?: string; busy?: string;
   onDelete?: (project: FieldProject) => Promise<void>;
+  sharedQuotations?: ReactNode;
 } & ProjectEditors) {
   const { term, t, formatNumber, locale } = useI18n();
   const leadership = isLeadershipRole(data.actor.role);
@@ -181,6 +182,7 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
     </header>
     <Notice error={error}/>
     {notice && <p role="status" className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-900">{term(notice)}</p>}
+    {sharedQuotations}
     <section aria-label={term('Project overview')} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {summary.map(item => <button key={item.scope} type="button" aria-pressed={scope === item.scope && stage === 'all'} onClick={() => { setScope(item.scope); setStage('all'); }}
         className={`flex min-h-28 flex-col items-start justify-between gap-3 rounded-lg border border-t-2 bg-white p-4 text-start transition-colors hover:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${dashboardTones[item.tone].edge} ${scope === item.scope && stage === 'all' ? 'border-slate-400 ring-1 ring-slate-400' : 'border-slate-200'}`}>

@@ -40,7 +40,7 @@ function moduleLoader(dependencies) {
 
 function fixture({ role = 'Indoor Sales', branch = 'Karkh', profileBranch = branch,
   projectRows = projects, rpcError = null, projectError = null, deletedBranch, outdoorRotationStartBranch, directoryRows = [] } = {}) {
-  const reads = [], writes = [], rpcCalls = [];
+  const reads = [], writes = [], rpcCalls = [], authorizationChecks = [];
   const tables = {
     projects: structuredClone(projectRows),
     field_sync_receipts: [],
@@ -93,6 +93,13 @@ function fixture({ role = 'Indoor Sales', branch = 'Karkh', profileBranch = bran
       return query;
     },
     async rpc(name, args) {
+      if (name === 'employee_has_quotation_price_access') {
+        // This fixture has no shared grants. Permission reads cannot become
+        // business mutations or authorize a cross-branch quotation write.
+        assert.equal(args.p_employee, actorId);
+        authorizationChecks.push({ name, args });
+        return { data: false, error: null };
+      }
       rpcCalls.push({ name, args });
       return { data: tables.projects.find(p => p.id === args.p_project) ?? null, error: rpcError };
     },
@@ -106,7 +113,7 @@ function fixture({ role = 'Indoor Sales', branch = 'Karkh', profileBranch = bran
     '@/lib/supabase/admin': { createAdminClient: () => admin },
     '@/lib/supabase/config': { hasSupabaseServiceRoleKey: () => true },
   });
-  return { load, reads, writes, rpcCalls };
+  return { load, reads, writes, rpcCalls, authorizationChecks };
 }
 
 const context = projectId => ({ params: Promise.resolve({ projectId, openingId: operationId }) });
@@ -235,6 +242,7 @@ test('workspace and quotation mutations cannot bypass branch access', async () =
     assertHidden(await x.load('src/app/api/sales-flow/[projectId]/route').POST(request({ action: 'save' }), context(otherProject.id)));
     assert.equal(x.writes.length + x.rpcCalls.length, 0);
     assert.ok(x.reads.every(read => read.table === 'projects'));
+    assert.deepEqual(x.authorizationChecks.map(check => check.args.p_project), [otherProject.id]);
   }
 });
 
@@ -251,6 +259,7 @@ test('Rasafa cannot read or mutate Governorates projects even as creator, assign
   assertHidden(await x.load('src/app/api/projects/[projectId]/client/route').PATCH(request({clientName:'Changed',expectedClientName:'Original'}),context(governorate.id)));
   assert.equal(x.writes.length+x.rpcCalls.length,0);
   assert.ok(x.reads.every(read=>read.table==='projects'));
+  assert.deepEqual(x.authorizationChecks.map(check=>check.args.p_project),[governorate.id,governorate.id]);
 });
 
 test('Outdoor Sales still needs project creation or assignment regardless of branch', async () => {

@@ -249,7 +249,11 @@ function fixture({role='Indoor Sales',branch='Karkh',projectBranch='Karkh',stage
   const predicates=[];
   const result=single=>{const rows=tables[table].filter(row=>predicates.every(predicate=>predicate(row)));reads.push({table,rows});return {data:single?rows[0]??null:rows,error:null};};
   return {select(){return this;},eq(key,value){predicates.push(row=>row[key]===value);return this;},in(key,values){predicates.push(row=>values.includes(row[key]));return this;},or(){return this;},order(){return this;},maybeSingle:async()=>result(true),single:async()=>result(true),then(resolve){return Promise.resolve(result(false)).then(resolve);}};
- },rpc:async(name,args)=>{calls.push({name,args});return {data:{...stored,revision:5,stage:'quotation',quotation:args.p_payload},error:null};}};
+ },rpc:async(name,args)=>{
+  // No shared grants exist in this fixture; authorization reads are separate
+  // from the workflow mutations counted by the branch-denial assertions.
+  if(name==='employee_has_quotation_price_access'){assert.equal(args.p_employee,actorId);return {data:false,error:null};}
+  calls.push({name,args});return {data:{...stored,revision:5,stage:'quotation',quotation:args.p_payload},error:null};}};
  const route=moduleLoader({
   'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status??200,headers:options?.headers})}},
   '@/lib/auth/adminServer':{requireRole:async roles=>roles.includes(role)?{ok:true,user:{id:actorId},role,profile:{branch}}:{ok:false,error:'Forbidden',status:403}},

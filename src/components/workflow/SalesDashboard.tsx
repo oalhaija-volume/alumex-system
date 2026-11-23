@@ -14,6 +14,7 @@ import { useState } from 'react';
 import type { FieldProject, SalesWorkspaceData } from '@/lib/offline/types';
 import { needsSalesFollowUp,projectStage,projectStages,stageDetails,projectLink } from '@/lib/workflow/stages';
 import { SalesTaskPanel } from './SalesTaskPanel';
+import { SharedQuotationProjects } from './SharedQuotationProjects';
 import { button,card,field,Notice,useResource,useNow,Workspace } from './ui';
 export function SalesDashboard(){
  const { term,formatDateTime,formatNumber } = useI18n();
@@ -35,7 +36,7 @@ export function SalesDashboard(){
    await reload();
   }catch(cause){setError(cause instanceof Error?cause.message:'Unable to delete project.');}finally{setBusy('');}
  }
- if(data && canAccessCRM(data.actor.role)) return <LeadershipDashboard data={data} error={error} now={now} notice={notice} busy={busy} onDelete={data.actor.role==='Admin'?remove:undefined} onProjectSaved={reload} onClientNameSaved={async(project,clientName)=>{
+ if(data && canAccessCRM(data.actor.role)) return <LeadershipDashboard data={data} error={error} now={now} notice={notice} busy={busy} sharedQuotations={data.actor.role==='Indoor Sales'?<SharedQuotationProjects key={data.actor.id}/>:undefined} onDelete={data.actor.role==='Admin'?remove:undefined} onProjectSaved={reload} onClientNameSaved={async(project,clientName)=>{
   setData(current=>current&&current.actor.id===data.actor.id?{...current,projects:current.projects.map(row=>row.id===project.id||(project.client_id&&row.client_id===project.client_id)?{...row,client_name:clientName}:row)}:current);
   await updateSavedClientName(data.actor.id,project.id,project.client_id,clientName).catch(()=>{/* A later device refresh can recover a successful server save. */});
   notifyWorkspaceChanged();

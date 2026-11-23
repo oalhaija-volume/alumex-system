@@ -9,7 +9,7 @@ import type { SalesFlow } from '@/lib/workflow/types';
 type Context={params:Promise<{projectId:string}>};
 const unavailable='The sales workflow database update is required. Ask the administrator to apply the prepared migration.';
 export async function GET(request:Request,context:Context){
- const {projectId}=await context.params;const access=await salesProject(projectId,'commercial');if(access.response)return access.response;
+ const {projectId}=await context.params;const access=await salesProject(projectId,'commercial',true);if(access.response)return access.response;
  const {admin,project}=access;
  const [flow,openings,catalog,client,history]=await Promise.all([
   admin.from('sales_workflows').select('*').eq('project_id',projectId).maybeSingle(),
@@ -21,11 +21,16 @@ export async function GET(request:Request,context:Context){
  if(flow.error||history.error)return NextResponse.json({error:unavailable},{status:503});
  if(openings.error||catalog.error||client.error)return NextResponse.json({error:'Unable to load quotation information.'},{status:500});
  if(new URL(request.url).searchParams.get('download')==='signed'){
+  if(access.quotationAccess==='prices')return NextResponse.json({error:'Shared access is limited to the quotation and its prices.'},{status:403});
   const evidence=(flow.data as unknown as SalesFlow|null)?.evidence;
   if(evidence?.method!=='upload'||!evidence.path)return NextResponse.json({error:'Signed file not found.'},{status:404});
   const file=await admin.storage.from('signed-contracts-private').download(evidence.path);
   if(file.error||!file.data)return NextResponse.json({error:'Unable to retrieve signed file.'},{status:500});
   return new Response(file.data,{headers:{'Content-Type':file.data.type,'Content-Disposition':'attachment; filename="signed-contract"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+ }
+ if(access.quotationAccess==='prices'){
+  const {id,project_number,project_name,address,building_type,branch,governorate,sales_status,additional_openings_state}=project;
+  return NextResponse.json({quotationAccess:'prices',project:{id,project_number,project_name,address,building_type,branch,governorate,sales_status,additional_openings_state},client:client.data,flow:flow.data?{...flow.data,contract:null,evidence:flow.data.evidence?{recorded:true}:null}:null,openings:openings.data,catalog:catalog.data,history:[],sizeHistory:[]},{headers:{'Cache-Control':'private, no-store'}});
  }
  // Old installations can continue opening quotations until the size-edit
  // migration is applied. Existing revision snapshots still remain available.
@@ -45,7 +50,7 @@ export async function GET(request:Request,context:Context){
  return NextResponse.json({project,client:client.data,flow:flow.data,openings:openings.data,catalog:catalog.data,history:history.data,sizeHistory,...(sizeHistoryError?{sizeHistoryError}:{})},{headers:{'Cache-Control':'private, no-store'}});
 }
 export async function POST(request:Request,context:Context){
- const {projectId}=await context.params;const access=await salesProject(projectId,'commercial');if(access.response)return access.response;
+ const {projectId}=await context.params;const access=await salesProject(projectId,'commercial',true);if(access.response)return access.response;
  const {admin,auth,project}=access;
  if(['cancelled','lost','closed'].includes(project.sales_status))return NextResponse.json({error:'This project is closed. Its quotation and contract history is read-only.'},{status:409});
  const saved=await admin.from('sales_workflows').select('*').eq('project_id',projectId).maybeSingle();
@@ -59,6 +64,22 @@ export async function POST(request:Request,context:Context){
   const file=form.get('file');upload=file instanceof File?file:null;
  }else{body=await request.json().catch(()=>({}));}
  const action=body.action;const revision=body.revision;
+ if(access.quotationAccess==='prices'&&action!=='save-shared-prices')return NextResponse.json({error:'Shared access permits quotation price editing only.'},{status:403});
+ if(action==='save-shared-prices'){
+  if(!Number.isInteger(revision)||revision!==flow?.revision)return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
+  if(!flow||flow.signed_at||flow.evidence||flow.accepted_at||flow.accepted_by||!['quotation','approved','contract'].includes(flow.stage)||['contract_signed','transferred_to_operations'].includes(project.sales_status))return NextResponse.json({error:'Signed contracts cannot be changed.'},{status:409});
+  if(project.additional_openings_state)return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.'},{status:409});
+  if(flow.stage==='contract'&&body.replaceUnsignedContract!==true)return NextResponse.json({error:'Confirm that this revision replaces the unsigned contract and requires new client approval.'},{status:400});
+  const catalog=await admin.from('product_price_settings').select('id,name:product_name,category,unit,unit_price,is_active').eq('is_active',true);
+  if(catalog.error)return NextResponse.json({error:'Unable to load pricing.'},{status:500});
+  try{
+   const {reviseSharedQuotationPrices}=await import('@/lib/quotations/sharedPrices');
+   const quotation=reviseSharedQuotationPrices(flow.quotation,{systemRates:body.systemRates,additionalRates:body.additionalRates},catalog.data as CatalogItem[],auth.user.id);
+   const result=await admin.rpc('advance_sales_flow',{p_project:projectId,p_action:'save',p_revision:revision as number,p_payload:quotation as unknown as Json,p_actor:auth.user.id});
+   if(result.error)return NextResponse.json({error:result.error.message},{status:result.error.code==='42501'?403:409});
+   return NextResponse.json({ok:true},{headers:{'Cache-Control':'private, no-store'}});
+  }catch(cause){return NextResponse.json({error:cause instanceof Error?cause.message:'Unable to update quotation prices.'},{status:400});}
+ }
  if(project.additional_openings_state==='requested'||(project.additional_openings_state==='submitted'&&action!=='save'))return NextResponse.json({error:'Complete the additional measurements and save a quotation revision before continuing.'},{status:409});
  if(!['save','approve','contract','sign','preview-prices','update-prices','set-discount','change-contract-template','save-contract-details'].includes(String(action))||!Number.isInteger(revision)||revision!==(flow?.revision??0))return NextResponse.json({error:'The project changed. Reload and try again.'},{status:409});
  if(!QUOTATION_DISCOUNTS_ENABLED&&(action==='set-discount'||['save','preview-prices','update-prices'].includes(String(action))&&body.discountPercent===5))return NextResponse.json({error:'Quotation discounts are temporarily unavailable.'},{status:403});

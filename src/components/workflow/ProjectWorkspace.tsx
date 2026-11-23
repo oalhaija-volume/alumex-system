@@ -16,6 +16,7 @@ import { deleteOnlineProject, updateSavedClientName } from '@/lib/offline/client
 import { useState } from 'react';
 import { useOutdoorSalesProjectFilters } from './useOutdoorSalesProjectFilters';
 import { OutdoorSalesProjectFilter } from './OutdoorSalesProjectFilter';
+import { SharedQuotationProjects } from './SharedQuotationProjects';
 import { projectOutdoorSalesOrigin } from '@/lib/dashboard/outdoorProjectFilters';
 import { api,button,card,Notice,useResource,useNow,Workspace } from './ui';
 type Project=FieldProject;
@@ -36,6 +37,7 @@ export function ProjectWorkspace({followUps=false,canDelete=false}:{followUps?:b
   <Notice error={error}/>
   {notice&&<p role="status" className="mb-5 text-green-700">{term(notice)}</p>}
   <Link href="/intake" className={`${button} mb-6 inline-block`}>{term("New client & project")}</Link>
+  {data?.actor.role==='Indoor Sales'&&<SharedQuotationProjects key={data.actor.id}/>}
   {!loading&&<OutdoorSalesProjectFilter filter={outdoorFilter}/>}
   {loading?<p>{term("Loading projects…")}</p>:!projects.length?<div className={card}>{term(data?.projects.length?"No projects match this view.":"No projects yet. Start by registering a client.")}</div>:<div className="space-y-4">{projects.map(p=>{const broughtInBy=projectOutdoorSalesOrigin(p,data?.outdoorSales);return <article key={p.id} id={`project-${p.id}`} className={`${card} scroll-mt-5`}>
    <div className="flex flex-wrap justify-between gap-4"><div><p className="text-xs font-semibold text-blue-600">{term(p.project_number)}{p.pending?` · ${term('Saved on device')}`:''}</p><h2 className="mt-2 text-xl font-semibold">{p.project_name}</h2><p className="mt-2 text-sm text-slate-600">{p.address}</p>{p.governorate&&<p className="mt-1 text-sm font-medium text-slate-700">{term('Governorates')} · <bdi>{p.governorate}</bdi></p>}</div><span className="h-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-medium">{term(stageDetails(p).label)}</span></div>

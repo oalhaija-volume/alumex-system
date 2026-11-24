@@ -6,8 +6,10 @@ const actualDate = Date;
 test.beforeEach(context => {
  if (Date === actualDate) context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-14T08:00:00Z') });
 });
-function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/intake/outdoorRotationSchedule'||n==='./outdoorRotationSchedule')return load('../src/lib/intake/outdoorRotationSchedule.ts',{});if(n==='@/lib/measurements/openingOwnership')return load('../src/lib/measurements/openingOwnership.ts',{});if(n==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(n==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts');if(n==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts');if(n==='./projectAccess')return load('../src/lib/offline/projectAccess.ts');if(n==='@/lib/location/coordinates')return load('../src/lib/location/coordinates.ts');if(n==='./device')return deps[n]??{isOfflineDevice:()=>true};if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/projectBranch'||n==='./projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(n==='@/lib/intake/outdoorRotation')return load('../src/lib/intake/outdoorRotation.ts');if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/legacyOutdoorSales')return load('../src/lib/intake/legacyOutdoorSales.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
-const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Employee',role:'Indoor Sales',branch:'Karkh'};
+function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='./policy')return load('../src/lib/offline/policy.ts');if(n==='@/lib/intake/outdoorRotationSchedule'||n==='./outdoorRotationSchedule')return load('../src/lib/intake/outdoorRotationSchedule.ts',{});if(n==='@/lib/measurements/openingOwnership')return load('../src/lib/measurements/openingOwnership.ts',{});if(n==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(n==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts');if(n==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts');if(n==='./projectAccess')return load('../src/lib/offline/projectAccess.ts');if(n==='@/lib/location/coordinates')return load('../src/lib/location/coordinates.ts');if(n==='./device')return deps[n]??{isOfflineDevice:()=>true};if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/projectBranch'||n==='./projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(n==='@/lib/intake/outdoorRotation')return load('../src/lib/intake/outdoorRotation.ts');if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/legacyOutdoorSales')return load('../src/lib/intake/legacyOutdoorSales.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
+// Exercise the shared durable queue with an authorized offline CRM role.
+// Indoor Sales has dedicated online-only coverage below.
+const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Employee',role:'Sales Manager',branch:'Karkh'};
 // Employee office identifies Baghdad or Najaf; the calendar selects a Baghdad area.
 function outdoorActorForCurrentBranch(branch) {
  return {...actor,role:'Outdoor Sales',branch,outdoorRotationStartBranch:branch==='Najaf'?null:branch};
@@ -122,7 +124,7 @@ test('deletion requires online access and never discards unsynced project work',
  assert.equal(calls,0);assert.equal(x.state.queue.length,1);
 });
 
-test('Indoor Sales cannot queue registration without an assignment; creator remains the signed-in actor',async()=>{
+test('an offline CRM employee must choose an assignment and retains the signed-in creator',async()=>{
  const x=setup();await assert.rejects(x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,assignedOutdoorSalesId:null}}),/Choose yourself or an Outdoor/);assert.equal(x.state.queue.length,0);
  await x.client.saveFieldChange('register',projectId,{...payload,created_by:'forged'});assert.equal(x.state.projects[0].created_by,actor.id);assert.equal(x.state.projects[0].assignedOutdoorSales,'Outdoor employee');
 });
@@ -220,7 +222,7 @@ test('online workspace reads upgrade a legacy owner directory before a Governora
  assert.deepEqual(x.state.indoorSales,fixture.indoorSales);
  assert.deepEqual(x.state.projects,before.projects);
  assert.deepEqual(x.state.queue,before.queue);
- const selected=workspace.indoorSales.find(employee=>employee.role==='Indoor Sales'&&employee.branch==='Karkh');
+ const selected=workspace.indoorSales.find(employee=>employee.id===actor.id&&employee.branch==='Karkh');
  assert.equal(selected.id,actor.id);
  navigator.onLine=false;
  await x.client.saveFieldChange('follow-up',projectId,{...fixture.values,followUpOwnerId:selected.id});
@@ -271,7 +273,7 @@ test('offline registration retains the assigned branch and rejects an unassigned
  assert.equal(unassigned.state.queue.length,0);
 });
 
-test('Indoor Sales can register for their own measurements and save openings offline',async()=>{
+test('Sales Managers can register for their own measurements and save openings offline',async()=>{
  const x=setup({outdoorSales:[]});
  await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,assignedOutdoorSalesId:actor.id}});
  assert.equal(x.state.projects[0].assigned_outdoor_sales_id,actor.id);
@@ -283,7 +285,7 @@ test('Indoor Sales can register for their own measurements and save openings off
  assert.deepEqual(x.state.queue.map(c=>c.action),['register','opening','finish']);
  assert.equal(x.state.projects[0].sales_status,'ready_for_quotation');
 });
-test('not-ready self-assigned projects keep the Indoor Sales creator when marked ready',async()=>{
+test('not-ready self-assigned projects keep the Sales Manager creator when marked ready',async()=>{
  const x=setup({outdoorSales:[]});
  await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,structureReadiness:'not_ready',assignedOutdoorSalesId:actor.id}});
  await x.client.saveFieldChange('ready',projectId,{});
@@ -316,7 +318,7 @@ test('Outdoor Sales cannot save a not-ready project locally without a note; the 
  assert.equal(x.state.projects[0].readiness_note,'Plastering unfinished');
  assert.equal((await (await x.client.fieldFetch('/api/workspace')).json()).projects[0].readiness_note,'Plastering unfinished');
  // Later CRM contact notes must not replace the original site-readiness reason.
- x.state.actor.role='Indoor Sales';x.state.actor.branch='Karkh';
+ x.state.actor.role='Sales Manager';x.state.actor.branch='Karkh';
  await x.client.saveFieldChange('follow-up',projectId,{nextFollowUp:'2026-11-08T07:00:00Z',note:'Called client',followUpType:'call',followUpOwnerId:actor.id});
  assert.equal(x.state.projects[0].readiness_note,'Plastering unfinished');
  assert.equal(x.state.projects[0].project_notes,'Called client');
@@ -1141,4 +1143,158 @@ test('a dynamic sync conflict blocks later changes for that project while newly 
  assert.match(x.state.queue[0].error,/another device/);
  assert.equal(x.state.openings.length,2);
  assert.equal(x.state.projects.find(project=>project.id===secondProjectId).pending,false);
+});
+
+function indoorRecoveryFixture(){
+ const indoor={...actor,role:'Indoor Sales'};
+ const project={id:projectId,branch:'Karkh',created_by:actor.id,structure_readiness:'not_ready',sales_status:'new_lead',project_name:'Saved project',project_number:'PRJ-1',updated_at:'2026-11-24T08:00:00Z',serverUpdatedAt:'2026-11-24T08:00:00Z',project_notes:'Saved local note',pending:true};
+ const change={id:'55555555-5555-4555-8555-555555555555',userId:actor.id,projectId,action:'follow-up',payload:{nextFollowUp:'2026-11-25T08:00:00Z',note:'Saved local note',followUpType:'call',followUpDetail:'',followUpOwnerId:actor.id},recordedAt:'2026-11-24T08:01:00Z',error:'Changed on another device'};
+ return {indoor,project,change};
+}
+
+test('Indoor Sales cannot queue any new work even when device storage contains an older workspace',async()=>{
+ const fixture=indoorRecoveryFixture(),x=setup({actor:fixture.indoor,projects:[fixture.project],queue:[fixture.change]});
+ const retained=structuredClone(x.state);
+ for(const action of ['register','opening','edit-opening','finish','reopen','follow-up','ready','assign-measurements','request-openings','delay-measurements','resume-measurements','cancel-project','rename-project']){
+  await assert.rejects(x.client.saveFieldChange(action,projectId,{}),/Indoor Sales.*internet/i);
+ }
+ assert.deepEqual(x.state,retained,'Rejecting offline work must retain legacy notes for recovery');
+});
+
+test('Indoor Sales reads and writes return an online-required error offline instead of stored business data',async()=>{
+ const fixture=indoorRecoveryFixture(),x=setup({actor:fixture.indoor,projects:[fixture.project],queue:[fixture.change]});
+ const retained=structuredClone(x.state);
+ globalThis.fetch=()=>{throw new Error('Offline requests must not reach the network');};
+ for(const method of ['GET','PATCH','POST']){
+  const response=await x.client.fieldFetch('/api/workspace',{method,body:method==='GET'?undefined:'{}'});
+  assert.equal(response.status,503);assert.match((await response.json()).error,/Indoor Sales.*internet/i);
+ }
+ await assert.rejects(x.client.prepareOffline(),/Indoor Sales.*internet/i);
+ await assert.rejects(x.client.prepareOffline({recovery:true}),/Indoor Sales.*internet/i);
+ assert.deepEqual(x.state,retained);
+});
+
+test('Indoor Sales always uses current server data while keeping legacy conflicts out of live reads and writes',async()=>{
+ const fixture=indoorRecoveryFixture(),x=setup({actor:fixture.indoor,projects:[fixture.project],queue:[fixture.change]});
+ const retained=structuredClone(x.state),requests=[];navigator.onLine=true;window.location={pathname:'/offline'};
+ globalThis.fetch=async(url,init)=>{requests.push({url,init});return Response.json({project:{...fixture.project,project_notes:'Updated on another device'},ok:true});};
+ for(const method of ['GET','PATCH','POST']){
+  const response=await x.client.fieldFetch('/api/workspace',{method,body:method==='GET'?undefined:'{}'});
+  assert.equal(response.status,200);assert.equal((await response.json()).project.project_notes,'Updated on another device');
+ }
+ assert.deepEqual(requests.map(request=>request.url),['/api/workspace','/api/workspace','/api/workspace']);
+ assert.ok(requests.every(request=>request.init.cache==='no-store'));
+ await assert.rejects(x.client.saveFieldChange('follow-up',projectId,fixture.change.payload),/Indoor Sales.*internet/i);
+ await assert.rejects(x.client.prepareOffline(),/Indoor Sales.*internet/i);
+ assert.deepEqual(x.state,retained,'Live writes never create additional offline operations');
+});
+
+test('Indoor Sales network failure never falls back to a saved workspace or queues a write',async()=>{
+ const fixture=indoorRecoveryFixture(),x=setup({actor:fixture.indoor,projects:[fixture.project],queue:[fixture.change]});
+ const retained=structuredClone(x.state);navigator.onLine=true;
+ globalThis.fetch=async()=>{throw new TypeError('Network unavailable');};
+ assert.equal((await x.client.fieldFetch('/api/workspace')).status,503);
+ assert.equal((await x.client.fieldFetch('/api/workspace',{method:'PATCH',body:'{}'})).status,503);
+ await assert.rejects(x.client.prepareOffline({recovery:true}),/Indoor Sales.*internet/i);
+ globalThis.fetch=async()=>Response.json({error:'Temporary outage'},{status:503});
+ await assert.rejects(x.client.prepareOffline({recovery:true}),/Indoor Sales.*internet/i);
+ assert.deepEqual(x.state,retained);
+});
+
+test('Indoor Sales cannot start competing online edits while the same project has a legacy saved change',async()=>{
+ const fixture=indoorRecoveryFixture(),x=setup({actor:fixture.indoor,projects:[fixture.project],queue:[fixture.change]});
+ const retained=structuredClone(x.state);navigator.onLine=true;let calls=0;
+ globalThis.fetch=async()=>{calls++;return Response.json({ok:true});};
+ const update=await x.client.fieldFetch('/api/workspace',{method:'PATCH',body:JSON.stringify({projectId,action:'follow-up',...fixture.change.payload})});
+ const opening=await x.client.fieldFetch('/api/initial-measurements/'+projectId,{method:'POST',body:'{}'});
+ assert.equal(update.status,409);assert.equal(opening.status,409);assert.match((await update.json()).error,/Review and sync/);
+ assert.equal(calls,0);assert.deepEqual(x.state,retained);
+ assert.equal((await x.client.fieldFetch('/api/workspace',{method:'PATCH',body:JSON.stringify({projectId:'another-project',action:'follow-up'})})).status,200);
+ assert.equal(calls,1,'Unrelated online projects remain available');
+});
+
+test('a verified Indoor marker prevents stale cached roles from restoring offline work',async t=>{
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'localStorage');
+ t.after(()=>{if(previous)Object.defineProperty(globalThis,'localStorage',previous);else Reflect.deleteProperty(globalThis,'localStorage');});
+ globalThis.localStorage={getItem:key=>key==='alumex-online-only-user'?actor.id:null};
+ const x=setup({actor:{...actor,role:'Outdoor Sales'}}),retained=structuredClone(x.state);
+ await assert.rejects(x.client.saveFieldChange('register',projectId,payload),/Indoor Sales.*internet/i);
+ assert.equal((await x.client.fieldFetch('/api/workspace')).status,503);
+ await assert.rejects(x.client.prepareOffline({recovery:true}),/Indoor Sales.*internet/i);
+ navigator.onLine=true;globalThis.fetch=async()=>{throw new TypeError('Network unavailable');};
+ await assert.rejects(x.client.prepareOffline({recovery:true}),/Indoor Sales.*internet/i);
+ assert.deepEqual(x.state,retained);
+});
+
+test('Indoor Sales explicit online recovery refresh preserves legacy pending notes without changing their base version',async()=>{
+ const fixture=indoorRecoveryFixture(),x=setup({actor:fixture.indoor,projects:[fixture.project],queue:[fixture.change]});
+ navigator.onLine=true;const requests=[];
+ globalThis.fetch=async url=>{requests.push(url);return Response.json({actor:fixture.indoor,projects:[{...fixture.project,project_notes:'Newer server note',updated_at:'2026-11-24T08:30:00Z',pending:false}],openings:[],queue:[],syncedAt:null});};
+ await x.client.prepareOffline({recovery:true});
+ assert.deepEqual(requests,['/api/offline?recovery=1']);
+ assert.deepEqual(x.state.queue,[fixture.change]);assert.equal(x.state.projects[0].project_notes,'Saved local note');
+ assert.equal(x.state.projects[0].serverUpdatedAt,fixture.project.serverUpdatedAt,'A refresh cannot automatically authorize overwriting newer remote changes');
+});
+
+test('Indoor Sales legacy recovery drains independent projects and preserves conflicts without silently rebasing them',async()=>{
+ const fixture=indoorRecoveryFixture(),otherId='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+ const second={...fixture.change,id:'66666666-6666-4666-8666-666666666666',projectId:otherId,error:undefined};
+ const x=setup({actor:fixture.indoor,projects:[fixture.project,{...fixture.project,id:otherId}],queue:[fixture.change,second]});
+ navigator.onLine=true;const posted=[];
+ globalThis.fetch=async(url,init)=>{
+  if(url==='/api/offline?session=1')return Response.json({actor:fixture.indoor});
+  const operation=JSON.parse(init.body);posted.push(operation);
+  if(operation.projectId===projectId)return Response.json({error:'Changed on another device'},{status:409});
+  return Response.json({project:{...fixture.project,id:otherId,updated_at:'2026-11-24T09:00:00Z'}});
+ };
+ await x.client.syncFieldChanges();
+ assert.equal(posted.length,2);assert.deepEqual(x.state.queue,[fixture.change]);
+ assert.equal(posted[0].expectedUpdatedAt,fixture.project.serverUpdatedAt);
+ assert.equal(x.state.projects.find(project=>project.id===otherId).pending,false);
+});
+
+test('keeping a reviewed server version archives local notes and media before clearing the conflict',async()=>{
+ const fixture=indoorRecoveryFixture(),opening={id:'local-opening',projectId,width:120,skylight:{photo:'local-photo'}};
+ const report={id:'local-report',project_id:projectId,note:'Local measurement note',photo:'report-photo'};
+ const history={entries:[{note:'Saved follow-up history'}]};
+ const x=setup({actor:fixture.indoor,projects:[fixture.project],queue:[fixture.change],openings:[opening],measurementReports:[report],followUpHistories:{[projectId]:history}});
+ navigator.onLine=true;
+ const latest={...fixture.project,project_notes:'Current server note',updated_at:'2026-11-24T09:00:00Z',pending:false};
+ await x.client.keepReviewedServerVersion({project:latest,openings:[],measurementReports:[]});
+ assert.equal(x.state.queue.length,0);assert.equal(x.state.projects[0].project_notes,'Current server note');
+ const archive=x.state.archivedProjects[0];assert.deepEqual(archive.changes,[fixture.change]);assert.deepEqual(archive.openings,[opening]);
+ assert.deepEqual(archive.measurementReports,[report]);assert.deepEqual(archive.followUpHistory,history);
+ assert.equal(archive.project.project_notes,'Saved local note');
+});
+
+test('logout pending count includes hidden field changes and quotation drafts from the active account',async()=>{
+ const x=setup({actor:outdoorActorForCurrentBranch('Karkh'),projects:[],queue:[{id:'hidden-operation',projectId:'hidden-project',action:'opening',payload:{}}],quotations:{queue:[{id:'hidden-quotation'}]}});
+ assert.equal((await x.client.fieldFetch('/api/workspace')).status,200);
+ assert.equal((await (await x.client.fieldFetch('/api/workspace')).json()).projects.length,0);
+ assert.equal(await x.client.pendingFieldChanges(),2,'Hidden retained work must still protect logout');
+ const before=structuredClone(x.state);assert.equal(before.queue.length,1);
+ assert.deepEqual(x.state,before);
+});
+
+test('a held cross-tab field sync lock returns without changing saved work and a later retry sends it once',async()=>{
+ const x=setup();await x.client.saveFieldChange('register',projectId,payload);
+ const before=structuredClone(x.state),requests=[];let available=false,acquisitions=0;
+ navigator.locks={request:async(name,options,callback)=>{
+  assert.equal(name,'alumex-field-sync');assert.deepEqual(options,{ifAvailable:true});acquisitions++;
+  return callback(available?{name}:null);
+ }};
+ globalThis.fetch=async(url,init)=>{
+  requests.push({url,init});
+  return init?.method==='POST'
+   ?Response.json({project:{id:projectId,project_number:'PRJ-LOCK-RETRY',updated_at:'2026-11-14T09:00:00Z',sales_status:'new_lead'}})
+   :Response.json({actor});
+ };
+ navigator.onLine=true;
+ await x.client.syncFieldChanges();
+ assert.deepEqual(x.state,before,'Another tab keeps ownership without changing this account queue');
+ assert.equal(requests.length,0);
+ available=true;await x.client.syncFieldChanges();
+ assert.equal(acquisitions,2);assert.equal(x.state.queue.length,0);
+ const posts=requests.filter(request=>request.init?.method==='POST');
+ assert.equal(posts.length,1);assert.equal(JSON.parse(posts[0].init.body).id,before.queue[0].id);
 });

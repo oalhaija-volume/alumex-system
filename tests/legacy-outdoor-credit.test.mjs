@@ -144,7 +144,7 @@ for (const name of ['sales-intake', 'offline']) {
   });
 }
 
-function device({ actor = indoor, outdoorSales = [owner, collector] } = {}) {
+function device({ actor = { ...indoor, role: 'Sales Manager' }, outdoorSales = [owner, collector] } = {}) {
   let state = { actor, outdoorSales, indoorSales: [indoor], projects: [], openings: [], queue: [], syncedAt: null };
   let active = actor.id;
   globalThis.window = { location: { pathname: '/offline' }, dispatchEvent() {} };
@@ -164,13 +164,13 @@ function device({ actor = indoor, outdoorSales = [owner, collector] } = {}) {
   return { client, get state() { return state; } };
 }
 
-test('offline ownership preserves the Indoor entrant and follow-up owner through a measurement handoff', async () => {
+test('offline ownership preserves the Sales Manager entrant and follow-up owner through a measurement handoff', async () => {
   const x = device();
   await x.client.saveFieldChange('register', projectId, payload(), indoor.id);
   let saved = x.state.projects[0];
   assert.equal(saved.created_by, indoor.id);
   assert.equal(saved.registeredBy, indoor.name);
-  assert.equal(saved.original_creator_role, indoor.role);
+  assert.equal(saved.original_creator_role, 'Sales Manager');
   assert.equal(saved.follow_up_owner_id, indoor.id);
   assert.equal(saved.legacy_outdoor_sales_id, owner.id);
   assert.equal(saved.owner_id, owner.id);

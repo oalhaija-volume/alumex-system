@@ -144,19 +144,13 @@ for(const path of ['workspace','offline'])test(`${path} permits Sales Manager pr
   assert.equal(x.calls.length,1);
 });
 
-test('Indoor title changes remain device-first and preserve all other project data',async t=>{
+test('Indoor title changes require online access and preserve existing device data',async t=>{
   const employee={...actor,role:'Indoor Sales',branch:'Karkh'};
   const currentProject={...project,created_by:'outdoor-creator',branch:'Karkh',client_id:'unchanged-client'};
   const x=device(t,{employee,currentProject});
   const before=x.state;
-  await x.client.saveFieldChange('rename-project',projectId,{projectName:'  عنوان المشروع الجديد  ',clientName:'Must not change'},actor.id);
-  const after=x.state;
-  assert.equal(after.projects[0].project_name,'عنوان المشروع الجديد');
-  assert.deepEqual({...after.projects[0],project_name:before.projects[0].project_name,pending:before.projects[0].pending},{...before.projects[0],pending:before.projects[0].pending});
-  assert.equal(after.projects[0].client_id,'unchanged-client');
-  assert.deepEqual(after.openings,before.openings);
-  assert.equal(after.queue.length,1);
-  assert.deepEqual(after.queue[0].payload,{projectName:'عنوان المشروع الجديد'});
+  await assert.rejects(x.client.saveFieldChange('rename-project',projectId,{projectName:'  عنوان المشروع الجديد  ',clientName:'Must not change'},actor.id),/Indoor Sales.*internet/i);
+  assert.deepEqual(x.state,before);
 });
 
 test('desktop rename uses project access, the signed-in actor and the displayed version, and strips forged fields', async () => {
@@ -257,7 +251,7 @@ for (const path of ['workspace', 'offline']) test(`${path} rename requires authe
   assert.equal(x.calls.length, 0);
 });
 
-function device(t, { employee = actor, currentProject = project, initialQueue = [] } = {}) {
+function device(t, { employee = { ...actor, role: 'Sales Manager' }, currentProject = project, initialQueue = [] } = {}) {
   const previous = new Map(['window', 'navigator', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   t.after(() => {
     for (const [key, descriptor] of previous) {

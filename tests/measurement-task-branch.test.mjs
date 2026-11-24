@@ -157,10 +157,10 @@ function fixture(actor, projectPatch = {}) {
     '@/lib/supabase/admin': { createAdminClient: () => admin }, '@/lib/supabase/config': { hasSupabaseServiceRoleKey: () => true },
   });
   const context = { params: Promise.resolve({ projectId }) };
-  const request = body => new Request('http://localhost:3003/api/offline', body ? { method: 'POST',
+  const request = (body, query = '') => new Request(`http://localhost:3003/api/offline${query}`, body ? { method: 'POST',
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined);
   return { load, reads, calls, project,
-    get: endpoint => load(`app/api/${endpoint}/route`).GET(request(), context),
+    get: (endpoint, query = '') => load(`app/api/${endpoint}/route`).GET(request(undefined, query), context),
     assign: (endpoint, body) => endpoint === 'workspace'
       ? load('app/api/workspace/route').PATCH(request({ projectId, ...body }))
       : load('app/api/offline/route').POST(request({ id: operationId, projectId, userId: actor.id, recordedAt: at,
@@ -178,8 +178,14 @@ for (const endpoint of ['workspace', 'offline', 'dashboard']) test(`${endpoint} 
   assert.ok(x.reads.filter(read => read.table === 'projects').every(read => read.columns.split(',').includes('measurement_branch')));
   const denied = await fixture(ehab).get(endpoint);
   assert.deepEqual(denied.body.projects, []);
-  const originOffice = await fixture(indoor).get(endpoint);
+  const origin = fixture(indoor);
+  const originOffice = await origin.get(endpoint, endpoint === 'offline' ? '?recovery=1' : '');
   assert.deepEqual(originOffice.body.projects.map(project => project.id), [projectId]);
+  if (endpoint === 'offline') {
+    const blocked = await origin.get(endpoint);
+    assert.equal(blocked.status, 403);
+    assert.equal(blocked.body.code, 'INDOOR_ONLINE_REQUIRED');
+  }
 });
 
 for (const endpoint of ['initial-measurements/[projectId]', 'measurement-reports/[projectId]']) test(`${endpoint} verifies physical area through its real direct-access selector`, async () => {

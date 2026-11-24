@@ -3227,7 +3227,18 @@
     "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled.": "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled.",
     "Measurement area": "Measurement area",
     "Connect and refresh projects to confirm your measurement area.": "Connect and refresh projects to confirm your measurement area.",
-    "Rotation exception": "Rotation exception"
+    "Rotation exception": "Rotation exception",
+    "Indoor Sales · Online only": "Indoor Sales · Online only",
+    "Saved changes could not sync. You can open the online system and review them later.": "Saved changes could not sync. You can open the online system and review them later.",
+    "1 saved change from this account needs syncing or review.": "1 saved change from this account needs syncing or review.",
+    "Connect to the internet to use Indoor Sales.": "Connect to the internet to use Indoor Sales.",
+    "Indoor Sales requires an internet connection. Reconnect to continue.": "Indoor Sales requires an internet connection. Reconnect to continue.",
+    "Review and sync the saved changes for this project before editing it online.": "Review and sync the saved changes for this project before editing it online.",
+    "Review and synchronize this project’s saved changes before changing its quotation online.": "Review and synchronize this project’s saved changes before changing its quotation online.",
+    "Indoor Sales requires an internet connection.": "Indoor Sales requires an internet connection.",
+    "Offline work is disabled for Indoor Sales. Open the online system to continue.": "Offline work is disabled for Indoor Sales. Open the online system to continue.",
+    "{count} saved changes from this account need syncing or review.": "{count} saved changes from this account need syncing or review.",
+    "You can log out. Unresolved work stays saved for this account and is not shown to the next employee.": "You can log out. Unresolved work stays saved for this account and is not shown to the next employee."
   },
   "registration": {
     "title": "New client & project",

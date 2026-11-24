@@ -121,23 +121,19 @@ function offline(context, role = 'Indoor Sales', branch = 'Najaf') {
   return { client, get state() { return structuredClone(state); } };
 }
 
-test('Najaf Indoor keeps legacy project title and local follow-up controls available offline', async context => {
+test('Najaf Indoor requires online access for legacy project edits and retains saved work', async context => {
   const x = offline(context);
-  await x.client.saveFieldChange('rename-project', projectId, { projectName: 'Updated Najaf title' }, actorId);
-  await x.client.saveFieldChange('follow-up', projectId, { nextFollowUp: '2026-11-20T08:00:00Z', followUpType: 'call', note: 'Najaf follow-up', followUpOwnerId: ownerId }, actorId);
-  await x.client.saveFieldChange('assign-measurements', projectId, { assignedOutdoorSalesId: outdoorId }, actorId);
-  assert.deepEqual(x.state.queue.map(change => change.action), ['rename-project', 'follow-up', 'assign-measurements']);
-  assert.equal(x.state.projects[0].project_name, 'Updated Najaf title');
-  assert.equal(x.state.projects[0].follow_up_owner_id, ownerId);
-  assert.equal(x.state.projects[0].assigned_outdoor_sales_id, outdoorId);
-  assert.equal(x.state.projects[0].branch, 'Governorates');
-  assert.equal(x.state.projects[0].governorate, 'النجف');
+  const before=x.state;
+  await assert.rejects(x.client.saveFieldChange('rename-project', projectId, { projectName: 'Updated Najaf title' }, actorId),/Indoor Sales.*internet/i);
+  await assert.rejects(x.client.saveFieldChange('follow-up', projectId, { nextFollowUp: '2026-11-20T08:00:00Z', followUpType: 'call', note: 'Najaf follow-up', followUpOwnerId: ownerId }, actorId),/Indoor Sales.*internet/i);
+  await assert.rejects(x.client.saveFieldChange('assign-measurements', projectId, { assignedOutdoorSalesId: outdoorId }, actorId),/Indoor Sales.*internet/i);
+  assert.deepEqual(x.state,before);
 });
 
 for (const branch of ['Karkh', 'Rasafa']) test(`${branch} Indoor cannot queue legacy Najaf edits despite creator identity`, async context => {
   const x = offline(context, 'Indoor Sales', branch), before = x.state;
   for (const [action, payload] of [['rename-project', { projectName: 'Denied' }], ['assign-measurements', { assignedOutdoorSalesId: outdoorId }]]) {
-    await assert.rejects(x.client.saveFieldChange(action, projectId, payload, actorId), /not available/);
+    await assert.rejects(x.client.saveFieldChange(action, projectId, payload, actorId), /Indoor Sales.*internet/i);
   }
   assert.deepEqual(x.state, before);
 });

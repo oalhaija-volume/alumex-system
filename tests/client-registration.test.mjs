@@ -16,6 +16,7 @@ function loadModule(path, dependencies) {
   const exports = {};
   new Function('require', 'exports', 'Date', source)((name) => {if(name==='@/lib/intake/outdoorRotationSchedule')return loadModule('../src/lib/intake/outdoorRotationSchedule.ts',{});if(name==='@/lib/auth/outdoorTeams')return loadModule('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return loadModule('../src/lib/workflow/projectName.ts',{});if(name==='@/lib/measurements/visitHistory')return loadModule('../src/lib/measurements/visitHistory.ts',{});if(name==='@/lib/auth/projectBranchAccess')return loadModule('../src/lib/auth/projectBranchAccess.ts',{});
     if(name==='@/lib/intake/outdoorRotation')return loadModule('../src/lib/intake/outdoorRotation.ts',{});
+    if(name==='@/lib/offline/policy')return loadModule('../src/lib/offline/policy.ts',{});
     if(name.startsWith('.'))return loadModule(new URL(`${name}.ts`,new URL(path,import.meta.url)),dependencies);
     if(name==='@/lib/measurements/completion')return loadModule('../src/lib/measurements/completion.ts',{});if(name==='@/lib/measurements/measurementDelay')return loadModule('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':loadModule('../src/lib/auth/permissions.ts',{})});
     if(name==='@/lib/intake/projectBranch')return loadModule('../src/lib/intake/projectBranch.ts',{});if(name==='@/lib/intake/buildingType')return loadModule('../src/lib/intake/buildingType.ts',{});

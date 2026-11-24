@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { useI18n } from '@/components/i18n/I18nProvider';
-import { isFieldOnline, pendingFieldChanges } from '@/lib/offline/client';
-import { setFieldUser } from '@/lib/offline/store';
+import { isFieldOnline, pendingFieldChanges, syncFieldChanges } from '@/lib/offline/client';
+import { readFieldState, setFieldUser } from '@/lib/offline/store';
+import { syncOfflineQuotations } from '@/lib/offline/quotations';
 
 /** Use the same sign-out safeguards in the online and device workspaces. */
-export function FieldLogoutButton({ className, formClassName }: { className: string; formClassName?: string }) {
+export function FieldLogoutButton({ className, formClassName, role }: { className: string; formClassName?: string; role?: string }) {
   const { t, term } = useI18n();
   const [busy, setBusy] = useState(false);
 
@@ -16,12 +17,24 @@ export function FieldLogoutButton({ className, formClassName }: { className: str
     const form = event.currentTarget;
     setBusy(true);
     try {
-      if (!isFieldOnline()) {
+      const indoor = (role ?? (await readFieldState().catch(() => null))?.actor.role) === 'Indoor Sales';
+      if (indoor ? !navigator.onLine : !isFieldOnline()) {
         alert(term('Connect to the internet before signing out.'));
         setBusy(false);
         return;
       }
-      if (await pendingFieldChanges()) {
+      if (indoor) {
+        // Attempt recovery without trapping an employee behind a conflict or
+        // an unreachable server. Account-scoped drafts remain in IndexedDB.
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            syncFieldChanges().then(() => syncOfflineQuotations()),
+            new Promise<void>(resolve => { timer = setTimeout(resolve, 8000); }),
+          ]);
+        } catch { /* Retained work can be reviewed when its owner signs in again. */ }
+        finally { clearTimeout(timer); }
+      } else if (await pendingFieldChanges()) {
         alert(term('Sync the changes saved on this device before signing out.'));
         setBusy(false);
         return;

@@ -8,6 +8,7 @@ import { reviseSharedQuotationPrices } from '@/lib/quotations/sharedPrices';
 import { activeFieldUser, readStoredFieldState, updateFieldState, type FieldChangeDetail } from './store';
 import type { FieldState } from './types';
 import type { OfflineQuotationData, OfflineQuotationEntry, OfflineQuotationOperation, OfflineQuotationReview, OfflineQuotationState } from './quotationTypes';
+import { canUseOfflineWorkspace, indoorOnlineRequiredMessage, isIndoorOnlineUser } from './policy';
 
 const endpoint = '/api/offline/quotations';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -166,7 +167,7 @@ export async function prepareOfflineQuotations({ background = false }: { backgro
   if (preparing?.actor === run.actor && preparing.generation === generation) return preparing.promise;
   const promise = (async () => {
     const stored = await readStoredFieldState(run.actor); run.check();
-    if (!stored || !canPrepareQuotation(stored.actor.role as Parameters<typeof canPrepareQuotation>[0])) return;
+    if (!stored || !canUseOfflineWorkspace(stored.actor.role) || isIndoorOnlineUser(run.actor) || !canPrepareQuotation(stored.actor.role as Parameters<typeof canPrepareQuotation>[0])) return;
     const downloaded = stored.quotations?.downloadedAt;
     if (background && downloaded && Date.now() - Date.parse(downloaded) < 60000) return;
     const receivedEntries: { projectId: string; data: OfflineQuotationData }[] = [];
@@ -323,7 +324,9 @@ export async function syncOfflineQuotations(): Promise<void> {
       if (refreshed?.ok && refreshed.headers.get('X-Alumex-Actor') === run.actor) { const remote: unknown = await refreshed.json(); run.check(); if (validData(remote)) await cacheResponse(sent.projectId, remote, run); }
     }
   };
-  const promise = (async () => { if ('locks' in navigator) await navigator.locks.request(`alumex-quotation-sync:${run.actor}`, sync); else await sync(); })();
+  // Another tab owns synchronization while it holds this lock. Do not queue
+  // behind a suspended tab and keep this tab's recovery controls waiting.
+  const promise = (async () => { if ('locks' in navigator) await navigator.locks.request(`alumex-quotation-sync:${run.actor}`, { ifAvailable: true }, lock => lock ? sync() : undefined); else await sync(); })();
   synchronizing = promise;
   try { await promise; } finally { if (synchronizing === promise) synchronizing = null; }
 }
@@ -334,6 +337,7 @@ async function saveQuotation(projectId: string, body: Record<string, unknown>): 
   const operationId = crypto.randomUUID();
   await updateFieldState(run.actor, state => {
     run.check(); if (!state) throw new Error(changedAccount);
+    if (!canUseOfflineWorkspace(state.actor.role) || isIndoorOnlineUser(run.actor)) throw new Error(indoorOnlineRequiredMessage);
     const quotations = state.quotations ?? empty();
     const entry = quotations.entries.find(item => item.projectId === projectId);
     if (!available(state, entry)) throw new Error('Open this quotation online once before working on it offline.');
@@ -380,6 +384,33 @@ export async function quotationFetch(url: string, init?: RequestInit): Promise<R
   const match = parsed.pathname.match(/^\/api\/sales-flow\/([0-9a-f-]{36})$/i);
   if (!match && parsed.pathname !== '/api/shared-quotations') return fetch(url, init);
   const projectId = match?.[1];
+  const activeActor = activeFieldUser();
+  const accountState = activeActor ? await readStoredFieldState(activeActor).catch(cause => {
+    if (isIndoorOnlineUser(activeActor)) return null;
+    throw cause;
+  }) : null;
+  if (activeActor !== activeFieldUser()) return Response.json({ error: changedAccount }, { status: 401 });
+  if (!accountState || !canUseOfflineWorkspace(accountState.actor.role) || isIndoorOnlineUser(activeActor)) {
+    if (!online()) return Response.json({ error: indoorOnlineRequiredMessage, code: 'INDOOR_ONLINE_REQUIRED' }, { status: 503 });
+    if (method !== 'GET' && projectId && (accountState?.queue.some(item => item.projectId === projectId)
+      || accountState?.quotations?.queue.some(item => item.projectId === projectId))) {
+      return Response.json({ error: 'Review and synchronize this project’s saved changes before changing its quotation online.' }, { status: 409 });
+    }
+    // Existing drafts are synchronized only through the recovery flow. Normal
+    // quotation work never reads or writes an Indoor Sales device snapshot.
+    const onlineRun = activeActor ? context() : null;
+    try {
+      const response = await fetch(url, { cache: 'no-store', ...init, signal: init?.signal ?? AbortSignal.timeout(20000) });
+      onlineRun?.check();
+      const responseActor = response.headers.get('X-Alumex-Actor');
+      if (activeActor && responseActor && responseActor !== activeActor) return Response.json({ error: changedAccount }, { status: 401 });
+      return response;
+    } catch (cause) {
+      onlineRun?.check();
+      if (init?.signal?.aborted) throw cause;
+      return Response.json({ error: indoorOnlineRequiredMessage, code: 'INDOOR_ONLINE_REQUIRED' }, { status: 503 });
+    }
+  }
   if (method !== 'GET') {
     if (typeof FormData !== 'undefined' && init?.body instanceof FormData) {
       const state = await readStoredFieldState();

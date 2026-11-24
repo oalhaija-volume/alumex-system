@@ -123,7 +123,7 @@ function fixture({ role = 'Indoor Sales', branch = 'Karkh', profileBranch = bran
 }
 
 const context = projectId => ({ params: Promise.resolve({ projectId, openingId: operationId }) });
-const request = body => ({ url: 'http://localhost:3003/api/offline', json: async () => body });
+const request = (body, search = '') => ({ url: `http://localhost:3003/api/offline${search}`, json: async () => body });
 const offlineChange = (projectId, action = 'finish') => ({
   id: operationId, userId: actorId, projectId, action, recordedAt: '2026-10-20T08:00:00Z',
   payload: action === 'register'
@@ -139,9 +139,9 @@ const assertHidden = response => {
 
 for (const branch of ['Karkh', 'Rasafa', 'Najaf', null, 'unknown']) {
   for (const path of ['dashboard', 'workspace', 'offline']) {
-    test(`${path}: Indoor Sales ${branch ?? 'unassigned'} sees only its branch and related data`, async () => {
+    test(`${path}${path === 'offline' ? ' recovery' : ''}: Indoor Sales ${branch ?? 'unassigned'} sees only its branch and related data`, async () => {
       const x = fixture({ branch });
-      const response = await x.load(`src/app/api/${path}/route`).GET(request());
+      const response = await x.load(`src/app/api/${path}/route`).GET(request(undefined, path === 'offline' ? '?recovery=1' : ''));
       assert.equal(response.status, 200);
       const allowed = projects.filter(p => ['Karkh', 'Rasafa', 'Najaf'].includes(branch) && (p.branch === branch || branch === 'Karkh' && p.branch === 'Governorates'));
       assert.deepEqual(response.body.projects.map(p => p.id), allowed.map(p => p.id));
@@ -154,6 +154,20 @@ for (const branch of ['Karkh', 'Rasafa', 'Najaf', null, 'unknown']) {
       assert.match(response.headers['Cache-Control'], /no-store/);
     });
   }
+}
+
+for (const branch of ['Karkh', 'Rasafa', 'Najaf', null, 'unknown']) {
+  test(`Indoor Sales ${branch ?? 'unassigned'} cannot download a new offline workspace`, async () => {
+    const x = fixture({ branch });
+    const response = await x.load('src/app/api/offline/route').GET(request());
+    assert.equal(response.status,403);
+    assert.equal(response.body.code,'INDOOR_ONLINE_REQUIRED');
+    assert.match(response.body.error,/Indoor Sales.*internet/i);
+    assert.match(response.headers['Cache-Control'],/no-store/);
+    assert.deepEqual(x.reads,[],'Denied offline preparation must not load business data');
+    assert.deepEqual(x.writes,[]);
+    assert.deepEqual(x.rpcCalls,[]);
+  });
 }
 
 for (const role of ['Admin', 'Sales Director', 'Company Owner']) {
@@ -318,12 +332,12 @@ for (const branch of ['Karkh','Rasafa','Najaf']) for (const deletedBranch of ['K
   });
 }
 
-test('a branch transfer during offline refresh cannot return projects from the former branch', async () => {
+test('a branch transfer during explicit Indoor recovery cannot return projects from the former branch', async () => {
   const x = fixture({ branch: 'Karkh', profileBranch: 'Rasafa', directoryRows: [
     { id: operationId, full_name: 'Former office Outdoor employee', role: 'Outdoor Sales', branch: 'Karkh', is_active: true, status: 'Active' },
     { id: 'former-indoor', full_name: 'Former office Indoor employee', role: 'Indoor Sales', branch: 'Karkh', is_active: true, status: 'Active' },
   ] });
-  const response = await x.load('src/app/api/offline/route').GET(request());
+  const response = await x.load('src/app/api/offline/route').GET(request(undefined,'?recovery=1'));
   assert.equal(response.status, 200);
   assert.equal(response.body.actor.branch, 'Rasafa');
   assert.ok(response.body.projects.every(project => project.branch === 'Rasafa'));
@@ -348,10 +362,10 @@ for(const [path,session] of [['workspace',false],['offline',false],['offline',tr
   }
 }
 
-test('Indoor branch snapshots do not apply an unrelated Outdoor rotation field',async()=>{
+test('Indoor live and explicit recovery snapshots do not apply an unrelated Outdoor rotation field',async()=>{
   for(const path of ['workspace','offline']){
     const x=fixture({branch:'Karkh',outdoorRotationStartBranch:'Rasafa'});
-    const response=await x.load(`src/app/api/${path}/route`).GET(request());
+    const response=await x.load(`src/app/api/${path}/route`).GET(request(undefined,path==='offline'?'?recovery=1':''));
     assert.equal(response.status,200);
     assert.equal(response.body.actor.branch,'Karkh');
     assert.equal(response.body.actor.outdoorRotationStartBranch,null);

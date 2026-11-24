@@ -4,8 +4,8 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 
 function worker(userAgent='iPhone',options={}){
- const listeners={},saved=new Map(),requests=[],background=[],cacheNames=[];
- const buckets=new Map([['alumex-field-shell-v31',saved]]),blocked=new Map();
+ const listeners={},saved=new Map(),requests=[],background=[],cacheNames=[],deadlines=[];
+ const buckets=new Map([['alumex-field-shell-v33',saved]]),blocked=new Map();
  let navigations=0,storageAccesses=0,cacheDeletions=0;
  let version=1,failAsset=false,network=false,now=100000;
  const key=value=>new URL(typeof value==='string'?value:value.url,'https://example.test').pathname;
@@ -24,9 +24,9 @@ function worker(userAgent='iPhone',options={}){
   if(path.startsWith('/_next/static/')&&(failAsset===true||failAsset===path))return new Response('missing',{status:503});
   return new Response('network '+path);
  };
- runInNewContext(readFileSync(new URL('../public/sw.js',import.meta.url),'utf8'),{self,caches,fetch,URL,Response,AbortController,AbortSignal,setTimeout:(callback,ms)=>setTimeout(callback,ms===4000?(options.navigationWaitMs??ms):ms),clearTimeout,Date:{now:()=>now},indexedDB:{open:()=>{storageAccesses++;throw Error('Business storage must not change');},deleteDatabase:()=>{storageAccesses++;throw Error('Business storage must not change');}}});
+ runInNewContext(readFileSync(new URL('../public/sw.js',import.meta.url),'utf8'),{self,caches,fetch,URL,Response,AbortController,AbortSignal,setTimeout:(callback,ms)=>{deadlines.push(ms);return setTimeout(callback,ms===4000?(options.navigationWaitMs??ms):ms);},clearTimeout,Date:{now:()=>now},indexedDB:{open:()=>{storageAccesses++;throw Error('Business storage must not change');},deleteDatabase:()=>{storageAccesses++;throw Error('Business storage must not change');}}});
  return {
-  saved,requests,cacheNames,
+  saved,requests,cacheNames,deadlines,
   get navigations(){return navigations;},get storageAccesses(){return storageAccesses;},get cacheDeletions(){return cacheDeletions;},
   async install(){await new Promise((resolve,reject)=>listeners.install({waitUntil:p=>p.then(resolve,reject)}));},
   async refresh(){await new Promise((resolve,reject)=>listeners.message({data:{type:'REFRESH_OFFLINE_SHELL'},waitUntil:p=>p.then(resolve,reject)}));},
@@ -35,7 +35,7 @@ function worker(userAgent='iPhone',options={}){
   release(n,fail=false,advance=true){version=n;failAsset=fail;if(advance)now+=61000;},offline(){network=true;self.navigator.onLine=false;now+=61000;},
   block(path){let resume;const promise=new Promise(resolve=>{resume=resolve;});blocked.set(path,{promise,resume});return()=>{blocked.delete(path);resume();};},
   async settled(){await Promise.all(background);},
-  legacy(records){buckets.set('alumex-field-shell-v30',new Map(records));},
+  legacy(records,version=30){buckets.set(`alumex-field-shell-v${version}`,new Map(records));},
  };
 }
 test('installed public shell and all referenced assets reopen offline; private routes and APIs are never cached',async()=>{
@@ -64,7 +64,7 @@ test('one online launch returns current HTML and assets even inside the backgrou
  assert.ok(w.saved.has('/_next/static/app-2.js'));
  assert.ok(w.saved.has('/_next/static/styles-2.css'));
  assert.ok(w.saved.has('/_next/static/app-1.js'));
- assert.ok(w.cacheNames.every(name=>name==='alumex-field-shell-v31'));
+ assert.ok(w.cacheNames.every(name=>name==='alumex-field-shell-v33'));
  assert.equal(w.navigations,0);assert.equal(w.storageAccesses,0);assert.equal(w.cacheDeletions,0);
 });
 
@@ -112,5 +112,44 @@ test('Windows laptops install a complete shell and reopen projects and quotation
  }
  assert.equal(w.navigate('/contract/11111111-1111-4111-8111-111111111111'),undefined);
  assert.equal(w.request('/api/offline/quotations'),undefined);
+ assert.equal(w.storageAccesses,0);assert.equal(w.cacheDeletions,0);
+});
+
+test('the Indoor online-only release replaces the installed v31 shell without touching retained account work',async()=>{
+ const w=worker('Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
+ w.legacy([
+  ['/offline',new Response('<html><script src="/_next/static/legacy-indoor-offline.js"></script></html>',{headers:{'content-type':'text/html'}})],
+  ['/_next/static/legacy-indoor-offline.js',new Response('old open form')],
+ ],31);
+ await w.install();w.offline();
+ const response=await w.navigate('/offline?path=/dashboard');
+ assert.match(await response.text(),/app-1/);
+ assert.equal(await(await w.request('/_next/static/legacy-indoor-offline.js')).text(),'old open form');
+ assert.ok(w.cacheNames.every(name=>name==='alumex-field-shell-v33'));
+ assert.equal(w.storageAccesses,0);assert.equal(w.cacheDeletions,0);
+});
+
+test('an explicit online navigation uses the live server without the offline deadline or saved fallback', async()=>{
+ const w=worker();await w.install();
+ const before=[...w.saved.keys()];
+ const previousDeadlines=w.deadlines.length;
+ const resume=w.block('/dashboard');
+ const navigation=w.navigate('/dashboard?__alumex_online=1');
+ let completed=false;navigation.then(()=>{completed=true;});
+ await new Promise(resolve=>setTimeout(resolve,10));
+ assert.equal(completed,false,'A delayed live request must wait for its server response');
+ assert.equal(w.deadlines.length,previousDeadlines,'An explicit reconnect must not schedule the three-second offline redirect');
+ resume();
+ const response=await navigation;
+ assert.equal(response.status,200);
+ assert.equal(await response.text(),'network /dashboard');
+ assert.deepEqual([...w.saved.keys()],before);
+ assert.equal(w.storageAccesses,0);assert.equal(w.cacheDeletions,0);
+});
+
+test('a failed explicit online attempt stays a network error rather than redirecting into the offline workspace',async()=>{
+ const w=worker();await w.install();w.offline();
+ await assert.rejects(w.navigate('/dashboard?__alumex_online=1'),/No network/);
+ assert.equal(w.saved.has('/dashboard'),false);
  assert.equal(w.storageAccesses,0);assert.equal(w.cacheDeletions,0);
 });

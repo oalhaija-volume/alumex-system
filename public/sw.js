@@ -1,5 +1,7 @@
 /* Only the public shell and static assets enter Cache Storage. Account data stays in IndexedDB. */
-const CACHE = 'alumex-field-shell-v31';
+// New shell enforces Indoor Sales online-only access while retaining every
+// older shell, immutable asset, and account's pending IndexedDB records.
+const CACHE = 'alumex-field-shell-v33';
 const offlineDevice = /Android|iPhone|iPad|iPod|Tablet|Silk|Windows|Macintosh|Mac OS X|X11|Linux|CrOS/i.test(self.navigator.userAgent);
 let refreshing = null;
 let refreshedAt = 0;
@@ -85,6 +87,13 @@ self.addEventListener('fetch', event => {
  }
  const fieldRoute = /^\/(?:dashboard|intake|project-log|projects|mini-crm|initial-measurements|quotation)(?:\/|$)/.test(url.pathname);
  if (!fieldRoute) return;
+ // Reconnecting is an explicit request for the live system. A slow server or
+ // a retained conflict must not send this navigation back to the saved shell.
+ // Browser network failures remain visible; no private document is cached.
+ if (url.searchParams.get('__alumex_online') === '1') {
+  event.respondWith(fetch(request));
+  return;
+ }
  event.respondWith((async () => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3000);

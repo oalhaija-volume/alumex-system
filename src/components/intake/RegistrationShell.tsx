@@ -7,6 +7,7 @@ import { useFieldState } from '@/components/offline/useFieldState';
 import { MobileOutdoorProvider } from "@/components/workflow/MobileOutdoorContext";
 import { SalesReminders } from "@/components/workflow/SalesReminders";
 import { OfflineStatus } from "@/components/offline/OfflineStatus";
+import { IndoorOnlineWorkspace } from "@/components/offline/IndoorOnlineWorkspace";
 import { isFieldOnline } from "@/lib/offline/client";
 import { FieldLogoutButton } from "@/components/offline/FieldLogoutButton";
 import { useRef, useState } from "react";
@@ -68,7 +69,7 @@ export function RegistrationShell({ children, role, mobileOutdoor = false, userN
         {term('Download Windows app')}
       </Link>}
       <LanguageSwitcher />
-      <FieldLogoutButton className="min-h-11 w-full rounded-md px-3 text-start text-sm text-slate-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:opacity-60" />
+      <FieldLogoutButton role={role} className="min-h-11 w-full rounded-md px-3 text-start text-sm text-slate-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:opacity-60" />
     </div>;
   }
 
@@ -104,7 +105,7 @@ export function RegistrationShell({ children, role, mobileOutdoor = false, userN
         </div>
       </dialog>
 
-      <main className="min-w-0 lg:ps-64 print:ps-0" onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a[href]');const href=link?.getAttribute('href');if(isOfflineDevice()&&!isFieldOnline()&&href?.startsWith('/')&&href!=='/offline'){event.preventDefault();event.stopPropagation();window.location.assign('/offline?path='+encodeURIComponent(href));}}}>
+      <main className="min-w-0 lg:ps-64 print:ps-0" onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a[href]');const href=link?.getAttribute('href');if(isOfflineDevice()&&!isFieldOnline()&&href?.startsWith('/')&&href!=='/offline'&&!href.includes('__alumex_online=1')){event.preventDefault();event.stopPropagation();window.location.assign('/offline?path='+encodeURIComponent(href));}}}>
         {role !== "Outdoor Sales" && ["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager"].includes(role) && <div className="hidden border-b border-slate-200 bg-white lg:block print:hidden"><div className="mx-auto flex max-w-5xl justify-end px-8 py-3"><NotificationCenter compact /></div></div>}
         {userName && (
           <div className="border-b border-slate-200 bg-white print:hidden">
@@ -114,7 +115,7 @@ export function RegistrationShell({ children, role, mobileOutdoor = false, userN
             </div>
           </div>
         )}
-        {role && ["Admin","Sales Director","CEO", "Company Owner","Indoor Sales", "Sales Manager","Outdoor Sales"].includes(role) && <><OfflineStatus quiet={role==='Outdoor Sales'}/><SalesReminders/>{role==='Outdoor Sales'&&<OutdoorWorkspaceNav state={fieldState} path={pathname} onNavigate={path=>window.location.assign(!isOfflineDevice()||isFieldOnline()?path:'/offline?path='+encodeURIComponent(path))}/>} </>}{children}
+        {role==='Indoor Sales'?<IndoorOnlineWorkspace><SalesReminders/>{children}</IndoorOnlineWorkspace>:<>{role && ["Admin","Sales Director","CEO", "Company Owner","Sales Manager","Outdoor Sales"].includes(role) && <><OfflineStatus quiet={role==='Outdoor Sales'}/><SalesReminders/>{role==='Outdoor Sales'&&<OutdoorWorkspaceNav state={fieldState} path={pathname} onNavigate={path=>window.location.assign(!isOfflineDevice()||isFieldOnline()?path:'/offline?path='+encodeURIComponent(path))}/>} </>}{children}</>}
       </main>
     </div></MobileOutdoorProvider>
   );

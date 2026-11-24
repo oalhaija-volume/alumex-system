@@ -2,8 +2,10 @@
 import { useEffect, useState } from 'react';
 import { canAccessCRM } from '@/lib/auth/permissions';
 import { activeFieldUser, readFieldState, updateFieldState } from '@/lib/offline/store';
-import { isFieldOnline, prepareOffline } from '@/lib/offline/client';
+import { isFieldOnline } from '@/lib/offline/client';
 import type { FollowUpEntry, FollowUpHistory } from '@/lib/workflow/followUps';
+import { canUseOfflineWorkspace, indoorOnlineRequiredMessage, isIndoorOnlineUser } from '@/lib/offline/policy';
+import { subscribeWorkspaceChanges } from '@/lib/workflow/workspaceEvents';
 
 export function useFollowUpHistory(projectId: string, enabled = true) {
   const [data, setData] = useState<FollowUpHistory | null>(null);
@@ -18,8 +20,20 @@ export function useFollowUpHistory(projectId: string, enabled = true) {
       if (running) { repeat = true; repeatForce ||= force; return; }
       running = true;
       try {
-        let saved = await readFieldState();
-        if (!saved && isFieldOnline()) saved = await prepareOffline().catch(() => null);
+        let saved = await readFieldState().catch(cause => {
+          if (isIndoorOnlineUser(activeFieldUser())) return null;
+          throw cause;
+        });
+        const onlineAccount = activeFieldUser();
+        if (!saved || !canUseOfflineWorkspace(saved.actor.role) || isIndoorOnlineUser(onlineAccount)) {
+          if (!isFieldOnline()) throw new Error(indoorOnlineRequiredMessage);
+          const response = await fetch(`/api/projects/${projectId}/follow-ups`, { cache: 'no-store', signal: controller.signal });
+          if (!active || onlineAccount !== activeFieldUser()) return;
+          if (!response.ok) { const result = await response.json(); throw new Error(result.error ?? 'Unable to load follow-ups.'); }
+          const history = await response.json() as FollowUpHistory;
+          if (active && onlineAccount === activeFieldUser()) { setData(history); setCached(false); setError(''); }
+          return;
+        }
         if (!active) return;
         if (saved && !canAccessCRM(saved.actor.role)) throw new Error('CRM access is limited to Indoor Sales and company leadership.');
         const account = activeFieldUser();
@@ -76,8 +90,13 @@ export function useFollowUpHistory(projectId: string, enabled = true) {
     const reconnected = () => { void load(true); };
     void load();
     window.addEventListener('field-change', changed);
+    window.addEventListener('field-refresh', reconnected);
     window.addEventListener('online', reconnected);
-    return () => { active = false; controller.abort(); window.removeEventListener('field-change', changed); window.removeEventListener('online', reconnected); };
+    window.addEventListener('offline', reconnected);
+    window.addEventListener('focus', reconnected);
+    const unsubscribe = subscribeWorkspaceChanges(reconnected);
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') void load(true); }, 30000);
+    return () => { active = false; controller.abort(); clearInterval(timer); unsubscribe(); window.removeEventListener('field-change', changed); window.removeEventListener('field-refresh', reconnected); window.removeEventListener('online', reconnected); window.removeEventListener('offline', reconnected); window.removeEventListener('focus', reconnected); };
   }, [projectId, enabled]);
   return { data, error, loading, cached };
 }

@@ -178,22 +178,15 @@ function offline(context, actor = employee(), projects = []) {
   return { client: modules({ './store': store, './device': { isOfflineDevice: () => true } })('lib/offline/client'), get state() { return structuredClone(state); } };
 }
 
-test('offline Karkh Indoor Najaf registration stays editable for project name and follow-up', async context => {
+test('Karkh Indoor Najaf registration and edits require online access', async context => {
   const x = offline(context);
-  await x.client.saveFieldChange('register', projectId, registration('النجف', { governorate_office: 'Najaf' }), actorId);
-  assert.equal(x.state.projects[0].governorate_office, 'Karkh', 'The local office is derived from the authorized actor');
-  await x.client.saveFieldChange('rename-project', projectId, { projectName: 'New Najaf showroom project' }, actorId);
-  await x.client.saveFieldChange('follow-up', projectId, {
+  const before=x.state;
+  await assert.rejects(x.client.saveFieldChange('register', projectId, registration('النجف', { governorate_office: 'Najaf' }), actorId),/Indoor Sales.*internet/i);
+  await assert.rejects(x.client.saveFieldChange('rename-project', projectId, { projectName: 'New Najaf showroom project' }, actorId),/Indoor Sales.*internet/i);
+  await assert.rejects(x.client.saveFieldChange('follow-up', projectId, {
     nextFollowUp: '2026-11-20T08:00:00Z', followUpType: 'call', note: 'Karkh follows up', followUpOwnerId: actorId,
-  }, actorId);
-  assert.deepEqual(x.state.queue.map(change => change.action), ['register', 'rename-project', 'follow-up']);
-  assert.equal(x.state.projects[0].project_name, 'New Najaf showroom project');
-  assert.equal(x.state.projects[0].follow_up_owner_id, actorId);
-  assert.equal(x.state.projects[0].project_notes, 'Karkh follows up');
-  assert.equal(x.state.projects[0].governorate, 'النجف');
-  assert.equal(x.state.projects[0].branch, 'Governorates');
-  assert.equal(x.state.projects[0].governorate_office, 'Karkh');
-  assert.equal(load('lib/offline/projectAccess').visibleFieldState(x.state).projects.length, 1);
+  }, actorId),/Indoor Sales.*internet/i);
+  assert.deepEqual(x.state,before);
 });
 
 test('offline Outdoor cannot forge the Karkh Najaf office marker during registration', async context => {
@@ -206,6 +199,6 @@ test('offline Outdoor cannot forge the Karkh Najaf office marker during registra
 test('offline Karkh creator cannot mark legacy Najaf through a queued edit', async context => {
   const x = offline(context, employee(), [project]);
   const before = x.state;
-  await assert.rejects(x.client.saveFieldChange('rename-project', projectId, { projectName: 'Denied', governorate_office: 'Karkh' }, actorId), /not available/);
+  await assert.rejects(x.client.saveFieldChange('rename-project', projectId, { projectName: 'Denied', governorate_office: 'Karkh' }, actorId), /Indoor Sales.*internet/i);
   assert.deepEqual(x.state, before);
 });

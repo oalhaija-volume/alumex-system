@@ -2,7 +2,9 @@ import { savedFieldState as savedState } from './helpers/fieldState';
 import { chromium, devices, expect, test, type BrowserContext } from '@playwright/test';
 import type { FieldChange, FieldState } from '../../src/lib/offline/types';
 
-for(const role of ['Indoor Sales','Outdoor Sales'])test(`${role}: real cached app survives browser restart, saves measurements offline, and reconnects exactly once`,async({},testInfo)=>{
+// Indoor Sales now requires a connection; its blocked/recovery flow is covered
+// by indoor-online-only.spec.ts. Sales Managers retain offline workspace access.
+for(const role of ['Sales Manager','Outdoor Sales'])test(`${role}: real cached app survives browser restart, saves measurements offline, and reconnects exactly once`,async({},testInfo)=>{
  test.setTimeout(90000);
  const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Offline employee',role,branch:'Karkh' as const};
  const remote:FieldState={actor,projects:[],openings:[],queue:[],outdoorSales:[],indoorSales:[{id:actor.id,name:actor.name}],syncedAt:null};
@@ -43,10 +45,10 @@ for(const role of ['Indoor Sales','Outdoor Sales'])test(`${role}: real cached ap
   let page=await launch();
   await page.goto(base+'/offline?path=/dashboard');
   await expect(page.getByRole('heading',{name:role==='Outdoor Sales'?'Measurement assignments':'Sales dashboard',exact:true})).toBeVisible();
-  if(role==='Indoor Sales')await expect(page.getByText('Synced · Offline saving ready',{exact:true})).toBeVisible();
+  if(role==='Sales Manager')await expect(page.getByText('Synced · Offline saving ready',{exact:true})).toBeVisible();
   await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
-  await expect.poll(()=>page.evaluate(async()=>(await (await caches.open('alumex-field-shell-v31')).keys()).some(r=>new URL(r.url).pathname==='/offline'))).toBe(true);
-  const cachePaths=await page.evaluate(async()=>{const cache=await caches.open('alumex-field-shell-v31');return(await cache.keys()).map(r=>new URL(r.url).pathname);});
+  await expect.poll(()=>page.evaluate(async()=>!!(await caches.match('/offline')))).toBe(true);
+  const cachePaths=await page.evaluate(async()=>(await Promise.all((await caches.keys()).map(async name=>(await (await caches.open(name)).keys()).map(r=>new URL(r.url).pathname)))).flat());
   expect(cachePaths).toContain('/offline');expect(cachePaths.some(p=>p.startsWith('/api/'))).toBe(false);
   await context!.close();context=undefined;
   page=await launch(true);
@@ -87,7 +89,7 @@ for(const role of ['Indoor Sales','Outdoor Sales'])test(`${role}: real cached ap
   expect(remote.projects).toHaveLength(1);expect(remote.projects[0].sales_status).toBe('ready_for_quotation');expect(remote.openings).toHaveLength(1);
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
   await page.waitForTimeout(400);expect(received).toHaveLength(3);
-  if(role==='Indoor Sales')await expect(page.getByText('Synced · Offline saving ready',{exact:true})).toBeVisible();
+  if(role==='Sales Manager')await expect(page.getByText('Synced · Offline saving ready',{exact:true})).toBeVisible();
   await expect(page.getByText('Offline reopening sample · PRJ-OFFLINE',{exact:true})).toBeVisible();
   expect(errors).toEqual([]);
   await testInfo.attach('offline-reopen-timing',{body:JSON.stringify({reopenMs,browserRestart:true,queuedChanges:3,synchronizedChanges:3}),contentType:'application/json'});

@@ -85,7 +85,7 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
    <button type="button" disabled={refreshing} onClick={()=>window.dispatchEvent(new Event('field-refresh'))} className="min-h-11 rounded-md px-3 font-semibold text-blue-700 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">{term(refreshing?'Refreshing projects…':'Refresh projects')}</button>
   </div>
   {ready&&!online&&<p role="status" className="mt-1 rounded-md bg-amber-50 p-3 leading-6 text-amber-900">{term('Showing saved projects. Connect and refresh to see the latest entries.')}</p>}
-  {issue&&<div role="alert" className="mt-2 text-red-700">{errorMessage(issue)} {error&&<button onClick={()=>{void syncFieldChanges().then(()=>syncOfflineQuotations()).catch(()=>{});}} className="min-h-11 px-2 font-semibold underline">{term('Retry sync')}</button>}</div>}
+  {issue&&<div role="alert" className="mt-2 text-red-700">{errorMessage(issue)} {error&&<button disabled={refreshing} onClick={()=>window.dispatchEvent(new Event('field-refresh'))} className="min-h-11 px-2 font-semibold underline">{term(refreshing?'Refreshing projects…':'Retry sync')}</button>}</div>}
   <QuotationSyncConflicts/>
  </div>;
  return <div className="border-b border-slate-200 bg-white px-5 py-3 text-sm print:hidden">
@@ -93,7 +93,7 @@ export function OfflineStatus({quiet=false}:{quiet?:boolean}){
    <div><p role="status" className={issue?'text-red-700':!online||count?'text-amber-800':'text-slate-600'}>{status}</p>{syncedAt&&<p className="mt-1 text-xs text-slate-500">{term('Last synced')} <time dateTime={syncedAt} dir="ltr" className="inline-block">{formatDateTime(syncedAt)}</time></p>}</div>
    <a href="/offline?path=/dashboard" className="font-semibold text-blue-600">{term('Device workspace')}</a>
   </div>
-  {issue&&<p role="alert" className="mx-auto mt-2 max-w-5xl text-xs text-red-700">{errorMessage(issue)} {error&&<button onClick={()=>{void syncFieldChanges().then(()=>syncOfflineQuotations()).catch(()=>{});}} className="min-h-11 px-2 underline">{term('Retry sync')}</button>}</p>}
+  {issue&&<p role="alert" className="mx-auto mt-2 max-w-5xl text-xs text-red-700">{errorMessage(issue)} {error&&<button disabled={refreshing} onClick={()=>window.dispatchEvent(new Event('field-refresh'))} className="min-h-11 px-2 underline">{term(refreshing?'Refreshing projects…':'Retry sync')}</button>}</p>}
   <QuotationSyncConflicts/>
  </div>;
 }

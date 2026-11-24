@@ -117,10 +117,10 @@ test('measurement task workflow remains shared while project-name editing stays 
   assert.equal(x.raw.projects[0].project_name, project.project_name);
 });
 
-test('Indoor Sales keeps its existing permission to edit an opening with unknown original ownership', async t => {
+test('Indoor Sales requires online access to edit an opening with unknown original ownership', async t => {
   const old = { ...opening, createdBy: null };
   const x = setup(t, { actor: { ...actor, role: 'Indoor Sales', branch: 'Karkh' }, projects: [{ ...project, branch: 'Karkh' }], openings: [old] });
-  await x.client.saveFieldChange('edit-opening', projectId, { previous: old, opening: { ...old, width: 155 } });
-  assert.equal(x.raw.openings[0].width, 155);
-  assert.equal(x.raw.openings[0].createdBy, null);
+  const before=x.raw;
+  await assert.rejects(x.client.saveFieldChange('edit-opening', projectId, { previous: old, opening: { ...old, width: 155 } }),/Indoor Sales.*internet/i);
+  assert.deepEqual(x.raw,before);
 });

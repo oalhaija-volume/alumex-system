@@ -191,6 +191,7 @@ test('a refreshed team identity hides former team data while reconciling already
 
 test('reviewing a former team project preserves read-only history while rejecting media and retry access', async t => {
   const x = setup(t);
+  navigator.onLine=true;
   const reference = { ...project, assigned_outdoor_sales_id: otherTeamId, assignedToTeam: false, project_log_only: true };
   globalThis.fetch = async () => Response.json({ actor, projects: [reference], openings: [opening], queue: [] });
   await assert.rejects(x.client.reviewServerProject(projectId), /no longer available/);

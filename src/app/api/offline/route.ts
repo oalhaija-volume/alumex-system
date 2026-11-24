@@ -18,13 +18,18 @@ import { isOutdoorAssignmentMember, outdoorAssignmentIds } from '@/lib/auth/outd
 import { normalizeOpeningEdit,normalizeRegistrationOpening,registrationRoomTypes } from '@/lib/measurements/registrationOpening';
 import { parseProjectLocation } from '@/lib/location/coordinates';
 import type { Json } from '@/lib/supabase/database.types';
+import { canUseOfflineWorkspace, indoorOnlineRequiredMessage } from '@/lib/offline/policy';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export async function GET(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
+ const parameters=new URL(request.url).searchParams;
+ // Keep authenticated legacy recovery available without preparing a new
+ // Indoor Sales workspace or querying business data for a denied download.
+ if(!canUseOfflineWorkspace(auth.role)&&!parameters.has('session')&&parameters.get('recovery')!=='1')return NextResponse.json({error:indoorOnlineRequiredMessage,code:'INDOOR_ONLINE_REQUIRED'},{status:403,headers:{'Cache-Control':'private, no-store'}});
  const admin=createAdminClient();
  const profileQuery=admin.from('profiles').select('full_name,username,branch,outdoor_rotation_start_branch').eq('id',auth.user.id).single();
  const actorFromProfile=(profile:{full_name:string|null;username:string|null;branch:string|null;outdoor_rotation_start_branch:'Karkh'|'Rasafa'|null}|null)=>({id:auth.user.id,name:profile?.full_name??profile?.username??'Employee',role:auth.role,branch:profile?.branch??null,outdoorRotationStartBranch:auth.role==='Outdoor Sales'?profile?.outdoor_rotation_start_branch??null:null,outdoorTeamMemberIds:auth.outdoorTeamMemberIds});
- if(new URL(request.url).searchParams.has('session')){
+ if(parameters.has('session')){
   const profile=await profileQuery;
   if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
   return NextResponse.json({actor:actorFromProfile(profile.data)},{headers:{'Cache-Control':'no-store'}});

@@ -3227,7 +3227,18 @@
     "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled.": "إذا لم تظهر هذه الخيارات أو كانت مؤسستك تحظر التطبيق، اطلب من مسؤول تقنية المعلومات اعتماد ملف التثبيت هذا. أبقِ وسائل حماية Windows مفعّلة.",
     "Measurement area": "منطقة القياسات",
     "Connect and refresh projects to confirm your measurement area.": "اتصل بالإنترنت وحدّث المشاريع لتأكيد منطقة القياسات المخصصة لك.",
-    "Rotation exception": "استثناء من التناوب"
+    "Rotation exception": "استثناء من التناوب",
+    "Indoor Sales · Online only": "المبيعات الداخلية · اتصال بالإنترنت مطلوب",
+    "Saved changes could not sync. You can open the online system and review them later.": "تعذرت مزامنة التغييرات المحفوظة. يمكنك فتح النظام المتصل ومراجعتها لاحقاً.",
+    "1 saved change from this account needs syncing or review.": "يوجد تغيير محفوظ واحد لهذا الحساب بانتظار المزامنة أو المراجعة.",
+    "Connect to the internet to use Indoor Sales.": "اتصل بالإنترنت لاستخدام المبيعات الداخلية.",
+    "Indoor Sales requires an internet connection. Reconnect to continue.": "تتطلب المبيعات الداخلية الاتصال بالإنترنت. أعد الاتصال للمتابعة.",
+    "Review and sync the saved changes for this project before editing it online.": "راجع التغييرات المحفوظة لهذا المشروع وزامنها قبل تعديله في النظام المتصل.",
+    "Review and synchronize this project’s saved changes before changing its quotation online.": "راجع التغييرات المحفوظة لهذا المشروع وزامنها قبل تعديل عرض سعره في النظام المتصل.",
+    "Indoor Sales requires an internet connection.": "تتطلب المبيعات الداخلية اتصالاً بالإنترنت.",
+    "Offline work is disabled for Indoor Sales. Open the online system to continue.": "العمل دون اتصال غير متاح للمبيعات الداخلية. افتح النظام المتصل للمتابعة.",
+    "{count} saved changes from this account need syncing or review.": "يوجد {count} من التغييرات المحفوظة لهذا الحساب بانتظار المزامنة أو المراجعة.",
+    "You can log out. Unresolved work stays saved for this account and is not shown to the next employee.": "يمكنك تسجيل الخروج. يبقى العمل غير المتزامن محفوظاً لهذا الحساب ولا يظهر للموظف التالي."
   },
   "registration": {
     "title": "عميل ومشروع جديد",

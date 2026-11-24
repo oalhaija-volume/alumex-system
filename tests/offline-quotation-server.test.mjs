@@ -199,7 +199,7 @@ test('offline approval/signing cannot enter a save transaction and ordinary onli
   assert.ok((await result.json()).flow);
 });
 
-function snapshotFixture({ role = 'Indoor Sales', grants = ['00000000-0000-4000-8000-000000000002'], many = false, grantError = false } = {}) {
+function snapshotFixture({ role = 'Sales Manager', grants = ['00000000-0000-4000-8000-000000000002'], many = false, grantError = false } = {}) {
   const makeProject = (id, branch, extra = {}) => ({ id, branch, governorate: null, governorate_office: null,
     project_number: `PRJ-${id}`, project_name: 'Snapshot project', client_id: 'client', archived_at: null,
     created_by: actorId, assigned_outdoor_sales_id: null, sales_status: 'quotation_in_progress', ...extra });
@@ -236,20 +236,19 @@ function snapshotFixture({ role = 'Indoor Sales', grants = ['00000000-0000-4000-
   const route = compiled('app/api/offline/quotations/route');
   return { get: (cursor = '') => route.GET(new Request(`http://localhost:3003/api/offline/quotations${cursor ? `?cursor=${cursor}` : ''}`)) };
 }
-test('snapshot collection applies branch/Najaf rules and isolates explicit shared quotes from CRM data', async () => {
+test('supported offline quotation downloads apply branch/Najaf rules and exclude Indoor-only shared grants', async () => {
   const result = await snapshotFixture().get();
   assert.equal(result.status, 200); assert.equal(result.headers.get('X-Alumex-Actor'), actorId);
   const data = await result.json();
   assert.equal(data.actor.id, actorId); assert.equal(data.complete, true); assert.equal(data.nextCursor, null);
-  assert.equal(data.quotations.length, 3);
-  assert.deepEqual(data.quotations.map(row => row.data.quotationAccess), ['full', 'prices', 'full']);
+  assert.equal(data.quotations.length, 2);
+  assert.deepEqual(data.quotations.map(row => row.data.quotationAccess), ['full', 'full']);
   assert.equal(data.catalog.length, 1);
   for (const row of data.quotations) {
     assert.equal(row.data.catalog, undefined); assert.deepEqual(row.data.history, []);
     assert.equal(row.data.flow?.contract ?? null, null);
   }
-  const shared = data.quotations.find(row => row.data.quotationAccess === 'prices').data.project;
-  assert.equal(shared.branch, 'Rasafa'); assert.equal(shared.follow_up_owner_id, undefined); assert.equal(shared.project_notes, undefined);
+  assert.ok(data.quotations.every(row => row.data.project.branch !== 'Rasafa'));
   assert.doesNotMatch(JSON.stringify(data), /private-document|private-signature|private-path/);
 });
 test('snapshot pagination is bounded and complete only after the final same-actor page', async () => {
@@ -260,9 +259,12 @@ test('snapshot pagination is bounded and complete only after the final same-acto
   assert.equal(last.quotations.length, 1); assert.equal(last.complete, true); assert.equal(last.nextCursor, null);
   assert.equal(new Set([...first.quotations, ...last.quotations].map(row => row.projectId)).size, 51);
 });
-test('revoked grants disappear, grant verification errors fail closed and nonsales roles cannot download', async () => {
+test('Indoor Sales cannot download offline quotations regardless of shared grants, and nonsales roles stay denied', async () => {
   const noGrant = await (await snapshotFixture({ grants: [] }).get()).json();
   assert.ok(noGrant.quotations.every(row => row.data.quotationAccess === 'full'));
-  assert.equal((await snapshotFixture({ grantError: true }).get()).status, 503);
+  for (const options of [{ role: 'Indoor Sales' }, { role: 'Indoor Sales', grants: [] }, { role: 'Indoor Sales', grantError: true }]) {
+    const response = await snapshotFixture(options).get();
+    assert.equal(response.status, 403); assert.equal((await response.json()).code, 'INDOOR_ONLINE_REQUIRED');
+  }
   for (const role of ['Outdoor Sales', 'HR', 'Operations Manager']) assert.equal((await snapshotFixture({ role }).get()).status, 403);
 });

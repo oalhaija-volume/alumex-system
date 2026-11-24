@@ -8,7 +8,7 @@ import type { OfflineQuotationData } from '../../src/lib/offline/quotationTypes'
 // real IndexedDB and real service worker, with every business API intercepted.
 const executablePath = [resolve('.next/cache/qa-client-name/chrome-headless-shell-mac-arm64/chrome-headless-shell'), resolve('artifacts/mini-crm-review-20261015/browser/chrome-headless-shell-mac-arm64/chrome-headless-shell')].find(path => existsSync(path));
 const origin = 'http://localhost:3003';
-const actor = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Windows offline fixture', role: 'Indoor Sales', branch: 'Karkh' as const };
+const accountId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const projectId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const catalog = [{ id: 'system', name: 'Alumex System', category: 'aluminum_system', unit: 'sqm', unit_price: 250000, is_active: true }];
 const opening = { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', width: 100, height: 100, quantity: 1, floor: 'GF', room: 'Office', opening_type: 'Window', opening_direction: 'Sliding' };
@@ -34,11 +34,12 @@ async function state(page: Page): Promise<FieldState> {
       read.onerror = () => { db.close(); reject(new Error('Saved account unavailable')); };
       read.onsuccess = () => { const result = read.result; db.close(); accept(result); };
     };
-  }), actor.id);
+  }), accountId);
 }
 
-for (const scenario of [{ shared: false, conflict: false }, { shared: true, conflict: false }, { shared: true, conflict: true }]) test(`Windows ${scenario.shared ? 'shared price-only' : 'full'} quotation ${scenario.conflict ? 'keeps a server conflict for explicit review' : 'survives restart and synchronizes exactly once'}`, async ({}, testInfo) => {
+for (const scenario of [{ shared: false, conflict: false }, { shared: true, conflict: false }, { shared: true, conflict: true }]) test(`Windows ${scenario.shared ? 'legacy Indoor Sales shared price-only' : 'Sales Manager full'} quotation ${scenario.conflict ? 'keeps a server conflict for explicit review' : 'survives restart and synchronizes exactly once'}`, async ({}, testInfo) => {
   const { shared, conflict } = scenario;
+  const actor = { id: accountId, name: 'Windows offline fixture', role: shared ? 'Indoor Sales' : 'Sales Manager', branch: 'Karkh' as const };
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Windows laptop scenario'); test.setTimeout(120000);
   expect(executablePath, 'A repository-local browser is required').toBeTruthy();
   let context: BrowserContext | undefined;
@@ -89,6 +90,7 @@ for (const scenario of [{ shared: false, conflict: false }, { shared: true, conf
       if (request.method() !== 'GET') throw new Error(`Unexpected business write: ${request.method()} ${url.pathname}`);
       return route.fulfill({ status: 404, json: { error: 'Fixture endpoint unavailable' } });
     });
+    await current.route('**/login', route => route.fulfill({ contentType: 'text/html', body: '<h1>Login fixture</h1>' }));
     const page = current.pages()[0] ?? await current.newPage();
     page.on('pageerror', error => errors.push(error.message)); return page;
   }
@@ -102,23 +104,56 @@ for (const scenario of [{ shared: false, conflict: false }, { shared: true, conf
 
   try {
     let page = await launch();
-    await page.goto(`${origin}/offline?path=/quotation/${projectId}`);
-    await expect(page.getByRole('heading', { name: 'Quotation', exact: true })).toBeVisible();
-    await expect.poll(async () => (await state(page))?.quotations?.entries.length).toBe(1);
+    if (shared) {
+      // Retained drafts may have been created by the previous application.
+      // Seed that existing account, then prove the new shell permits recovery
+      // while preventing any further Indoor Sales editing offline.
+      await page.goto(`${origin}/login`);
+      const saved: FieldState = { ...remoteField, quotations: {
+        entries: [{ projectId, data: data(true, 280000), available: true, downloadedAt: '2026-11-23T10:00:00Z' }],
+        queue: [{ id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', userId: actor.id, projectId, recordedAt: '2026-11-23T10:01:00Z',
+          body: { action: 'save-shared-prices', revision: 1, systemRates: [{ openingId: opening.id, rate: 280000 }] }, base: data(true), draft: data(true, 280000) }],
+        archived: [], downloadedAt: '2026-11-23T10:00:00Z',
+      } };
+      await page.evaluate(saved => new Promise<void>((accept, reject) => {
+        const request = indexedDB.open('alumex-field-v1', 1);
+        request.onupgradeneeded = () => request.result.createObjectStore('accounts');
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction('accounts', 'readwrite');
+          tx.objectStore('accounts').put(saved, saved.actor.id);
+          tx.oncomplete = () => { db.close(); localStorage.setItem('alumex-field-active', saved.actor.id); accept(); };
+          tx.onerror = () => { db.close(); reject(tx.error); };
+        };
+      }), saved);
+      await page.evaluate(async () => { await navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }); });
+    } else {
+      await page.goto(`${origin}/offline?path=/quotation/${projectId}`);
+      await expect(page.getByRole('heading', { name: 'Quotation', exact: true })).toBeVisible();
+      await expect.poll(async () => (await state(page))?.quotations?.entries.length).toBe(1);
+    }
     await page.evaluate(async () => { await navigator.serviceWorker.ready; });
     await expect.poll(() => page.evaluate(async () => !!(await caches.match('/offline')))).toBe(true);
     const paths = await page.evaluate(async () => (await Promise.all((await caches.keys()).map(async name => (await (await caches.open(name)).keys()).map(request => new URL(request.url).pathname)))).flat());
     expect(paths.some(path => path.startsWith('/api/'))).toBe(false);
     await context!.close(); context = undefined;
     page = await launch(true); await page.goto(`${origin}/offline?path=/quotation/${projectId}`);
-    await expect(page.getByRole('heading', { name: 'Quotation', exact: true })).toBeVisible();
-    await edit(page, 280000);
+    if (shared) {
+      await expect(page.getByRole('heading', { name: 'Indoor Sales requires an internet connection.', exact: true })).toBeVisible();
+      await expect(page.getByRole('spinbutton')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Save revised quotation', exact: true })).toHaveCount(0);
+    } else {
+      await expect(page.getByRole('heading', { name: 'Quotation', exact: true })).toBeVisible();
+      await edit(page, 280000);
+    }
     const saved = await state(page); expect(saved.quotations!.queue).toHaveLength(1);
     const operation = saved.quotations!.queue[0]; expect(operation.draft.flow!.quotation.total).toBe(280000);
     expect(received).toHaveLength(0); expect(saved.projects).toHaveLength(0);
     await context!.close(); context = undefined;
     page = await launch(true); await page.goto(`${origin}/offline?path=/quotation/${projectId}`);
-    await expect(page.getByText('Quotation saved on this device. It will sync when connected.', { exact: true })).toBeVisible();
+    if (shared) await expect(page.getByRole('heading', { name: 'Indoor Sales requires an internet connection.', exact: true })).toBeVisible();
+    else await expect(page.getByText('Quotation saved on this device. It will sync when connected.', { exact: true })).toBeVisible();
     expect((await state(page)).quotations!.queue[0].id).toBe(operation.id);
     if (shared) {
       await expect(page.getByRole('button', { name: 'Edit quotation', exact: true })).toHaveCount(0);

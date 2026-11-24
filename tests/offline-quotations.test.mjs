@@ -18,7 +18,7 @@ function modules(dependencies = {}) {
   return path => load(new URL(`../src/${path}.${path.startsWith('components/') ? 'tsx' : 'ts'}`, import.meta.url));
 }
 const pricing = modules()('lib/workflow/pricing');
-const actor = { id: 'b1527c5b-dfee-4336-ae1b-88acf76a5060', role: 'Indoor Sales', name: 'Fixture indoor', branch: 'Karkh' };
+const actor = { id: 'b1527c5b-dfee-4336-ae1b-88acf76a5060', role: 'Sales Manager', name: 'Fixture sales manager', branch: 'Karkh' };
 const projectId = '11111111-1111-4111-8111-111111111111';
 const otherProjectId = '22222222-2222-4222-8222-222222222222';
 const catalog = [{ id: 'system', name: 'Alumex System', category: 'aluminum_system', unit: 'sqm', unit_price: 250000, is_active: true }];
@@ -33,7 +33,7 @@ function quotationData({ shared = false, id = projectId, revision = 1, rate = 25
   return { quotationAccess: shared ? 'prices' : 'full', project: { id, branch: shared ? 'Rasafa' : 'Karkh', project_number: `PRJ-${id.slice(0, 4)}`, project_name: 'Quotation fixture', address: 'Baghdad', sales_status: 'quotation_in_progress' }, client: { name: 'Fixture client', mobile: '07000000000' }, openings: [opening], catalog, flow: { project_id: id, revision, stage: 'quotation', quotation, contract: null, evidence: null, signed_at: null, accepted_at: null, accepted_by: null }, history: [] };
 }
 
-function fixture({ shared = false, role = 'Indoor Sales', cached = true } = {}) {
+function fixture({ shared = false, role = 'Sales Manager', cached = true } = {}) {
   const events = new EventTarget();
   Object.defineProperty(globalThis, 'window', { configurable: true, value: events });
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
@@ -106,14 +106,23 @@ test('unattempted saves coalesce without changing original base revision or unre
   assert.deepEqual(x.operation.base, first.base); assert.deepEqual(x.state.projects, before.projects);
 });
 
-test('shared grants have their own offline discovery and cannot queue full quotation edits', async () => {
-  const x = fixture({ shared: true });
-  assert.equal((await x.post(body())).status, 409);
+test('Indoor shared quotation reads and writes require the server and never extend saved drafts', async () => {
+  const x = fixture({ shared: true, role: 'Indoor Sales' });
+  const before = x.state;
+  assert.equal((await x.post(body())).status, 503);
+  assert.equal((await x.post(priceBody())).status, 503);
+  assert.equal((await x.get()).status, 503);
+  assert.equal((await x.client.quotationFetch('/api/shared-quotations')).status, 503);
+  assert.deepEqual(x.state, before); assert.equal(x.requests.length, 0);
+  x.online(); x.network(() => response(x.data));
+  assert.equal((await x.get()).status, 200);
   assert.equal((await x.post(priceBody())).status, 200);
-  const data = await (await x.get()).json(); assert.equal(data.project.branch, 'Rasafa'); assert.equal(data.quotationAccess, 'prices');
-  assert.deepEqual(data.flow.quotation.lines[0].opening, x.data.flow.quotation.lines[0].opening);
-  const list = await (await x.client.quotationFetch('/api/shared-quotations')).json(); assert.equal(list.projects[0].id, projectId);
-  assert.equal(x.state.projects.length, 0, 'Shared commercial access does not join generic branch-scoped projects');
+  await x.client.prepareOfflineQuotations();
+  assert.deepEqual(x.state, before); assert.equal(x.writes.length, 0);
+  x.network(() => { throw new Error('Server unreachable while browser reports online'); });
+  assert.equal((await x.get()).status, 503);
+  assert.equal((await x.post(priceBody())).status, 503);
+  assert.deepEqual(x.state, before);
 });
 
 test('offline approval, signatures, catalog refresh and contract generation cannot be queued', async () => {
@@ -136,7 +145,7 @@ test('cached locks, price minimums, field queues and ordinary branch restriction
 });
 
 test('lost response and continued local editing preserve immutable retry body then chain a fresh revision', async () => {
-  const x = fixture({ shared: true }); await x.post(priceBody(280000));
+  const x = fixture(); await x.post(body(280000));
   let unavailable = false, firstResponseLost = true, remote = x.data;
   const receipts = new Map(), posts = [];
   x.network((url, init) => {
@@ -147,7 +156,7 @@ test('lost response and continued local editing preserve immutable retry body th
       assert.equal(init.headers['X-Alumex-Offline-Actor'], actor.id); posts.push({ id, value });
       if (!receipts.has(id)) {
         assert.equal(value.revision, remote.flow.revision);
-        remote = quotationData({ shared: true, revision: remote.flow.revision + 1, rate: value.systemRates[0].rate });
+        remote = quotationData({ revision: remote.flow.revision + 1, rate: value.choices[0].systemRate });
         receipts.set(id, { ok: true, flow: remote.flow, revision: remote.flow.revision, operationId: id });
       } else assert.deepEqual(value, posts[0].value, 'Exact retry cannot replace the original request');
       if (firstResponseLost) { firstResponseLost = false; unavailable = true; throw new Error('Response lost after commit'); }
@@ -157,36 +166,36 @@ test('lost response and continued local editing preserve immutable retry body th
   });
   x.online(); await x.client.syncOfflineQuotations();
   const original = x.operation; assert.ok(original.attemptedAt);
-  await x.post(priceBody(300000)); await x.client.syncOfflineQuotations();
+  await x.post(body(300000)); await x.client.syncOfflineQuotations();
   assert.deepEqual(x.operation.body, original.body); assert.equal(x.operation.id, original.id);
   assert.equal(x.operation.successor.draft.flow.quotation.total, 300000);
   const visible = await (await x.get()).json(); assert.equal(visible.flow.quotation.total, 300000);
   unavailable = false; await x.client.syncOfflineQuotations();
   assert.equal(x.state.quotations.queue.length, 0); assert.equal(x.state.quotations.entries[0].data.flow.quotation.total, 300000);
   assert.equal(posts.length, 3); assert.equal(posts[0].id, posts[1].id); assert.notEqual(posts[1].id, posts[2].id);
-  assert.equal(posts[2].value.revision, 2); assert.equal(posts[2].value.systemRates[0].rate, 300000);
+  assert.equal(posts[2].value.revision, 2); assert.equal(posts[2].value.choices[0].systemRate, 300000);
 });
 
 test('server conflicts retain local drafts and explicit review archives them before rebasing', async () => {
-  const x = fixture({ shared: true }); await x.post(priceBody());
-  const latest = quotationData({ shared: true, revision: 3, rate: 290000 });
+  const x = fixture(); await x.post(body());
+  const latest = quotationData({ revision: 3, rate: 290000 });
   let denySave = true;
   x.network((url, init) => url.includes('session=1') ? session() : init.method === 'POST'
     ? Response.json({ error: 'This project changed. Reload and try again.' }, { status: 409 }) : response(latest));
   x.online(); await x.client.syncOfflineQuotations();
   assert.equal(x.operation.conflict, true); const oldId = x.operation.id;
-  await x.post(priceBody(300000));
+  await x.post(body(300000));
   const review = await x.client.reviewOfflineQuotation(projectId); assert.equal(review.canRebase, true); assert.equal(review.localTotal, 300000);
   x.network((url, init) => url.includes('session=1') && denySave ? Promise.reject(new Error('Network unavailable')) : init.method === 'POST' ? Response.json({ error: 'Conflict' }, { status: 409 }) : response(latest));
   await x.client.resolveOfflineQuotation(review, 'rebase'); await tick();
-  assert.notEqual(x.operation.id, oldId); assert.equal(x.operation.body.revision, 3); assert.equal(x.operation.body.systemRates[0].rate, 300000);
+  assert.notEqual(x.operation.id, oldId); assert.equal(x.operation.body.revision, 3); assert.equal(x.operation.body.choices[0].systemRate, 300000);
   assert.equal(x.state.quotations.archived.length, 1); assert.equal(x.state.quotations.archived[0].operation.successor.draft.flow.quotation.total, 300000);
   denySave = false;
 });
 
 test('a changed server specification cannot be silently rebased over the newer quotation', async () => {
-  const x = fixture({ shared: true }); await x.post(priceBody());
-  const latest = quotationData({ shared: true, revision: 2 }); latest.flow.quotation.lines[0].opening.width = 120;
+  const x = fixture(); await x.post(body());
+  const latest = quotationData({ revision: 2 }); latest.flow.quotation.lines[0].opening.width = 120;
   x.online(); x.network(() => response(latest));
   const review = await x.client.reviewOfflineQuotation(projectId); assert.equal(review.canRebase, false);
   await assert.rejects(x.client.resolveOfflineQuotation(review, 'rebase'), /specifications changed/);
@@ -196,7 +205,7 @@ test('a changed server specification cannot be silently rebased over the newer q
 });
 
 test('complete authoritative refresh hides revoked pending content while preserving its operation', async () => {
-  const x = fixture({ shared: true }); await x.post(priceBody()); const original = x.operation;
+  const x = fixture(); await x.post(body()); const original = x.operation;
   x.online(); x.network(() => response({ actor, quotations: [], catalog, complete: true }));
   await x.client.prepareOfflineQuotations(); x.online(false);
   assert.equal((await x.get()).status, 404); assert.deepEqual((await (await x.client.quotationFetch('/api/shared-quotations')).json()).projects, []);
@@ -204,35 +213,35 @@ test('complete authoritative refresh hides revoked pending content while preserv
   assert.equal(x.client.quotationSyncStatus(x.state).pending, 1); assert.match(x.operation.error, /access changed/);
 });
 
-test('a full-to-prices entitlement change archives every saved edit and serves only the price editor', async () => {
+test('an Indoor role transition blocks offline cached full content and preserves earlier drafts', async () => {
   const x = fixture(); await x.post(body());
-  x.records.get(actor.id).quotations.queue[0].attemptedAt = '2026-11-23T09:00:00Z';
-  await x.post(body(300000));
   const original = x.operation;
-  const latest = quotationData({ shared: true, revision: 3, rate: 260000 });
-  x.online(); x.network(() => response({ actor, quotations: [{ projectId, data: latest }], catalog, complete: true }));
-  await x.client.prepareOfflineQuotations(); x.online(false);
-  assert.equal(x.state.quotations.queue.length, 0);
-  assert.deepEqual(x.state.quotations.archived[0].operation, original, 'Original attempted UUID/body and newer successor are retained exactly');
-  assert.equal(x.client.canAccessOfflineQuotationDraft(x.state, original), false);
-  const visible = await (await x.get()).json();
-  assert.equal(visible.quotationAccess, 'prices'); assert.equal(visible.flow.quotation.total, 260000);
-  assert.equal(visible.offlineQuotation, undefined);
-  assert.equal((await x.post(body(310000, 3))).status, 409, 'Narrowed scope cannot queue full editor actions');
-  assert.equal((await x.post(priceBody(290000, 3))).status, 200, 'Allowed price-only work can continue without rewriting the old draft');
-  assert.equal(x.operation.body.action, 'save-shared-prices'); assert.notEqual(x.operation.id, original.id);
-  assert.equal(x.state.quotations.archived[0].operation.successor.draft.flow.quotation.total, 300000);
+  x.records.get(actor.id).actor.role = 'Indoor Sales';
+  const before = x.state;
+  assert.equal((await x.get()).status, 503);
+  assert.equal((await x.post(body(300000))).status, 503);
+  x.online(); x.network(() => response(x.data));
+  assert.equal((await x.get()).status, 200);
+  assert.equal((await x.post(body(300000))).status, 409, 'Normal edits cannot race a pending legacy draft');
+  await x.client.prepareOfflineQuotations();
+  assert.deepEqual(x.operation, original); assert.deepEqual(x.state, before);
 });
 
-test('an already narrowed cache cannot expose, transmit, or extend an old full pending draft', async () => {
-  const x = fixture(); await x.post(body()); const original = x.operation;
-  x.records.get(actor.id).quotations.entries[0].data = quotationData({ shared: true });
-  const visible = await (await x.get()).json();
-  assert.equal(visible.quotationAccess, 'prices'); assert.equal(visible.flow.quotation.total, 250000);
-  assert.equal((await x.post(body(300000))).status, 409);
-  x.online(); x.network(url => { assert.match(url, /session=1/); return session(); });
+test('Indoor Sales can synchronize a legacy shared quotation without creating another local draft', async () => {
+  const x = fixture({ shared: true, role: 'Indoor Sales' });
+  const request = priceBody();
+  const id = '44444444-4444-4444-8444-444444444444';
+  x.records.get(actor.id).quotations.queue.push({ id, userId: actor.id, projectId, recordedAt: '2026-11-23T09:00:00Z',
+    body: request, base: x.data, draft: x.client.projectOfflineQuotation(x.data, request, actor.id) });
+  const latest = quotationData({ shared: true, revision: 2, rate: 280000 });
+  x.online(); x.network((url, init) => url.includes('session=1') ? response({ actor: { ...actor, role: 'Indoor Sales' } })
+    : init.method === 'POST' ? response({ ok: true, operationId: id, revision: 2, flow: latest.flow }) : response(latest));
   await x.client.syncOfflineQuotations();
-  assert.deepEqual(x.operation, original); assert.equal(x.requests.length, 1, 'Only the session check runs; no full-scope request is sent');
+  assert.equal(x.state.quotations.queue.length, 0);
+  assert.equal(x.state.quotations.entries[0].data.flow.quotation.total, 280000);
+  x.online(false);
+  assert.equal((await x.post(priceBody(300000, 2))).status, 503);
+  assert.equal((await x.get()).status, 503);
 });
 
 test('paginated snapshots commit only after every page and share the catalog reference', async () => {
@@ -386,4 +395,24 @@ test('archived drafts remain recoverable after conflict resolution and disappear
   assert.equal(render(), '', 'A price-only grant does not reveal a formerly full-scope draft archive');
   snapshot.quotations.entries[0].data = quotationData();
   assert.match(render(), /Download archived quotation draft/, 'Restored full access permits recovery of the preserved archive');
+});
+
+test('a held cross-tab quotation lock returns with the original draft intact and a released lock permits one replay', async () => {
+  const x = fixture(); await x.post(body());
+  const before = x.state, operation = x.operation;
+  let available = false, acquisitions = 0;
+  navigator.locks = { request: async (name, options, callback) => {
+    assert.equal(name, `alumex-quotation-sync:${actor.id}`); assert.deepEqual(options, { ifAvailable: true }); acquisitions++;
+    return callback(available ? { name } : null);
+  } };
+  const latest = quotationData({ revision: 2, rate: 280000 });
+  x.network((url, init) => url.includes('session=1') ? session() : init.method === 'POST'
+    ? response({ ok: true, operationId: operation.id, revision: 2, flow: latest.flow }) : response(latest));
+  x.online(); await x.client.syncOfflineQuotations();
+  assert.deepEqual(x.state, before); assert.equal(x.requests.length, 0);
+  available = true; await x.client.syncOfflineQuotations();
+  assert.equal(acquisitions, 2); assert.equal(x.state.quotations.queue.length, 0);
+  const posts = x.requests.filter(request => request.init.method === 'POST');
+  assert.equal(posts.length, 1); assert.equal(posts[0].init.headers['X-Alumex-Offline-Operation'], operation.id);
+  assert.equal(x.state.quotations.entries[0].data.flow.revision, 2);
 });

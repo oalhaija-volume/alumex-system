@@ -3,6 +3,7 @@ import { normalizeOutdoorProjectBranch, outdoorSalesBranch } from '@/lib/intake/
 import {normalizeMeasurementCompletion,retainMeasurementReport} from '@/lib/measurements/completion';
 import { parseProjectLocation } from '@/lib/location/coordinates';
 import { isOfflineDevice } from './device';
+import { canUseOfflineWorkspace, indoorOnlineRequiredMessage, isIndoorOnlineUser } from './policy';
 import { normalizeBuildingType } from '@/lib/intake/buildingType';
 import { canCancelProject, normalizeClientCancellation, canDelayMeasurements, canResumeMeasurements, normalizeMeasurementDelay } from '@/lib/measurements/measurementDelay';
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
@@ -63,6 +64,7 @@ function withCurrentProjectAccess(local:FieldProject,remote:FieldProject):FieldP
 let connectionAvailable=true;
 export function isFieldOnline(){return typeof navigator!=="undefined" && navigator.onLine && (!isOfflineDevice() || connectionAvailable);}
 function connection(available:boolean){if(connectionAvailable!==available){connectionAvailable=available;window.dispatchEvent(new Event('field-connection'));}}
+export function setFieldConnectionAvailable(available:boolean){connection(available);}
 let initializing:Promise<FieldState>|null=null;
 let initializationContext:{generation:number;force:boolean;downloaded:boolean}|null=null;
 let syncing:Promise<void>|null=null;
@@ -75,13 +77,15 @@ const WORKSPACE_DOWNLOAD_TIMEOUT=30000;
 if(typeof window!=='undefined')window.addEventListener?.('field-change',event=>{
  if((event as CustomEvent<FieldChangeDetail>).detail?.source==='account'){accountGeneration++;lastSnapshot=null;}
 });
-export async function prepareOffline({background=false}:{background?:boolean}={}):Promise<FieldState>{
+export async function prepareOffline({background=false,recovery=false}:{background?:boolean;recovery?:boolean}={}):Promise<FieldState>{
+ if(isIndoorOnlineUser(activeFieldUser())&&(!recovery||!navigator.onLine))throw new Error(indoorOnlineRequiredMessage);
  if(initializing){
   const pending=initializing,context=initializationContext!;
   context.force ||= !background;
   let state:FieldState;
-  try{state=await pending;}catch(error){if(context.generation!==accountGeneration)return prepareOffline({background});throw error;}
-  if(context.generation!==accountGeneration||(!background&&!context.downloaded&&navigator.onLine))return prepareOffline({background});
+  try{state=await pending;}catch(error){if(context.generation!==accountGeneration)return prepareOffline({background,recovery});throw error;}
+  if(!canUseOfflineWorkspace(state.actor.role)&&(!recovery||!navigator.onLine))throw new Error(indoorOnlineRequiredMessage);
+  if(context.generation!==accountGeneration||(!background&&!context.downloaded&&navigator.onLine))return prepareOffline({background,recovery});
   return state;
  }
  const context={generation:accountGeneration,force:!background,downloaded:false};
@@ -89,13 +93,14 @@ export async function prepareOffline({background=false}:{background?:boolean}={}
  const requestedAccount=activeFieldUser();
  const checkAccount=()=>{if(context.generation!==accountGeneration||activeFieldUser()!==requestedAccount)throw new Error('Sign in with the employee who opened this registration form.');};
  initializing=(async()=>{
-  if(!navigator.onLine){const state=await readFieldState();checkAccount();if(!state)throw new Error('Sign in online once to prepare this device for offline work.');return state;}
+  if(!navigator.onLine){const state=await readFieldState();checkAccount();if(state&&!canUseOfflineWorkspace(state.actor.role))throw new Error(indoorOnlineRequiredMessage);if(!state)throw new Error('Sign in online once to prepare this device for offline work.');return state;}
   // Remember local progress before downloading. Registration and the first
   // opening can both finish syncing while this snapshot is still in flight.
   const stored=await readStoredFieldState();
   checkAccount();
+  if(stored&&!canUseOfflineWorkspace(stored.actor.role)&&!recovery)throw new Error(indoorOnlineRequiredMessage);
   const age=lastSnapshot?Date.now()-lastSnapshot.downloadedAt:Infinity;
-  if(!context.force&&stored&&lastSnapshot?.actorId===stored.actor.id&&activeFieldUser()===stored.actor.id&&age>=0&&age<BACKGROUND_REFRESH_INTERVAL)return visibleFieldState(stored);
+  if(!recovery&&!context.force&&stored&&lastSnapshot?.actorId===stored.actor.id&&activeFieldUser()===stored.actor.id&&age>=0&&age<BACKGROUND_REFRESH_INTERVAL)return visibleFieldState(stored);
   const snapshotBase=stored?{
    actorId:stored.actor.id,
    projectIds:new Set(stored.projects.map(project=>project.id)),
@@ -103,11 +108,12 @@ export async function prepareOffline({background=false}:{background?:boolean}={}
    openingIds:new Set(stored.openings.map(opening=>opening.id)),
   }:null;
   let response:Response;
-  try{response=await fetch('/api/offline',{cache:'no-store',signal:AbortSignal.timeout(WORKSPACE_DOWNLOAD_TIMEOUT)});checkAccount();connection(true);}catch{checkAccount();connection(false);const cached=await readFieldState();checkAccount();if(cached)return cached;throw new Error('Connect once to prepare this device for offline work.');}
+  try{response=await fetch(recovery?'/api/offline?recovery=1':'/api/offline',{cache:'no-store',signal:AbortSignal.timeout(WORKSPACE_DOWNLOAD_TIMEOUT)});checkAccount();connection(true);}catch{checkAccount();connection(false);const cached=await readFieldState();checkAccount();if(isIndoorOnlineUser(activeFieldUser())||cached&&!canUseOfflineWorkspace(cached.actor.role))throw new Error(indoorOnlineRequiredMessage);if(cached)return cached;throw new Error('Connect once to prepare this device for offline work.');}
   checkAccount();
-  if(!response.ok){if([401,403].includes(response.status))setFieldUser(null);else if(response.status>=500){connection(false);const cached=await readFieldState();checkAccount();if(cached)return cached;}throw new Error('Sign in with an active sales account to use offline work.');}
+  if(!response.ok){if([401,403].includes(response.status))setFieldUser(null);else if(response.status>=500){connection(false);const cached=await readFieldState();checkAccount();if(isIndoorOnlineUser(activeFieldUser())||cached&&!canUseOfflineWorkspace(cached.actor.role))throw new Error(indoorOnlineRequiredMessage);if(cached)return cached;}throw new Error('Sign in with an active sales account to use offline work.');}
   const remote=await response.json() as FieldState;
   checkAccount();
+  if(!canUseOfflineWorkspace(remote.actor.role)&&(!recovery||!navigator.onLine))throw new Error(indoorOnlineRequiredMessage);
   const state=await updateFieldState(remote.actor.id,old=>{
    checkAccount();
    const remoteProjects=new Map(remote.projects.map(project=>[project.id,project]));
@@ -133,9 +139,11 @@ export async function prepareOffline({background=false}:{background?:boolean}={}
  try{return await pending;}finally{if(initializing===pending){initializing=null;initializationContext=null;}}
 }
 async function stateForWrite(expectedActorId?:string){
+ if(isIndoorOnlineUser(activeFieldUser()))throw new Error(indoorOnlineRequiredMessage);
  let state=await readFieldState();
  if(!state || (expectedActorId && state.actor.id!==expectedActorId))state=await prepareOffline();
  if(expectedActorId && state.actor.id!==expectedActorId)throw new Error('Sign in with the employee who opened this registration form.');
+ if(!canUseOfflineWorkspace(state.actor.role))throw new Error(indoorOnlineRequiredMessage);
  return state;
 }
 export async function syncFieldChanges(){
@@ -241,13 +249,16 @@ export async function syncFieldChanges(){
    });
   }
  };
- syncing=Promise.resolve('locks' in navigator?navigator.locks.request('alumex-field-sync',run):run()).then(()=>undefined).finally(()=>{syncing=null;});return syncing;
+ // A suspended tab can own this lock indefinitely. Leave its queue intact
+ // and let a later refresh retry instead of waiting with a disabled control.
+ syncing=Promise.resolve('locks' in navigator?navigator.locks.request('alumex-field-sync',{ifAvailable:true},lock=>lock?run():undefined):run()).then(()=>undefined).finally(()=>{syncing=null;});return syncing;
 }
 export async function saveFieldChange(action:FieldChange['action'],projectId:string,payload:Record<string,unknown>,expectedActorId?:string){
  if(Object.hasOwn(payload,'measurementExceptionReason'))throw new Error('Rotation exceptions must be assigned online by an Admin.');
  const state=await stateForWrite(expectedActorId);if(['follow-up','ready','assign-measurements','request-openings'].includes(action)&&!canAccessCRM(state.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');if(action==='follow-up')payload=normalizeFollowUp(payload);if(action==='finish')payload=normalizeMeasurementCompletion(payload);const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
  await updateFieldState(state.actor.id,s=>{
   if(!s)throw new Error('Offline account unavailable.');
+  if(!canUseOfflineWorkspace(s.actor.role))throw new Error(indoorOnlineRequiredMessage);
   const measurementReports=[...(s.measurementReports??[])];let projects=[...s.projects];const openings=[...s.openings];let p=projects.find(p=>p.id===projectId);
   if(action==='register'){
    const client=payload.client as Record<string,unknown>,project=payload.project as Record<string,unknown>;
@@ -382,6 +393,20 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
  // Unsupported clients use the live application. Laptops and installed apps
  // use the same durable queue as the device workspace.
  if(!isOfflineDevice())return fetch(url,init);
+ const indoor=isIndoorOnlineUser(activeFieldUser());
+ const actor=await readFieldState().catch(error=>{if(indoor)return null;throw error;});
+ if(indoor||actor&&!canUseOfflineWorkspace(actor.actor.role)){
+  // Indoor Sales always reads and writes the server. Legacy queued work is
+  // handled only by the recovery flow and must never mask current server data.
+  if(!navigator.onLine)return Response.json({error:indoorOnlineRequiredMessage},{status:503});
+  if(init?.method&&init.method!=='GET'&&init.method!=='HEAD'){
+   let body:Record<string,unknown>={};try{const parsed=JSON.parse(String(init.body??'{}'));if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))body=parsed;}catch{/* Let the server validate malformed requests. */}
+   const projectId=typeof body.projectId==='string'?body.projectId:url.startsWith('/api/initial-measurements/')?url.split('/').pop():null;
+   if(projectId&&actor?.queue.some(change=>change.projectId===projectId))return Response.json({error:'Review and sync the saved changes for this project before editing it online.'},{status:409});
+  }
+  try{const response=await fetch(url,{...init,cache:'no-store'});connection(true);return response;}
+  catch(error){if(init?.signal?.aborted)throw error;connection(false);return Response.json({error:indoorOnlineRequiredMessage},{status:503});}
+ }
  const method=init?.method??'GET';
  if(method==='PATCH'&&url==='/api/workspace'&&Object.hasOwn(JSON.parse(String(init?.body??'{}')),'measurementExceptionReason')){
   if(!isFieldOnline())return Response.json({error:'Connect to the internet before assigning a rotation exception.'},{status:409});
@@ -472,11 +497,20 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
   return Response.json({id:body.id,ok:true,pending:true,salesStatus:action==='finish'?'ready_for_quotation':'new_lead'},{status:method==='POST'?201:200});
  }catch(e){return Response.json({error:e instanceof Error?e.message:'Unable to save on this device.'},{status:400});}
 }
-export async function pendingFieldChanges(){return (await readFieldState())?.queue.length??0;}
+export async function pendingFieldChanges(){
+ const id=activeFieldUser();if(!id)return 0;
+ // Logout protects every retained operation, including work hidden by a new
+ // assignment or branch. UI projections intentionally omit those records.
+ const state=await readStoredFieldState(id);
+ if(activeFieldUser()!==id)return 0;
+ return (state?.queue.length??0)+(state?.quotations?.queue.length??0);
+}
 export type {FieldProject};
 
 export async function reviewServerProject(projectId:string){
- const response=await fetch('/api/offline',{cache:'no-store'});if(!response.ok)throw new Error('Connect and sign in to review the latest version.');
+ if(!navigator.onLine)throw new Error('Connect and sign in to review the latest version.');
+ const state=await readFieldState();
+ const response=await fetch(isIndoorOnlineUser(activeFieldUser())||state&&!canUseOfflineWorkspace(state.actor.role)?'/api/offline?recovery=1':'/api/offline',{cache:'no-store'});if(!response.ok)throw new Error('Connect and sign in to review the latest version.');
  const data=await response.json() as FieldState;if(data.actor.id!==activeFieldUser())throw new Error('Sign in with the employee who saved this work.');
  const snapshot=data.projects.find(p=>p.id===projectId&&canAccessProjectRow(data.actor,p));
  const project=snapshot&&canAccessFieldProject({...data,unavailableProjectIds:[]},snapshot)?snapshot:undefined;
@@ -486,6 +520,7 @@ export async function reviewServerProject(projectId:string){
 }
 export async function retryReviewedProject(projectId:string,updatedAt:string,correction?:{changeId:string;values:FollowUpInput}){
  const id=activeFieldUser();if(!id)return;
+ const state=await readFieldState();if((isIndoorOnlineUser(id)||state&&!canUseOfflineWorkspace(state.actor.role))&&!navigator.onLine)throw new Error(indoorOnlineRequiredMessage);
  const corrected=correction?normalizeFollowUp(correction.values):null;
  await updateFieldState(id,s=>{
   if(!s)throw new Error('Offline account unavailable.');
@@ -508,8 +543,15 @@ export async function keepReviewedServerVersion(review:Awaited<ReturnType<typeof
  const id=activeFieldUser();if(!id)throw new Error('Sign in before resolving saved work.');
  await updateFieldState(id,s=>{
   if(!s)throw new Error('Offline account unavailable.');
+  if((isIndoorOnlineUser(id)||!canUseOfflineWorkspace(s.actor.role))&&!navigator.onLine)throw new Error(indoorOnlineRequiredMessage);
   if(!canAccessFieldProject(s,review.project)||!canAccessFieldProject(s,s.projects.find(p=>p.id===review.project.id)))throw new Error('Project is not available to this employee.');
-  return {...s,measurementReports:[...(s.measurementReports??[]).filter(r=>r.project_id!==review.project.id),...review.measurementReports.map(r=>retainMeasurementReport(r,s.measurementReports??[]))],queue:s.queue.filter(c=>c.projectId!==review.project.id),projects:s.projects.map(p=>p.id===review.project.id?{...review.project,pending:false}:p),openings:[...s.openings.filter(o=>o.projectId!==review.project.id),...review.openings.map(o=>retainSkylightCapture(o,s.openings))]};
+  const projectId=review.project.id,previous=s.archivedProjects?.find(project=>project.projectId===projectId);
+  const archived={projectId,project:s.projects.find(project=>project.id===projectId)??previous?.project,
+   changes:[...(previous?.changes??[]),...s.queue.filter(change=>change.projectId===projectId&&!previous?.changes.some(old=>old.id===change.id))],
+   openings:[...new Map([...(previous?.openings??[]),...s.openings.filter(opening=>opening.projectId===projectId)].map(opening=>[opening.id,opening])).values()],
+   measurementReports:[...new Map([...(previous?.measurementReports??[]),...(s.measurementReports??[]).filter(report=>report.project_id===projectId)].map(report=>[report.id,report])).values()],
+   followUpHistory:s.followUpHistories?.[projectId]??previous?.followUpHistory,archivedAt:new Date().toISOString()};
+  return {...s,archivedProjects:[...(s.archivedProjects??[]).filter(project=>project.projectId!==projectId),archived],measurementReports:[...(s.measurementReports??[]).filter(r=>r.project_id!==review.project.id),...review.measurementReports.map(r=>retainMeasurementReport(r,s.measurementReports??[]))],queue:s.queue.filter(c=>c.projectId!==review.project.id),projects:s.projects.map(p=>p.id===review.project.id?{...review.project,pending:false}:p),openings:[...s.openings.filter(o=>o.projectId!==review.project.id),...review.openings.map(o=>retainSkylightCapture(o,s.openings))]};
  });
 }
 

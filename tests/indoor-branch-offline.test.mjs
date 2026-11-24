@@ -107,7 +107,7 @@ for (const branch of ['Karkh', 'Rasafa']) {
     assert.deepEqual(view.measurementReports.map(report => report.project_id), [expected.id]);
     assert.deepEqual(Object.keys(view.followUpHistories), [expected.id]);
     assert.deepEqual(view.archivedProjects.map(archive => archive.project.branch), [branch]);
-    assert.deepEqual((await x.client.prepareOffline()).projects, view.projects);
+    await assert.rejects(x.client.prepareOffline(), /Indoor Sales.*internet/i);
     assert.deepEqual(x.raw, before, 'Filtering must never remove retained work');
   });
 }
@@ -133,19 +133,13 @@ for(const branch of ['Karkh','Rasafa'])test(`${branch} cached Governorates acces
     assert.equal(view[key].length,allowed?1:0,key);
   }
   assert.deepEqual(Object.keys(view.followUpHistories),allowed?['governorate-project']:[]);
-  assert.equal((await (await x.client.fieldFetch('/api/workspace')).json()).projects.length,allowed?1:0);
-  assert.equal((await x.client.fieldFetch('/api/initial-measurements/governorate-project')).status,allowed?200:404);
+  assert.equal((await x.client.fieldFetch('/api/workspace')).status,503);
+  assert.equal((await x.client.fieldFetch('/api/initial-measurements/governorate-project')).status,503);
   assert.deepEqual(x.raw,before,'Access filtering retains inaccessible work in storage');
-  if(allowed){
-    await x.client.saveFieldChange('rename-project','governorate-project',{projectName:'Updated Governorates project'});
-    assert.equal(x.raw.projects[0].project_name,'Updated Governorates project');
-    assert.equal(x.raw.queue.length,2);
-  }else{
-    await assert.rejects(x.client.saveFieldChange('rename-project','governorate-project',{projectName:'Forbidden'}),/not available/);
-    await assert.rejects(x.client.retryReviewedProject('governorate-project','new-version'),/not available/);
-    await assert.rejects(x.client.keepReviewedServerVersion({project:snapshot.projects[0],openings:[],measurementReports:[]}),/not available/);
-    assert.deepEqual(x.raw,before);
-  }
+  await assert.rejects(x.client.saveFieldChange('rename-project','governorate-project',{projectName:'Forbidden'}),/Indoor Sales.*internet/i);
+  await assert.rejects(x.client.retryReviewedProject('governorate-project','new-version'),/Indoor Sales.*internet/i);
+  await assert.rejects(x.client.keepReviewedServerVersion({project:snapshot.projects[0],openings:[],measurementReports:[]}),/Indoor Sales.*internet/i);
+  assert.deepEqual(x.raw,before);
 });
 
 test('a cached Governorates change is not sent after its Indoor employee moves to Rasafa',async()=>{
@@ -175,7 +169,7 @@ test('missing or invalid Indoor Sales branches fail closed, including old snapsh
     for (const key of ['projects', 'queue', 'openings', 'measurementReports', 'archivedProjects']) assert.deepEqual(view[key], []);
     assert.deepEqual(view.followUpHistories, {});
     assert.equal(x.raw.queue.length, 3);
-    await assert.rejects(x.client.saveFieldChange('reopen', projects[0].id, {}), /not available/);
+    await assert.rejects(x.client.saveFieldChange('reopen', projects[0].id, {}), /Indoor Sales.*internet/i);
   }
 });
 
@@ -200,14 +194,13 @@ test('office-scoped roles with no assigned office cannot expose any cached proje
 
 test('device workspace and direct project URLs cannot read or modify another branch, even for creator and assignee', async () => {
   const x = setup();
-  const workspace = await (await x.client.fieldFetch('/api/workspace')).json();
-  assert.deepEqual(workspace.projects.map(project => project.branch), ['Karkh']);
+  assert.equal((await x.client.fieldFetch('/api/workspace')).status,503);
   const restricted = projects[1].id;
-  assert.equal((await x.client.fieldFetch(`/api/initial-measurements/${restricted}`)).status, 404);
+  assert.equal((await x.client.fieldFetch(`/api/initial-measurements/${restricted}`)).status, 503);
   const before = structuredClone(x.raw);
-  await assert.rejects(x.client.saveFieldChange('reopen', restricted, {}), /not available/);
-  await assert.rejects(x.client.retryReviewedProject(restricted, 'new-version'), /not available/);
-  await assert.rejects(x.client.keepReviewedServerVersion({ project: projects[1], openings: [], measurementReports: [] }), /not available/);
+  await assert.rejects(x.client.saveFieldChange('reopen', restricted, {}), /Indoor Sales.*internet/i);
+  await assert.rejects(x.client.retryReviewedProject(restricted, 'new-version'), /Indoor Sales.*internet/i);
+  await assert.rejects(x.client.keepReviewedServerVersion({ project: projects[1], openings: [], measurementReports: [] }), /Indoor Sales.*internet/i);
   assert.deepEqual(x.raw, before);
 });
 
@@ -218,7 +211,7 @@ test('snapshot refresh changes the branch immediately and retains inaccessible q
   globalThis.fetch = async () => Response.json({
     actor: { ...actor, branch: 'Rasafa' }, projects: [projects[1]], openings: [openings[1]], queue: [],
   });
-  const refreshed = await x.client.prepareOffline();
+  const refreshed = await x.client.prepareOffline({recovery:true});
   assert.equal(refreshed.actor.branch, 'Rasafa');
   assert.deepEqual(refreshed.projects.map(project => project.branch), ['Rasafa']);
   assert.deepEqual(refreshed.archivedProjects.map(archive => archive.project.branch), ['Rasafa']);
@@ -228,27 +221,27 @@ test('snapshot refresh changes the branch immediately and retains inaccessible q
   assert.deepEqual(x.raw.measurementReports, before.measurementReports);
   assert.deepEqual(x.raw.followUpHistories, before.followUpHistories);
   navigator.onLine = false;
-  assert.equal((await x.client.fieldFetch(`/api/initial-measurements/${projects[0].id}`)).status, 404);
+  assert.equal((await x.client.fieldFetch(`/api/initial-measurements/${projects[0].id}`)).status, 503);
 });
 
 test('a pending project missing from the server snapshot is hidden even if its cached branch still matches', async () => {
   const x = setup({ projects: [projects[0]], openings: [openings[0]], queue: [queue[0]] });
   navigator.onLine = true;
   globalThis.fetch = async () => Response.json({ actor, projects: [], openings: [], queue: [] });
-  assert.deepEqual((await x.client.prepareOffline()).projects, []);
+  assert.deepEqual((await x.client.prepareOffline({recovery:true})).projects, []);
   assert.equal(x.raw.projects.length, 1);
   assert.equal(x.raw.queue.length, 1);
   assert.equal(x.raw.openings.length, 1);
-  await assert.rejects(x.client.saveFieldChange('reopen', projects[0].id, {}), /not available/);
+  await assert.rejects(x.client.saveFieldChange('reopen', projects[0].id, {}), /Indoor Sales.*internet/i);
   globalThis.fetch = async () => Response.json({ actor, projects: [projects[0]], openings: [], queue: [] });
-  assert.equal((await x.client.prepareOffline()).projects.length, 1, 'A later authorized snapshot restores retained work');
+  assert.equal((await x.client.prepareOffline({recovery:true})).projects.length, 1, 'A later authorized recovery snapshot restores retained work');
 });
 
 test('offline registrations remain visible before their first server synchronization', async () => {
   const x = setup({ projects: [projects[0]], openings: [], queue: [{ ...queue[0], action: 'register' }] });
   navigator.onLine = true;
   globalThis.fetch = async () => Response.json({ actor, projects: [], openings: [], queue: [] });
-  assert.deepEqual((await x.client.prepareOffline()).projects.map(project => project.id), [projects[0].id]);
+  assert.deepEqual((await x.client.prepareOffline({recovery:true})).projects.map(project => project.id), [projects[0].id]);
 });
 
 test('a registration rejected as inaccessible remains hidden across refreshes until the server grants access again', async () => {
@@ -258,10 +251,10 @@ test('a registration rejected as inaccessible remains hidden across refreshes un
   });
   navigator.onLine = true;
   globalThis.fetch = async () => Response.json({ actor, projects: [], openings: [], queue: [] });
-  assert.deepEqual((await x.client.prepareOffline()).projects, []);
+  assert.deepEqual((await x.client.prepareOffline({recovery:true})).projects, []);
   assert.equal(x.raw.queue.length, 1);
   globalThis.fetch = async () => Response.json({ actor, projects: [projects[0]], openings: [], queue: [] });
-  assert.deepEqual((await x.client.prepareOffline()).projects.map(project => project.id), [projects[0].id]);
+  assert.deepEqual((await x.client.prepareOffline({recovery:true})).projects.map(project => project.id), [projects[0].id]);
 });
 
 test('sync applies the current employee branch before sending any saved change', async () => {
@@ -317,7 +310,7 @@ test('reviewing a project after employee branch reassignment hides previous bran
   assert.equal(x.raw.queue.length, 3);
 });
 
-test('an online workspace read refreshes the stored employee branch and project branches without dropping pending work', async () => {
+test('an Indoor online workspace read returns the current server branch without replacing retained recovery work', async () => {
   const x = setup({ queue: [queue[1]] });
   const before = structuredClone(x.raw);
   navigator.onLine = true;
@@ -326,15 +319,13 @@ test('an online workspace read refreshes the stored employee branch and project 
     actor: { ...actor, branch: 'Rasafa' },
     projects: [{ ...projects[0], branch: 'Rasafa' }, projects[1]],
   });
-  assert.equal((await x.client.fieldFetch('/api/workspace')).status, 200);
-  assert.equal(x.raw.actor.branch, 'Rasafa');
-  assert.equal(x.raw.projects[0].branch, 'Rasafa');
-  assert.deepEqual(x.raw.queue, before.queue);
-  assert.deepEqual(x.raw.openings, before.openings);
+  const response=await x.client.fieldFetch('/api/workspace');
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).actor.branch,'Rasafa');
+  assert.deepEqual(x.raw,before);
   navigator.onLine = false;
-  const view = await (await x.client.fieldFetch('/api/workspace')).json();
-  assert.deepEqual(view.projects.map(project => project.branch), ['Rasafa', 'Rasafa']);
-  assert.deepEqual((await x.store.readFieldState()).archivedProjects.map(archive => archive.project.branch), ['Rasafa']);
+  assert.equal((await x.client.fieldFetch('/api/workspace')).status,503);
+  assert.deepEqual(x.raw,before);
 });
 
 test('a successful workspace response for another account never changes the stored employee identity', async () => {
@@ -347,28 +338,25 @@ test('a successful workspace response for another account never changes the stor
   assert.deepEqual(x.raw, before);
 });
 
-test('a direct online project 404 hides its cached data before any subsequent offline read and can recover on authorized read', async () => {
+test('an Indoor direct project read never exposes cached data after a server 404 or when offline', async () => {
   const x = setup({ queue: [] });
+  const before=structuredClone(x.raw);
   navigator.onLine = true;
   window.location.pathname = `/initial-measurements/${projects[0].id}`;
   globalThis.fetch = async () => Response.json({ error: 'Project not found.' }, { status: 404 });
   assert.equal((await x.client.fieldFetch(`/api/initial-measurements/${projects[0].id}`)).status, 404);
   navigator.onLine = false;
-  assert.equal((await x.client.fieldFetch(`/api/initial-measurements/${projects[0].id}`)).status, 404);
+  assert.equal((await x.client.fieldFetch(`/api/initial-measurements/${projects[0].id}`)).status, 503);
   const hidden = await x.store.readFieldState();
-  assert.deepEqual(hidden.projects, []);
-  assert.deepEqual(hidden.openings, []);
-  assert.deepEqual(hidden.measurementReports, []);
-  assert.deepEqual(hidden.followUpHistories, {});
-  assert.equal(x.raw.projects.length, 3);
-  assert.equal(x.raw.openings.length, 3);
+  assert.deepEqual(hidden.projects.map(project=>project.id),[projects[0].id],'Recovery reads retain the original scoped record');
+  assert.deepEqual(x.raw,before);
   navigator.onLine = true;
   globalThis.fetch = async () => Response.json({ project: projects[0], openings: [openings[0]] });
   assert.equal((await x.client.fieldFetch(`/api/initial-measurements/${projects[0].id}`)).status, 200);
   assert.deepEqual((await x.store.readFieldState()).projects.map(project => project.id), [projects[0].id]);
 });
 
-test('temporary online project failures retain authorized cached access', async () => {
+test('temporary Indoor online project failures retain recovery data while rejecting cached business access', async () => {
   for (const failure of ['network', 'server']) {
     const x = setup({ queue: [] });
     const before = structuredClone(x.raw);
@@ -378,7 +366,7 @@ test('temporary online project failures retain authorized cached access', async 
       if (failure === 'network') throw new Error('Network unavailable');
       return Response.json({ error: 'Temporarily unavailable' }, { status: 503 });
     };
-    assert.equal((await x.client.fieldFetch(`/api/initial-measurements/${projects[0].id}`)).status, 200);
+    assert.equal((await x.client.fieldFetch(`/api/initial-measurements/${projects[0].id}`)).status, 503);
     assert.deepEqual(x.raw, before);
     assert.deepEqual((await x.store.readFieldState()).projects.map(project => project.id), [projects[0].id]);
   }

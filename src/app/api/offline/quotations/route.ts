@@ -10,6 +10,7 @@ import { offlineQuotationFlow, offlineQuotationProject, offlineQuotationProjectC
   offlineQuotationOpeningColumns, type OfflineQuotationProject } from '@/lib/offline/quotationSnapshots';
 import type { Database } from '@/lib/supabase/database.types';
 import type { CatalogItem } from '@/lib/workflow/pricing';
+import { canUseOfflineWorkspace, indoorOnlineRequiredMessage } from '@/lib/offline/policy';
 
 type FlowRow = Database['public']['Tables']['sales_workflows']['Row'];
 type ClientRow = { id: string; name: string; mobile: string; client_type: string | null };
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
   }
   const auth = await requireRole(quotationRoles);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (!canUseOfflineWorkspace(auth.role)) return NextResponse.json({ error: indoorOnlineRequiredMessage, code: 'INDOOR_ONLINE_REQUIRED' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
   if (!hasSupabaseServiceRoleKey()) return NextResponse.json({ error: 'Offline quotation download is unavailable.' }, { status: 503 });
   const admin = createAdminClient();
   const actor = { id: auth.user.id, role: auth.role, branch: auth.profile?.branch ?? null };

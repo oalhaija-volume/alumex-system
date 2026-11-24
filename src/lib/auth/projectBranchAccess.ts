@@ -12,6 +12,14 @@ type ProjectBranchRow = {
   governorate_office?: 'Karkh' | null;
   created_by?: string | null;
   assigned_outdoor_sales_id?: string | null;
+  measurement_assignment_id?: string | null;
+  measurement_exception_employee_id?: string | null;
+  measurement_exception_assignment_id?: string | null;
+  measurement_exception_reason?: string | null;
+  structure_readiness?: string | null;
+  sales_status?: string | null;
+  archived_at?: string | null;
+  pending?: boolean;
 };
 
 export function hasGlobalProjectAccess(role: string | null | undefined): boolean {
@@ -46,6 +54,29 @@ export function effectiveMeasurementBranch(project: Pick<ProjectBranchRow, 'bran
     ? project.measurement_branch : branch;
 }
 
+// An approved exception belongs to one employee and one live assignment. Team
+// membership, ownership and an old assignment must never inherit that proof.
+export function hasMeasurementRotationException(
+  project: ProjectBranchRow | null | undefined,
+  actor: ProjectBranchActor & { id?: string },
+): boolean {
+  if (!project || actor.role !== 'Outdoor Sales' || !actor.id
+    || (actor.branch !== 'Karkh' && actor.branch !== 'Rasafa')) return false;
+  const branch = effectiveMeasurementBranch(project);
+  const reason = project.measurement_exception_reason;
+  // Only a device projection has pending:true. Keep its issued proof until a
+  // queued finish is acknowledged; server-selected rows never select pending.
+  return (project.branch === 'Karkh' || project.branch === 'Rasafa')
+    && (branch === 'Karkh' || branch === 'Rasafa')
+    && project.structure_readiness === 'ready'
+    && (project.sales_status === 'new_lead' || (project.pending === true && project.sales_status === 'ready_for_quotation'))
+    && !project.archived_at && project.assigned_outdoor_sales_id === actor.id
+    && project.measurement_exception_employee_id === actor.id
+    && typeof project.measurement_assignment_id === 'string' && !!project.measurement_assignment_id
+    && project.measurement_exception_assignment_id === project.measurement_assignment_id
+    && typeof reason === 'string' && reason.trim().length > 0 && reason.trim().length <= 1000;
+}
+
 // Baghdad Outdoor visibility follows the same calendar as new registrations.
 // Ownership, attribution and team assignment cannot bypass the current area.
 export function canAccessProjectRow(
@@ -57,7 +88,8 @@ export function canAccessProjectRow(
   const branch = actor.role === 'Outdoor Sales' ? effectiveMeasurementBranch(project) : effectiveProjectBranch(project);
   if (!canAccessProjectBranch(actor, branch)) return false;
   if (actor.role === 'Outdoor Sales') {
-    if ((branch === 'Karkh' || branch === 'Rasafa') && outdoorSalesBranch(actor, date) !== branch) return false;
+    if ((branch === 'Karkh' || branch === 'Rasafa') && outdoorSalesBranch(actor, date) !== branch
+      && !hasMeasurementRotationException(project, actor)) return false;
     if (actor.id && project.created_by === actor.id) return true;
     if (branch === 'Governorates' && actor.branch !== 'Karkh') {
       const assignee = project.assigned_outdoor_sales_id;

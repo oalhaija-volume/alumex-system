@@ -27,5 +27,7 @@ export function normalizeMeasurementAssignment(input:Record<string,unknown>) {
  const id=input.assignedOutdoorSalesId;
  if(typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))throw new Error('Choose an active Outdoor Sales employee for measurements.');
  if(Object.hasOwn(input,'measurementBranch')&&input.measurementBranch!=='Karkh'&&input.measurementBranch!=='Rasafa')throw new Error('Choose Karkh or Rasafa as the measurement area.');
- return {assignedOutdoorSalesId:id,...(Object.hasOwn(input,'measurementBranch')?{measurementBranch:input.measurementBranch as 'Karkh'|'Rasafa'}:{})};
+ const reason=input.measurementExceptionReason;
+ if(Object.hasOwn(input,'measurementExceptionReason')&&(typeof reason!=='string'||!reason.trim()||reason.trim().length>1000))throw new Error('Enter a measurement rotation exception reason in 1,000 characters or fewer.');
+ return {assignedOutdoorSalesId:id,...(Object.hasOwn(input,'measurementBranch')?{measurementBranch:input.measurementBranch as 'Karkh'|'Rasafa'}:{}),...(Object.hasOwn(input,'measurementExceptionReason')?{measurementExceptionReason:(reason as string).trim()}:{})};
 }

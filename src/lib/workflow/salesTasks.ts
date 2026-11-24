@@ -1,6 +1,6 @@
 import { canAccessCRM } from '@/lib/auth/permissions';
 import { isOutdoorAssignmentMember } from '@/lib/auth/outdoorTeams';
-import { canAccessProjectRow, effectiveMeasurementBranch } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectRow, effectiveMeasurementBranch, hasMeasurementRotationException } from '@/lib/auth/projectBranchAccess';
 import { outdoorSalesBranch, type OutdoorRotationStartBranch } from '@/lib/intake/outdoorRotationSchedule';
 import type { FieldActor,FieldProject } from '@/lib/offline/types';
 import { needsSalesFollowUp,projectStage } from './stages';
@@ -22,7 +22,7 @@ export function measurementTasks(projects:FieldProject[],actor?:FieldActor,date:
  return projects.filter(p=>{
   if(actor.role==='Outdoor Sales'){
    const branch=effectiveMeasurementBranch(p);
-   if(!canAccessProjectRow(actor,p,date)||((branch==='Karkh'||branch==='Rasafa')&&branch!==area))return false;
+   if(!canAccessProjectRow(actor,p,date)||((branch==='Karkh'||branch==='Rasafa')&&branch!==area&&!hasMeasurementRotationException(p,actor)))return false;
   }
   return !p.project_log_only && p.structure_readiness==='ready' && p.sales_status==='new_lead' &&
   !!p.assigned_outdoor_sales_id && projectStage(p)==='measurements' && (

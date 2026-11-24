@@ -68,6 +68,10 @@ export async function POST(request:Request){
  if(body.acknowledgeOnly===true&&auth.role!=='Outdoor Sales')return NextResponse.json({error:'This saved change cannot be acknowledged.'},{status:403,headers:{'Cache-Control':'private, no-store'}});
  if(['follow-up','ready','assign-measurements','request-openings'].includes(body.action)&&!canAccessCRM(auth.role))return NextResponse.json({error:'CRM access is limited to Indoor Sales and company leadership.'},{status:403});
  if(Object.hasOwn(body.payload,'measurementBranch')&&body.action!=='assign-measurements')return NextResponse.json({error:'Measurement area can be changed only when assigning a Baghdad project.'},{status:400});
+ if(Object.hasOwn(body.payload,'measurementExceptionReason')){
+  if(auth.role!=='Admin')return NextResponse.json({error:'Only Admin can approve a measurement rotation exception.'},{status:403});
+  if(body.action!=='assign-measurements')return NextResponse.json({error:'A measurement rotation exception can be approved only when assigning a Baghdad project.'},{status:400});
+ }
  let payload:Json={};
  if(body.action==='register'){
   const c=body.payload.client,p=body.payload.project;
@@ -144,10 +148,11 @@ export async function POST(request:Request){
  }
  const admin=createAdminClient();
  // SQL validates the active actor and creator/branch access before any replay.
- if(!hasGlobalProjectAccess(auth.role)||Object.hasOwn(body.payload,'measurementBranch')){
-  const project=await admin.from('projects').select('branch,measurement_branch,governorate,governorate_office,created_by,assigned_outdoor_sales_id').eq('id',body.projectId).maybeSingle();
+ if(!hasGlobalProjectAccess(auth.role)||Object.hasOwn(body.payload,'measurementBranch')||Object.hasOwn(body.payload,'measurementExceptionReason')){
+  const project=await admin.from('projects').select('structure_readiness,sales_status,branch,measurement_branch,measurement_exception_employee_id,measurement_exception_assignment_id,measurement_exception_reason,archived_at,governorate,governorate_office,created_by,measurement_assignment_id,assigned_outdoor_sales_id').eq('id',body.projectId).maybeSingle();
   if(project.error)return NextResponse.json({error:'Unable to verify project access.'},{status:503});
   if(Object.hasOwn(body.payload,'measurementBranch')&&project.data&&!['Karkh','Rasafa'].includes(project.data.branch??''))return NextResponse.json({error:'Measurement area can be changed only when assigning a Baghdad project.'},{status:400});
+  if(Object.hasOwn(body.payload,'measurementExceptionReason')&&project.data&&!['Karkh','Rasafa'].includes(project.data.branch??''))return NextResponse.json({error:'A measurement rotation exception can be approved only when assigning a Baghdad project.'},{status:400});
   if(project.data&&!canAccessProjectRow({id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorRotationStartBranch:auth.profile?.outdoor_rotation_start_branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds},project.data))return NextResponse.json({error:'Project not found.'},{status:404});
  }
  const result=await admin.rpc('sync_field_change',{p_operation:body.id,p_actor:auth.user.id,p_project:body.projectId,p_action:body.action,p_payload:payload,p_recorded_at:body.recordedAt,p_expected_updated_at:typeof body.expectedUpdatedAt==='string'?body.expectedUpdatedAt:null});

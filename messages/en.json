@@ -3226,7 +3226,8 @@
     "Open Setup.exe. If Windows then displays “Windows protected your PC”, use:": "Open Setup.exe. If Windows then displays “Windows protected your PC”, use:",
     "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled.": "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled.",
     "Measurement area": "Measurement area",
-    "Connect and refresh projects to confirm your measurement area.": "Connect and refresh projects to confirm your measurement area."
+    "Connect and refresh projects to confirm your measurement area.": "Connect and refresh projects to confirm your measurement area.",
+    "Rotation exception": "Rotation exception"
   },
   "registration": {
     "title": "New client & project",

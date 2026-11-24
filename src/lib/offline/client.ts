@@ -8,7 +8,7 @@ import { canCancelProject, normalizeClientCancellation, canDelayMeasurements, ca
 import { normalizeReadinessNote } from '@/lib/intake/readinessNote';
 import { normalizeLegacyOutdoorSalesId } from '@/lib/intake/legacyOutdoorSales';
 import { canAccessCRM } from '@/lib/auth/permissions';
-import { canAccessProjectBranch, canAccessProjectRow, canOwnProjectFollowUp, effectiveProjectBranch } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectBranch, canAccessProjectRow, canOwnProjectFollowUp, effectiveProjectBranch, hasMeasurementRotationException } from '@/lib/auth/projectBranchAccess';
 import { isOutdoorAssignmentMember } from '@/lib/auth/outdoorTeams';
 import { canAccessFieldProject, visibleFieldState } from './projectAccess';
 import { normalizeFollowUp,type FollowUpInput } from '@/lib/workflow/followUps';
@@ -51,6 +51,11 @@ function withCurrentProjectAccess(local:FieldProject,remote:FieldProject):FieldP
   ...('governorate_office' in remote||'governorate_office' in local?{governorate_office:remote.governorate_office}:{}),project_log_only:remote.project_log_only,
   ...('client_name' in remote?{client_name:remote.client_name,client_id:remote.client_id}:{}),
   ...('assigned_outdoor_sales_id' in remote?{assigned_outdoor_sales_id:remote.assigned_outdoor_sales_id}:{}),
+  ...('measurement_assignment_id' in remote||'measurement_assignment_id' in local?{measurement_assignment_id:remote.measurement_assignment_id??null}:{}),
+  ...('measurement_exception_employee_id' in remote||'measurement_exception_employee_id' in local?{measurement_exception_employee_id:remote.measurement_exception_employee_id??null}:{}),
+  ...('measurement_exception_assignment_id' in remote||'measurement_exception_assignment_id' in local?{measurement_exception_assignment_id:remote.measurement_exception_assignment_id??null}:{}),
+  ...('measurement_exception_reason' in remote||'measurement_exception_reason' in local?{measurement_exception_reason:remote.measurement_exception_reason??null}:{}),
+  ...('archived_at' in remote||'archived_at' in local?{archived_at:remote.archived_at??null}:{}),
   ...('assignedOutdoorSales' in remote?{assignedOutdoorSales:remote.assignedOutdoorSales}:{}),
   ...('assignedToYou' in remote?{assignedToYou:remote.assignedToYou}:{}),
   ...('assignedToTeam' in remote?{assignedToTeam:remote.assignedToTeam}:{})};
@@ -189,6 +194,25 @@ export async function syncFieldChanges(){
    try{response=await fetch('/api/offline',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(20000),body:JSON.stringify({...change,expectedUpdatedAt:project?.serverUpdatedAt??project?.updated_at})});}catch{connection(false);return;}
    const result=await response.json().catch(()=>null);
    if(!response.ok){
+    if(response.status===404&&change.measurementExceptionAssignmentId){
+     // Completing the exception removes its access immediately. If only the
+     // response was lost, acknowledge that exact committed operation without
+     // restoring the old grant or returning its historical project snapshot.
+     let acknowledgement:Response;
+     try{acknowledgement=await fetch('/api/offline',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(20000),body:JSON.stringify({...change,acknowledgeOnly:true})});}
+     catch{connection(false);return;}
+     if(activeFieldUser()!==id)return;
+     if([401,403].includes(acknowledgement.status)){setFieldUser(null);return;}
+     const receipt=await acknowledgement.json().catch(()=>null);
+     if(acknowledgement.ok&&receipt?.acknowledged===true&&receipt.operationId===change.id&&receipt.projectId===change.projectId){
+      await updateFieldState(id,s=>{
+       const queue=s!.queue.filter(c=>c.id!==change.id);
+       return {...s!,queue,projects:s!.projects.map(p=>p.id===change.projectId&&p.measurement_exception_assignment_id===change.measurementExceptionAssignmentId
+        ?{...p,pending:queue.some(c=>c.projectId===p.id),...(change.action==='finish'?{measurement_exception_employee_id:null,measurement_exception_assignment_id:null,measurement_exception_reason:null}:{})}:p)};
+      });
+      continue;
+     }
+    }
     if(response.status===410&&result?.code==='project_deleted'){
      // Preserve the complete local record, including notes and captured media.
      // Only server-confirmed deletions leave the retry queue; other conflicts stay.
@@ -220,6 +244,7 @@ export async function syncFieldChanges(){
  syncing=Promise.resolve('locks' in navigator?navigator.locks.request('alumex-field-sync',run):run()).then(()=>undefined).finally(()=>{syncing=null;});return syncing;
 }
 export async function saveFieldChange(action:FieldChange['action'],projectId:string,payload:Record<string,unknown>,expectedActorId?:string){
+ if(Object.hasOwn(payload,'measurementExceptionReason'))throw new Error('Rotation exceptions must be assigned online by an Admin.');
  const state=await stateForWrite(expectedActorId);if(['follow-up','ready','assign-measurements','request-openings'].includes(action)&&!canAccessCRM(state.actor.role))throw new Error('CRM access is limited to Indoor Sales and company leadership.');if(action==='follow-up')payload=normalizeFollowUp(payload);if(action==='finish')payload=normalizeMeasurementCompletion(payload);const change:FieldChange={id:crypto.randomUUID(),userId:state.actor.id,projectId,action,payload,recordedAt:new Date().toISOString()};
  await updateFieldState(state.actor.id,s=>{
   if(!s)throw new Error('Offline account unavailable.');
@@ -249,6 +274,10 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
    if(p?.project_log_only)throw new Error('This project is available in your log for reference only.');
    if(!canAccessFieldProject(s,p))throw new Error('Project is not available to this employee.');
    if(!p)throw new Error('Open this project online once before working on it offline.');
+   if(['opening','edit-opening','finish'].includes(action)&&p.measurement_exception_employee_id===s.actor.id
+    &&hasMeasurementRotationException(p,s.actor))change.measurementExceptionAssignmentId=p.measurement_assignment_id??undefined;
+   if(action==='reopen'&&p.measurement_exception_employee_id===s.actor.id
+    &&p.measurement_exception_assignment_id&&p.measurement_exception_assignment_id===p.measurement_assignment_id)throw new Error('Ask Indoor Sales to assign a new measurement task after this rotation exception is completed.');
    if(action==='rename-project'){
     if(!canRenameProject(p,s.actor))throw new Error('Only Indoor Sales and Sales Managers can change project names.');
     if(payload.expectedUpdatedAt!==undefined&&payload.expectedUpdatedAt!==p.updated_at)throw new Error('This project changed on another device. Reload the project before changing its name.');
@@ -325,7 +354,9 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
      p={...p,measurement_branch:area};
     }
     change.payload={...payload,assignedOutdoorSalesId:employee.id};
-    p={...p,measurement_delayed:false,assigned_outdoor_sales_id:employee.id,assignedOutdoorSales:employee.name,assignedToYou:employee.id===s.actor.id,measurement_assignment_id:change.id};
+    p={...p,...('measurement_exception_employee_id' in p||'measurement_exception_assignment_id' in p||'measurement_exception_reason' in p
+     ?{measurement_exception_employee_id:null,measurement_exception_assignment_id:null,measurement_exception_reason:null}:{}),
+     measurement_delayed:false,assigned_outdoor_sales_id:employee.id,assignedOutdoorSales:employee.name,assignedToYou:employee.id===s.actor.id,measurement_assignment_id:change.id};
    }
    if(action==='ready'){if(p.structure_readiness!=='not_ready'||p.sales_status!=='new_lead')throw new Error('This project has already moved beyond site readiness.');p={...p,structure_readiness:'ready',sales_status:'new_lead',next_follow_up_at:null,follow_up_owner_id:p.follow_up_owner_id??((s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.id:null),followUpOwner:p.followUpOwner??((s.actor.role === 'Indoor Sales' || s.actor.role === 'Sales Manager')?s.actor.name:null)};}
    if(action==='follow-up'&&!needsSalesFollowUp(p))throw new Error('Sales follow-up is complete for this project.');
@@ -352,6 +383,12 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
  // use the same durable queue as the device workspace.
  if(!isOfflineDevice())return fetch(url,init);
  const method=init?.method??'GET';
+ if(method==='PATCH'&&url==='/api/workspace'&&Object.hasOwn(JSON.parse(String(init?.body??'{}')),'measurementExceptionReason')){
+  if(!isFieldOnline())return Response.json({error:'Connect to the internet before assigning a rotation exception.'},{status:409});
+  const response=await fetch(url,init);
+  if(response.ok)await prepareOffline();
+  return response;
+ }
  if(method==='PATCH' && url==='/api/workspace' && JSON.parse(String(init?.body??'{}')).action==='reactivate-project'){
   if(!isFieldOnline())return Response.json({error:'Connect to the internet before reactivating a project.'},{status:409});
   const body=JSON.parse(String(init?.body??'{}'));

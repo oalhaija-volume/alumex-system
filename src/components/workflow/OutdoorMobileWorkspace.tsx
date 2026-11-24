@@ -7,7 +7,7 @@ import { DashboardProjectFilters } from './DashboardProjectFilters';
 import { matchesProjectSearch } from '@/lib/dashboard/projectSearch';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import type { SalesWorkspaceData } from '@/lib/offline/types';
-import { effectiveMeasurementBranch } from '@/lib/auth/projectBranchAccess';
+import { effectiveMeasurementBranch, hasMeasurementRotationException } from '@/lib/auth/projectBranchAccess';
 import { measurementAreaForActor, measurementTasks } from '@/lib/workflow/salesTasks';
 import { button, card, Notice, useNow, useResource, Workspace } from './ui';
 
@@ -34,6 +34,7 @@ export function OutdoorMobileWorkspace() {
         {!selected.length ? <p className={card}>{term(tasks.length ? 'No projects match this view.' : 'No measurement tasks waiting.')}</p> : <ul className="space-y-4">
           {selected.map(project => <li key={project.id} className={card}>
             <p className="text-xs font-semibold text-blue-700">{term(project.project_number)}</p>
+            {data && hasMeasurementRotationException(project, data.actor) && <span className="mt-2 inline-block rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">{term('Rotation exception')}</span>}
             {effectiveMeasurementBranch(project) && <p className="mt-2 text-sm font-semibold text-slate-800">{term('Measurement area')}: <bdi>{term(effectiveMeasurementBranch(project)!)}</bdi>{project.governorate && <> · <bdi>{project.governorate}</bdi></>}</p>}
             {project.branch && <p className="mt-2 text-xs font-medium text-slate-600">{term('Project branch')}: <bdi>{term(project.branch)}</bdi>{project.governorate && <> · <bdi>{project.governorate}</bdi></>}</p>}
             {project.additional_openings_state==='requested'&&<p className="mt-2 text-sm font-semibold text-amber-800">{term('Add more openings')}</p>}

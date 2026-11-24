@@ -39,6 +39,10 @@ export async function GET(){
 export async function PATCH(request:Request){
  const body=await request.json().catch(()=>null);if(typeof body?.projectId!=='string')return NextResponse.json({error:'Project is required.'},{status:400});
  const access=await salesProject(body.projectId,body.action==='rename-project'?false:true);if(access.response)return access.response;
+ if(Object.hasOwn(body,'measurementExceptionReason')){
+  if(access.auth.role!=='Admin')return NextResponse.json({error:'Only Admin can approve a measurement rotation exception.'},{status:403});
+  if(body.action!=='assign-measurements'||!['Karkh','Rasafa'].includes(access.project.branch??''))return NextResponse.json({error:'A measurement rotation exception can be approved only when assigning a Baghdad project.'},{status:400});
+ }
  if(body.action==='rename-project'){
   if(!canRenameProject(access.project,{id:access.auth.user.id,role:access.auth.role,branch:access.auth.profile?.branch,outdoorTeamMemberIds:access.auth.outdoorTeamMemberIds}))return NextResponse.json({error:'Only Indoor Sales and Sales Managers can change project names.'},{status:403});
   let payload;

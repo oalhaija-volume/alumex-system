@@ -273,6 +273,9 @@ export type Database = {
           project_type: string | null;
           branch: ProjectBranch | null;
           measurement_branch: "Karkh" | "Rasafa" | null;
+          measurement_exception_employee_id: string | null;
+          measurement_exception_assignment_id: string | null;
+          measurement_exception_reason: string | null;
           governorate: ProjectGovernorate | null;
           governorate_office: "Karkh" | null;
           sales_engineer_id: string | null;
@@ -356,6 +359,9 @@ export type Database = {
           project_type?: string | null;
           branch?: ProjectBranch | null;
           measurement_branch?: "Karkh" | "Rasafa" | null;
+          measurement_exception_employee_id?: string | null;
+          measurement_exception_assignment_id?: string | null;
+          measurement_exception_reason?: string | null;
           governorate?: ProjectGovernorate | null;
           governorate_office?: "Karkh" | null;
           sales_engineer_id?: string | null;

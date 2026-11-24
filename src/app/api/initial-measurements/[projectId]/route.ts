@@ -6,7 +6,7 @@ import { requireRole } from "@/lib/auth/adminServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseServiceRoleKey } from "@/lib/supabase/config";
 import { normalizeOpeningEdit, normalizeRegistrationOpening, registrationRoomTypes } from "@/lib/measurements/registrationOpening";
-import { canAccessProjectRow } from '@/lib/auth/projectBranchAccess';
+import { canAccessProjectRow, hasMeasurementRotationException } from '@/lib/auth/projectBranchAccess';
 import { canAccessOutdoorProject, isOutdoorAssignmentMember } from '@/lib/auth/outdoorTeams';
 import { canEditOpeningEntry } from '@/lib/measurements/openingOwnership';
 
@@ -18,7 +18,7 @@ async function access(context: Context) {
   const {projectId} = await context.params;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) return {response:NextResponse.json({error:"Project not found."},{status:404})};
   const admin = createAdminClient();
-  const {data:project,error} = await admin.from("projects").select("id, additional_openings_state,additional_openings_original_ids,building_type,branch,measurement_branch,governorate,governorate_office, project_name, project_number, created_at, created_by, original_creator_role, legacy_outdoor_sales_id, address, location_latitude, location_longitude, assigned_outdoor_sales_id, follow_up_owner_id, structure_readiness, sales_status, updated_at, measurement_delayed, measurement_delay_reason, measurement_delay_note, measurement_delayed_at, measurement_delayed_by, client_cancellation_note, client_cancelled_at, client_cancelled_by").eq("id",projectId).maybeSingle();
+  const {data:project,error} = await admin.from("projects").select("id, additional_openings_state,additional_openings_original_ids,building_type,branch,measurement_branch,measurement_exception_employee_id,measurement_exception_assignment_id,measurement_exception_reason,archived_at,governorate,governorate_office, project_name, project_number, created_at, created_by, original_creator_role, legacy_outdoor_sales_id, address, location_latitude, location_longitude, measurement_assignment_id,assigned_outdoor_sales_id, follow_up_owner_id, structure_readiness, sales_status, updated_at, measurement_delayed, measurement_delay_reason, measurement_delay_note, measurement_delayed_at, measurement_delayed_by, client_cancellation_note, client_cancelled_at, client_cancelled_by").eq("id",projectId).maybeSingle();
   if (error) return {response:NextResponse.json({error:"Unable to load project."},{status:500})};
   if (project && !canAccessProjectRow({id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorRotationStartBranch:auth.profile?.outdoor_rotation_start_branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds},project)) return {response:NextResponse.json({error:"Project not found."},{status:404})};
   if (!project || (!["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager"].includes(auth.role) && !canAccessOutdoorProject(project,{id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}))) return {response:NextResponse.json({error:"Project not found."},{status:404})};
@@ -49,6 +49,11 @@ export async function POST(request: Request, context: Context) {
   const opening = normalizeRegistrationOpening(await request.json().catch(()=>null));
   if (!opening) return NextResponse.json({error:"Enter floor, room, valid dimensions, structural type, and opening type."},{status:400});
   if(opening.workArea&&result.project.building_type!=='commercial_building')return NextResponse.json({error:'Facade and Internal works are only available for commercial buildings.'},{status:400});
+  if(hasMeasurementRotationException(result.project,{id:result.auth.user.id,role:result.auth.role,branch:result.auth.profile?.branch})){
+    const saved=await result.admin.rpc('sync_field_change',{p_operation:opening.id,p_actor:result.auth.user.id,p_project:result.project.id,
+      p_action:'opening',p_payload:opening as unknown as Json,p_recorded_at:new Date().toISOString(),p_expected_updated_at:result.project.updated_at});
+    return saved.error?NextResponse.json({error:saved.error.message},{status:409}):NextResponse.json({id:opening.id},{status:201});
+  }
   // Existing storage calls the structural category opening_type. The movement
   // is stored separately in opening_direction; each row records the quantity of identical openings.
   const {error} = await result.admin.from("openings").insert({
@@ -124,6 +129,11 @@ export async function PATCH(request: Request, context: Context) {
   }
   const ready = body.action === "finish";
   const salesStatus = ready ? "ready_for_quotation" : "new_lead";
+  if(hasMeasurementRotationException(result.project,{id:result.auth.user.id,role:result.auth.role,branch:result.auth.profile?.branch})){
+    const saved=await result.admin.rpc('sync_field_change',{p_operation:crypto.randomUUID(),p_actor:result.auth.user.id,p_project:result.project.id,
+      p_action:body.action,p_payload:{},p_recorded_at:new Date().toISOString(),p_expected_updated_at:result.project.updated_at});
+    return saved.error?NextResponse.json({error:saved.error.message},{status:409}):NextResponse.json({salesStatus});
+  }
   const {error} = await result.admin.from("projects").update({sales_status:salesStatus,status:ready ? "Quotation" : "Draft"}).eq("id",result.project.id);
   if (error) return NextResponse.json({error:"Unable to update the project status. Please try again."},{status:500});
   return NextResponse.json({salesStatus});

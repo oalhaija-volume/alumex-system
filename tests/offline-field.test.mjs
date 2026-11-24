@@ -14,7 +14,73 @@ function outdoorActorForCurrentBranch(branch) {
 }
 const projectId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const payload={client:{clientType:'individual',clientName:'Client',mobile:'07000000000'},project:{branch:'Karkh',buildingType:'villa_house',assignedOutdoorSalesId:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',address:'Site',locationLatitude:33.3,locationLongitude:44.4,structureReadiness:'ready'}};
-function setup(overrides={}){globalThis.window={dispatchEvent:()=>{}};let active=actor.id;let state={actor,indoorSales:[{id:actor.id,name:actor.name,role:actor.role,branch:actor.branch}],outdoorSales:[{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',name:'Outdoor employee',branch:overrides.actor?.branch??actor.branch}],projects:[],openings:[],queue:[],syncedAt:null,...overrides};Object.defineProperty(globalThis,'navigator',{value:{onLine:false},configurable:true});const store={activeFieldUser:()=>active,setFieldUser:id=>{active=id;},readStoredFieldState:async()=>structuredClone(state),readFieldState:async()=>load('../src/lib/offline/projectAccess.ts').visibleFieldState(structuredClone(state)),updateFieldState:async(id,fn)=>{assert.equal(id,actor.id);state=fn(structuredClone(state));return load('../src/lib/offline/projectAccess.ts').visibleFieldState(structuredClone(state));}};const client=load('../src/lib/offline/client.ts',{'./store':store,'@/lib/workflow/followUps':load('../src/lib/workflow/followUps.ts'),'@/lib/workflow/stages':load('../src/lib/workflow/stages.ts'),'@/lib/measurements/registrationOpening':load('../src/lib/measurements/registrationOpening.ts')});return {client,get state(){return state;},get active(){return active;}};}
+function setup(overrides={}){globalThis.window={dispatchEvent:()=>{}};const updates=[];let active=actor.id;let state={actor,indoorSales:[{id:actor.id,name:actor.name,role:actor.role,branch:actor.branch}],outdoorSales:[{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',name:'Outdoor employee',branch:overrides.actor?.branch??actor.branch}],projects:[],openings:[],queue:[],syncedAt:null,...overrides};Object.defineProperty(globalThis,'navigator',{value:{onLine:false},configurable:true});const store={activeFieldUser:()=>active,setFieldUser:id=>{active=id;},readStoredFieldState:async()=>structuredClone(state),readFieldState:async()=>load('../src/lib/offline/projectAccess.ts').visibleFieldState(structuredClone(state)),updateFieldState:async(id,fn,source)=>{assert.equal(id,actor.id);updates.push(source);state=fn(structuredClone(state));return load('../src/lib/offline/projectAccess.ts').visibleFieldState(structuredClone(state));}};const client=load('../src/lib/offline/client.ts',{'./store':store,'@/lib/workflow/followUps':load('../src/lib/workflow/followUps.ts'),'@/lib/workflow/stages':load('../src/lib/workflow/stages.ts'),'@/lib/measurements/registrationOpening':load('../src/lib/measurements/registrationOpening.ts')});return {client,updates,get state(){return state;},get active(){return active;}};}
+
+test('a successful workspace read publishes a server snapshot rather than invalidating itself as a local edit',async()=>{
+ const project={id:projectId,branch:'Karkh',created_by:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-11-14T08:00:00Z'};
+ const x=setup({projects:[project]});navigator.onLine=true;window.location={pathname:'/dashboard'};
+ const directory=[{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',name:'Rasafa collector',branch:'Karkh',outdoorRotationStartBranch:'Rasafa'}];
+ globalThis.fetch=async()=>Response.json({actor,projects:[{...project,measurement_branch:'Rasafa'}],outdoorSales:directory,indoorSales:[]});
+ const response=await x.client.fieldFetch('/api/workspace');
+ assert.equal(response.status,200);assert.equal((await response.json()).projects[0].measurement_branch,'Rasafa');
+ assert.deepEqual(x.updates,['snapshot'],'A normal-page resource loader must not invalidate its own successful read');
+ assert.equal(x.state.projects[0].measurement_branch,'Rasafa');assert.deepEqual(x.state.outdoorSales,directory);assert.deepEqual(x.state.queue,[]);
+});
+
+test('a delayed failed workspace read returns the current rotation projection without changing retained work',async t=>{
+ t.mock.timers.setTime(Date.parse('2026-11-15T20:59:59.999Z'));
+ const outdoor={...actor,role:'Outdoor Sales',branch:'Rasafa',outdoorRotationStartBranch:'Rasafa'};
+ const base={created_by:actor.id,assigned_outdoor_sales_id:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-11-14T08:00:00Z'};
+ const projects=[{...base,id:projectId,branch:'Rasafa'},{...base,id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',branch:'Karkh'}];
+ const x=setup({actor:outdoor,projects});navigator.onLine=true;window.location={pathname:'/dashboard'};
+ const retained=structuredClone(x.state);let rejectNetwork,started;
+ const fetching=new Promise(resolve=>{started=resolve;});
+ globalThis.fetch=()=>{started();return new Promise((_resolve,reject)=>{rejectNetwork=reject;});};
+ const pending=x.client.fieldFetch('/api/workspace');await fetching;
+ t.mock.timers.setTime(Date.parse('2026-11-15T21:00:00Z'));rejectNetwork(new Error('Network unavailable'));
+ const result=await (await pending).json();
+ assert.deepEqual(result.projects.map(p=>p.branch),['Karkh']);assert.deepEqual(x.state,retained);
+});
+
+test('a direct measurement read is also a snapshot and retains its explicit physical area',async()=>{
+ const project={id:projectId,branch:'Karkh',created_by:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-11-14T08:00:00Z'};
+ const x=setup({projects:[project]});navigator.onLine=true;window.location={pathname:'/initial-measurements/'+projectId};
+ globalThis.fetch=async()=>Response.json({project:{...project,measurement_branch:'Rasafa'},openings:[]});
+ assert.equal((await x.client.fieldFetch('/api/initial-measurements/'+projectId)).status,200);
+ assert.deepEqual(x.updates,['snapshot']);assert.equal(x.state.projects[0].measurement_branch,'Rasafa');assert.deepEqual(x.state.queue,[]);
+});
+
+test('a refreshed physical area replaces stale routing while preserving a pending local opening',async()=>{
+ const project={id:projectId,branch:'Karkh',measurement_branch:'Karkh',created_by:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-11-14T08:00:00Z',project_name:'Unsynced local work',pending:true};
+ const opening={id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',projectId,createdBy:actor.id,width:1400,height:1800};
+ const change={id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',userId:actor.id,projectId,action:'opening',payload:opening,recordedAt:project.updated_at};
+ const x=setup({projects:[project],openings:[opening],queue:[change]});navigator.onLine=true;
+ globalThis.fetch=async()=>Response.json({actor,projects:[{...project,measurement_branch:'Rasafa',project_name:'Server snapshot',pending:false}],openings:[],queue:[],syncedAt:null});
+ await x.client.prepareOffline();
+ assert.equal(x.state.projects[0].measurement_branch,'Rasafa');assert.equal(x.state.projects[0].branch,'Karkh');assert.equal(x.state.projects[0].project_name,'Unsynced local work');
+ assert.deepEqual(x.state.openings,[opening]);assert.deepEqual(x.state.queue,[change]);
+});
+
+test('an explicit physical area assignment keeps the Indoor office and queues the matching rotation collector',async()=>{
+ const collector={id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',name:'Rasafa collector',branch:'Karkh',outdoorRotationStartBranch:'Rasafa'};
+ const project={id:projectId,branch:'Karkh',created_by:actor.id,follow_up_owner_id:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-11-14T08:00:00Z'};
+ const x=setup({projects:[project],outdoorSales:[collector]});
+ await x.client.saveFieldChange('assign-measurements',projectId,{assignedOutdoorSalesId:collector.id,measurementBranch:'Rasafa'});
+ const saved=x.state.projects[0];assert.equal(saved.branch,'Karkh');assert.equal(saved.follow_up_owner_id,actor.id);assert.equal(saved.measurement_branch,'Rasafa');assert.equal(saved.assigned_outdoor_sales_id,collector.id);
+ assert.deepEqual(x.state.queue[0].payload,{assignedOutdoorSalesId:collector.id,measurementBranch:'Rasafa'});
+});
+
+for(const [label,metadata,area,expected]of[
+ ['wrong current team',{outdoorRotationStartBranch:'Karkh'},'Rasafa',/covering the measurement area/],
+ ['missing verified rotation',{},'Rasafa',/refresh projects to confirm the measurement team/],
+ ['invalid physical area',{outdoorRotationStartBranch:'Rasafa'},'Najaf',/Choose Karkh or Rasafa/],
+])test(`${label} cannot create a misleading local measurement task`,async()=>{
+ const collector={id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',name:'Collector',branch:'Karkh',...metadata};
+ const project={id:projectId,branch:'Karkh',created_by:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-11-14T08:00:00Z'};
+ const x=setup({projects:[project],outdoorSales:[collector]}),before=structuredClone(x.state);
+ await assert.rejects(x.client.saveFieldChange('assign-measurements',projectId,{assignedOutdoorSalesId:collector.id,measurementBranch:area}),expected);
+ assert.deepEqual(x.state,before);
+});
 test('unsupported clients use the server without queueing',async()=>{
  const requests=[];
  const client=load('../src/lib/offline/client.ts',{

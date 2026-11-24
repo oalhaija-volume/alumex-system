@@ -52,7 +52,7 @@ for (const endpoint of ['workspace', 'offline']) {
         then(resolve) {
           if (table === 'field_sync_receipts') return Promise.resolve({data:[],error:null}).then(resolve);
           const key = table === 'profiles' ? fields.startsWith('full_name') ? 'actor' : fields.split(',').includes('role') ? 'directory' : 'people' : table;
-          if(key==='directory')assert.deepEqual(fields.split(','),['id','full_name','username','role','branch']);
+          if(key==='directory')assert.deepEqual(fields.split(','),['id','full_name','username','role','branch','outdoor_rotation_start_branch']);
           return new Promise(done => started.set(key, data => done({ data: Array.isArray(data)?data.filter(row=>(!branches.length||branches.includes(row.branch))&&(!directoryScope||row.branch==='Karkh'||row.role==='Outdoor Sales'&&['Karkh','Rasafa'].includes(row.branch))):data, error: null }))).then(resolve);
         },
       };

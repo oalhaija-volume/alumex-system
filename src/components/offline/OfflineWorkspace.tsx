@@ -22,6 +22,7 @@ import { readFieldState, type FieldChangeDetail } from '@/lib/offline/store';
 import { isOfflineDevice } from '@/lib/offline/device';
 import { QuotationWorkspace } from '@/components/workflow/QuotationWorkspace';
 import type { FieldState } from '@/lib/offline/types';
+import { useNow } from '@/components/workflow/ui';
 export function OfflineWorkspace(){
  const [allowed,setAllowed]=useState(false);
  useEffect(()=>{if(!isOfflineDevice()){window.location.replace('/dashboard');return;}const timer=setTimeout(()=>setAllowed(true),0);return()=>clearTimeout(timer);},[]);
@@ -29,6 +30,7 @@ export function OfflineWorkspace(){
 }
 function DeviceWorkspace(){
  const { term,t,errorMessage } = useI18n();
+ const now=useNow();
  const [state,setState]=useState<FieldState|null>(null);const [loaded,setLoaded]=useState(false);const [requestedPath,setPath]=useState('/intake');const [navigationVersion,setNavigationVersion]=useState(0);const [message,setMessage]=useState('');
  const [storageError,setStorageError]=useState('');
  const [storageRetry,setStorageRetry]=useState(0);
@@ -59,7 +61,7 @@ function DeviceWorkspace(){
   const timer=setTimeout(()=>void refresh(),0);
   window.addEventListener('field-change',refresh);
   return()=>{live=false;clearTimeout(timer);window.removeEventListener('field-change',refresh);};
- },[storageRetry]);
+ },[storageRetry,now]);
  const outdoor = state?.actor.role === 'Outdoor Sales';
  const mobileOutdoor = state?.actor.role === 'Outdoor Sales' && isPhoneRequest(new Headers({'user-agent': navigator.userAgent}));
  const basePath=requestedPath.split('#')[0];

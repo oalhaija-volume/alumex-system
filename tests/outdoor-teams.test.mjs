@@ -45,7 +45,7 @@ const projects = employees.map((employee, index) => ({
   archived_at: null, created_at: version, updated_at: version, project_notes: null, next_follow_up_at: null,
 }));
 const teamIds = employee => employees.filter(member => member.outdoor_team_key === employee.outdoor_team_key).map(member => member.id);
-const actorFor = employee => ({ id: employee.id, role: employee.role, branch: employee.branch, outdoorTeamMemberIds: teamIds(employee) });
+const actorFor = employee => ({ id: employee.id, role: employee.role, branch: employee.branch, outdoorRotationStartBranch: null, outdoorTeamMemberIds: teamIds(employee) });
 
 // Execute the real access policies and route handlers with a row-filtering
 // database transport. No account, database or environment is changed.

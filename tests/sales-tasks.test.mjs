@@ -5,15 +5,18 @@ import ts from 'typescript';
 import * as React from 'react';
 import * as jsxRuntime from 'react/jsx-runtime';
 import {renderToStaticMarkup} from 'react-dom/server';
+
+// Assignment and stage tests use a verified default seed during its Karkh half.
+test.beforeEach(context=>{context.mock.timers.enable({apis:['Date'],now:new Date('2026-11-14T08:00:00Z')});});
 function load(path,deps={}){const output=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;const exports={};new Function('require','exports',output)(name=>{if(name==='@/lib/intake/outdoorRotationSchedule')return load('../src/lib/intake/outdoorRotationSchedule.ts',{});if(name==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts',{});if(name==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts');if(name==='@/lib/measurements/visitHistory')return load('../src/lib/measurements/visitHistory.ts');if(name==='@/lib/workflow/reactivation')return load('../src/lib/workflow/reactivation.ts');if(name==='@/lib/offline/device')return load('../src/lib/offline/device.ts');if(name==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts');if(name==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');assert.ok(name in deps,name);return deps[name];},exports);return exports;}
 const followUps=load('../src/lib/workflow/followUps.ts');
 const branchAccess=load('../src/lib/auth/projectBranchAccess.ts');
 const stages=load('../src/lib/workflow/stages.ts');
 const tasks=load('../src/lib/workflow/salesTasks.ts',{'./stages':stages});
 const indoor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',role:'Indoor Sales',name:'Indoor'};
-const outdoor={id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',role:'Outdoor Sales',name:'Outdoor'};
+const outdoor={id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',role:'Outdoor Sales',name:'Outdoor',branch:'Karkh',outdoorRotationStartBranch:null};
 const schedule={nextFollowUp:'2026-10-08T10:00:00+03:00',note:'Called the client',followUpType:'call',followUpDetail:'ignored',followUpOwnerId:indoor.id};
-const base={id:'one',created_by:outdoor.id,structure_readiness:'ready',sales_status:'new_lead',follow_up_owner_id:indoor.id,next_follow_up_at:'2026-10-08T07:00:00Z',assigned_outdoor_sales_id:outdoor.id};
+const base={id:'one',branch:'Karkh',created_by:outdoor.id,structure_readiness:'ready',sales_status:'new_lead',follow_up_owner_id:indoor.id,next_follow_up_at:'2026-10-08T07:00:00Z',assigned_outdoor_sales_id:outdoor.id};
 test('scheduling requires a contact type, valid owner and date, and a description for Other',()=>{
  assert.deepEqual(followUps.normalizeFollowUp(schedule),{...schedule,nextFollowUp:'2026-10-08T07:00:00.000Z',followUpDetail:''});
  for(const patch of [{followUpType:''},{followUpType:'invented'},{followUpOwnerId:''},{followUpOwnerId:'not-a-uuid'},{nextFollowUp:'invalid'},{followUpType:'other',followUpDetail:''},{followUpType:'other',followUpDetail:'x'.repeat(121)},{note:'x'.repeat(2001)}])assert.throws(()=>followUps.normalizeFollowUp({...schedule,...patch}));

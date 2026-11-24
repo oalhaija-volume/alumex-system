@@ -10,15 +10,17 @@ import { projectStage, stageDetails } from '@/lib/workflow/stages';
 import { projectVisitHistory, visitEntryLabel, visitOutcomeLabel } from '@/lib/workflow/projectLog';
 import { DashboardProjectFilters } from './DashboardProjectFilters';
 import { ProjectNameEditor } from './ProjectNameEditor';
-import { card, Notice, useResource, Workspace } from './ui';
+import { card, Notice, useNow, useResource, Workspace } from './ui';
 
 export function OutdoorProjectLog() {
   const { term, formatDateTime, formatNumber } = useI18n();
   const { data, error, loading, reload } = useResource<SalesWorkspaceData>('/api/workspace');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const now = useNow();
+  const date = now > 0 ? new Date(now) : undefined;
   const projects = data?.projects ?? [];
-  const assigned = new Set(data ? measurementTasks(projects, data.actor).map(project => project.id) : []);
+  const assigned = new Set(data ? measurementTasks(projects, data.actor, date).map(project => project.id) : []);
   const selected = projects.filter(project => matchesProjectSearch(project, search) && (filter === 'all' || projectStage(project) === filter));
 
   return <Workspace title={term('Project log')} description={term('Your registered projects, measurement visits and follow-up progress.')}>

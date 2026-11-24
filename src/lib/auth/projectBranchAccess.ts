@@ -7,6 +7,7 @@ type ProjectBranchActor = {
 };
 type ProjectBranchRow = {
   branch?: string | null;
+  measurement_branch?: 'Karkh' | 'Rasafa' | null;
   governorate?: string | null;
   governorate_office?: 'Karkh' | null;
   created_by?: string | null;
@@ -36,6 +37,15 @@ export function effectiveProjectBranch(project: Pick<ProjectBranchRow, 'branch' 
     ? 'Najaf' : project.branch;
 }
 
+// Measurement territory is separate from the immutable registering office.
+// Overrides never move Province/Najaf records across their existing boundary.
+export function effectiveMeasurementBranch(project: Pick<ProjectBranchRow, 'branch' | 'measurement_branch' | 'governorate' | 'governorate_office'>): string | null | undefined {
+  const branch = effectiveProjectBranch(project);
+  return (branch === 'Karkh' || branch === 'Rasafa')
+    && (project.measurement_branch === 'Karkh' || project.measurement_branch === 'Rasafa')
+    ? project.measurement_branch : branch;
+}
+
 // Baghdad Outdoor visibility follows the same calendar as new registrations.
 // Ownership, attribution and team assignment cannot bypass the current area.
 export function canAccessProjectRow(
@@ -44,7 +54,7 @@ export function canAccessProjectRow(
   date: Date = new Date(),
 ): boolean {
   if (!project) return false;
-  const branch = effectiveProjectBranch(project);
+  const branch = actor.role === 'Outdoor Sales' ? effectiveMeasurementBranch(project) : effectiveProjectBranch(project);
   if (!canAccessProjectBranch(actor, branch)) return false;
   if (actor.role === 'Outdoor Sales') {
     if ((branch === 'Karkh' || branch === 'Rasafa') && outdoorSalesBranch(actor, date) !== branch) return false;

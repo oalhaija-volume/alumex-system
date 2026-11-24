@@ -163,7 +163,9 @@ test('an aborted first opening save rejects; retry reports success only after du
   assert.equal(x.timerCount, 0);
 });
 
-for (const changedScope of [{ role: 'Indoor Sales' }, { branch: 'Rasafa' }]) test(`a committed employee scope change invalidates loaded views: ${JSON.stringify(changedScope)}`, async () => {
+for (const changedScope of [{ role: 'Indoor Sales' }, { branch: 'Rasafa' },
+  { outdoorRotationStartBranch: 'Rasafa' }, { outdoorRotationStartBranch: null },
+  { outdoorTeamMemberIds: ['teammate'] }]) test(`a committed employee scope change invalidates loaded views: ${JSON.stringify(changedScope)}`, async () => {
   const x = storage();
   const pending = x.store.updateFieldState(actor.id, state => ({ ...state, actor: { ...state.actor, ...changedScope } }), 'snapshot');
   const tx = await x.open(); tx.readSuccess();
@@ -172,6 +174,29 @@ for (const changedScope of [{ role: 'Indoor Sales' }, { branch: 'Rasafa' }]) tes
   assert.deepEqual(x.events[0].detail, { source: 'snapshot', userId: actor.id, actorScopeChanged: true });
   assert.equal(x.active, actor.id);
   assert.deepEqual(x.records.get(actor.id).queue, original.queue);
+});
+
+test('verified rotation updates invalidate loaded tasks without discarding saved measurements', async () => {
+  const x = storage();
+  const retained = { ...original, actor: { ...actor, branch: 'Rasafa', outdoorRotationStartBranch: 'Karkh', outdoorTeamMemberIds: [actor.id, 'teammate'] },
+    projects: [{ id: 'saved-project', branch: 'Rasafa' }], openings: [{ id: 'saved-opening', projectId: 'saved-project' }],
+    queue: [{ id: 'saved-change', projectId: 'saved-project', payload: { note: 'Retain my work' } }] };
+  x.records.set(actor.id, structuredClone(retained));
+  const pending = x.store.updateFieldState(actor.id, state => ({ ...state, actor: { ...state.actor, outdoorRotationStartBranch: 'Rasafa' } }), 'snapshot');
+  const tx = await x.open(); tx.readSuccess();
+  assert.equal(x.events.length, 0);
+  tx.commit(); await pending;
+  assert.equal(x.events[0].detail.actorScopeChanged, true);
+  const saved = x.records.get(actor.id);
+  assert.deepEqual(saved.projects, retained.projects); assert.deepEqual(saved.openings, retained.openings); assert.deepEqual(saved.queue, retained.queue);
+});
+
+test('reordered or repeated team IDs do not invalidate an unchanged task scope', async () => {
+  const x = storage();
+  x.records.set(actor.id, { ...structuredClone(original), actor: { ...actor, branch: 'Rasafa', outdoorRotationStartBranch: 'Rasafa', outdoorTeamMemberIds: [actor.id, 'teammate'] } });
+  const pending = x.store.updateFieldState(actor.id, state => ({ ...state, actor: { ...state.actor, outdoorTeamMemberIds: ['teammate', actor.id, 'teammate'] } }), 'snapshot');
+  const tx = await x.open(); tx.readSuccess(); tx.commit(); await pending;
+  assert.deepEqual(x.events[0].detail, { source: 'snapshot', userId: actor.id });
 });
 
 test('a failed storage request rejects instead of waiting for transaction completion', async () => {

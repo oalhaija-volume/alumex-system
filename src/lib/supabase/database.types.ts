@@ -272,6 +272,7 @@ export type Database = {
           geofence_radius_meters: number | null;
           project_type: string | null;
           branch: ProjectBranch | null;
+          measurement_branch: "Karkh" | "Rasafa" | null;
           governorate: ProjectGovernorate | null;
           governorate_office: "Karkh" | null;
           sales_engineer_id: string | null;
@@ -354,6 +355,7 @@ export type Database = {
           geofence_radius_meters?: number | null;
           project_type?: string | null;
           branch?: ProjectBranch | null;
+          measurement_branch?: "Karkh" | "Rasafa" | null;
           governorate?: ProjectGovernorate | null;
           governorate_office?: "Karkh" | null;
           sales_engineer_id?: string | null;

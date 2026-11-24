@@ -90,7 +90,14 @@ export async function readFieldState(id=activeFieldUser()):Promise<FieldState|nu
 export async function updateFieldState(id:string,change:(state:FieldState|null)=>FieldState,source?:'snapshot'):Promise<FieldState>{
  invalidateRead(id);
  let actorScopeChanged=false;
- const saving=accountRecord(id,'readwrite',(store,state)=>{const next=change(state);actorScopeChanged=!!state&&(state.actor.role!==next.actor.role||state.actor.branch!==next.actor.branch);store.put(next,id);return next;});
+ const teamScope=(actor:FieldState['actor'])=>JSON.stringify([...new Set([actor.id,...(actor.outdoorTeamMemberIds??[])])].sort());
+ const saving=accountRecord(id,'readwrite',(store,state)=>{
+  const next=change(state);
+  actorScopeChanged=!!state&&(state.actor.role!==next.actor.role||state.actor.branch!==next.actor.branch
+   ||state.actor.role==='Outdoor Sales'&&(state.actor.outdoorRotationStartBranch!==next.actor.outdoorRotationStartBranch
+    ||teamScope(state.actor)!==teamScope(next.actor)));
+  store.put(next,id);return next;
+ });
  const writes=accountWrites.get(id)??new Set<Promise<FieldState>>();writes.add(saving);accountWrites.set(id,writes);
  let next:FieldState;
  try{next=await saving;}finally{writes.delete(saving);if(!writes.size)accountWrites.delete(id);}

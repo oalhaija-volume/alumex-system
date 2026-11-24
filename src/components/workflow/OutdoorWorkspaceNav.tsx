@@ -2,15 +2,19 @@
 import {useI18n} from '@/components/i18n/I18nProvider';
 import {FieldLogoutButton} from '@/components/offline/FieldLogoutButton';
 import {NotificationCenter} from '@/components/notifications/NotificationCenter';
-import {measurementTasks} from '@/lib/workflow/salesTasks';
+import {measurementAreaForActor,measurementTasks} from '@/lib/workflow/salesTasks';
 import type {SalesWorkspaceData} from '@/lib/offline/types';
+import {useNow} from './ui';
 
 export function OutdoorWorkspaceNav({state,path,onNavigate}:{state:Pick<SalesWorkspaceData,'actor'|'projects'>|null;path:string;onNavigate:(path:string)=>void}){
  const {term,formatNumber}=useI18n();
- const count=state?measurementTasks(state.projects,state.actor).length:0;
+ const now=useNow();
+ const date=now>0?new Date(now):undefined;
+ const area=measurementAreaForActor(state?.actor,date);
+ const count=state?measurementTasks(state.projects,state.actor,date).length:0;
  return <nav aria-label={term('Outdoor Sales workspace')} className="mx-auto flex max-w-5xl flex-wrap gap-3 px-5 pt-5 print:hidden">
   <div className="flex w-full items-center justify-between gap-4">
-   {state&&<p className="min-w-0 text-sm text-slate-600">{term('Signed in as')} <bdi className="font-semibold break-words text-slate-900">{state.actor.name==='Employee'?term('Employee'):state.actor.name}</bdi></p>}
+   {state&&<div className="min-w-0 text-sm text-slate-600"><p>{term('Signed in as')} <bdi className="font-semibold break-words text-slate-900">{state.actor.name==='Employee'?term('Employee'):state.actor.name}</bdi></p>{state.actor.role==='Outdoor Sales'&&(area?<p className="mt-1 text-xs">{term('Measurement area')}: <bdi className="font-semibold text-slate-900">{term(area)}</bdi></p>:<p className="mt-1 text-xs leading-5 text-amber-800">{term('Connect and refresh projects to confirm your measurement area.')}</p>)}</div>}
    <div className="ms-auto flex shrink-0 items-center gap-2"><NotificationCenter compact onNavigate={onNavigate}/><FieldLogoutButton className="min-h-12 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600 disabled:opacity-60" /></div>
   </div>
   {[['/dashboard','Measurement assignments'],['/projects','My projects'],['/intake','New project'],['/project-log','Project log']].map(([href,label])=><button type="button" key={href} onClick={()=>onNavigate(href)} aria-current={path===href?'page':undefined} className={`relative min-h-12 rounded-md px-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600 ${path===href?'bg-blue-600 text-white':'border border-slate-300 bg-white text-slate-700'}`}>

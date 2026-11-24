@@ -26,5 +26,6 @@ export type FollowUpHistory={project:{id:string;project_name:string;project_numb
 export function normalizeMeasurementAssignment(input:Record<string,unknown>) {
  const id=input.assignedOutdoorSalesId;
  if(typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))throw new Error('Choose an active Outdoor Sales employee for measurements.');
- return {assignedOutdoorSalesId:id};
+ if(Object.hasOwn(input,'measurementBranch')&&input.measurementBranch!=='Karkh'&&input.measurementBranch!=='Rasafa')throw new Error('Choose Karkh or Rasafa as the measurement area.');
+ return {assignedOutdoorSalesId:id,...(Object.hasOwn(input,'measurementBranch')?{measurementBranch:input.measurementBranch as 'Karkh'|'Rasafa'}:{})};
 }

@@ -47,6 +47,7 @@ export async function updateSavedIndoorSales(actorId:string,assignment:Pick<Fiel
 // second local edit. A pending rename or opening must not retain a former team.
 function withCurrentProjectAccess(local:FieldProject,remote:FieldProject):FieldProject {
  return {...local,branch:remote.branch,governorate:remote.governorate,
+  ...('measurement_branch' in remote?{measurement_branch:remote.measurement_branch}:{}),
   ...('governorate_office' in remote||'governorate_office' in local?{governorate_office:remote.governorate_office}:{}),project_log_only:remote.project_log_only,
   ...('client_name' in remote?{client_name:remote.client_name,client_id:remote.client_id}:{}),
   ...('assigned_outdoor_sales_id' in remote?{assigned_outdoor_sales_id:remote.assigned_outdoor_sales_id}:{}),
@@ -313,6 +314,16 @@ export async function saveFieldChange(action:FieldChange['action'],projectId:str
     if(p.sales_status!=='new_lead'||(action==='assign-measurements'&&p.structure_readiness!=='ready'))throw new Error('Measurement assignment is only available before measurements are completed.');
     const id=payload.assignedOutdoorSalesId??p.assigned_outdoor_sales_id;const employee=s.outdoorSales?.find(e=>e.id===id)??((p.original_creator_role === 'Indoor Sales' || p.original_creator_role === 'Sales Manager')&&id===p.created_by?s.indoorSales?.find(e=>e.id===id):undefined);
     if(!employee||!canAccessProjectBranch({role:'Outdoor Sales',branch:employee.branch},effectiveProjectBranch(p)))throw new Error('Choose an employee from the project branch.');
+    if(action==='assign-measurements'&&Object.hasOwn(payload,'measurementBranch')){
+     const area=payload.measurementBranch;
+     if((area!=='Karkh'&&area!=='Rasafa')||(p.branch!=='Karkh'&&p.branch!=='Rasafa'))throw new Error('Choose Karkh or Rasafa as the measurement area.');
+     const outdoor=s.outdoorSales?.find(person=>person.id===employee.id);
+     if(outdoor){
+      if(!Object.hasOwn(outdoor,'outdoorRotationStartBranch'))throw new Error('Connect and refresh projects to confirm the measurement team.');
+      if(outdoorSalesBranch({role:'Outdoor Sales',branch:outdoor.branch,outdoorRotationStartBranch:outdoor.outdoorRotationStartBranch})!==area)throw new Error('Choose an Outdoor Sales employee covering the measurement area.');
+     }
+     p={...p,measurement_branch:area};
+    }
     change.payload={...payload,assignedOutdoorSalesId:employee.id};
     p={...p,measurement_delayed:false,assigned_outdoor_sales_id:employee.id,assignedOutdoorSales:employee.name,assignedToYou:employee.id===s.actor.id,measurement_assignment_id:change.id};
    }
@@ -351,14 +362,16 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
   return response;
  }
  if(method==='GET'){
-  const s=await readFieldState();const id=url.split('/').pop();
+  let s=await readFieldState();const id=url.split('/').pop();
   const pending=s?.queue.some(c=>url==='/api/workspace'||c.projectId===id);
   // This explicit device workspace already owns an account-scoped snapshot.
   // OfflineStatus refreshes it in the background; reads need no second API call.
   const savedProject=s?.projects.find(p=>p.id===id);
   if(savedProject?.project_log_only&&url.startsWith('/api/initial-measurements/'))return Response.json({error:'This project is available in your log for reference only.'},{status:403});
   const useSaved=isDeviceWorkspace()&&s&&(url==='/api/workspace'||savedProject);
+  let attemptedNetwork=false;
   if(!useSaved && !pending && isFieldOnline()){
+   attemptedNetwork=true;
    const controller=new AbortController();
    const abort=()=>controller.abort();
    const timeout=setTimeout(abort,8000);
@@ -375,25 +388,32 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
       if(!old)throw new Error('Offline account unavailable.');
       const registrations=new Set(old.queue.filter(change=>change.action==='register').map(change=>change.projectId));
       const unavailableProjectIds=old.projects.filter(project=>!remoteProjects.has(project.id)&&(!registrations.has(project.id)||old.unavailableProjectIds?.includes(project.id))).map(project=>project.id);
-      return {...old,actor:workspace.actor,indoorSales:workspace.indoorSales,unavailableProjectIds,projects:old.projects.map(project=>remoteProjects.has(project.id)?withCurrentProjectAccess(project,remoteProjects.get(project.id)!):project)};
-     });
+      return {...old,actor:workspace.actor,outdoorSales:workspace.outdoorSales??old.outdoorSales,indoorSales:workspace.indoorSales,unavailableProjectIds,projects:old.projects.map(project=>remoteProjects.has(project.id)?withCurrentProjectAccess(project,remoteProjects.get(project.id)!):project)};
+     },'snapshot');
     }
     if(s && url!=='/api/workspace' && data.project && data.openings && activeFieldUser()===s.actor.id)await updateFieldState(s.actor.id,old=>{
      if(!old)throw new Error('Offline account unavailable.');
      const pending=old.queue.some(change=>change.projectId===id);
      return {...old,unavailableProjectIds:(old.unavailableProjectIds??[]).filter(projectId=>projectId!==id),projects:old.projects.map(project=>project.id===id?(pending?withCurrentProjectAccess(project,data.project):{...project,...data.project}):project),openings:pending?old.openings:[...old.openings.filter(opening=>opening.projectId!==id),...data.openings.map((opening:RegistrationOpening)=>retainSkylightCapture({...opening,projectId:id!},old.openings))]};
-    });
+    },'snapshot');
     return response;
    }
    if(response.status===404 && s && id && url.startsWith('/api/initial-measurements/') && activeFieldUser()===s.actor.id){
     await updateFieldState(s.actor.id,old=>{
      if(!old)throw new Error('Offline account unavailable.');
      return {...old,unavailableProjectIds:[...new Set([...(old.unavailableProjectIds??[]),id])]};
-    });
+    },'snapshot');
    }
    if(response.status<500)return response;
    }catch{if(init?.signal?.aborted)throw new DOMException('Request cancelled','AbortError');connection(false);/* Read the last saved local copy below. */}
    finally{clearTimeout(timeout);init?.signal?.removeEventListener('abort',abort);}
+  }
+  // A slow request may have crossed the area boundary or a verified scope
+  // refresh. Re-read the retained record instead of returning its old projection.
+  if(attemptedNetwork){
+   const requestedActor=s?.actor.id;
+   s=await readFieldState();
+   if(requestedActor&&s?.actor.id!==requestedActor)return Response.json({error:'Sign in with the employee who opened this workspace.'},{status:401});
   }
   if(!s)return Response.json({error:'Open this workspace online once before working offline.'},{status:503});
   if(url==='/api/workspace')return Response.json({actor:s.actor,outdoorSales:s.outdoorSales??[],indoorSales:s.indoorSales??[],projects:s.projects});

@@ -3224,7 +3224,9 @@
     "Open Edge Downloads with Ctrl+J, then open the menu (⋯) beside Setup.exe.": "Open Edge Downloads with Ctrl+J, then open the menu (⋯) beside Setup.exe.",
     "Choose these options for this file:": "Choose these options for this file:",
     "Open Setup.exe. If Windows then displays “Windows protected your PC”, use:": "Open Setup.exe. If Windows then displays “Windows protected your PC”, use:",
-    "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled.": "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled."
+    "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled.": "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled.",
+    "Measurement area": "Measurement area",
+    "Connect and refresh projects to confirm your measurement area.": "Connect and refresh projects to confirm your measurement area."
   },
   "registration": {
     "title": "New client & project",

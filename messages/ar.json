@@ -3224,7 +3224,9 @@
     "Open Edge Downloads with Ctrl+J, then open the menu (⋯) beside Setup.exe.": "افتح التنزيلات في Edge باستخدام Ctrl+J، ثم افتح القائمة (⋯) بجانب Setup.exe.",
     "Choose these options for this file:": "اختر هذه الخيارات لهذا الملف:",
     "Open Setup.exe. If Windows then displays “Windows protected your PC”, use:": "افتح Setup.exe. إذا عرض Windows بعد ذلك رسالة «قام Windows بحماية الكمبيوتر»، فاختر:",
-    "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled.": "إذا لم تظهر هذه الخيارات أو كانت مؤسستك تحظر التطبيق، اطلب من مسؤول تقنية المعلومات اعتماد ملف التثبيت هذا. أبقِ وسائل حماية Windows مفعّلة."
+    "If those options are missing or your organization blocks the app, ask your IT administrator to approve this installer. Keep Windows security protections enabled.": "إذا لم تظهر هذه الخيارات أو كانت مؤسستك تحظر التطبيق، اطلب من مسؤول تقنية المعلومات اعتماد ملف التثبيت هذا. أبقِ وسائل حماية Windows مفعّلة.",
+    "Measurement area": "منطقة القياسات",
+    "Connect and refresh projects to confirm your measurement area.": "اتصل بالإنترنت وحدّث المشاريع لتأكيد منطقة القياسات المخصصة لك."
   },
   "registration": {
     "title": "عميل ومشروع جديد",

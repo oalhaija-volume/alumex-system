@@ -32,7 +32,7 @@ const teammateId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const projectId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const openingId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const version = '2026-11-04T08:00:00Z';
-const actor = { id: actorId, role: 'Outdoor Sales', outdoorTeamMemberIds: [actorId, teammateId] };
+const actor = { id: actorId, role: 'Outdoor Sales', branch: 'Karkh', outdoorRotationStartBranch: null, outdoorTeamMemberIds: [actorId, teammateId] };
 const openingInput = { id: openingId, floor: 'GF', room: 'Kitchen', otherRoom: '', width: 100, height: 200, quantity: 1, structuralType: 'Window', openingType: 'Sliding' };
 
 function fixture({ role = 'Outdoor Sales', openingCreator = actorId, projectCreator = teammateId, missingOpening = false, openingError = null } = {}) {

@@ -29,7 +29,7 @@ export async function GET(request:Request){
   if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
   return NextResponse.json({actor:actorFromProfile(profile.data)},{headers:{'Cache-Control':'no-store'}});
  }
- let directoryQuery=admin.from('profiles').select('id,full_name,username,role,branch').in('role',['Indoor Sales', 'Sales Manager','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name');
+ let directoryQuery=admin.from('profiles').select('id,full_name,username,role,branch,outdoor_rotation_start_branch').in('role',['Indoor Sales', 'Sales Manager','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name');
  if(!hasGlobalProjectAccess(auth.role))directoryQuery=auth.profile?.branch==='Karkh'||auth.profile?.branch==='Rasafa'
   ?directoryQuery.or(`branch.eq.${auth.profile.branch},and(role.eq."Outdoor Sales",branch.in.(Karkh,Rasafa))`)
   :directoryQuery.eq('branch',auth.profile?.branch??'');
@@ -55,7 +55,7 @@ export async function GET(request:Request){
  if(directory.error||people.error)return NextResponse.json({error:'Unable to load employee assignments.'},{status:500});
  if(openings.error||clients.error||reports.error)return NextResponse.json({error:'Unable to download measurements.'},{status:500});
  const indoorSales=directory.data.filter(p=>(p.role === 'Indoor Sales' || p.role === 'Sales Manager')).map(p=>({id:p.id,name:p.full_name??p.username??'Employee',role:p.role,branch:p.branch}));
- const outdoorSales=directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee',branch:p.branch}));
+ const outdoorSales=directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee',branch:p.branch,outdoorRotationStartBranch:p.outdoor_rotation_start_branch??null}));
  const employees=new Map((people.data??[]).map(p=>[p.id,p]));
  const contacts=new Map(clients.data.map(c=>[c.id,c]));
  const name=(id:string|null)=>id?(employees.get(id)?.full_name??employees.get(id)?.username):null;
@@ -67,6 +67,7 @@ export async function POST(request:Request){
  if(!body||body.userId!==auth.user.id||!uuid.test(body.id)||!uuid.test(body.projectId)||!body.payload||!Number.isFinite(Date.parse(body.recordedAt)))return NextResponse.json({error:'Invalid saved change or account. Sign in with the employee who recorded this work.'},{status:400});
  if(body.acknowledgeOnly===true&&auth.role!=='Outdoor Sales')return NextResponse.json({error:'This saved change cannot be acknowledged.'},{status:403,headers:{'Cache-Control':'private, no-store'}});
  if(['follow-up','ready','assign-measurements','request-openings'].includes(body.action)&&!canAccessCRM(auth.role))return NextResponse.json({error:'CRM access is limited to Indoor Sales and company leadership.'},{status:403});
+ if(Object.hasOwn(body.payload,'measurementBranch')&&body.action!=='assign-measurements')return NextResponse.json({error:'Measurement area can be changed only when assigning a Baghdad project.'},{status:400});
  let payload:Json={};
  if(body.action==='register'){
   const c=body.payload.client,p=body.payload.project;
@@ -143,9 +144,10 @@ export async function POST(request:Request){
  }
  const admin=createAdminClient();
  // SQL validates the active actor and creator/branch access before any replay.
- if(!hasGlobalProjectAccess(auth.role)){
-  const project=await admin.from('projects').select('branch,governorate,governorate_office,created_by,assigned_outdoor_sales_id').eq('id',body.projectId).maybeSingle();
+ if(!hasGlobalProjectAccess(auth.role)||Object.hasOwn(body.payload,'measurementBranch')){
+  const project=await admin.from('projects').select('branch,measurement_branch,governorate,governorate_office,created_by,assigned_outdoor_sales_id').eq('id',body.projectId).maybeSingle();
   if(project.error)return NextResponse.json({error:'Unable to verify project access.'},{status:503});
+  if(Object.hasOwn(body.payload,'measurementBranch')&&project.data&&!['Karkh','Rasafa'].includes(project.data.branch??''))return NextResponse.json({error:'Measurement area can be changed only when assigning a Baghdad project.'},{status:400});
   if(project.data&&!canAccessProjectRow({id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorRotationStartBranch:auth.profile?.outdoor_rotation_start_branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds},project.data))return NextResponse.json({error:'Project not found.'},{status:404});
  }
  const result=await admin.rpc('sync_field_change',{p_operation:body.id,p_actor:auth.user.id,p_project:body.projectId,p_action:body.action,p_payload:payload,p_recorded_at:body.recordedAt,p_expected_updated_at:typeof body.expectedUpdatedAt==='string'?body.expectedUpdatedAt:null});
@@ -167,6 +169,7 @@ export async function POST(request:Request){
   const actor={id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorRotationStartBranch:auth.profile?.outdoor_rotation_start_branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds};
   const visibleArchive=hasGlobalProjectAccess(auth.role)||(previous&&typeof previous==='object'&&!Array.isArray(previous)
    &&canAccessProjectRow(actor,{branch:typeof previous.branch==='string'?previous.branch:null,governorate:typeof previous.governorate==='string'?previous.governorate:null,
+    measurement_branch:previous.measurement_branch==='Karkh'||previous.measurement_branch==='Rasafa'?previous.measurement_branch:null,
     governorate_office:previous.governorate_office==='Karkh'?'Karkh':null,
     created_by:typeof previous.created_by==='string'?previous.created_by:null,assigned_outdoor_sales_id:typeof previous.assigned_outdoor_sales_id==='string'?previous.assigned_outdoor_sales_id:null}));
   if(!archived.error&&archived.data&&visibleArchive)return NextResponse.json({code:'project_deleted',error:'This project was deleted by an Admin. Saved work cannot be synced and will be kept on this device.'},{status:410,headers:{'Cache-Control':'no-store'}});

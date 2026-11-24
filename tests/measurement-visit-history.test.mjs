@@ -3,6 +3,12 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 
+// Keep unrelated workflow fixtures in the first half of Baghdad's month.
+test.beforeEach(context => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-14T08:00:00Z') });
+});
+
+
 function load(path) {
  const code=ts.transpileModule(readFileSync(new URL(`../src/${path}.ts`,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
  const exports={};

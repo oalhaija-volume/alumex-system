@@ -44,7 +44,7 @@ const history = project(7, { project_name: 'Previous visit only', created_by: ot
 const najaf = project(8, { branch: 'Najaf', project_name: 'Separate region entry' });
 const unrelated = project(9, { project_name: 'Unrelated credited entry', created_by: other, legacy_outdoor_sales_id: other, project_log_only: true });
 
-for (const locale of ['en', 'ar'] as const) test(`${locale}: own and credited projects stay findable across rotation, renamed clients and offline reopen`, async ({ page }, testInfo) => {
+for (const locale of ['en', 'ar'] as const) test(`${locale}: own and credited projects follow the current area across midnight, client search and offline reopen`, async ({ page }, testInfo) => {
   const messages = locale === 'ar' ? ar : en;
   const terms = messages.terms as Record<string, string>, tr = (key: string) => terms[key] ?? key;
   const state: FieldState = { actor, projects: [...own, ...credited, team, history, najaf, unrelated], openings: [], outdoorSales: [actor], indoorSales: [], queue: [], syncedAt: null };
@@ -70,22 +70,23 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: own and credited pr
   await page.goto('/offline?path=/projects');
   await expect(page.getByRole('heading', { name: tr('My projects'), exact: true })).toBeVisible();
   const records = page.locator('article[id^="project-"]');
-  await expect(records).toHaveCount(6);
-  for (const row of [...own, ...credited, team]) await expect(page.locator(`#project-${row.id}`).getByRole('heading', { name: row.project_name, exact: true })).toBeVisible();
-  for (const row of credited) {
+  const firstHalfVisible = [own[1], own[2], credited[1], team];
+  await expect(records).toHaveCount(4);
+  for (const row of firstHalfVisible) await expect(page.locator(`#project-${row.id}`).getByRole('heading', { name: row.project_name, exact: true })).toBeVisible();
+  for (const row of [credited[1]]) {
     const article = page.locator(`#project-${row.id}`);
     await expect(article).toContainText(tr('Original Outdoor Sales owner'));
     await expect(article).toContainText(tr('This project is available in your log for reference only.'));
     await expect(article.getByRole('link', { name: tr('Open project'), exact: true })).toHaveCount(0);
   }
-  for (const row of [...own, team]) await expect(page.locator(`#project-${row.id}`).getByRole('link', { name: tr('Open project'), exact: true })).toBeVisible();
-  for (const row of [history, najaf, unrelated]) await expect(page.getByRole('heading', { name: row.project_name, exact: true })).toHaveCount(0);
+  for (const row of [own[1], own[2], team]) await expect(page.locator(`#project-${row.id}`).getByRole('link', { name: tr('Open project'), exact: true })).toBeVisible();
+  for (const row of [own[0], credited[0], history, najaf, unrelated]) await expect(page.getByRole('heading', { name: row.project_name, exact: true })).toHaveCount(0);
   const search = page.getByRole('searchbox', { name: tr('Find a project'), exact: true });
-  await search.fill(credited[0].client_name!);
+  await search.fill(credited[1].client_name!);
   await expect(records).toHaveCount(1);
-  await expect(page.getByRole('heading', { name: credited[0].project_name, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: credited[1].project_name, exact: true })).toBeVisible();
   await page.getByRole('button', { name: tr('Clear filters'), exact: true }).click();
-  await expect(records).toHaveCount(6);
+  await expect(records).toHaveCount(4);
   await expect(page.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath(`${locale}-own-and-credited-projects.png`), fullPage: true });
@@ -96,7 +97,7 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: own and credited pr
   failSnapshot = true;
   await refresh.click();
   await expect(savedWarning).toBeVisible();
-  await expect(records).toHaveCount(6);
+  await expect(records).toHaveCount(4);
   await expect(page.getByText(tr('Last synced'), { exact: false })).toBeVisible();
 
   // A manual retry bypasses the one-minute background cache and downloads a
@@ -105,20 +106,28 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: own and credited pr
   state.projects.push(newlyAssigned);
   failSnapshot = false;
   await refresh.click();
-  await expect(records).toHaveCount(7);
+  await expect(records).toHaveCount(5);
   await expect(page.getByRole('heading', { name: newlyAssigned.project_name, exact: true })).toBeVisible();
   await expect(savedWarning).toHaveCount(0);
 
-  // Crossing Baghdad midnight changes creation territory, not saved entries.
+  const savedBeforeRotation = await savedFieldState(page);
+  // Crossing Baghdad midnight hides the previous area, including creator,
+  // legacy-credit and assigned rows, while retained storage stays intact.
   await page.clock.setFixedTime(new Date('2026-11-16T00:01:00+03:00'));
   await page.evaluate(() => { sessionStorage.setItem('visibility-offline', '1'); window.dispatchEvent(new Event('offline')); });
   await page.reload();
-  await expect(records).toHaveCount(7);
+  await expect(records).toHaveCount(3);
+  for (const row of [own[0], own[2], credited[0]]) await expect(page.locator(`#project-${row.id}`)).toBeVisible();
+  for (const row of [own[1], credited[1], team, newlyAssigned, history, najaf, unrelated]) await expect(page.locator(`#project-${row.id}`)).toHaveCount(0);
   await search.fill(credited[0].client_name!);
   await expect(records).toHaveCount(1);
   await expect(page.getByRole('heading', { name: credited[0].project_name, exact: true })).toBeVisible();
   await expect(page.locator(`#project-${credited[0].id}`).getByRole('link')).toHaveCount(0);
-  expect((await savedFieldState(page)).queue).toEqual([]);
+  const saved = await savedFieldState(page);
+  expect(saved.projects).toEqual(savedBeforeRotation.projects);
+  expect(saved.openings).toEqual(savedBeforeRotation.openings);
+  expect(saved.queue).toEqual(savedBeforeRotation.queue);
+  expect(saved.queue).toEqual([]);
   expect(writes).toEqual([]);
   expect(errors).toEqual([]);
 });

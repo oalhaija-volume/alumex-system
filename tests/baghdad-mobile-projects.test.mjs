@@ -3,6 +3,12 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 
+// Keep unrelated workflow fixtures in the first half of Baghdad's month.
+test.beforeEach(context => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-14T08:00:00Z') });
+});
+
+
 function load(path) {
   const code = ts.transpileModule(readFileSync(new URL(`../src/${path}.ts`, import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -38,22 +44,23 @@ function fixture(projects, failOffset) {
 }
 
 const base = { created_by: 'outdoor', assigned_outdoor_sales_id: 'someone-else', created_at: '2026-11-14T10:00:00Z' };
-for (const branch of ['Karkh', 'Rasafa']) test(`${branch} mobile workspace includes every own entry beyond the first database page`, async () => {
+for (const branch of ['Karkh', 'Rasafa']) test(`${branch} mobile workspace paginates all rows and exposes every current-area entry`, async () => {
   const own = Array.from({ length: 1205 }, (_, index) => ({ ...base, id: `own-${index}`, branch: ['Karkh', 'Rasafa', 'Governorates'][index % 3], governorate: index % 3 === 2 ? 'البصرة' : null }));
   const privateRows = [
     { ...base, id: 'najaf', branch: 'Najaf' },
     { ...base, id: 'retired-najaf', branch: 'Governorates', governorate: ' النجف ' },
     { ...base, id: 'unrelated', branch: 'Karkh', created_by: 'someone-else' },
   ];
-  const actor = { id: 'outdoor', role: 'Outdoor Sales', branch };
+  const actor = { id: 'outdoor', role: 'Outdoor Sales', branch, outdoorRotationStartBranch: branch };
   const admin = fixture([...own, ...privateRows]);
   const result = await loadWorkspaceProjects(admin, actor);
   assert.equal(result.error, null);
-  assert.equal(result.data.length, own.length);
-  assert.deepEqual(new Set(result.data.map(project => project.id)), new Set(own.map(project => project.id)));
+  const visible = own.filter(project => project.branch === branch || project.branch === 'Governorates');
+  assert.equal(result.data.length, visible.length);
+  assert.deepEqual(new Set(result.data.map(project => project.id)), new Set(visible.map(project => project.id)));
   assert.deepEqual(admin.reads.filter(read => read.table === 'projects').map(read => read.offset), [0, 1000]);
   const state = { actor, projects: result.data, queue: [], openings: [], syncedAt: null };
-  assert.equal(visibleFieldState(state).projects.length, own.length);
+  assert.equal(visibleFieldState(state).projects.length, visible.length);
 });
 
 test('a later project-page error does not return a silently incomplete mobile workspace', async () => {

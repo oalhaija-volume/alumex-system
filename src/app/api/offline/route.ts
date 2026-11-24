@@ -23,7 +23,7 @@ export async function GET(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const admin=createAdminClient();
  const profileQuery=admin.from('profiles').select('full_name,username,branch,outdoor_rotation_start_branch').eq('id',auth.user.id).single();
- const actorFromProfile=(profile:{full_name:string|null;username:string|null;branch:string|null;outdoor_rotation_start_branch:string|null}|null)=>({id:auth.user.id,name:profile?.full_name??profile?.username??'Employee',role:auth.role,branch:profile?.branch??null,outdoorRotationStartBranch:auth.role==='Outdoor Sales'?profile?.outdoor_rotation_start_branch??null:null,outdoorTeamMemberIds:auth.outdoorTeamMemberIds});
+ const actorFromProfile=(profile:{full_name:string|null;username:string|null;branch:string|null;outdoor_rotation_start_branch:'Karkh'|'Rasafa'|null}|null)=>({id:auth.user.id,name:profile?.full_name??profile?.username??'Employee',role:auth.role,branch:profile?.branch??null,outdoorRotationStartBranch:auth.role==='Outdoor Sales'?profile?.outdoor_rotation_start_branch??null:null,outdoorTeamMemberIds:auth.outdoorTeamMemberIds});
  if(new URL(request.url).searchParams.has('session')){
   const profile=await profileQuery;
   if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
@@ -33,7 +33,7 @@ export async function GET(request:Request){
  if(!hasGlobalProjectAccess(auth.role))directoryQuery=auth.profile?.branch==='Karkh'||auth.profile?.branch==='Rasafa'
   ?directoryQuery.or(`branch.eq.${auth.profile.branch},and(role.eq."Outdoor Sales",branch.in.(Karkh,Rasafa))`)
   :directoryQuery.eq('branch',auth.profile?.branch??'');
- const [profile,projects,directory]=await Promise.all([profileQuery,loadWorkspaceProjects(admin,{id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}),directoryQuery]);
+ const [profile,projects,directory]=await Promise.all([profileQuery,loadWorkspaceProjects(admin,{id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorRotationStartBranch:auth.profile?.outdoor_rotation_start_branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}),directoryQuery]);
  if(profile.error)return NextResponse.json({error:'Unable to load your employee branch.'},{status:503});
  const actor=actorFromProfile(profile.data);
  if(projects.error)return NextResponse.json({error:'Unable to download projects.'},{status:500});
@@ -65,6 +65,7 @@ export async function POST(request:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
  const body=await request.json().catch(()=>null);
  if(!body||body.userId!==auth.user.id||!uuid.test(body.id)||!uuid.test(body.projectId)||!body.payload||!Number.isFinite(Date.parse(body.recordedAt)))return NextResponse.json({error:'Invalid saved change or account. Sign in with the employee who recorded this work.'},{status:400});
+ if(body.acknowledgeOnly===true&&auth.role!=='Outdoor Sales')return NextResponse.json({error:'This saved change cannot be acknowledged.'},{status:403,headers:{'Cache-Control':'private, no-store'}});
  if(['follow-up','ready','assign-measurements','request-openings'].includes(body.action)&&!canAccessCRM(auth.role))return NextResponse.json({error:'CRM access is limited to Indoor Sales and company leadership.'},{status:403});
  let payload:Json={};
  if(body.action==='register'){
@@ -129,19 +130,30 @@ export async function POST(request:Request){
  }else if(body.action==='delay-measurements'){
   try{payload=normalizeMeasurementDelay(body.payload);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  }else if(!['finish','reopen','ready','resume-measurements'].includes(body.action))return NextResponse.json({error:'Unknown offline action.'},{status:400});
+ if(body.acknowledgeOnly===true){
+  // This read-only receipt check never replays a write or returns a hidden
+  // project snapshot. SQL verifies the exact actor, action and normalized hash.
+  try{
+   const acknowledged=await createAdminClient().rpc('acknowledge_hidden_field_receipt',{p_operation:body.id,p_actor:auth.user.id,p_project:body.projectId,p_action:body.action,p_payload:payload});
+   if(acknowledged.error)return NextResponse.json({error:'Unable to verify the saved change. Try again when connected.'},{status:503,headers:{'Cache-Control':'private, no-store'}});
+   return acknowledged.data===true
+    ?NextResponse.json({acknowledged:true,operationId:body.id,projectId:body.projectId},{headers:{'Cache-Control':'private, no-store'}})
+    :NextResponse.json({error:'Project not found.'},{status:404,headers:{'Cache-Control':'private, no-store'}});
+  }catch{return NextResponse.json({error:'Unable to verify the saved change. Try again when connected.'},{status:503,headers:{'Cache-Control':'private, no-store'}});}
+ }
  const admin=createAdminClient();
  // SQL validates the active actor and creator/branch access before any replay.
  if(!hasGlobalProjectAccess(auth.role)){
   const project=await admin.from('projects').select('branch,governorate,governorate_office,created_by,assigned_outdoor_sales_id').eq('id',body.projectId).maybeSingle();
   if(project.error)return NextResponse.json({error:'Unable to verify project access.'},{status:503});
-  if(project.data&&!canAccessProjectRow({id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds},project.data))return NextResponse.json({error:'Project not found.'},{status:404});
+  if(project.data&&!canAccessProjectRow({id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorRotationStartBranch:auth.profile?.outdoor_rotation_start_branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds},project.data))return NextResponse.json({error:'Project not found.'},{status:404});
  }
  const result=await admin.rpc('sync_field_change',{p_operation:body.id,p_actor:auth.user.id,p_project:body.projectId,p_action:body.action,p_payload:payload,p_recorded_at:body.recordedAt,p_expected_updated_at:typeof body.expectedUpdatedAt==='string'?body.expectedUpdatedAt:null});
  if(result.error&&['Project is not available to this employee','This project was deleted. Its saved offline work cannot be synced.'].includes(result.error.message)){
   // A missing project may have been deleted while the employee was offline.
   // Confirm deletion and the employee's former access before disclosing it.
   let deletion=admin.from('audit_events').select('id,previous_value').eq('action','project_deleted').eq('entity_type','project').eq('entity_id',body.projectId);
-  const branches=projectBranchesForActor({role:auth.role,branch:auth.profile?.branch});
+  const branches=projectBranchesForActor({role:auth.role,branch:auth.profile?.branch,outdoorRotationStartBranch:auth.profile?.outdoor_rotation_start_branch});
   const archiveBranches=branches?.includes('Najaf')?[...branches,'Governorates']:branches;
   if(auth.role==='Outdoor Sales'){
    const ownEntry=`previous_value->>created_by.eq.${auth.user.id}`;
@@ -152,7 +164,7 @@ export async function POST(request:Request){
   }else if(archiveBranches!==null)deletion=archiveBranches.length?deletion.in('previous_value->>branch',archiveBranches):deletion.eq('previous_value->>branch','');
   const archived=await deletion.limit(1).maybeSingle();
   const previous=archived.data?.previous_value;
-  const actor={id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds};
+  const actor={id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorRotationStartBranch:auth.profile?.outdoor_rotation_start_branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds};
   const visibleArchive=hasGlobalProjectAccess(auth.role)||(previous&&typeof previous==='object'&&!Array.isArray(previous)
    &&canAccessProjectRow(actor,{branch:typeof previous.branch==='string'?previous.branch:null,governorate:typeof previous.governorate==='string'?previous.governorate:null,
     governorate_office:previous.governorate_office==='Karkh'?'Karkh':null,

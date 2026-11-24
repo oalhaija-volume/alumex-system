@@ -3,6 +3,12 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 
+// Keep unrelated workflow fixtures in the first half of Baghdad's month.
+test.beforeEach(context => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-14T08:00:00Z') });
+});
+
+
 const actorId = 'operations-manager';
 const timestamp = '2026-10-20T08:00:00Z';
 const privateContract = { privateTerms: 'CONFIDENTIAL_CONTRACT', total: 12345 };

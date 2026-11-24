@@ -3,6 +3,12 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 
+// Keep unrelated workflow fixtures in the first half of Baghdad's month.
+test.beforeEach(context => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-14T08:00:00Z') });
+});
+
+
 const actorId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const globalRoles = ['Admin', 'Sales Director', 'Company Owner'];
 const offices = ['Karkh', 'Rasafa', 'Najaf'];
@@ -95,7 +101,7 @@ function fixture(role, branch, overrides = {}) {
 
 const allowedRows = (role, branch) => projectRows.filter(project => globalRoles.includes(role)
   || offices.includes(branch) && (role === 'Outdoor Sales' && branch !== 'Najaf'
-    ? ['Karkh', 'Rasafa', 'Governorates'].includes(project.branch)
+    ? ['Karkh', 'Governorates'].includes(project.branch)
     : project.branch === branch || branch === 'Karkh' && project.branch === 'Governorates'));
 
 const { appRoles } = moduleLoader({})('src/lib/auth/roles');
@@ -181,7 +187,7 @@ for (const branch of ['Rasafa', 'Najaf']) for (const history of ['legacy', 'meas
         : [],
     });
     const { data, error } = await x.load('src/lib/measurements/visitHistory').loadWorkspaceProjects(x.admin,
-      { id: actorId, role: 'Outdoor Sales', branch, outdoorTeamMemberIds: [actorId] });
+      { id: actorId, role: 'Outdoor Sales', branch, outdoorRotationStartBranch: branch === 'Rasafa' ? 'Rasafa' : null, outdoorTeamMemberIds: [actorId] });
     assert.equal(error, null);
     assert.deepEqual(data.map(project => project.id), [current.id]);
   });

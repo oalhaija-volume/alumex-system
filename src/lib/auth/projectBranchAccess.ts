@@ -1,4 +1,10 @@
-type ProjectBranchActor = { role: string; branch?: string | null };
+import { outdoorSalesBranch, type OutdoorRotationStartBranch } from '@/lib/intake/outdoorRotationSchedule';
+
+type ProjectBranchActor = {
+  role: string;
+  branch?: string | null;
+  outdoorRotationStartBranch?: OutdoorRotationStartBranch | null;
+};
 type ProjectBranchRow = {
   branch?: string | null;
   governorate?: string | null;
@@ -11,8 +17,8 @@ export function hasGlobalProjectAccess(role: string | null | undefined): boolean
   return role === 'Admin' || role === 'Sales Director' || role === 'Company Owner';
 }
 
-// Karkh handles Governorates follow-up. Baghdad Outdoor Sales work across
-// both Baghdad areas; Najaf employees remain within Najaf.
+// Static branch capability keeps assignments and original sales attribution
+// valid across the rotation. Row visibility applies the current area below.
 export function canAccessProjectBranch(
   actor: ProjectBranchActor,
   projectBranch: string | null | undefined,
@@ -30,16 +36,18 @@ export function effectiveProjectBranch(project: Pick<ProjectBranchRow, 'branch' 
     ? 'Najaf' : project.branch;
 }
 
-// Creation uses the calendar guard in outdoorRotation. Saved Baghdad entries
-// remain available across both halves of the month, within their region.
+// Baghdad Outdoor visibility follows the same calendar as new registrations.
+// Ownership, attribution and team assignment cannot bypass the current area.
 export function canAccessProjectRow(
   actor: ProjectBranchActor & { id?: string; outdoorTeamMemberIds?: readonly string[] },
   project: ProjectBranchRow | null | undefined,
+  date: Date = new Date(),
 ): boolean {
   if (!project) return false;
   const branch = effectiveProjectBranch(project);
   if (!canAccessProjectBranch(actor, branch)) return false;
   if (actor.role === 'Outdoor Sales') {
+    if ((branch === 'Karkh' || branch === 'Rasafa') && outdoorSalesBranch(actor, date) !== branch) return false;
     if (actor.id && project.created_by === actor.id) return true;
     if (branch === 'Governorates' && actor.branch !== 'Karkh') {
       const assignee = project.assigned_outdoor_sales_id;

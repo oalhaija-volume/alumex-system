@@ -4,7 +4,19 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { canReactivateProject, normalizeReactivation } from '../src/lib/workflow/reactivation.ts';
 import { supportsOfflineWorkspace } from '../src/lib/offline/device.ts';
-import * as branchAccess from '../src/lib/auth/projectBranchAccess.ts';
+
+function load(url) {
+  const source = ts.transpileModule(readFileSync(url, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const exports = {};
+  new Function('require', 'exports', source)(name => {
+    assert.equal(name, '@/lib/intake/outdoorRotationSchedule');
+    return load(new URL('../src/lib/intake/outdoorRotationSchedule.ts', import.meta.url));
+  }, exports);
+  return exports;
+}
+const branchAccess = load(new URL('../src/lib/auth/projectBranchAccess.ts', import.meta.url));
 
 const cancelled = { sales_status: 'cancelled', client_cancelled_at: '2026-10-19T09:00:00Z' };
 test('only Indoor Sales and Admin can reactivate client cancellations', () => {

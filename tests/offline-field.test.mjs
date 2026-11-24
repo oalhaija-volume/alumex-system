@@ -6,7 +6,7 @@ const actualDate = Date;
 test.beforeEach(context => {
  if (Date === actualDate) context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-14T08:00:00Z') });
 });
-function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/measurements/openingOwnership')return load('../src/lib/measurements/openingOwnership.ts',{});if(n==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(n==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts');if(n==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts');if(n==='./projectAccess')return load('../src/lib/offline/projectAccess.ts');if(n==='@/lib/location/coordinates')return load('../src/lib/location/coordinates.ts');if(n==='./device')return deps[n]??{isOfflineDevice:()=>true};if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/projectBranch'||n==='./projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(n==='@/lib/intake/outdoorRotation')return load('../src/lib/intake/outdoorRotation.ts');if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/legacyOutdoorSales')return load('../src/lib/intake/legacyOutdoorSales.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
+function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='@/lib/intake/outdoorRotationSchedule'||n==='./outdoorRotationSchedule')return load('../src/lib/intake/outdoorRotationSchedule.ts',{});if(n==='@/lib/measurements/openingOwnership')return load('../src/lib/measurements/openingOwnership.ts',{});if(n==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(n==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts');if(n==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts');if(n==='./projectAccess')return load('../src/lib/offline/projectAccess.ts');if(n==='@/lib/location/coordinates')return load('../src/lib/location/coordinates.ts');if(n==='./device')return deps[n]??{isOfflineDevice:()=>true};if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/projectBranch'||n==='./projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(n==='@/lib/intake/outdoorRotation')return load('../src/lib/intake/outdoorRotation.ts');if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/legacyOutdoorSales')return load('../src/lib/intake/legacyOutdoorSales.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
 const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Employee',role:'Indoor Sales',branch:'Karkh'};
 // Employee office identifies Baghdad or Najaf; the calendar selects a Baghdad area.
 function outdoorActorForCurrentBranch(branch) {
@@ -699,7 +699,7 @@ test('an Outdoor employee without an office cannot queue a project in any branch
  }
 });
 
-test('a server access rejection preserves every queued change and retries the same operation after access is restored',async()=>{
+test('a hidden-area receipt rejection preserves queued work and retries the same operations when access returns',async()=>{
  const outdoor=outdoorActorForCurrentBranch('Karkh');
  const x=setup({actor:outdoor});
  await x.client.saveFieldChange('register',projectId,{...payload,project:{...payload.project,branch:'Karkh'}});
@@ -716,15 +716,17 @@ test('a server access rejection preserves every queued change and retries the sa
   return Response.json({project:{...x.state.projects[0],project_number:'PRJ-SYNCED',updated_at:new Date().toISOString()}});
  };
  await x.client.syncFieldChanges();
- assert.equal(posted.length,1,'A rejected registration holds later changes for the same project');
+ assert.equal(posted.length,1,'A rejected acknowledgement holds later changes for the same hidden project');
+ assert.equal(posted[0].acknowledgeOnly,true,'Hidden-area work must never enter the normal write path');
  assert.deepEqual(x.state.queue.map(change=>change.id),before.queue.map(change=>change.id));
  assert.deepEqual(x.state.queue.map(change=>change.payload),before.queue.map(change=>change.payload));
  assert.deepEqual(x.state.projects,before.projects);assert.deepEqual(x.state.openings,before.openings);
- assert.match(x.state.queue[0].error,/project from your branch/);
+ assert.equal(x.state.queue[0].error,before.queue[0].error,'A receipt-only rejection must not change retained work');
  assert.equal(x.state.actor.outdoorRotationStartBranch,currentActor.outdoorRotationStartBranch);
  reject=false;
  await x.client.syncFieldChanges();
  assert.deepEqual(posted.map(change=>change.id),[before.queue[0].id,before.queue[0].id,before.queue[1].id]);
+ assert.ok(posted.slice(1).every(change=>change.acknowledgeOnly!==true),'Restored-area work uses its original normal operations');
  assert.equal(x.state.queue.length,0);assert.equal(x.state.openings[0].width,opening.width);
 });
 

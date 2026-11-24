@@ -14,7 +14,7 @@ function loadModule(path, dependencies) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', 'Date', source)((name) => {if(name==='@/lib/auth/outdoorTeams')return loadModule('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return loadModule('../src/lib/workflow/projectName.ts',{});if(name==='@/lib/measurements/visitHistory')return loadModule('../src/lib/measurements/visitHistory.ts',{});if(name==='@/lib/auth/projectBranchAccess')return loadModule('../src/lib/auth/projectBranchAccess.ts',{});
+  new Function('require', 'exports', 'Date', source)((name) => {if(name==='@/lib/intake/outdoorRotationSchedule')return loadModule('../src/lib/intake/outdoorRotationSchedule.ts',{});if(name==='@/lib/auth/outdoorTeams')return loadModule('../src/lib/auth/outdoorTeams.ts',{});if(name==='@/lib/workflow/projectName')return loadModule('../src/lib/workflow/projectName.ts',{});if(name==='@/lib/measurements/visitHistory')return loadModule('../src/lib/measurements/visitHistory.ts',{});if(name==='@/lib/auth/projectBranchAccess')return loadModule('../src/lib/auth/projectBranchAccess.ts',{});
     if(name==='@/lib/intake/outdoorRotation')return loadModule('../src/lib/intake/outdoorRotation.ts',{});
     if(name.startsWith('.'))return loadModule(new URL(`${name}.ts`,new URL(path,import.meta.url)),dependencies);
     if(name==='@/lib/measurements/completion')return loadModule('../src/lib/measurements/completion.ts',{});if(name==='@/lib/measurements/measurementDelay')return loadModule('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':loadModule('../src/lib/auth/permissions.ts',{})});
@@ -244,7 +244,7 @@ for(const scenario of ['valid','invalid','conflict'])test(`offline opening edit 
  else{assert.equal(writes.length,1);assert.equal(writes[0].p_action,'edit-opening');assert.equal(writes[0].p_actor,id);assert.equal(writes[0].p_payload.opening.width,180);assert.equal(writes[0].p_payload.previous.width,120);}
 });
 
-for(const role of ['Outdoor Sales','Indoor Sales','Sales Manager'])for(const branch of role==='Indoor Sales'?['Karkh','Rasafa']:['Karkh'])for(const deleted of [true,false])test(`offline deletion recovery checks prior access: ${role}, ${branch}, deleted=${deleted}`,async()=>{
+for(const role of ['Outdoor Sales','Indoor Sales','Sales Manager'])for(const branch of role==='Sales Manager'?['Karkh']:['Karkh','Rasafa'])for(const deleted of [true,false])test(`offline deletion recovery checks current-area prior access: ${role}, ${branch}, deleted=${deleted}`,async()=>{
  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',filters=[];
  const route=loadModule('../src/app/api/offline/route.ts',{
   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},
@@ -258,7 +258,8 @@ for(const role of ['Outdoor Sales','Indoor Sales','Sales Manager'])for(const bra
   '@/lib/measurements/registrationOpening':{},'@/lib/location/coordinates':{},
  });
  const response=await route.POST({json:async()=>({id,userId:id,projectId:id,recordedAt:new Date().toISOString(),action:'cancel-project',payload:{note:'Client cancelled',confirmed:true}})});
- assert.equal(response.status,deleted?410:409);assert.equal(response.body.code,deleted?'project_deleted':undefined);
+ const canDisclose=deleted&&(role!=='Outdoor Sales'||branch==='Rasafa');
+ assert.equal(response.status,canDisclose?410:409);assert.equal(response.body.code,canDisclose?'project_deleted':undefined);
  assert.ok(filters.some(([key,value])=>key==='entity_id'&&value===id));
  assert.ok(filters.some(([key,value])=>key==='action'&&value==='project_deleted'));
  assert.equal(filters.some(([key])=>key==='or'),role==='Outdoor Sales');

@@ -164,7 +164,26 @@ export async function syncFieldChanges(){
     await updateFieldState(id,s=>({...s!,queue:s!.queue.map(c=>c.id===change.id?{...c,error:'Only Indoor Sales and Sales Managers can change project names.'}:c)}));
     failed.add(change.projectId);continue;
    }
-   if(!current||!canAccessProjectRow(current.actor,project)){failed.add(change.projectId);continue;}
+   if(!current||!canAccessProjectRow(current.actor,project)){
+    // Rotation hides the opposite area, including retained work. A lost
+    // response may still leave an already committed operation in the queue.
+    // Ask only for its exact receipt; never send it through the write path or
+    // merge an opposite-area project snapshot back into the visible workspace.
+    const branch=project&&effectiveProjectBranch(project);
+    if(current?.actor.role==='Outdoor Sales'&&(branch==='Karkh'||branch==='Rasafa')){
+     let acknowledgement:Response;
+     try{acknowledgement=await fetch('/api/offline',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(20000),body:JSON.stringify({...change,acknowledgeOnly:true})});}
+     catch{connection(false);return;}
+     if(activeFieldUser()!==id)return;
+     if([401,403].includes(acknowledgement.status)){setFieldUser(null);return;}
+     const receipt=await acknowledgement.json().catch(()=>null);
+     if(acknowledgement.ok&&receipt?.acknowledged===true&&receipt.operationId===change.id&&receipt.projectId===change.projectId){
+      await updateFieldState(id,s=>({...s!,queue:s!.queue.filter(c=>c.id!==change.id)}));
+      continue;
+     }
+    }
+    failed.add(change.projectId);continue;
+   }
    let response:Response;
    try{response=await fetch('/api/offline',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(20000),body:JSON.stringify({...change,expectedUpdatedAt:project?.serverUpdatedAt??project?.updated_at})});}catch{connection(false);return;}
    const result=await response.json().catch(()=>null);

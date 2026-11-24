@@ -210,7 +210,8 @@ test('ordinary offline registration leaves pre-system attribution unset', async 
   assert.equal(x.state.projects[0].created_by, indoor.id);
 });
 
-test('the credited Outdoor owner can retain a reference record without gaining measurement tasks or writes', async () => {
+test('the credited Outdoor owner can retain a current-area reference without gaining measurement tasks or writes', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-14T08:00:00Z') });
   const x = device({ actor: owner });
   const project = {
     id: projectId, branch: 'Karkh', created_by: indoor.id, assigned_outdoor_sales_id: collector.id,

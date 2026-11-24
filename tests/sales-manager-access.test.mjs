@@ -8,7 +8,7 @@ function load(path, dependencies = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', js)(name => {
+  new Function('require', 'exports', js)(name => {if(name==='@/lib/intake/outdoorRotationSchedule')return load('../src/lib/intake/outdoorRotationSchedule.ts',{});
     if (name === '@/lib/auth/projectBranchAccess') return load('../src/lib/auth/projectBranchAccess.ts');
     if (name === '@/lib/intake/legacyOutdoorSales') return load('../src/lib/intake/legacyOutdoorSales.ts');
     if (name === '@/lib/intake/outdoorRotation') return load('../src/lib/intake/outdoorRotation.ts');

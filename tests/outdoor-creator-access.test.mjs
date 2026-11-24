@@ -3,6 +3,12 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 
+// Keep unrelated workflow fixtures in the first half of Baghdad's month.
+test.beforeEach(context => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-14T08:00:00Z') });
+});
+
+
 const actorId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const teammateId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const otherId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -48,13 +54,13 @@ const foreignHistory = project(10, 'Rasafa', { created_by: otherId });
 const rows = [...own, team, foreignAssigned, foreignTeam, unrelated, history, foreignHistory];
 const load = modules();
 
-for (const branch of ['Karkh', 'Rasafa', 'Governorates']) test(`Outdoor creator retains ${branch} entries independently of current assignee`, () => {
+for (const branch of ['Karkh', 'Rasafa', 'Governorates']) test(`Outdoor creator's ${branch} visibility follows the current area independently of assignee`, () => {
   const access = load('lib/auth/projectBranchAccess');
-  assert.equal(access.canAccessProjectRow(actor, own.find(row => row.branch === branch)), true);
+  assert.equal(access.canAccessProjectRow(actor, own.find(row => row.branch === branch)), branch !== 'Rasafa');
   assert.equal(load('lib/measurements/visitHistory').isHistoricalProject(own.find(row => row.branch === branch), actor), false);
 });
 
-test('saved Baghdad entries remain accessible while Najaf and creation choices stay restricted', () => {
+test('saved Baghdad entries follow the current area while static assignment capability and Najaf isolation stay intact', () => {
   const access = load('lib/auth/projectBranchAccess');
   const date = new Date('2026-11-14T08:00:00Z');
   assert.deepEqual(access.projectBranchesForActor(actor), ['Karkh', 'Rasafa', 'Governorates']);
@@ -68,10 +74,10 @@ test('saved Baghdad entries remain accessible while Najaf and creation choices s
     assert.throws(() => load('lib/intake/outdoorRotation').normalizeOutdoorProjectBranch(actor, branch, date));
   }
   for (const row of [own.find(row => row.branch === 'Najaf'), foreignTeam]) assert.equal(access.canAccessProjectRow(actor, row), false);
-  assert.equal(access.canAccessProjectRow(actor, foreignAssigned), true);
+  assert.equal(access.canAccessProjectRow(actor, foreignAssigned), false);
 });
 
-test('offline creator entries retain queued work, openings, report media and archives across offices', () => {
+test('offline creator entries hide opposite-area work without removing stored openings, media, queue or archives', () => {
   const cached = rows.map(row => ({ ...row, project_log_only: [history.id, foreignHistory.id].includes(row.id) }));
   const state = { actor, projects: cached, syncedAt: null,
     openings: cached.map(row => ({ id: `opening-${row.id}`, projectId: row.id, skylight: { photo: `photo-${row.id}` } })),
@@ -81,16 +87,17 @@ test('offline creator entries retain queued work, openings, report media and arc
     archivedProjects: cached.map(row => ({ projectId: row.id, project: row, openings: [], changes: [], measurementReports: [] })),
   };
   const before = structuredClone(state), access = load('lib/offline/projectAccess');
-  const view = access.visibleFieldState(state), writable = [...ownBaghdad, team, foreignAssigned].map(row => row.id);
-  assert.deepEqual(view.projects.map(row => row.id), [...writable, history.id, foreignHistory.id]);
+  const currentOwn = ownBaghdad.filter(row => row.branch !== 'Rasafa');
+  const view = access.visibleFieldState(state), writable = [...currentOwn, team].map(row => row.id);
+  assert.deepEqual(view.projects.map(row => row.id), [...writable, history.id]);
   assert.deepEqual(view.openings.map(row => row.projectId), writable);
   assert.deepEqual(view.queue.map(row => row.projectId), writable);
   assert.deepEqual(view.measurementReports.map(row => row.project_id), writable);
   assert.deepEqual(Object.keys(view.followUpHistories), writable);
   assert.deepEqual(view.archivedProjects.map(row => row.projectId), writable);
-  for (const row of [...ownBaghdad, foreignAssigned]) assert.equal(access.canAccessFieldProject(state, row), true);
-  for (const row of [own[3], foreignTeam, unrelated, foreignHistory]) assert.equal(access.canAccessFieldProject(state, row), false);
-  assert.equal(view.openings.find(row => row.projectId === own[1].id).skylight.photo, `photo-${own[1].id}`);
+  for (const row of currentOwn) assert.equal(access.canAccessFieldProject(state, row), true);
+  for (const row of [own[1], own[3], foreignAssigned, foreignTeam, unrelated, foreignHistory]) assert.equal(access.canAccessFieldProject(state, row), false);
+  assert.equal(view.openings.find(row => row.projectId === own[0].id).skylight.photo, `photo-${own[0].id}`);
   assert.deepEqual(state, before, 'Filtering must preserve unsynced raw storage');
   const indoor = access.visibleFieldState({ ...state, actor: { ...actor, role: 'Indoor Sales' } });
   assert.ok(indoor.projects.every(row => ['Karkh', 'Governorates'].includes(row.branch)));
@@ -136,11 +143,11 @@ function fixture(role = actor.role) {
   return { admin, load: loadRoute, reads, writes, tables };
 }
 
-for (const path of ['workspace', 'offline', 'dashboard']) test(`${path} API returns all own Baghdad entries while isolating Najaf`, async () => {
+for (const path of ['workspace', 'offline', 'dashboard']) test(`${path} API returns current-area creator entries while isolating the opposite area and Najaf`, async () => {
   const x = fixture();
   const response = await x.load(`app/api/${path}/route`).GET(new Request(`http://localhost:3003/api/${path}`));
   assert.equal(response.status, 200);
-  const expected = [...ownBaghdad, team, foreignAssigned, ...(path === 'dashboard' ? [] : [history, foreignHistory])].map(row => row.id);
+  const expected = [...ownBaghdad.filter(row => row.branch !== 'Rasafa'), team, ...(path === 'dashboard' ? [] : [history])].map(row => row.id);
   assert.deepEqual(response.body.projects.map(row => row.id), expected);
   for (const row of ownBaghdad) assert.equal(response.body.projects.find(project => project.id === row.id)?.project_log_only ?? false, false);
   assert.equal(response.body.projects.some(row => row.branch === 'Najaf'), false);
@@ -150,13 +157,13 @@ for (const path of ['workspace', 'offline', 'dashboard']) test(`${path} API retu
   assert.deepEqual(x.writes, []);
 });
 
-for (const branch of ['Rasafa', 'Najaf']) test(`direct ${branch} measurement and workflow reads enforce Najaf isolation`, async () => {
+for (const branch of ['Rasafa', 'Najaf']) test(`direct ${branch} measurement and workflow reads deny creator and assigned rows outside the current area`, async () => {
   const ownProject = own.find(row => row.branch === branch);
   const denied = branch === 'Rasafa' ? foreignAssigned : foreignTeam;
   for (const row of [ownProject, denied]) {
     const x = fixture();
     const response = await x.load('app/api/initial-measurements/[projectId]/route').GET(new Request(`http://localhost:3003/api/initial-measurements/${row.id}`), { params: Promise.resolve({ projectId: row.id }) });
-    const permitted = branch === 'Rasafa';
+    const permitted = false;
     assert.equal(response.status, permitted ? 200 : 404);
     assert.equal(x.reads.some(read => read.table === 'openings'), permitted);
     const workflow = await x.load('lib/workflow/access').salesProject(row.id);
@@ -168,14 +175,14 @@ for (const branch of ['Rasafa', 'Najaf']) test(`direct ${branch} measurement and
   assert.equal(response.status, 404, 'Creator identity cannot relax Indoor branch rules');
 });
 
-for (const branch of ['Rasafa', 'Najaf']) test(`${branch} queued opening replay cannot bypass Najaf isolation`, async () => {
+for (const branch of ['Rasafa', 'Najaf']) test(`${branch} queued opening replay cannot bypass current-area or Najaf isolation`, async () => {
   const ownProject = own.find(row => row.branch === branch), denied = branch === 'Rasafa' ? foreignAssigned : foreignTeam;
   for (const row of [ownProject, denied]) {
     const x = fixture();
     const body = { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', userId: actorId, projectId: row.id, action: 'opening', recordedAt: timestamp,
       payload: { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', floor: 'GF', room: 'Bedroom', width: 1200, height: 1400, quantity: 2, structuralType: 'Window', openingType: 'Sliding' } };
     const response = await x.load('app/api/offline/route').POST({ json: async () => body });
-    const permitted = branch === 'Rasafa';
+    const permitted = false;
     assert.equal(response.status, permitted ? 200 : 404);
     assert.equal(x.writes.length, permitted ? 1 : 0);
     if (permitted) {
@@ -189,13 +196,13 @@ for (const branch of ['Rasafa', 'Najaf']) test(`${branch} queued opening replay 
 for (const [path, type, column, key] of [
   ['curtain-wall-capture', 'Curtain Wall', 'curtain_wall_capture', 'curtainWall'],
   ['skylight-capture', 'Skylight', 'skylight_capture', 'skylight'],
-]) test(`${path} media stays readable for own foreign entries without exposing assigned-only entries`, async () => {
-  for (const row of [own[1], own[3], foreignAssigned, foreignTeam]) {
+]) test(`${path} media stays readable for current-area creator entries and hides opposite-area entries`, async () => {
+  for (const row of [own[0], own[1], own[3], foreignAssigned, foreignTeam]) {
     const x = fixture(), openingId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
     const capture = { photo: 'private-fixture-photo', note: 'Creator fixture', sections: [] };
     Object.assign(x.tables.openings.find(opening => opening.project_id === row.id), { id: openingId, opening_type: type, [column]: capture });
     const response = await x.load(`app/api/${path}/[projectId]/[openingId]/route`).GET(new Request(`http://localhost:3003/api/${path}/${row.id}/${openingId}`), { params: Promise.resolve({ projectId: row.id, openingId }) });
-    const permitted = row.branch !== 'Najaf';
+    const permitted = row.branch === 'Karkh';
     assert.equal(response.status, permitted ? 200 : 404);
     if (permitted) assert.deepEqual(response.body[key], capture);
     assert.equal(x.reads.some(read => read.table === 'openings'), permitted);

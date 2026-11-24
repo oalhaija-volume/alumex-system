@@ -10,8 +10,8 @@ export function canAccessFieldProject(state: FieldState, project: FieldProject |
   return true;
 }
 
-// Keep Baghdad Outdoor entries across the monthly area rotation, while the
-// row guard keeps Najaf isolated in every offline view.
+// Filter every offline view by the current Baghdad area and Najaf boundary.
+// The returned view leaves retained projects and unsynced work in storage.
 export function visibleFieldState(state: FieldState): FieldState {
   const outdoor = state.actor.role === 'Outdoor Sales';
   const projects = state.projects.filter(project => canAccessProjectRow(state.actor, project)

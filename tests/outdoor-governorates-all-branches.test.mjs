@@ -37,7 +37,7 @@ for (const branch of ['Karkh', 'Rasafa']) test(`${branch} Outdoor can create Gov
   assert.equal(rotation.normalizeOutdoorProjectBranch(actor, 'Governorates', date), 'Governorates');
   for (const office of offices) {
     assert.equal(access.canAccessProjectBranch(actor, office), office !== 'Najaf');
-    assert.equal(access.canAccessProjectRow(actor, { branch: office, created_by: actorId }), office !== 'Najaf');
+    assert.equal(access.canAccessProjectRow(actor, { branch: office, created_by: actorId }, date), office === 'Rasafa');
     if (office !== 'Rasafa') assert.throws(() => rotation.normalizeOutdoorProjectBranch(actor, office, date));
   }
   assert.equal(access.canAccessProjectRow(actor, { branch: 'Najaf', created_by: otherId }), false);

@@ -3,6 +3,12 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 
+// Keep unrelated workflow fixtures in the first half of Baghdad's month.
+test.beforeEach(context => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-14T08:00:00Z') });
+});
+
+
 const actorId = '11111111-1111-4111-8111-111111111111';
 const otherId = '22222222-2222-4222-8222-222222222222';
 const operationId = '33333333-3333-4333-8333-333333333333';
@@ -108,7 +114,7 @@ function fixture({ role = 'Indoor Sales', branch = 'Karkh', profileBranch = bran
     'next/server': { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200, headers: options?.headers }) } },
     '@/lib/auth/adminServer': { requireRole: async allowed => {
       assert.ok(allowed.includes(role), role);
-      return { ok: true, role, user: { id: actorId }, profile: { branch } };
+      return { ok: true, role, user: { id: actorId }, profile: { branch, outdoor_rotation_start_branch: outdoorRotationStartBranch } };
     } },
     '@/lib/supabase/admin': { createAdminClient: () => admin },
     '@/lib/supabase/config': { hasSupabaseServiceRoleKey: () => true },
@@ -167,7 +173,7 @@ for (const role of ['Admin', 'Sales Director', 'Company Owner']) {
 
 for (const role of ['CEO', 'Sales Manager', 'Outdoor Sales']) {
   test(`${role} sees its office projects while foreign offices stay hidden even for current assignments`, async () => {
-    const allowed = projects.filter(project => project.branch === 'Karkh' || project.branch === 'Governorates' || role === 'Outdoor Sales' && project.branch === 'Rasafa');
+    const allowed = projects.filter(project => project.branch === 'Karkh' || project.branch === 'Governorates');
     for (const path of ['dashboard', 'workspace', 'offline']) {
       const response = await fixture({ role }).load(`src/app/api/${path}/route`).GET(request());
       assert.equal(response.status, 200);
@@ -336,7 +342,8 @@ for(const [path,session] of [['workspace',false],['offline',false],['offline',tr
       assert.equal(response.body.actor.outdoorRotationStartBranch,starter??null);
       assert.equal(response.body.actor.branch,'Karkh','Employee office access stays fixed independently of legacy rotation seeds');
       assert.ok(x.reads.some(read=>read.table==='profiles'&&read.fields.includes('outdoor_rotation_start_branch')));
-      if(!session)assert.deepEqual(response.body.projects.map(project=>project.id),projects.filter(project=>['Karkh','Rasafa','Governorates'].includes(project.branch)).map(project=>project.id),'Both Baghdad areas remain readable while Najaf stays isolated');
+      const currentArea=starter==='Rasafa'?'Rasafa':'Karkh';
+      if(!session)assert.deepEqual(response.body.projects.map(project=>project.id),projects.filter(project=>[currentArea,'Governorates'].includes(project.branch)).map(project=>project.id),'Only the current Baghdad area and Governorates remain readable while Najaf stays isolated');
     });
   }
 }

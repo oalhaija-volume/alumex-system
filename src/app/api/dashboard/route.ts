@@ -17,7 +17,7 @@ export async function GET() {
   if (auth.role === 'Outdoor Sales') {
     query = query.or(outdoorProjectFilter({id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds}));
   }
-  const actor = { id: auth.user.id, role: auth.role, branch: auth.profile?.branch, outdoorTeamMemberIds: auth.outdoorTeamMemberIds };
+  const actor = { id: auth.user.id, role: auth.role, branch: auth.profile?.branch, outdoorRotationStartBranch: auth.profile?.outdoor_rotation_start_branch, outdoorTeamMemberIds: auth.outdoorTeamMemberIds };
   const branches = projectBranchesForActor(actor);
   if (branches !== null && auth.role !== 'Outdoor Sales') {
     // Historic Najaf projects may still be stored under Governorates. The row

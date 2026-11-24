@@ -11,7 +11,7 @@ function load(path, dependencies = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', source)(name => {
+  new Function('require', 'exports', source)(name => {if(name==='@/lib/intake/outdoorRotationSchedule')return load('../src/lib/intake/outdoorRotationSchedule.ts',{});
     if(name==='@/lib/auth/permissions') return load('../src/lib/auth/permissions.ts');
     if(name==='@/lib/auth/projectBranchAccess') return load('../src/lib/auth/projectBranchAccess.ts');
     if(name==='@/lib/intake/projectBranch') return load('../src/lib/intake/projectBranch.ts');

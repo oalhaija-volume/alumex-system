@@ -3,6 +3,12 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 
+// Keep unrelated workflow fixtures in the first half of Baghdad's month.
+test.beforeEach(context => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-14T08:00:00Z') });
+});
+
+
 function modules() {
   const cache = new Map();
   return function load(path) {
@@ -52,7 +58,7 @@ for (const role of appRoles) test(`${role} cached reads redact foreign office pr
     const state = snapshot(role, branch), before = structuredClone(state);
     const expected = state.projects.filter(project => globalRoles.includes(role)
       || offices.includes(branch) && (role === 'Outdoor Sales' && branch !== 'Najaf'
-        ? ['Karkh', 'Rasafa', 'Governorates'].includes(project.branch)
+        ? ['Karkh', 'Governorates'].includes(project.branch)
         : project.branch === branch || branch === 'Karkh' && project.branch === 'Governorates'));
     const ids = expected.map(project => project.id);
     const view = visibleFieldState(state);

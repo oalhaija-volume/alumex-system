@@ -6,7 +6,7 @@ import type { ArchivedFieldProject } from '@/lib/offline/types';
 export function ArchivedSavedWork({ projects = [] }: { projects?: ArchivedFieldProject[] }) {
  const { term } = useI18n();
  if (!projects.length) return null;
- return <details className="mx-auto mt-5 max-w-5xl rounded-md border border-slate-200 bg-white p-4 text-sm">
+ return <details className="mx-auto mt-5 max-w-5xl rounded-md border border-slate-200 bg-white p-4 text-sm print:hidden">
   <summary className="min-h-11 cursor-pointer font-semibold text-slate-700">{term('Saved work for deleted projects')}</summary>
   <p className="mt-2 text-slate-600">{term('These projects were deleted by an Admin. Their saved work is kept on this device and will no longer retry syncing.')}</p>
   <div className="mt-3 space-y-4">{projects.map(archive => <div key={archive.projectId} className="border-t border-slate-200 pt-3">

@@ -136,6 +136,7 @@ export function IndoorOnlineWorkspace({ children, recoveryOnly = false, onlinePa
   const pending = (state?.queue.length ?? 0) + quotationSyncStatus(state).pending;
   const requiresConnection = !online || !verified;
   return <>
+    <div className="print:hidden">
     <div className="border-b border-slate-200 bg-white px-5 py-3 text-sm print:hidden">
       <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
         <p role="status" className={requiresConnection ? 'text-amber-900' : 'text-slate-600'}>{term(requiresConnection ? 'Connect to the internet to use Indoor Sales.' : 'Indoor Sales · Online only')}</p>
@@ -157,6 +158,7 @@ export function IndoorOnlineWorkspace({ children, recoveryOnly = false, onlinePa
       <p className="mt-2">{term('You can log out. Unresolved work stays saved for this account and is not shown to the next employee.')}</p>
     </div>}
     {verified && online && state && <><SyncConflicts state={state}/><QuotationSyncConflicts/></>}
+    </div>
     {!recoveryOnly && !requiresConnection && children}
   </>;
 }

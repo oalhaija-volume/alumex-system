@@ -857,6 +857,11 @@ textarea {
  .document-summary-values { width:100%; justify-content:space-between; gap:10px 16px; }
 }
 @media print {
+ /* Keep only client document content and its existing layout ancestors. */
+ body:has(.commercial-document):not(:has(.follow-up-print-document))
+  :not(.commercial-document, .commercial-document *, :has(.commercial-document)) {
+  display:none !important;
+ }
  .commercial-document { border:0; border-radius:0; box-shadow:none; padding:0; font-size:11px; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
  .commercial-document .opening-area-legend,.commercial-document .document-opening-area-indicator { display:none; }
  .document-header,.document-parties,.document-total,.document-group-subtotal,.document-footer,.document-company-signature { break-inside:avoid; }

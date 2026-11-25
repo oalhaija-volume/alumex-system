@@ -31,6 +31,7 @@ export function InitialMeasurements({projectId,role,actor}:{projectId:string;rol
   const [project,setProject] = useState<FieldProject|null>(null);
   const [projectRecordError,setProjectRecordError] = useState(false);
   const [openings,setOpenings] = useState<RegistrationOpening[]>([]);
+  const [openingFilter,setOpeningFilter] = useState<'all'|'skylight'>('all');
   const [floor,setFloor] = useState("");
   const [otherFloor,setOtherFloor] = useState("");
   const commercial=project?.building_type==='commercial_building';
@@ -48,6 +49,8 @@ export function InitialMeasurements({projectId,role,actor}:{projectId:string;rol
   const wholeFacade=structuralType==='Facade';
   const facades=openings.filter(o=>o.structuralType==='Facade');
   const internalOpenings=openings.filter(o=>o.structuralType!=='Facade');
+  const skylightCount=internalOpenings.filter(o=>o.structuralType==='Skylight').length;
+  const showSkylights=openingFilter==='skylight'&&skylightCount>0;
   const nextFacadeNumber=()=>String(Math.max(0,...openings.map(o=>o.facadeNumber??0))+1);
   function chooseWorkArea(area:'facade'|'internal'){
     setWorkArea(area);setRoom('');setOtherRoom('');setStructuralType(area==='facade'?'Facade':'');
@@ -283,6 +286,9 @@ export function InitialMeasurements({projectId,role,actor}:{projectId:string;rol
       {internalOpenings.length>0&&<>
       <h2 id="saved-openings-heading" className="text-base font-semibold text-slate-900">{t("initialStep.list",{count:formatNumber(internalOpenings.length)})}</h2>
       <p className="mt-2 text-sm text-slate-600">{term("Total openings")}: {formatNumber(internalOpenings.reduce((sum,opening)=>sum+(opening.quantity??1),0))}</p>
+      {skylightCount>0&&<div role="group" aria-label={term('Filter openings')} className="mt-3 flex flex-wrap gap-2">
+        {(['all','skylight'] as const).map(filter=><button key={filter} type="button" aria-pressed={filter==='skylight'?showSkylights:!showSkylights} onClick={()=>setOpeningFilter(filter)} className={`min-h-11 rounded-md border px-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${(filter==='skylight'?showSkylights:!showSkylights)?'border-blue-600 bg-blue-50 text-blue-800':'border-slate-300 bg-white text-slate-700'}`}>{term(filter==='all'?'All openings':'Skylights')} ({formatNumber(filter==='all'?internalOpenings.length:skylightCount)})</button>)}
+      </div>}
       <p id="saved-openings-scroll-hint" className="mt-2 text-xs text-slate-500 sm:hidden">{t("initialStep.tableScrollHint")}</p>
       <div role="region" aria-labelledby="saved-openings-heading" tabIndex={0} className="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
         <table className="w-full min-w-[640px] border-collapse text-start text-sm">
@@ -290,15 +296,15 @@ export function InitialMeasurements({projectId,role,actor}:{projectId:string;rol
           <thead className="bg-slate-100 text-xs font-semibold text-slate-700">
             <tr>
               <th scope="col" className="sticky start-0 z-10 border-e border-slate-200 bg-slate-100 px-3 py-3 text-start">{t("initialStep.number")}</th>
-              {["floor","room","structure","movement","width","height","quantity"].map(column=><th key={column} scope="col" className="whitespace-nowrap px-3 py-3 text-start">{commercial&&column==='room'?term('Work area / location'):t(`initialStep.${column}`)}</th>)}
+              {["floor","room","structure","movement","width","height","quantity"].map(column=><th key={column} scope="col" className="whitespace-nowrap px-3 py-3 text-start">{commercial&&column==='room'?term('Work area / location'):column==='height'&&skylightCount>0?term(showSkylights?'Length (cm)':'Height / length (cm)'):t(`initialStep.${column}`)}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {internalOpenings.map((opening,index)=><tr key={opening.id} className="odd:bg-white even:bg-slate-50">
+            {internalOpenings.map((opening,index)=>showSkylights&&opening.structuralType!=='Skylight'?null:<tr key={opening.id} className={index%2===0?"bg-white":"bg-slate-50"}>
               <th scope="row" className={`sticky start-0 border-e border-slate-200 px-3 py-3 text-start font-semibold tabular-nums text-slate-700 ${index%2===0?"bg-white":"bg-slate-50"}`}>{formatNumber(index+1)}{!finished&&!project?.measurement_delayed&&!project?.additional_openings_original_ids?.includes(opening.id)&&canEditOpeningEntry(opening,actor,role)&&<button type="button" disabled={saving||photoBusy||dirty} aria-label={`${term('Edit opening')} ${formatNumber(index+1)}`} onClick={()=>editOpening(opening)} className="mt-1 block min-h-11 rounded-md px-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-40">{term('Edit')}</button>}</th>
               <td className="max-w-40 break-words px-3 py-3 text-slate-700">{term(opening.floor)}</td>
               <td className="max-w-48 break-words px-3 py-3 text-slate-700">{opening.workArea==='internal'&&<span className="block text-xs text-slate-500">{term('Internal works')}</span>}{opening.workArea==='facade'?term('Facade {number}',{number:String(opening.facadeNumber)}):opening.room === "Other" ? opening.otherRoom : t(`initialStep.rooms.${opening.room}`)}</td>
-              <td className="px-3 py-3 text-slate-900">{t(`initialStep.types.${opening.structuralType}`)}{opening.hasRollerShutter&&<span className="mt-1 block text-xs font-semibold text-blue-700">{term('Roller shutter')}</span>}{['Window','Door'].includes(opening.structuralType)&&<span className="mt-1 block text-xs text-slate-500">{term(opening.hasArch?'Arch':'No arch')}</span>}</td>
+              <td className="px-3 py-3 text-slate-900">{t(`initialStep.types.${opening.structuralType}`)}{opening.structuralType==='Skylight'&&<span className="mt-1 block text-xs font-medium text-slate-700">{term('Width × length (cm)')}: <bdi dir="ltr" className="whitespace-nowrap font-semibold tabular-nums">{formatNumber(opening.width)} × {formatNumber(opening.height)}</bdi></span>}{opening.hasRollerShutter&&<span className="mt-1 block text-xs font-semibold text-blue-700">{term('Roller shutter')}</span>}{['Window','Door'].includes(opening.structuralType)&&<span className="mt-1 block text-xs text-slate-500">{term(opening.hasArch?'Arch':'No arch')}</span>}</td>
               <td className="px-3 py-3 text-slate-700">{opening.openingType ? t(`initialStep.${opening.openingType}`) : "—"}</td>
               <td className="whitespace-nowrap px-3 py-3 font-medium tabular-nums text-slate-900"><bdi>{formatNumber(opening.width)}</bdi></td>
               <td className="whitespace-nowrap px-3 py-3 font-medium tabular-nums text-slate-900"><bdi>{formatNumber(opening.height)}</bdi></td>

@@ -3238,7 +3238,11 @@
     "Indoor Sales requires an internet connection.": "Indoor Sales requires an internet connection.",
     "Offline work is disabled for Indoor Sales. Open the online system to continue.": "Offline work is disabled for Indoor Sales. Open the online system to continue.",
     "{count} saved changes from this account need syncing or review.": "{count} saved changes from this account need syncing or review.",
-    "You can log out. Unresolved work stays saved for this account and is not shown to the next employee.": "You can log out. Unresolved work stays saved for this account and is not shown to the next employee."
+    "You can log out. Unresolved work stays saved for this account and is not shown to the next employee.": "You can log out. Unresolved work stays saved for this account and is not shown to the next employee.",
+    "Height / length (cm)": "Height / length (cm)",
+    "All openings": "All openings",
+    "Skylights": "Skylights",
+    "Filter openings": "Filter openings"
   },
   "registration": {
     "title": "New client & project",

@@ -31,6 +31,7 @@ export function SkylightCapturePreview({projectId,opening,number}:{projectId:str
  }
  return <section className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
   <button type="button" disabled={busy} aria-expanded={expanded} onClick={()=>void open()} className="min-h-11 text-start text-sm font-semibold text-blue-800">{term('Skylight shape and measurements')} · {term('Opening')} {formatNumber(number)}</button>
+  <p className="mt-1 text-sm text-slate-700">{term('Width × length (cm)')}: <bdi className="font-semibold tabular-nums text-slate-900">{formatNumber(opening.width)} × {formatNumber(opening.height)}</bdi></p>
   {expanded&&<div className="mt-3 space-y-4">
    {busy&&<p role="status">{term('Loading…')}</p>}
    {error&&<p role="alert" className="text-sm text-amber-800">{term(error)}</p>}

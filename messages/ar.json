@@ -3238,7 +3238,11 @@
     "Indoor Sales requires an internet connection.": "تتطلب المبيعات الداخلية اتصالاً بالإنترنت.",
     "Offline work is disabled for Indoor Sales. Open the online system to continue.": "العمل دون اتصال غير متاح للمبيعات الداخلية. افتح النظام المتصل للمتابعة.",
     "{count} saved changes from this account need syncing or review.": "يوجد {count} من التغييرات المحفوظة لهذا الحساب بانتظار المزامنة أو المراجعة.",
-    "You can log out. Unresolved work stays saved for this account and is not shown to the next employee.": "يمكنك تسجيل الخروج. يبقى العمل غير المتزامن محفوظاً لهذا الحساب ولا يظهر للموظف التالي."
+    "You can log out. Unresolved work stays saved for this account and is not shown to the next employee.": "يمكنك تسجيل الخروج. يبقى العمل غير المتزامن محفوظاً لهذا الحساب ولا يظهر للموظف التالي.",
+    "Height / length (cm)": "الارتفاع / الطول (سم)",
+    "All openings": "جميع الفتحات",
+    "Skylights": "سكاي لايت",
+    "Filter openings": "تصفية الفتحات"
   },
   "registration": {
     "title": "عميل ومشروع جديد",

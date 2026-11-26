@@ -6,6 +6,9 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { SignaturePad } from '@/components/contracts/SignaturePad';
 import { Agreement2027Document } from '@/components/contracts/Agreement2027Document';
+import { SavedContractDocument } from '@/components/contracts/SavedContractDocument';
+import { ContractRevisionActions } from '@/components/contracts/ContractRevisionActions';
+import type { ContractDocumentRevision } from '@/lib/contracts/documentRevisions';
 import { Agreement2027FieldsForm } from '@/components/contracts/Agreement2027FieldsForm';
 import type { Agreement2027Fields } from '@/lib/contracts/agreement2027Types';
 import type { ContractSnapshot, SalesFlow, SignedEvidence } from '@/lib/workflow/types';
@@ -15,27 +18,40 @@ import { api,button,card,field,Notice,secondary,useResource,Workspace } from './
 type ContractProject = {additional_openings_state?:string|null;sales_status?:string|null};
 type ContractData = {flow:SalesFlow|null;project:ContractProject};
 
-export function ContractWorkspace({projectId}:{projectId:string}) {
- const {term}=useI18n();
+export function ContractWorkspace({projectId,canReviewRevisions=false}:{projectId:string;canReviewRevisions?:boolean}) {
+ const {term,formatNumber}=useI18n();
  const endpoint=`/api/sales-flow/${projectId}`;
  const {data,error,setError,setData,loading}=useResource<ContractData>(endpoint);
+ const revised=useResource<{documentRevisions:ContractDocumentRevision[]}>(`/api/projects/${projectId}/contract-revisions`);
+ const [selectedVersion,setSelectedVersion]=useState<string|null>(null);
+ const [printing,setPrinting]=useState(false);
  const [notice,setNotice]=useState('');
  const flow=data?.flow,contract=flow?.contract;
+ const revisions=revised.data?.documentRevisions??[];
+ const correction=revisions.find(row=>row.revision_reason==='client_name_correction'&&!row.superseded_at);
+ const version=selectedVersion??correction?.id??'original';
+ const documentRevision=revisions.find(row=>row.id===version);
+ function replaceRevision(updated:ContractDocumentRevision){revised.setData(current=>current?{...current,documentRevisions:current.documentRevisions.map(row=>row.id===updated.id?updated:row)}:current);}
+ async function printRevision(){setPrinting(true);setError('');try{await document.fonts.ready;await Promise.all(Array.from(document.querySelectorAll<HTMLImageElement>('.commercial-document img')).map(image=>image.decode()));window.print();}catch{setError('Unable to prepare this document for printing.');}finally{setPrinting(false);}}
  function replaceFlow(updated:SalesFlow){setData(current=>current?{...current,flow:updated}:current);}
  return <Workspace title={term('Client contract')} description={term('Review the complete contract, then sign digitally, upload a signed copy, or record that the client signed a hard copy.')}>
-  <ProjectRecord projectId={projectId}/><Notice error={error}/>
+  <ProjectRecord projectId={projectId}/><Notice error={error||revised.error}/>
+  {!!correction&&<label className="mb-5 block text-sm font-medium print:hidden">{term('Contract version')}<select aria-label={term('Contract version')} value={version} onChange={event=>setSelectedVersion(event.target.value)} className={`${field} mt-2 max-w-xl`}><option value="original">{term('Original contract')}</option>{revisions.map(row=><option key={row.id} value={row.id}>{term('Contract revision {number}',{number:formatNumber(row.document_revision)})} · {term(row.superseded_at?'Superseded revision':row.status==='signed'?'Signed':row.status==='approved'?'Approved · Awaiting signature':'Awaiting approval')}</option>)}</select></label>}
+  {correction&&version==='original'&&<div className="mb-5 rounded-md bg-blue-50 p-4 text-sm text-blue-900 print:hidden"><p>{term('Client and project name corrections are shown in the latest contract revision.')}</p><button type="button" className={`${secondary} mt-3`} onClick={()=>setSelectedVersion(correction.id)}>{term('Open latest contract revision')}</button></div>}
+  {canReviewRevisions&&contract&&<Link href={`/projects/${projectId}?section=contract`} className={`${secondary} mb-5 inline-flex items-center print:hidden`}>{term('Review contract revisions')}</Link>}
   {notice&&<p role="status" className="mb-5 rounded-md bg-green-50 p-4 text-sm text-green-800 print:hidden">{term(notice)}</p>}
-  {loading?<p>{term('Loading contract…')}</p>:!data||!flow||!contract?<div className={card}>
+  {loading||revised.loading?<p>{term('Loading contract…')}</p>:documentRevision?<div className="space-y-5"><ContractRevisionActions key={`${documentRevision.id}-${documentRevision.revision}`} documentRevision={documentRevision} canManage onUpdated={replaceRevision}/><button type="button" disabled={printing} className={`${secondary} print:hidden`} onClick={()=>void printRevision()}>{term(printing?'Preparing print…':'Print / Save PDF')}</button><SavedContractDocument contract={documentRevision.contract} documentRevision={documentRevision} signedAt={documentRevision.signed_at} evidence={documentRevision.evidence}/></div>:!data||!flow||!contract?<div className={card}>
    <p>{term('Generate the contract from a client-approved quotation first.')}</p>
    <Link href={`/quotation/${projectId}`} className="mt-4 inline-block text-blue-600">{term('Open quotation →')}</Link>
-  </div>:<ContractContent key={`${projectId}:${flow.revision}`} projectId={projectId} project={data.project} flow={flow} contract={contract} onFlow={replaceFlow} setError={setError} setNotice={setNotice}/>}
+  </div>:<ContractContent key={`${projectId}:${flow.revision}:${correction?.id??''}`} projectId={projectId} project={data.project} flow={flow} contract={contract} readOnly={!!correction} onFlow={replaceFlow} setError={setError} setNotice={setNotice}/>}
  </Workspace>;
 }
 
 // A new workflow revision remounts the editor so a previous signature, file or
 // consent can never be reused after the contract's terms have changed.
-function ContractContent({projectId,project,flow,contract,onFlow,setError,setNotice}:{
+function ContractContent({projectId,project,flow,contract,readOnly=false,onFlow,setError,setNotice}:{
  projectId:string;project:ContractProject;flow:SalesFlow;contract:ContractSnapshot;
+ readOnly?:boolean;
  onFlow:(updated:SalesFlow)=>void;setError:(message:string)=>void;setNotice:(message:string)=>void;
 }) {
  const {term,formatDateTime,locale}=useI18n();
@@ -54,7 +70,7 @@ function ContractContent({projectId,project,flow,contract,onFlow,setError,setNot
  const [agreementFields,setAgreementFields]=useState<Agreement2027Fields|null>(()=>contract.agreement2027?.fields??null);
  const agreement=contract.agreement2027?.version==='agreement-2027'?contract.agreement2027:undefined;
  const sourceDocument=agreement?.documentLayout==='source-pdf-2027'&&(contract.template==='residential'||contract.template==='commercial');
- const canEditContract=flow.stage==='contract'&&!flow.signed_at&&!flow.evidence&&!flow.accepted_at&&!flow.accepted_by&&project.sales_status==='contract_generated'&&!project.additional_openings_state;
+ const canEditContract=!readOnly&&flow.stage==='contract'&&!flow.signed_at&&!flow.evidence&&!flow.accepted_at&&!flow.accepted_by&&project.sales_status==='contract_generated'&&!project.additional_openings_state;
  const canChangeType=canEditContract&&contract.template!=='unified';
  function changeMethod(next:SignedEvidence['method']){
   if(next===method)return;

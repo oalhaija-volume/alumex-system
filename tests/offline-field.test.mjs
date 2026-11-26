@@ -6,7 +6,7 @@ const actualDate = Date;
 test.beforeEach(context => {
  if (Date === actualDate) context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-14T08:00:00Z') });
 });
-function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='./policy')return load('../src/lib/offline/policy.ts');if(n==='@/lib/intake/outdoorRotationSchedule'||n==='./outdoorRotationSchedule')return load('../src/lib/intake/outdoorRotationSchedule.ts',{});if(n==='@/lib/measurements/openingOwnership')return load('../src/lib/measurements/openingOwnership.ts',{});if(n==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(n==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts');if(n==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts');if(n==='./projectAccess')return load('../src/lib/offline/projectAccess.ts');if(n==='@/lib/location/coordinates')return load('../src/lib/location/coordinates.ts');if(n==='./device')return deps[n]??{isOfflineDevice:()=>true};if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/projectBranch'||n==='./projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(n==='@/lib/intake/outdoorRotation')return load('../src/lib/intake/outdoorRotation.ts');if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/legacyOutdoorSales')return load('../src/lib/intake/legacyOutdoorSales.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
+function load(path,deps={}){const js=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const exports={};new Function('require','exports',js)(n=>{if(n==='./policy')return load('../src/lib/offline/policy.ts');if(n==='./quotationIdentity')return load('../src/lib/offline/quotationIdentity.ts');if(n==='@/lib/intake/outdoorRotationSchedule'||n==='./outdoorRotationSchedule')return load('../src/lib/intake/outdoorRotationSchedule.ts',{});if(n==='@/lib/measurements/openingOwnership')return load('../src/lib/measurements/openingOwnership.ts',{});if(n==='@/lib/auth/outdoorTeams')return load('../src/lib/auth/outdoorTeams.ts',{});if(n==='@/lib/workflow/projectName')return load('../src/lib/workflow/projectName.ts');if(n==='@/lib/auth/projectBranchAccess')return load('../src/lib/auth/projectBranchAccess.ts');if(n==='./projectAccess')return load('../src/lib/offline/projectAccess.ts');if(n==='@/lib/location/coordinates')return load('../src/lib/location/coordinates.ts');if(n==='./device')return deps[n]??{isOfflineDevice:()=>true};if(n==='@/lib/measurements/completion')return load('../src/lib/measurements/completion.ts');if(n==='@/lib/measurements/measurementDelay')return load('../src/lib/measurements/measurementDelay.ts',{'@/lib/auth/permissions':load('../src/lib/auth/permissions.ts')});if(n==='@/lib/intake/projectBranch'||n==='./projectBranch')return load('../src/lib/intake/projectBranch.ts',{});if(n==='@/lib/intake/outdoorRotation')return load('../src/lib/intake/outdoorRotation.ts');if(n==='@/lib/intake/buildingType')return load('../src/lib/intake/buildingType.ts');if(n==='@/lib/intake/legacyOutdoorSales')return load('../src/lib/intake/legacyOutdoorSales.ts');if(n==='@/lib/intake/readinessNote')return load('../src/lib/intake/readinessNote.ts');if(n==='@/lib/auth/permissions')return load('../src/lib/auth/permissions.ts');if(!(n in deps))throw Error(n);return deps[n];},exports);return exports;}
 // Exercise the shared durable queue with an authorized offline CRM role.
 // Indoor Sales has dedicated online-only coverage below.
 const actor={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Employee',role:'Sales Manager',branch:'Karkh'};
@@ -52,14 +52,15 @@ test('a direct measurement read is also a snapshot and retains its explicit phys
  assert.deepEqual(x.updates,['snapshot']);assert.equal(x.state.projects[0].measurement_branch,'Rasafa');assert.deepEqual(x.state.queue,[]);
 });
 
-test('a refreshed physical area replaces stale routing while preserving a pending local opening',async()=>{
- const project={id:projectId,branch:'Karkh',measurement_branch:'Karkh',created_by:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-11-14T08:00:00Z',project_name:'Unsynced local work',pending:true};
+test('a refreshed physical area and verified title replace stale metadata while preserving a pending local opening',async()=>{
+ const project={id:projectId,branch:'Karkh',measurement_branch:'Karkh',created_by:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-11-14T08:00:00Z',serverUpdatedAt:'2026-11-13T08:00:00Z',project_name:'Old saved title',pending:true};
  const opening={id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',projectId,createdBy:actor.id,width:1400,height:1800};
  const change={id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',userId:actor.id,projectId,action:'opening',payload:opening,recordedAt:project.updated_at};
  const x=setup({projects:[project],openings:[opening],queue:[change]});navigator.onLine=true;
  globalThis.fetch=async()=>Response.json({actor,projects:[{...project,measurement_branch:'Rasafa',project_name:'Server snapshot',pending:false}],openings:[],queue:[],syncedAt:null});
  await x.client.prepareOffline();
- assert.equal(x.state.projects[0].measurement_branch,'Rasafa');assert.equal(x.state.projects[0].branch,'Karkh');assert.equal(x.state.projects[0].project_name,'Unsynced local work');
+ assert.equal(x.state.projects[0].measurement_branch,'Rasafa');assert.equal(x.state.projects[0].branch,'Karkh');assert.equal(x.state.projects[0].project_name,'Server snapshot');
+ assert.equal(x.state.projects[0].serverUpdatedAt,project.serverUpdatedAt,'Refreshing identity must not rebase the pending opening');assert.equal(x.state.projects[0].pending,true);
  assert.deepEqual(x.state.openings,[opening]);assert.deepEqual(x.state.queue,[change]);
 });
 
@@ -152,7 +153,7 @@ function governorateFollowUpFixture(){
  const manager={id:'22222222-2222-4222-8222-222222222222',name:'Sales manager',role:'Sales Manager',branch:'Karkh'};
  const rasafa={id:'33333333-3333-4333-8333-333333333333',name:'Rasafa employee',role:'Indoor Sales',branch:'Rasafa'};
  const legacy={id:'44444444-4444-4444-8444-444444444444',name:'Legacy employee'};
- const project={id:projectId,branch:'Governorates',governorate:'البصرة',project_log_only:false,created_by:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-11-11T08:00:00Z',project_notes:'Original note'};
+ const project={id:projectId,project_name:'Governorates project',branch:'Governorates',governorate:'البصرة',project_log_only:false,created_by:actor.id,structure_readiness:'ready',sales_status:'new_lead',updated_at:'2026-11-11T08:00:00Z',project_notes:'Original note'};
  const values={nextFollowUp:'2026-11-12T07:00:00Z',note:'Governorates contact',followUpType:'call',followUpDetail:'',followUpOwnerId:actor.id};
  const pending={id:'55555555-5555-4555-8555-555555555555',userId:actor.id,projectId,action:'follow-up',payload:values,recordedAt:'2026-11-11T08:00:00Z',error:'Review server version'};
  const unrelated={id:'66666666-6666-4666-8666-666666666666',userId:actor.id,projectId:'another-project',action:'follow-up',payload:{...values,note:'Other saved note'},recordedAt:'2026-11-11T08:00:00Z',error:'Unrelated conflict'};
@@ -1156,7 +1157,7 @@ test('Indoor Sales cannot queue any new work even when device storage contains a
  const fixture=indoorRecoveryFixture(),x=setup({actor:fixture.indoor,projects:[fixture.project],queue:[fixture.change]});
  const retained=structuredClone(x.state);
  for(const action of ['register','opening','edit-opening','finish','reopen','follow-up','ready','assign-measurements','request-openings','delay-measurements','resume-measurements','cancel-project','rename-project']){
-  await assert.rejects(x.client.saveFieldChange(action,projectId,{}),/Indoor Sales.*internet/i);
+  await assert.rejects(x.client.saveFieldChange(action,projectId,{}),/This account requires an internet connection/i);
  }
  assert.deepEqual(x.state,retained,'Rejecting offline work must retain legacy notes for recovery');
 });
@@ -1167,10 +1168,10 @@ test('Indoor Sales reads and writes return an online-required error offline inst
  globalThis.fetch=()=>{throw new Error('Offline requests must not reach the network');};
  for(const method of ['GET','PATCH','POST']){
   const response=await x.client.fieldFetch('/api/workspace',{method,body:method==='GET'?undefined:'{}'});
-  assert.equal(response.status,503);assert.match((await response.json()).error,/Indoor Sales.*internet/i);
+  assert.equal(response.status,503);assert.match((await response.json()).error,/This account requires an internet connection/i);
  }
- await assert.rejects(x.client.prepareOffline(),/Indoor Sales.*internet/i);
- await assert.rejects(x.client.prepareOffline({recovery:true}),/Indoor Sales.*internet/i);
+ await assert.rejects(x.client.prepareOffline(),/This account requires an internet connection/i);
+ await assert.rejects(x.client.prepareOffline({recovery:true}),/This account requires an internet connection/i);
  assert.deepEqual(x.state,retained);
 });
 
@@ -1184,8 +1185,8 @@ test('Indoor Sales always uses current server data while keeping legacy conflict
  }
  assert.deepEqual(requests.map(request=>request.url),['/api/workspace','/api/workspace','/api/workspace']);
  assert.ok(requests.every(request=>request.init.cache==='no-store'));
- await assert.rejects(x.client.saveFieldChange('follow-up',projectId,fixture.change.payload),/Indoor Sales.*internet/i);
- await assert.rejects(x.client.prepareOffline(),/Indoor Sales.*internet/i);
+ await assert.rejects(x.client.saveFieldChange('follow-up',projectId,fixture.change.payload),/This account requires an internet connection/i);
+ await assert.rejects(x.client.prepareOffline(),/This account requires an internet connection/i);
  assert.deepEqual(x.state,retained,'Live writes never create additional offline operations');
 });
 
@@ -1195,9 +1196,9 @@ test('Indoor Sales network failure never falls back to a saved workspace or queu
  globalThis.fetch=async()=>{throw new TypeError('Network unavailable');};
  assert.equal((await x.client.fieldFetch('/api/workspace')).status,503);
  assert.equal((await x.client.fieldFetch('/api/workspace',{method:'PATCH',body:'{}'})).status,503);
- await assert.rejects(x.client.prepareOffline({recovery:true}),/Indoor Sales.*internet/i);
+ await assert.rejects(x.client.prepareOffline({recovery:true}),/This account requires an internet connection/i);
  globalThis.fetch=async()=>Response.json({error:'Temporary outage'},{status:503});
- await assert.rejects(x.client.prepareOffline({recovery:true}),/Indoor Sales.*internet/i);
+ await assert.rejects(x.client.prepareOffline({recovery:true}),/This account requires an internet connection/i);
  assert.deepEqual(x.state,retained);
 });
 
@@ -1218,11 +1219,11 @@ test('a verified Indoor marker prevents stale cached roles from restoring offlin
  t.after(()=>{if(previous)Object.defineProperty(globalThis,'localStorage',previous);else Reflect.deleteProperty(globalThis,'localStorage');});
  globalThis.localStorage={getItem:key=>key==='alumex-online-only-user'?actor.id:null};
  const x=setup({actor:{...actor,role:'Outdoor Sales'}}),retained=structuredClone(x.state);
- await assert.rejects(x.client.saveFieldChange('register',projectId,payload),/Indoor Sales.*internet/i);
+ await assert.rejects(x.client.saveFieldChange('register',projectId,payload),/This account requires an internet connection/i);
  assert.equal((await x.client.fieldFetch('/api/workspace')).status,503);
- await assert.rejects(x.client.prepareOffline({recovery:true}),/Indoor Sales.*internet/i);
+ await assert.rejects(x.client.prepareOffline({recovery:true}),/This account requires an internet connection/i);
  navigator.onLine=true;globalThis.fetch=async()=>{throw new TypeError('Network unavailable');};
- await assert.rejects(x.client.prepareOffline({recovery:true}),/Indoor Sales.*internet/i);
+ await assert.rejects(x.client.prepareOffline({recovery:true}),/This account requires an internet connection/i);
  assert.deepEqual(x.state,retained);
 });
 

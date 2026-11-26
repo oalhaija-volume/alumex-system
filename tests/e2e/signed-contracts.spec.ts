@@ -95,7 +95,9 @@ async function mount(page: Page, context: BrowserContext, request: APIRequestCon
       assert.deepEqual(Object.keys(body).sort(), ['clientName', 'expectedClientName']);
       assert.equal(body.expectedClientName, records[0].project.client_name);
       for (const record of records) if (record.project.client_id === 'shared-client') record.project.client_name = body.clientName;
-      return route.fulfill({ json: { ok: true, client: { id: 'shared-client', client_name: body.clientName } } });
+      const changes = [{ id: firstId, project_name: body.clientName, updated_at: '2026-11-16T09:00:00Z' }];
+      Object.assign(records[0].project, changes[0]);
+      return route.fulfill({ json: { ok: true, client: { id: 'shared-client', client_name: body.clientName }, projects: changes, documentRevisionsCreated: 1 } });
     }
     if (url.pathname.startsWith('/api/') || !['GET', 'HEAD', 'OPTIONS'].includes(req.method())) {
       unexpected.push(`${req.method()} ${url.pathname}`);
@@ -116,8 +118,8 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: branch records, sea
   const branch = page.getByRole('combobox', { name: term('Branch'), exact: true });
   const search = page.getByRole('searchbox', { name: term('Search signed contracts'), exact: true });
   await branch.selectOption('Karkh');
-  const first = page.locator('article').filter({ has: page.getByRole('heading', { name: 'First signed project', exact: true }) });
-  const second = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Second signed project', exact: true }) });
+  const first = page.locator(`#signed-contract-${firstId}`);
+  const second = page.locator(`#signed-contract-${secondId}`);
   await expect(first).toBeVisible();
   await expect(second).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Governorate signed project', exact: true })).toHaveCount(0);
@@ -149,13 +151,14 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: branch records, sea
   await expect(second.getByText('Original shared client', { exact: true })).toBeVisible();
   await first.getByRole('button', { name: messages.common.saveChanges, exact: true }).click();
   await expect(first.getByRole('status')).toHaveText(term('Client name updated.'));
-  await expect(first.getByText(corrected, { exact: true })).toBeVisible();
+  await expect(first.getByText(corrected, { exact: true }).first()).toBeVisible();
   await expect(second.getByText(corrected, { exact: true })).toBeVisible();
   expect(fixture.saves).toEqual([
     { clientName: corrected, expectedClientName: 'Original shared client' },
     { clientName: corrected, expectedClientName: 'Original shared client' },
   ]);
-  await expect(first.getByRole('heading', { name: 'First signed project', exact: true })).toBeVisible();
+  await expect(first.getByRole('heading', { name: corrected, exact: true })).toBeVisible();
+  await expect(second.getByRole('heading', { name: 'Second signed project', exact: true })).toBeVisible();
   await expect(first.getByText('ALX-CONTRACT-001', { exact: true })).toBeVisible();
   await expect(first.getByText('Original signer', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: term('Refresh records'), exact: true }).click();

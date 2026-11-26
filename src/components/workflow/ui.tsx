@@ -75,7 +75,7 @@ export function useResource<T>(url:string){
    timer=setTimeout(()=>{pendingForce=false;void loader.refresh(true);},150);
   }
   void loader.refresh();
-  const live=commercial||url==='/api/workspace'||url==='/api/dashboard'||url==='/api/outdoor-sales-coverage'||url==='/api/signed-contracts';
+  const live=commercial||url==='/api/workspace'||url==='/api/dashboard'||url==='/api/outdoor-sales-coverage'||url==='/api/signed-contracts'||/^\/api\/projects\/[0-9a-f-]{36}(?:\/contract-revisions)?$/i.test(url);
   // Saved quotation acknowledgments refresh their view, while background polls
   // cannot replace a form the employee is still editing.
   const interval=live&&!commercial?setInterval(()=>{if(document.visibilityState==='visible')changed();},30000):undefined;

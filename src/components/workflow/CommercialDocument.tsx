@@ -2,7 +2,7 @@
 import { projectBranchLabels, type ProjectBranch, type ProjectGovernorate } from '@/lib/intake/projectBranch';
 /* eslint-disable @next/next/no-img-element -- Print documents use the original SVG brand asset. */
 import type { ReactNode } from 'react';
-import type { QuoteSnapshot,Charge } from '@/lib/workflow/pricing';
+import type { QuoteLine,QuoteSnapshot,Charge } from '@/lib/workflow/pricing';
 import { discountedSystemRate,measuredOpeningArea,billableOpeningArea,openingSellingBand,isAlumexSqmSystem,alumexSystemLabel,isLouver } from '@/lib/workflow/pricing';
 import { quotationItemGroups } from '@/lib/quotations/itemGroups';
 import { useI18n } from '@/components/i18n/I18nProvider';
@@ -15,35 +15,38 @@ export function DocumentHeader({kind,number,createdAt}:{kind:'Quotation'|'Contra
   <div className="document-reference"><p className="document-eyebrow">{term(kind==='Quotation'?'SALES QUOTATION':'SUPPLY & INSTALLATION')}</p><h2>{term(kind)}{locale==='en'&&<span lang="ar">{kind==='Quotation'?'عرض سعر':'عقد'}</span>}</h2><dl><div><dt>{term('Reference')}</dt><dd><bdi dir="ltr">{number}</bdi></dd></div><div><dt>{term('Issued')}</dt><dd><bdi dir="ltr">{formatDate(createdAt)}</bdi></dd></div><div><dt>{term('Currency')}</dt><dd>{term('Iraqi dinar · IQD')}</dd></div></dl></div>
  </header>;
 }
-export function DocumentParties({client,project}:{client:{name:string;mobile:string|null};project:{number:string;address:string|null;branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null}}){
+export function DocumentParties({client,project}:{client:{name:string;mobile:string|null};project:{name?:string;number:string;address:string|null;branch?:ProjectBranch|null;governorate?:ProjectGovernorate|null}}){
  const {term}=useI18n();
- return <div className="document-parties"><section><h3>{term('PREPARED FOR / العميل')}</h3><p className="document-client" dir="auto">{client.name}</p><p><bdi dir="ltr">{client.mobile}</bdi></p></section><section><h3>{term('PROJECT SITE / موقع المشروع')}</h3><p className="document-client"><bdi dir="ltr">{project.number}</bdi></p><p dir="auto">{project.address||'—'}</p>{project.branch && <p className="mt-2 font-semibold">{term(projectBranchLabels[project.branch])}</p>}{project.governorate && <p className="mt-1 font-semibold">{project.branch !== 'Governorates' && <>{term('Governorates')} · </>}<bdi>{project.governorate}</bdi></p>}</section></div>;
+ return <div className="document-parties"><section><h3>{term('PREPARED FOR / العميل')}</h3><p className="document-client" dir="auto">{client.name}</p><p><bdi dir="ltr">{client.mobile}</bdi></p></section><section><h3>{term('PROJECT SITE / موقع المشروع')}</h3>{project.name&&<p className="document-client" dir="auto" data-document-project-name><span className="sr-only">{term('Project name')}: </span>{project.name}</p>}<p className="document-client"><bdi dir="ltr">{project.number}</bdi></p><p dir="auto">{project.address||'—'}</p>{project.branch && <p className="mt-2 font-semibold">{term(projectBranchLabels[project.branch])}</p>}{project.governorate && <p className="mt-1 font-semibold">{project.branch !== 'Governorates' && <>{term('Governorates')} · </>}<bdi>{project.governorate}</bdi></p>}</section></div>;
 }
 function ChargeRows({items,labels}:{items:Charge[];labels?:string[]}) {
  const {term,formatNumber}=useI18n();
  return <>{items.map((item,i)=><tr key={item.id}><td>{labels&&<span className="document-charge-kind">{term(labels[i])}</span>}<span dir="auto">{term(item.name)}</span></td><td>{formatNumber(item.quantity)} {term(item.unit==='sqm'?'m²':item.unit==='meter'?'m':item.unit)}</td><td>{formatNumber(item.rate)}</td><td>{formatNumber(item.total)}</td></tr>)}</>;
 }
-type AreaBasis = 'measured'|'billable';
-function ScheduleMeasures({area,openingCount,areaBasis='measured'}:{area:number;openingCount:number;areaBasis?:AreaBasis}) {
+type AreaBasis = 'quoted'|'measured'|'billable';
+function ScheduleMeasures({area,openingCount,areaBasis='billable'}:{area:number;openingCount:number;areaBasis?:AreaBasis}) {
  const {term,formatNumber}=useI18n();
  return <dl className="document-summary-measures" data-area={area} data-opening-count={openingCount} data-area-basis={areaBasis}>
   <div><dt>{term(areaBasis==='billable'?'Billable area':'Total area')}</dt><dd><bdi>{formatNumber(area,areaBasis==='billable'?4:2)} {term('m²')}</bdi></dd></div>
   <div><dt>{term('Total openings')}</dt><dd><bdi>{formatNumber(openingCount)}</bdi></dd></div>
  </dl>;
 }
-export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal=false,colorDiscountPercent=quote.discount?.percent??0,areaBasis='measured'}:{quote:QuoteSnapshot;showAreaColors?:boolean;showOpeningAreaTotal?:boolean;colorDiscountPercent?:0|5;areaBasis?:AreaBasis}) {
+export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal=false,colorDiscountPercent=quote.discount?.percent??0,areaBasis='billable'}:{quote:QuoteSnapshot;showAreaColors?:boolean;showOpeningAreaTotal?:boolean;colorDiscountPercent?:0|5;areaBasis?:AreaBasis}) {
  const {term,locale,formatMoney,formatNumber}=useI18n();
- const totalOpeningArea=quote.lines.reduce((sum,line)=>sum+line.area,0);
+ const billable=areaBasis!=='measured';
+ const displayBasis=billable?'billable':'measured';
+ const openingArea=(line:QuoteLine)=>billable?(line.system.unit==='sqm'?line.system.quantity:0):line.area;
+ const displayOpeningArea=quote.lines.reduce((sum,line)=>sum+openingArea(line),0);
  const groups=quotationItemGroups(quote);
- const summaryArea=(group:ReturnType<typeof quotationItemGroups>[number])=>areaBasis==='billable'?group.billableArea:group.area;
+ const summaryArea=(group:ReturnType<typeof quotationItemGroups>[number])=>billable?group.billableArea:group.area;
  const totalArea=groups.reduce((sum,group)=>sum+summaryArea(group),0);
  const totalOpenings=groups.reduce((sum,group)=>sum+group.openingCount,0);
  const openingNumbers=new Map(groups.flatMap(group=>group.lines).map((line,index)=>[line.opening.id,index+1]));
- return <section className="document-schedule">{!!quote.lines.length&&<div className="document-section-heading"><h3>{term('Opening schedule')}{locale==='en'&&<span lang="ar">جدول الفتحات</span>}</h3><p>{term('{count} openings · {area} m² measured',{count:formatNumber(quote.lines.reduce((sum,line)=>sum+(line.opening.quantity??1),0)),area:formatNumber(totalOpeningArea,2)})}</p></div>}
+ return <section className="document-schedule">{!!quote.lines.length&&<div className="document-section-heading"><h3>{term('Opening schedule')}{locale==='en'&&<span lang="ar">جدول الفتحات</span>}</h3><p>{billable?<>{term('{count} openings',{count:formatNumber(totalOpenings)})} · {term('Billable area: {area} m²',{area:formatNumber(displayOpeningArea,4)})}</>:term('{count} openings · {area} m² measured',{count:formatNumber(totalOpenings),area:formatNumber(displayOpeningArea,2)})}</p></div>}
  {showAreaColors&&quote.lines.some(line=>isAlumexSqmSystem(line.system))&&<OpeningSellingLegend discountPercent={colorDiscountPercent}/>}
  {!quote.lines.length&&!!groups.length&&<div className="document-section-heading"><h3>{term('Standalone products & facade services')}</h3></div>}
  {groups.map(group=><section key={group.key} className="document-item-group" data-item-group={group.key} aria-label={term(group.label)}>
-  {group.key==='curtain wall'?<div className="document-item-group-title document-curtain-wall-heading"><h4>{term(group.label)}</h4>{(summaryArea(group)>0||group.openingCount>0)&&<ScheduleMeasures area={summaryArea(group)} openingCount={group.openingCount} areaBasis={areaBasis}/>}</div>:<h4 className="document-item-group-title">{term(group.label)}</h4>}
+  {group.key==='curtain wall'?<div className="document-item-group-title document-curtain-wall-heading"><h4>{term(group.label)}</h4>{(summaryArea(group)>0||group.openingCount>0)&&<ScheduleMeasures area={summaryArea(group)} openingCount={group.openingCount} areaBasis={displayBasis}/>}</div>:<h4 className="document-item-group-title">{term(group.label)}</h4>}
  {!!group.lines.length&&<div className="document-schedule-scroll" role="region" aria-label={`${term('Opening schedule')} · ${term(group.label)}`} tabIndex={0}>
   <table className="document-opening-table">
    <caption className="sr-only">{term('Opening schedule')} · {term(group.label)}</caption>
@@ -53,6 +56,7 @@ export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal
     const charges=[line.system,...(line.glass?[line.glass]:[]),...line.extras];
     const labels=['Aluminum / system',...(line.glass?['Glass']:[]),...line.extras.map(()=>'Add-on')];
     const area=measuredOpeningArea(line.opening);
+    const displayArea=openingArea(line);
     const band=showAreaColors&&isAlumexSqmSystem(line.system)?openingSellingBand(area,discountedSystemRate(line.system.rate,colorDiscountPercent),line.opening):undefined;
     const louver=line.opening.opening_type==='Louver'||isLouver(line.system);
     const minimumApplied=!louver&&line.opening.opening_type==='Window'&&area<1&&charges.some(charge=>charge.unit==='sqm'&&charge.quantity>line.area);
@@ -64,7 +68,7 @@ export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal
       {chargeIndex===0&&<>
        <th scope="rowgroup" rowSpan={charges.length} className="document-opening-index">{formatNumber(openingNumbers.get(line.opening.id)!)}</th>
        <td rowSpan={charges.length}><strong dir="auto">{term(line.opening.floor)}</strong><span className="document-table-detail" dir="auto">{line.opening.work_area==='internal'?`${term('Internal works')} · ${term(line.opening.room)}`:term(line.opening.room)}</span></td>
-       <td rowSpan={charges.length}><strong>{term(line.opening.opening_type)} {line.opening.opening_direction?term(line.opening.opening_direction):''}{line.opening.has_arch?` · ${term('Arch')}`:''}{line.opening.has_roller_shutter?` · ${term('Roller shutter')}`:''}</strong><span className="document-table-detail"><bdi dir="ltr">{formatNumber(line.opening.width)} × {formatNumber(line.opening.height)}</bdi> {term('cm')}</span><span className="document-table-detail">{formatNumber(line.area,2)} {term('m²')}</span>{showAreaColors&&<span className="document-opening-area-indicator mt-1 block">{band?<OpeningAreaBadge area={area} rate={line.system.rate} opening={line.opening} discountPercent={colorDiscountPercent}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}</span>}{minimumApplied&&<span className="document-table-detail">{term('Minimum billable area: 1 m² per window.')}</span>}{louverMinimumApplied&&<span className="document-table-detail">{term('Louver pricing uses a minimum of 100 cm for each dimension. Actual dimensions are unchanged.')}</span>}</td>
+       <td rowSpan={charges.length}><strong>{term(line.opening.opening_type)} {line.opening.opening_direction?term(line.opening.opening_direction):''}{line.opening.has_arch?` · ${term('Arch')}`:''}{line.opening.has_roller_shutter?` · ${term('Roller shutter')}`:''}</strong><span className="document-table-detail"><bdi dir="ltr">{formatNumber(line.opening.width)} × {formatNumber(line.opening.height)}</bdi> {term('cm')}</span>{displayArea>0&&<span className="document-table-detail">{formatNumber(displayArea,billable?4:2)} {term('m²')}</span>}{showAreaColors&&(band||!billable)&&<span className="document-opening-area-indicator mt-1 block">{band?<OpeningAreaBadge area={area} rate={line.system.rate} opening={line.opening} discountPercent={colorDiscountPercent} showArea={!billable}/>:<span className="text-xs text-slate-600">{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}</span>}{minimumApplied&&<span className="document-table-detail">{term('Minimum billable area: 1 m² per window.')}</span>}{louverMinimumApplied&&<span className="document-table-detail">{term('Louver pricing uses a minimum of 100 cm for each dimension. Actual dimensions are unchanged.')}</span>}</td>
        <td rowSpan={charges.length} className="document-table-number">{formatNumber(line.opening.quantity??1)}</td>
       </>}
       <td><span className="document-charge-kind">{term(labels[chargeIndex])}</span><span dir="auto">{term(chargeIndex===0?alumexSystemLabel(charge.name,line.systemModel):charge.name)}</span>{chargeIndex===0&&line.curtainWallGlassType&&<span className="document-table-detail">{term(line.curtainWallGlassType==='single'?'Single Glass':'Double Glass')}</span>}</td>
@@ -82,7 +86,7 @@ export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal
   {!!item.measurements?.length&&<table><caption className="sr-only">{term('Measured facade areas')}</caption><thead><tr><th>{term('Area / elevation name')}</th><th>{term('Dimensions (m)')}</th><th>{term('Quantity')}</th><th>{term('Area (m²)')}</th></tr></thead><tbody>{item.measurements.map((area,index)=><tr key={index}><td dir="auto">{term(area.label)}</td><td><bdi>{formatNumber(area.width,3)} × {formatNumber(area.height,3)}</bdi></td><td>{formatNumber(area.quantity)}</td><td>{formatNumber(area.width*area.height*area.quantity,3)}</td></tr>)}</tbody></table>}
   <table><caption className="sr-only">{term('Project products and services')}</caption><thead><tr><th>{term('Product / service')}</th><th>{term('Basis')}</th><th>{term('Rate · IQD')}</th><th>{term('Amount · IQD')}</th></tr></thead><tbody><ChargeRows items={[item,...(item.extras??[])]}/></tbody></table>
  </section>)}
- <div className="document-group-subtotal" data-group-subtotal={group.key}><span>{term('{group} subtotal',{group:term(group.label)})}</span><div className="document-summary-values">{group.key!=='curtain wall'&&<ScheduleMeasures area={summaryArea(group)} openingCount={group.openingCount} areaBasis={areaBasis}/>}<strong><bdi>{formatMoney(group.subtotal)}</bdi></strong></div></div>
+ <div className="document-group-subtotal" data-group-subtotal={group.key}><span>{term('{group} subtotal',{group:term(group.label)})}</span><div className="document-summary-values">{group.key!=='curtain wall'&&<ScheduleMeasures area={summaryArea(group)} openingCount={group.openingCount} areaBasis={displayBasis}/>}<strong><bdi>{formatMoney(group.subtotal)}</bdi></strong></div></div>
  </section>)}
  {!!quote.facadeMeasurements?.length&&<section className="document-opening">
   <div className="document-section-heading"><h3>{term('Recorded facade dimensions')}</h3></div>
@@ -92,13 +96,13 @@ export function OpeningSchedule({quote,showAreaColors=false,showOpeningAreaTotal
  <div className="break-inside-avoid">
   {quote.discount&&!!groups.length&&<p className="mb-3 text-sm text-slate-600">{term('Group subtotals are before the quotation discount.')}</p>}
   {(showOpeningAreaTotal||quote.discount)&&<dl className="mb-4 ms-auto max-w-sm space-y-2 text-sm text-slate-700">
-   {showOpeningAreaTotal&&<div className="flex items-baseline justify-between gap-4"><dt>{term('Total opening area')}</dt><dd className="font-semibold"><bdi>{formatNumber(totalOpeningArea,2)} {term('m²')}</bdi></dd></div>}
+   {showOpeningAreaTotal&&<div className="flex items-baseline justify-between gap-4"><dt>{term(billable?'Billable area':'Total opening area')}</dt><dd className="font-semibold"><bdi>{formatNumber(displayOpeningArea,billable?4:2)} {term('m²')}</bdi></dd></div>}
    {quote.discount&&<>
     <div className="flex items-baseline justify-between gap-4"><dt>{term('Subtotal')}</dt><dd className="font-semibold"><bdi>{formatMoney(quote.discount.subtotal)}</bdi></dd></div>
     <div className="flex items-baseline justify-between gap-4"><dt>{term('Discount (5%)')}</dt><dd className="font-semibold"><bdi>{formatMoney(-quote.discount.amount)}</bdi></dd></div>
    </>}
   </dl>}
-  <div className="document-total"><div><span>{term('Grand total')}</span><p>{term('All amounts in Iraqi dinars')}</p></div><div className="document-summary-values"><ScheduleMeasures area={totalArea} openingCount={totalOpenings} areaBasis={areaBasis}/><strong>{formatMoney(quote.total)}</strong></div></div>
+  <div className="document-total"><div><span>{term('Grand total')}</span><p>{term('All amounts in Iraqi dinars')}</p></div><div className="document-summary-values"><ScheduleMeasures area={totalArea} openingCount={totalOpenings} areaBasis={displayBasis}/><strong>{formatMoney(quote.total)}</strong></div></div>
  </div></section>;
 }
 export function DocumentFooter({reference}:{reference:string}){const {term}=useI18n();return <footer className="document-footer"><strong>{term('ALUMEX EXPERTS')}</strong><bdi dir="ltr">{reference}</bdi></footer>;}

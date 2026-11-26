@@ -115,6 +115,7 @@ export function LegacyAgreement2027Document({ contract, signedAt }: { contract: 
   <Handover contract={contract} agreement={agreement} signedAt={signedAt} />
   <Parties contract={contract} agreement={agreement} />
   <section data-agreement-section="terms" className="document-terms">{contract.terms.map((section, index) => <section key={index} data-agreement-clause={index + 1}><h4>{section.title}</h4>{section.text.split('\n').filter(Boolean).map((paragraph, current) => <p key={current} dir="rtl">{paragraph}</p>)}{index === 2 && <Payments agreement={agreement} />}{index === 3 && <Specifications contract={contract} agreement={agreement} />}</section>)}</section>
+  {contract.terms.length < 4 && <Specifications contract={contract} agreement={agreement} />}
   <Annex agreement={agreement} />
  </div>;
 }

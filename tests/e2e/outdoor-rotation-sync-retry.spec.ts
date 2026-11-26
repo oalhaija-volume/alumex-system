@@ -17,9 +17,10 @@ test.use({ serviceWorkers: 'block', video: 'off', launchOptions: { executablePat
 const actor = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Ehab', role: 'Outdoor Sales', branch: 'Rasafa' as const, outdoorRotationStartBranch: 'Rasafa' as const };
 const branchError = 'You can only create projects for your assigned branch or Governorates during this half of the month.';
 
-for (const locale of ['en', 'ar'] as const) test(`${locale}: Ehab retries the same saved Karkh registration after the server rotation check is repaired`, async ({ page }) => {
+for (const locale of ['en', 'ar'] as const) test(`${locale}: Ehab automatically resynchronizes the same saved Karkh registration without manual retry`, async ({ page }) => {
   const messages = locale === 'en' ? en : ar;
   const term = (key: string) => (messages.terms as Record<string, string>)[key] ?? key;
+  await page.clock.install({ time: new Date('2026-11-16T09:00:00Z') });
   await page.clock.setFixedTime(new Date('2026-11-16T09:00:00Z'));
   await page.addInitScript(value => localStorage.setItem('alumex_locale', value), locale);
   const remote: FieldState = { actor, projects: [], openings: [], queue: [], outdoorSales: [], indoorSales: [], syncedAt: null };
@@ -101,7 +102,10 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: Ehab retries the sa
 
   acknowledgement.project = { ...localProject, project_number: 'PRJ-KARKH-RECOVERED', pending: false, updated_at: '2026-11-16T09:01:00.000Z' };
   rejectRegistration = false;
-  await page.getByRole('button', { name: term('Retry sync'), exact: true }).click();
+  // Keep the page open and connected. Only the existing background interval
+  // may recover this saved operation after the backend correction.
+  expect(accepted).toHaveLength(0);
+  await page.clock.fastForward(31000);
   await expect.poll(async () => (await savedFieldState(page)).queue.length).toBe(0);
   await expect(page.getByRole('heading', { name: term('Saved work needs attention'), exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: term('Retry sync'), exact: true })).toHaveCount(0);

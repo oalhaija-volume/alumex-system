@@ -39,7 +39,7 @@ export function OpeningSellingLegend({discountPercent=0}:{discountPercent?:0|5}=
  </div>;
 }
 
-export function OpeningAreaBadge({area,rate,opening,discountPercent=0}:{area:number;rate?:number;opening?:SellingOpening;discountPercent?:0|5}) {
+export function OpeningAreaBadge({area,rate,opening,discountPercent=0,showArea=true}:{area:number;rate?:number;opening?:SellingOpening;discountPercent?:0|5;showArea?:boolean}) {
  const {term,formatNumber,formatMoney}=useI18n();
  const effectiveRate=rate===undefined?undefined:discountedSystemRate(rate,discountPercent);
  const afterDiscount=discountPercent===5&&effectiveRate!==undefined?term('After discount: {rate} / m²',{rate:`${formatNumber(effectiveRate,2)} ${term('IQD')}`}):undefined;
@@ -47,7 +47,7 @@ export function OpeningAreaBadge({area,rate,opening,discountPercent=0}:{area:num
  const label=rate===undefined?term(areaBands.find(item=>item.band===band)!.label):term(band==='green'?'Green target met':'Below selling target');
  const title=rate===undefined?label:`${label} · ${term('System rate: {rate} / m²',{rate:formatMoney(rate)})}${afterDiscount?` · ${afterDiscount}`:''} · ${term('Minimum rate for green: {rate} / m²',{rate:formatMoney(openingMinimumSellingRate(area,opening))})}`;
  return <span className={`opening-area-badge flex-wrap gap-x-1.5 opening-area-${band}`} title={title}>
-  <span>{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>{rate===undefined?<span className="sr-only"> · {label}</span>:<span>· {label}</span>}
+  {showArea&&<span>{term('Each opening: {area} m²',{area:formatNumber(area)})}</span>}{rate===undefined&&showArea?<span className="sr-only"> · {label}</span>:<span>{showArea?'· ':''}{label}</span>}
   {afterDiscount&&<span>· {afterDiscount}</span>}
  </span>;
 }

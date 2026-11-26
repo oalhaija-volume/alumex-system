@@ -9,6 +9,7 @@ export type OfflineQuotationData = {
   project: {
     id?: string;
     project_name: string;
+    updated_at?: string;
     project_number: string;
     address: string | null;
     building_type?: BuildingType | null;

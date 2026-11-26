@@ -64,7 +64,7 @@ function fixture({ role = 'Admin', branch = 'Najaf', missingUsername = false } =
   return { api, writes, queries };
 }
 
-for (const role of ['Indoor Sales', 'Outdoor Sales', 'Sales Manager', 'CEO', 'HR', 'Operations Manager', 'Project Manager']) test(`Admin creates ${role} in Najaf without discarding the office assignment`, async () => {
+for (const role of ['Indoor Sales', 'Outdoor Sales', 'Sales Manager', 'Branch Manager', 'CEO', 'HR', 'Operations Manager', 'Project Manager']) test(`Admin creates ${role} in Najaf without discarding the office assignment`, async () => {
   const x = fixture(); const result = await x.api.POST(request({ ...create, role }));
   assert.equal(result.status, 201);
   assert.equal(result.body.user.branch, 'Najaf');
@@ -72,8 +72,8 @@ for (const role of ['Indoor Sales', 'Outdoor Sales', 'Sales Manager', 'CEO', 'HR
   assert.equal(x.writes.find(write => write.kind === 'profile').profile.branch, 'Najaf');
 });
 
-for (const branch of [undefined, null, '', 'Governorates', 'Baghdad', {}, 3]) test(`a branch-scoped account rejects invalid or missing office ${JSON.stringify(branch)}`, async () => {
-  const x = fixture(); assert.equal((await x.api.POST(request({ ...create, branch }))).status, 400);
+for (const role of ['Indoor Sales','Branch Manager']) for (const branch of [undefined, null, '', 'Governorates', 'Baghdad', {}, 3]) test(`${role} account rejects invalid or missing office ${JSON.stringify(branch)}`, async () => {
+  const x = fixture(); assert.equal((await x.api.POST(request({ ...create, role, branch }))).status, 400);
   assert.deepEqual(x.writes, []);
 });
 
@@ -82,13 +82,14 @@ for (const role of ['Admin', 'Sales Director', 'Company Owner']) test(`${role} a
   assert.equal(result.status, 201); assert.equal(result.body.user.branch, null);
 });
 
-test('Najaf HR creates employees only in its own office, including a missing branch field from an older form', async () => {
+for (const role of ['Indoor Sales','Branch Manager']) test(`Najaf HR creates ${role} only in its own office, including a missing branch field from an older form`, async () => {
   const x = fixture({ role: 'HR' });
-  assert.equal((await x.api.POST(request({ ...create, branch: undefined }))).status, 201);
+  assert.equal((await x.api.POST(request({ ...create, role, branch: undefined }))).status, 201);
   assert.equal(x.writes.find(write => write.kind === 'profile').profile.branch, 'Najaf');
+  assert.equal(x.writes.find(write => write.kind === 'profile').profile.role, role);
   for (const branch of ['Karkh', 'Rasafa']) {
     const other = fixture({ role: 'HR' });
-    assert.equal((await other.api.POST(request({ ...create, branch }))).status, 403);
+    assert.equal((await other.api.POST(request({ ...create, role, branch }))).status, 403);
     assert.deepEqual(other.writes, []);
   }
 });

@@ -178,3 +178,41 @@ for(const locale of ['en','ar'])test(`${locale}: submit checks the current Baghd
  expect((await savedFieldState(page)).queue[0].payload.project).toMatchObject({branch:'Rasafa'});
  expect(errors).toEqual([]);
 });
+
+for(const locale of ['en','ar'])for(const seed of ['Karkh','Rasafa'] as const)for(const boundary of [
+ {name:'16th',before:'2026-11-15T20:59:00Z',after:'2026-11-15T21:00:00Z'},
+ {name:'1st',before:'2026-11-30T20:59:00Z',after:'2026-11-30T21:00:00Z'},
+])test(`${locale}: ${seed}-first employee switches automatically on Baghdad's ${boundary.name} without focus or manual sync`,async({page})=>{
+ await page.clock.install({time:new Date(boundary.before)});
+ const employee={name:'Automatic rotation employee',branch:seed,outdoorRotationStartBranch:seed};
+ const previous=boundary.name==='16th'?seed:seed==='Karkh'?'Rasafa':'Karkh';
+ const next=previous==='Karkh'?'Rasafa':'Karkh';
+ const {posts,errors}=await prepare(page,locale,employee,boundary.before);
+ await page.locator(`input[name="projectBranch"][value="${previous}"]`).check();
+ await page.locator('input[autocomplete="name"]').fill('Preserve the open registration draft');
+ await page.locator('input[type="tel"]').fill('07701234567');
+ await page.locator('input[name="buildingType"][value="villa_house"]').check();
+ await page.locator('input[name="readiness"][value="not_ready"]').check();
+ await page.locator('#readiness-note').fill('Preserve the site readiness note');
+ // Changing Date does not fire timers. Advance the installed interval clock
+ // without dispatching focus, visibilitychange, online, or any sync action.
+ await page.clock.setFixedTime(new Date(boundary.after));
+ await page.clock.fastForward(61000);
+ await expect(page.locator(`input[name="projectBranch"][value="${previous}"]`)).toHaveCount(0);
+ await expect(page.locator(`input[name="projectBranch"][value="${next}"]`)).toBeVisible();
+ await expect(page.locator('input[name="projectBranch"]:checked')).toHaveCount(0);
+ await expect(page.locator('input[autocomplete="name"]')).toHaveValue('Preserve the open registration draft');
+ await expect(page.locator('input[type="tel"]')).toHaveValue('07701234567');
+ await expect(page.locator('input[name="buildingType"][value="villa_house"]')).toBeChecked();
+ await expect(page.locator('input[name="readiness"][value="not_ready"]')).toBeChecked();
+ await expect(page.locator('#readiness-note')).toHaveValue('Preserve the site readiness note');
+ await page.getByRole('group',{name:locale==='en'?/Project branch/:/فرع المشروع/}).screenshot({path:test.info().outputPath('automatic-monthly-assignment.png')});
+ await page.locator('input[name="projectBranch"][value="Governorates"]').check();
+ await page.locator('#project-governorate').selectOption('البصرة');
+ await page.clock.fastForward(61000);
+ await expect(page.locator('input[name="projectBranch"][value="Governorates"]')).toBeChecked();
+ await expect(page.locator('#project-governorate')).toHaveValue('البصرة');
+ expect((await savedFieldState(page)).queue).toHaveLength(0);
+ expect(posts).toHaveLength(0);
+ expect(errors).toEqual([]);
+});

@@ -9,6 +9,7 @@ import { SalesReminders } from "@/components/workflow/SalesReminders";
 import { OfflineStatus } from "@/components/offline/OfflineStatus";
 import { IndoorOnlineWorkspace } from "@/components/offline/IndoorOnlineWorkspace";
 import { isFieldOnline } from "@/lib/offline/client";
+import { canUseOfflineWorkspace } from "@/lib/offline/policy";
 import { FieldLogoutButton } from "@/components/offline/FieldLogoutButton";
 import { useRef, useState } from "react";
 import Link from "next/link";
@@ -53,7 +54,7 @@ export function RegistrationShell({ children, role, mobileOutdoor = false, userN
     return <nav aria-label={menuLabel} className="space-y-1 px-4 py-5">
       {(mobileOutdoor ? [["/dashboard", "Measurement assignments", "مهام القياسات"], ["/intake", "New project", "مشروع جديد"], ["/project-log", "Project log", "سجل المشاريع"]] : links).filter(([href]) => canAccessRoute(href, role)).map(([href, en, ar]) => {
         const active = pathname === href || (href === "/mini-crm" && /^\/projects\/[^/]+\/follow-ups$/.test(pathname)) || (href === "/projects" && /^\/(initial-measurements|quotation|contract)\//.test(pathname));
-        return <Link key={href} href={href} onClick={event=>{closeMenu();if(isOfflineDevice()&&!isFieldOnline()){event.preventDefault();window.location.assign("/offline?path="+encodeURIComponent(href));}}} aria-current={active ? "page" : undefined}
+        return <Link key={href} href={href} onClick={event=>{closeMenu();if(canUseOfflineWorkspace(role)&&isOfflineDevice()&&!isFieldOnline()){event.preventDefault();window.location.assign("/offline?path="+encodeURIComponent(href));}}} aria-current={active ? "page" : undefined}
           className={`flex min-h-12 items-center rounded-md border-s-4 px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${active ? "border-blue-600 bg-blue-50 text-blue-700" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
           {locale === "ar" ? ar : en}
         </Link>;
@@ -105,7 +106,7 @@ export function RegistrationShell({ children, role, mobileOutdoor = false, userN
         </div>
       </dialog>
 
-      <main className="min-w-0 lg:ps-64 print:ps-0" onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a[href]');const href=link?.getAttribute('href');if(isOfflineDevice()&&!isFieldOnline()&&href?.startsWith('/')&&href!=='/offline'&&!href.includes('__alumex_online=1')){event.preventDefault();event.stopPropagation();window.location.assign('/offline?path='+encodeURIComponent(href));}}}>
+      <main className="min-w-0 lg:ps-64 print:ps-0" onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a[href]');const href=link?.getAttribute('href');if(canUseOfflineWorkspace(role)&&isOfflineDevice()&&!isFieldOnline()&&href?.startsWith('/')&&href!=='/offline'&&!href.includes('__alumex_online=1')){event.preventDefault();event.stopPropagation();window.location.assign('/offline?path='+encodeURIComponent(href));}}}>
         {role !== "Outdoor Sales" && ["Admin", "Sales Director", "CEO", "Company Owner", "Indoor Sales", "Sales Manager"].includes(role) && <div className="hidden border-b border-slate-200 bg-white lg:block print:hidden"><div className="mx-auto flex max-w-5xl justify-end px-8 py-3"><NotificationCenter compact /></div></div>}
         {userName && (
           <div className="border-b border-slate-200 bg-white print:hidden">
@@ -115,7 +116,7 @@ export function RegistrationShell({ children, role, mobileOutdoor = false, userN
             </div>
           </div>
         )}
-        {role==='Indoor Sales'?<IndoorOnlineWorkspace><SalesReminders/>{children}</IndoorOnlineWorkspace>:<>{role && ["Admin","Sales Director","CEO", "Company Owner","Sales Manager","Outdoor Sales"].includes(role) && <><OfflineStatus quiet={role==='Outdoor Sales'}/><SalesReminders/>{role==='Outdoor Sales'&&<OutdoorWorkspaceNav state={fieldState} path={pathname} onNavigate={path=>window.location.assign(!isOfflineDevice()||isFieldOnline()?path:'/offline?path='+encodeURIComponent(path))}/>} </>}{children}</>}
+        {!canUseOfflineWorkspace(role)?<IndoorOnlineWorkspace role={role==='Admin'?'Admin':'Indoor Sales'}><SalesReminders/>{children}</IndoorOnlineWorkspace>:<>{role && ["Sales Director","CEO", "Company Owner","Sales Manager","Outdoor Sales"].includes(role) && <><OfflineStatus quiet={role==='Outdoor Sales'}/><SalesReminders/>{role==='Outdoor Sales'&&<OutdoorWorkspaceNav state={fieldState} path={pathname} onNavigate={path=>window.location.assign(!isOfflineDevice()||isFieldOnline()?path:'/offline?path='+encodeURIComponent(path))}/>} </>}{children}</>}
       </main>
     </div></MobileOutdoorProvider>
   );

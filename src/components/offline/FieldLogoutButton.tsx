@@ -5,6 +5,7 @@ import { useI18n } from '@/components/i18n/I18nProvider';
 import { isFieldOnline, pendingFieldChanges, syncFieldChanges } from '@/lib/offline/client';
 import { readFieldState, setFieldUser } from '@/lib/offline/store';
 import { syncOfflineQuotations } from '@/lib/offline/quotations';
+import { canUseOfflineWorkspace } from '@/lib/offline/policy';
 
 /** Use the same sign-out safeguards in the online and device workspaces. */
 export function FieldLogoutButton({ className, formClassName, role }: { className: string; formClassName?: string; role?: string }) {
@@ -17,13 +18,13 @@ export function FieldLogoutButton({ className, formClassName, role }: { classNam
     const form = event.currentTarget;
     setBusy(true);
     try {
-      const indoor = (role ?? (await readFieldState().catch(() => null))?.actor.role) === 'Indoor Sales';
-      if (indoor ? !navigator.onLine : !isFieldOnline()) {
+      const onlineOnly = !canUseOfflineWorkspace(role ?? (await readFieldState().catch(() => null))?.actor.role);
+      if (onlineOnly ? !navigator.onLine : !isFieldOnline()) {
         alert(term('Connect to the internet before signing out.'));
         setBusy(false);
         return;
       }
-      if (indoor) {
+      if (onlineOnly) {
         // Attempt recovery without trapping an employee behind a conflict or
         // an unreachable server. Account-scoped drafts remain in IndexedDB.
         let timer: ReturnType<typeof setTimeout> | undefined;

@@ -7,6 +7,7 @@ import { LeadershipDashboard, dashboardTones, dashboardStageTone } from './Leade
 import { deleteOnlineProject, updateSavedClientName, updateSavedIndoorSales } from '@/lib/offline/client';
 import { notifyWorkspaceChanged } from '@/lib/workflow/workspaceEvents';
 import { canAccessCRM } from '@/lib/auth/permissions';
+import { applyClientNameUpdate } from '@/lib/clients/name';
 import { DashboardProjectFilters } from './DashboardProjectFilters';
 import { matchesProjectSearch } from '@/lib/dashboard/projectSearch';
 import Link from 'next/link';
@@ -36,10 +37,9 @@ export function SalesDashboard(){
    await reload();
   }catch(cause){setError(cause instanceof Error?cause.message:'Unable to delete project.');}finally{setBusy('');}
  }
- if(data && canAccessCRM(data.actor.role)) return <LeadershipDashboard data={data} error={error} now={now} notice={notice} busy={busy} sharedQuotations={data.actor.role==='Indoor Sales'?<SharedQuotationProjects key={data.actor.id}/>:undefined} onDelete={data.actor.role==='Admin'?remove:undefined} onProjectSaved={reload} onClientNameSaved={async(project,clientName)=>{
-  setData(current=>current&&current.actor.id===data.actor.id?{...current,projects:current.projects.map(row=>row.id===project.id||(project.client_id&&row.client_id===project.client_id)?{...row,client_name:clientName}:row)}:current);
-  await updateSavedClientName(data.actor.id,project.id,project.client_id,clientName).catch(()=>{/* A later device refresh can recover a successful server save. */});
-  notifyWorkspaceChanged();
+ if(data && canAccessCRM(data.actor.role)) return <LeadershipDashboard data={data} error={error} now={now} notice={notice} busy={busy} sharedQuotations={data.actor.role==='Indoor Sales'?<SharedQuotationProjects key={data.actor.id}/>:undefined} onDelete={data.actor.role==='Admin'?remove:undefined} onProjectSaved={reload} onClientNameSaved={async(project,update)=>{
+  setData(current=>current&&current.actor.id===data.actor.id?{...current,projects:current.projects.map(row=>applyClientNameUpdate(row,update))}:current);
+  await updateSavedClientName(data.actor.id,project.id,project.client_id,update.client.client_name,update.projects).catch(()=>{/* A later device refresh can recover a successful server save. */});
  }} onIndoorSalesSaved={async assignment=>{
   setData(current=>current&&current.actor.id===data.actor.id?{...current,projects:current.projects.map(project=>project.id===assignment.id&&!project.pending&&Date.parse(project.updated_at)<=Date.parse(assignment.updated_at)?{...project,...assignment}:project)}:current);
   await updateSavedIndoorSales(data.actor.id,assignment).catch(()=>{/* A later device refresh can recover a successful server save. */});

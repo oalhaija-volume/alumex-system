@@ -132,3 +132,82 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: Admin assigns Najaf
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(mutations).toHaveLength(2); expect(unexpected).toEqual([]); expect(errors).toEqual([]);
 });
+
+for (const locale of ['en', 'ar'] as const) test(`${locale}: Admin can create and edit Branch Managers with a required office`, async ({ page }, testInfo) => {
+  if (testInfo.project.name === 'mobile-chromium') await page.setViewportSize({ width: 375, height: 950 });
+  const term = (key: string) => (messages[locale].terms as Record<string, string>)[key] ?? key;
+  let employees = [structuredClone(firstEmployee)];
+  let expectedBranch = '';
+  const mutations: { method: string; body: Record<string, unknown> }[] = [], unexpected: string[] = [], errors: string[] = [];
+  await page.addInitScript(value => localStorage.setItem('alumex_locale', value), locale);
+  await page.route('**/*', async route => {
+    const req = route.request(), url = new URL(req.url());
+    if (url.origin !== base) { unexpected.push(req.method() + ' ' + url.origin); return route.abort('blockedbyclient'); }
+    if (url.pathname === '/api/admin/users') {
+      if (req.method() === 'GET') return route.fulfill({ json: { users: employees } });
+      const body = req.postDataJSON() as Record<string, unknown>;
+      mutations.push({ method: req.method(), body });
+      expect(body.role).toBe('Branch Manager');
+      expect(body.branch).toBe(expectedBranch);
+      if (req.method() === 'POST') {
+        expect(body).toMatchObject({ fullName: `Branch manager ${expectedBranch}`, username: `manager.${expectedBranch.toLowerCase()}`, password: 'fixture-password' });
+        const employee = { ...firstEmployee, id: `55555555-5555-4555-8555-${String(employees.length).padStart(12, '0')}`,
+          full_name: String(body.fullName), username: String(body.username), role: 'Branch Manager', branch: expectedBranch };
+        employees = [...employees, employee];
+        return route.fulfill({ status: 201, json: { user: employee } });
+      }
+      expect(req.method()).toBe('PATCH');
+      expect(body).toMatchObject({ action: 'update-profile', id: firstEmployee.id, updatedAt: firstEmployee.updated_at });
+      employees = employees.map(employee => employee.id === firstEmployee.id ? { ...employee, role: 'Branch Manager', branch: expectedBranch } : employee);
+      return route.fulfill({ json: { user: employees[0] } });
+    }
+    if (!['GET', 'HEAD'].includes(req.method())) { unexpected.push(req.method() + ' ' + url.pathname); return route.fulfill({ status: 405, json: { error: 'Unexpected write blocked' } }); }
+    if (url.pathname === '/qa/najaf-employee-branches' && req.resourceType() === 'document') return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html lang="${locale}" dir="${locale === 'ar' ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${styles}</head><body><div id="root"></div><script src="/qa/najaf-branches.js"></script></body></html>` });
+    if (url.pathname === '/qa/najaf-branches.js') return route.fulfill({ contentType: 'text/javascript', body: bundle });
+    if (url.pathname.startsWith('/api/')) { unexpected.push(req.method() + ' ' + url.pathname); return route.fulfill({ status: 404, json: {} }); }
+    return route.continue();
+  });
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await page.goto('/qa/najaf-employee-branches');
+  const form = page.getByRole('form', { name: term('Add employee'), exact: true });
+  for (const [index, branchName] of ['Karkh', 'Rasafa', 'Najaf'].entries()) {
+    await form.getByRole('combobox', { name: term('Role'), exact: true }).selectOption('Branch Manager');
+    const branch = form.getByRole('combobox', { name: term('Branch'), exact: true });
+    await expect(branch).toBeVisible();
+    await expect(branch).toHaveAttribute('required', '');
+    await expect(branch).toHaveValue('');
+    expect(await branch.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual(['', 'Karkh', 'Rasafa', 'Najaf']);
+    await form.getByRole('textbox', { name: term('Employee name'), exact: true }).fill(`Branch manager ${branchName}`);
+    await form.getByRole('textbox', { name: term('Username'), exact: true }).fill(`manager.${branchName.toLowerCase()}`);
+    await form.getByLabel(term('Password'), { exact: true }).fill('fixture-password');
+    await form.getByRole('button', { name: term('Add employee'), exact: true }).click();
+    expect(await branch.evaluate(element => (element as HTMLSelectElement).validity.valueMissing)).toBe(true);
+    expect(mutations).toHaveLength(index);
+    expectedBranch = branchName;
+    await branch.selectOption(branchName);
+    if (branchName === 'Najaf') await form.screenshot({ path: testInfo.outputPath(`${locale}-branch-manager-add.png`) });
+    await form.getByRole('button', { name: term('Add employee'), exact: true }).click();
+    await expect(page.getByRole('heading', { name: `Branch manager ${branchName}`, exact: true })).toBeVisible();
+    expect(mutations).toHaveLength(index + 1);
+    await expect(form.getByRole('combobox', { name: term('Role'), exact: true })).toHaveValue('');
+  }
+  await page.getByRole('button', { name: term('Edit {name}').replace('{name}', firstEmployee.full_name), exact: true }).click();
+  const editor = page.getByRole('form', { name: term('Edit employee'), exact: true });
+  await editor.getByRole('combobox', { name: term('Role'), exact: true }).selectOption('Branch Manager');
+  const editBranch = editor.getByRole('combobox', { name: term('Branch'), exact: true });
+  await expect(editBranch).toHaveAttribute('required', '');
+  expectedBranch = 'Rasafa';
+  await editBranch.selectOption(expectedBranch);
+  await editor.screenshot({ path: testInfo.outputPath(`${locale}-branch-manager-edit.png`) });
+  await editor.getByRole('button', { name: term('Save changes'), exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  expect(mutations).toHaveLength(4);
+  await page.reload();
+  for (const branchName of ['Karkh', 'Rasafa', 'Najaf']) await expect(page.getByRole('heading', { name: `Branch manager ${branchName}`, exact: true })).toBeVisible();
+  expect(employees.every(employee => employee.role === 'Branch Manager')).toBe(true);
+  expect(employees[0].branch).toBe('Rasafa');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(unexpected).toEqual([]);
+  expect(errors).toEqual([]);
+});

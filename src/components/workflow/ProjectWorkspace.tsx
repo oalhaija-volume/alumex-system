@@ -9,6 +9,7 @@ import { ReactivateProject } from './ReactivateProject';
 import { ProjectNameEditor } from './ProjectNameEditor';
 import { ClientNameEditor } from './ClientNameEditor';
 import { canReactivateProject } from '@/lib/workflow/reactivation';
+import { applyClientNameUpdate } from '@/lib/clients/name';
 import { canAccessCRM } from '@/lib/auth/permissions';
 import Link from 'next/link';
 import { stageDetails,projectLink } from '@/lib/workflow/stages';
@@ -42,9 +43,9 @@ export function ProjectWorkspace({followUps=false,canDelete=false}:{followUps?:b
   {loading?<p>{term("Loading projects…")}</p>:!projects.length?<div className={card}>{term(data?.projects.length?"No projects match this view.":"No projects yet. Start by registering a client.")}</div>:<div className="space-y-4">{projects.map(p=>{const broughtInBy=projectOutdoorSalesOrigin(p,data?.outdoorSales);return <article key={p.id} id={`project-${p.id}`} className={`${card} scroll-mt-5`}>
    <div className="flex flex-wrap justify-between gap-4"><div><p className="text-xs font-semibold text-blue-600">{term(p.project_number)}{p.pending?` · ${term('Saved on device')}`:''}</p><h2 className="mt-2 text-xl font-semibold">{p.project_name}</h2><p className="mt-2 text-sm text-slate-600">{p.address}</p>{p.governorate&&<p className="mt-1 text-sm font-medium text-slate-700">{term('Governorates')} · <bdi>{p.governorate}</bdi></p>}</div><span className="h-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-medium">{term(stageDetails(p).label)}</span></div>
    {data&&<ProjectNameEditor project={p} actor={data.actor} onSaved={reload}/>}
-   {data&&<ClientNameEditor project={p} actor={data.actor} onSaved={async clientName=>{
-    setData(current=>current?{...current,projects:current.projects.map(row=>row.id===p.id||(p.client_id&&row.client_id===p.client_id)?{...row,client_name:clientName}:row)}:current);
-    await updateSavedClientName(data.actor.id,p.id,p.client_id,clientName).catch(()=>{/* The server saved the name; the next device refresh will update its cache. */});
+   {data&&<ClientNameEditor project={p} actor={data.actor} onSaved={async update=>{
+    setData(current=>current&&current.actor.id===data.actor.id?{...current,projects:current.projects.map(row=>applyClientNameUpdate(row,update))}:current);
+    await updateSavedClientName(data.actor.id,p.id,p.client_id,update.client.client_name,update.projects).catch(()=>{/* The server saved the name; the next device refresh will update its cache. */});
    }}/>}
    <MeasurementDelayNotice project={p}/>
    {canReactivateProject(p,data?.actor.role)&&<ReactivateProject busy={!!busy||!!p.pending} onSubmit={form=>void update(p,'reactivate-project',form)}/>}

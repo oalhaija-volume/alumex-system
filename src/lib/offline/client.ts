@@ -19,17 +19,32 @@ import { canEditOpeningEntry } from '@/lib/measurements/openingOwnership';
 import { normalizeOpeningEdit, sameOpeningMeasurements, normalizeRegistrationOpening, type RegistrationOpening } from '@/lib/measurements/registrationOpening';
 import { activeFieldUser,readFieldState,readStoredFieldState,setFieldUser,updateFieldState,type FieldChangeDetail } from './store';
 import type { FieldChange,FieldProject,FieldState,SalesWorkspaceData } from './types';
+import { refreshQuotationIdentities } from './quotationIdentity';
 // Captures are immutable after save. Keep downloaded media when refreshing lightweight metadata.
 export function retainSkylightCapture<T extends RegistrationOpening & {projectId:string}>(opening:T,cached:FieldState['openings']):T {
  const previous=cached.find(o=>o.id===opening.id&&o.projectId===opening.projectId);
  return {...opening,...(opening.hasSkylightCapture&&previous?.skylight?{skylight:previous.skylight}:{}),...(opening.hasCurtainWallCapture&&previous?.curtainWall?{curtainWall:previous.curtainWall}:{})};
 }
 export function isDeviceWorkspace(){return typeof window!=='undefined'&&window.location?.pathname==='/offline';}
-export async function updateSavedClientName(actorId:string,projectId:string,clientId:string|undefined,clientName:string){
+export async function updateSavedClientName(actorId:string,projectId:string,clientId:string|undefined,clientName:string,changedProjects:ReadonlyArray<Pick<FieldProject,'id'|'project_name'|'updated_at'>>=[]){
  if(activeFieldUser()!==actorId||!await readStoredFieldState(actorId))return;
+ if(activeFieldUser()!==actorId)return;
  await updateFieldState(actorId,state=>{
   if(!state)throw new Error('Offline account unavailable.');
-  return {...state,projects:state.projects.map(project=>project.id===projectId||(clientId&&project.client_id===clientId)?{...project,client_name:clientName}:project)};
+  if(activeFieldUser()!==actorId||state.actor.id!==actorId)throw new Error('Offline account changed.');
+  const confirmed=new Map(changedProjects.map(project=>[project.id,project]));
+  const related=new Set([projectId,...changedProjects.map(project=>project.id),...state.projects.filter(project=>clientId&&project.client_id===clientId).map(project=>project.id)]);
+  const projects=state.projects.map(project=>{
+   if(!related.has(project.id))return project;
+   const saved=confirmed.get(project.id);
+   if(saved&&Date.parse(project.updated_at)>Date.parse(saved.updated_at))return project;
+   const pending=state.queue.some(change=>change.projectId===project.id);
+   const localTitle=state.queue.some(change=>change.projectId===project.id&&change.action==='rename-project');
+   return {...project,client_name:clientName,...(saved?{project_name:localTitle?project.project_name:saved.project_name,updated_at:saved.updated_at,
+    ...(pending?{serverUpdatedAt:project.serverUpdatedAt??project.updated_at}:project.serverUpdatedAt?{serverUpdatedAt:saved.updated_at}:{})}: {})};
+  });
+  const identities=(state.quotations?.entries??[]).filter(entry=>related.has(entry.projectId)).map(entry=>({id:entry.projectId,project_name:confirmed.get(entry.projectId)?.project_name??entry.data.project.project_name,client_name:clientName,updated_at:confirmed.get(entry.projectId)?.updated_at}));
+  return {...state,projects,...(state.quotations?{quotations:refreshQuotationIdentities(state.quotations,identities)}:{})};
  });
 }
 export async function updateSavedIndoorSales(actorId:string,assignment:Pick<FieldProject,'id'|'updated_at'|'follow_up_owner_id'|'followUpOwner'>){
@@ -46,11 +61,12 @@ export async function updateSavedIndoorSales(actorId:string,assignment:Pick<Fiel
 }
 // Keep unsynced content, but refresh the current assignment before allowing a
 // second local edit. A pending rename or opening must not retain a former team.
-function withCurrentProjectAccess(local:FieldProject,remote:FieldProject):FieldProject {
+function withCurrentProjectAccess(local:FieldProject,remote:FieldProject,preserveTitle=false):FieldProject {
+ const currentIdentity=!(Date.parse(local.updated_at)>Date.parse(remote.updated_at));
  return {...local,branch:remote.branch,governorate:remote.governorate,
   ...('measurement_branch' in remote?{measurement_branch:remote.measurement_branch}:{}),
   ...('governorate_office' in remote||'governorate_office' in local?{governorate_office:remote.governorate_office}:{}),project_log_only:remote.project_log_only,
-  ...('client_name' in remote?{client_name:remote.client_name,client_id:remote.client_id}:{}),
+  ...(currentIdentity?{...(!preserveTitle?{project_name:remote.project_name}:{}),...('client_name' in remote?{client_name:remote.client_name,client_id:remote.client_id}:{})}:{}),
   ...('assigned_outdoor_sales_id' in remote?{assigned_outdoor_sales_id:remote.assigned_outdoor_sales_id}:{}),
   ...('measurement_assignment_id' in remote||'measurement_assignment_id' in local?{measurement_assignment_id:remote.measurement_assignment_id??null}:{}),
   ...('measurement_exception_employee_id' in remote||'measurement_exception_employee_id' in local?{measurement_exception_employee_id:remote.measurement_exception_employee_id??null}:{}),
@@ -65,6 +81,9 @@ let connectionAvailable=true;
 export function isFieldOnline(){return typeof navigator!=="undefined" && navigator.onLine && (!isOfflineDevice() || connectionAvailable);}
 function connection(available:boolean){if(connectionAvailable!==available){connectionAvailable=available;window.dispatchEvent(new Event('field-connection'));}}
 export function setFieldConnectionAvailable(available:boolean){connection(available);}
+function notifyOfflinePolicy(role:string){
+ if(typeof navigator!=='undefined'&&'serviceWorker' in navigator)navigator.serviceWorker.controller?.postMessage({type:'SET_OFFLINE_POLICY',onlineOnly:!canUseOfflineWorkspace(role)});
+}
 let initializing:Promise<FieldState>|null=null;
 let initializationContext:{generation:number;force:boolean;downloaded:boolean}|null=null;
 let syncing:Promise<void>|null=null;
@@ -113,6 +132,7 @@ export async function prepareOffline({background=false,recovery=false}:{backgrou
   if(!response.ok){if([401,403].includes(response.status))setFieldUser(null);else if(response.status>=500){connection(false);const cached=await readFieldState();checkAccount();if(isIndoorOnlineUser(activeFieldUser())||cached&&!canUseOfflineWorkspace(cached.actor.role))throw new Error(indoorOnlineRequiredMessage);if(cached)return cached;}throw new Error('Sign in with an active sales account to use offline work.');}
   const remote=await response.json() as FieldState;
   checkAccount();
+  notifyOfflinePolicy(remote.actor.role);
   if(!canUseOfflineWorkspace(remote.actor.role)&&(!recovery||!navigator.onLine))throw new Error(indoorOnlineRequiredMessage);
   const state=await updateFieldState(remote.actor.id,old=>{
    checkAccount();
@@ -131,7 +151,7 @@ export async function prepareOffline({background=false,recovery=false}:{backgrou
    const pending=new Set([...(old?.queue.map(c=>c.projectId)??[]),...freshProjects]);
    const registrations=new Set([...(old?.queue.filter(change=>change.action==='register').map(change=>change.projectId)??[]),...freshProjects]);
    const unavailableProjectIds=['Indoor Sales','Outdoor Sales'].includes(remote.actor.role)?[...pending].filter(id=>!remoteProjects.has(id)&&(!registrations.has(id)||old?.unavailableProjectIds?.includes(id))):[];
-   return {...remote,quotations:old?.quotations,unavailableProjectIds,archivedProjects:old?.archivedProjects??[],measurementReports:[...(remote.measurementReports??[]).filter(r=>!pending.has(r.project_id)).map(r=>retainMeasurementReport(r,old?.measurementReports??[])),...(old?.measurementReports??[]).filter(r=>pending.has(r.project_id))],followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remoteProjects.has(id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id)).map(p=>remoteProjects.has(p.id)?withCurrentProjectAccess(p,remoteProjects.get(p.id)!):p)??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)).map(o=>retainSkylightCapture(o,old?.openings??[])),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
+   return {...remote,quotations:refreshQuotationIdentities(old?.quotations,remote.projects),unavailableProjectIds,archivedProjects:old?.archivedProjects??[],measurementReports:[...(remote.measurementReports??[]).filter(r=>!pending.has(r.project_id)).map(r=>retainMeasurementReport(r,old?.measurementReports??[])),...(old?.measurementReports??[]).filter(r=>pending.has(r.project_id))],followUpHistories:canAccessCRM(remote.actor.role)?Object.fromEntries(Object.entries(old?.followUpHistories??{}).filter(([id])=>remoteProjects.has(id)||pending.has(id))):{},queue:old?.queue??[],projects:[...remote.projects.filter(p=>!pending.has(p.id)),...(old?.projects.filter(p=>pending.has(p.id)).map(p=>remoteProjects.has(p.id)?withCurrentProjectAccess(p,remoteProjects.get(p.id)!,old?.queue.some(change=>change.projectId===p.id&&change.action==='rename-project')):p)??[])],openings:[...remote.openings.filter(o=>!pending.has(o.projectId)).map(o=>retainSkylightCapture(o,old?.openings??[])),...(old?.openings.filter(o=>pending.has(o.projectId))??[])],syncedAt:new Date().toISOString()};
   },'snapshot');
   checkAccount();setFieldUser(remote.actor.id);context.generation=accountGeneration;context.downloaded=true;lastSnapshot={actorId:remote.actor.id,downloadedAt:Date.now()};return state;
  })();
@@ -160,6 +180,7 @@ export async function syncFieldChanges(){
   connection(true);
   if(!session.ok){if([401,403].includes(session.status))setFieldUser(null);return;}
   const identity=await session.json();if(activeFieldUser()!==id)return;if(identity.actor.id!==id){setFieldUser(null);return;}
+  notifyOfflinePolicy(identity.actor.role);
   await updateFieldState(id,s=>{if(!s)throw new Error('Offline account unavailable.');return {...s,actor:identity.actor};});
   const failed=new Set<string>();
   const attempted=new Set<string>();
@@ -514,7 +535,7 @@ export async function reviewServerProject(projectId:string){
  const data=await response.json() as FieldState;if(data.actor.id!==activeFieldUser())throw new Error('Sign in with the employee who saved this work.');
  const snapshot=data.projects.find(p=>p.id===projectId&&canAccessProjectRow(data.actor,p));
  const project=snapshot&&canAccessFieldProject({...data,unavailableProjectIds:[]},snapshot)?snapshot:undefined;
- await updateFieldState(data.actor.id,s=>{if(!s)throw new Error('Offline account unavailable.');return {...s,actor:data.actor,indoorSales:data.indoorSales??s.indoorSales,unavailableProjectIds:snapshot?(s.unavailableProjectIds??[]).filter(id=>id!==projectId):[...new Set([...(s.unavailableProjectIds??[]),projectId])],projects:s.projects.map(p=>p.id===projectId&&snapshot?withCurrentProjectAccess(p,snapshot):p)};});
+ await updateFieldState(data.actor.id,s=>{if(!s)throw new Error('Offline account unavailable.');return {...s,actor:data.actor,indoorSales:data.indoorSales??s.indoorSales,...(s.quotations?{quotations:refreshQuotationIdentities(s.quotations,data.projects)}:{}),unavailableProjectIds:snapshot?(s.unavailableProjectIds??[]).filter(id=>id!==projectId):[...new Set([...(s.unavailableProjectIds??[]),projectId])],projects:s.projects.map(p=>p.id===projectId&&snapshot?withCurrentProjectAccess(p,snapshot,s.queue.some(change=>change.projectId===p.id&&change.action==='rename-project')):p)};});
  if(!project)throw new Error('Project no longer available. Your saved work remains on this device.');
  return {project,openings:data.openings.filter(o=>o.projectId===projectId),measurementReports:(data.measurementReports??[]).filter(r=>r.project_id===projectId)};
 }

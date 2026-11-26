@@ -64,7 +64,7 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: discounts stay in s
         assert.notEqual(body.discountPercent, 5);
         if (body.action === 'preview-prices') return route.fulfill({ json: { quotation: gross, priceKey: 'gross-preview', revision } });
         if (body.action === 'approve') { assert.equal(body.confirmed, true); stage = 'approved'; revision++; }
-        else if (body.action === 'contract') { stage = 'contract'; hasContract = true; revision++; }
+        else if (body.action === 'contract') { assert.equal(Object.hasOwn(body, 'template'), false); stage = 'contract'; hasContract = true; revision++; }
         else if (body.action === 'save' || body.action === 'update-prices') {
           if (stage === 'contract') assert.equal(body.replaceUnsignedContract, true);
           if (body.action === 'save') assert.equal(body.discountPercent, 0);
@@ -110,8 +110,7 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: discounts stay in s
   const approval = page.getByRole('checkbox', { name: term('The client approved this saved quotation.'), exact: true });
   await expect(approval).toBeEnabled(); await approval.check();
   await page.getByRole('button', { name: term('Record client approval'), exact: true }).click();
-  await expect(page.getByRole('button', { name: term('Generate contract'), exact: true })).toBeDisabled();
-  await page.getByRole('combobox', { name: term('Contract type'), exact: true }).selectOption('residential');
+  await expect(page.getByRole('combobox', { name: term('Contract type'), exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: term('Generate contract'), exact: true })).toBeEnabled();
   expect(saved).toEqual(legacy);
   await page.getByRole('button', { name: term('Generate contract'), exact: true }).click();

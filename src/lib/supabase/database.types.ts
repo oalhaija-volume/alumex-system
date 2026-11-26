@@ -92,6 +92,18 @@ export type Database = {
         | "document";
     };
     Tables: {
+      contract_document_revisions: {
+        Row: {
+          id:string;project_id:string;document_revision:number;source_workflow_revision:number;
+          source_contract:Json;contract:Json;format_version:'billable-opening-schedule-v1';
+          revision_reason:'opening_schedule'|'client_name_correction';superseded_at:string|null;
+          status:'pending_approval'|'approved'|'signed';revision:number;source_signed_at:string|null;
+          created_at:string;created_by:string;approved_at:string|null;approved_by:string|null;signed_at:string|null;evidence:Json|null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       offline_quotation_receipts: {
         Row: {operation_id:string;actor_id:string;project_id:string;action:'save'|'save-shared-prices';expected_revision:number;original_request:Json;recorded_at:string;synced_at:string;result:Json};
         Insert: never;
@@ -1524,6 +1536,9 @@ export type Database = {
       };
     };
     Functions: {
+      create_contract_document_revision: { Args: {p_project:string;p_source_revision:number;p_actor:string}; Returns: Database['public']['Tables']['contract_document_revisions']['Row'] };
+      approve_contract_document_revision: { Args: {p_id:string;p_revision:number;p_actor:string}; Returns: Database['public']['Tables']['contract_document_revisions']['Row'] };
+      sign_contract_document_revision: { Args: {p_id:string;p_revision:number;p_evidence:Json;p_actor:string}; Returns: Database['public']['Tables']['contract_document_revisions']['Row'] };
       replay_offline_quotation: { Args: {p_operation:string;p_actor:string;p_project:string;p_request:Json;p_recorded_at:string}; Returns: Json };
       sync_offline_quotation: { Args: {p_operation:string;p_actor:string;p_project:string;p_expected_revision:number;p_payload:Json;p_request:Json;p_recorded_at:string}; Returns: Json };
       update_agreement_contract: { Args: { p_project: string; p_revision: number; p_agreement: Json; p_terms: Json; p_template: string; p_actor: string }; Returns: Json };

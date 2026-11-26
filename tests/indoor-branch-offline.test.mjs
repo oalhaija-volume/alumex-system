@@ -107,7 +107,7 @@ for (const branch of ['Karkh', 'Rasafa']) {
     assert.deepEqual(view.measurementReports.map(report => report.project_id), [expected.id]);
     assert.deepEqual(Object.keys(view.followUpHistories), [expected.id]);
     assert.deepEqual(view.archivedProjects.map(archive => archive.project.branch), [branch]);
-    await assert.rejects(x.client.prepareOffline(), /Indoor Sales.*internet/i);
+    await assert.rejects(x.client.prepareOffline(), /requires an internet connection/i);
     assert.deepEqual(x.raw, before, 'Filtering must never remove retained work');
   });
 }
@@ -136,9 +136,9 @@ for(const branch of ['Karkh','Rasafa'])test(`${branch} cached Governorates acces
   assert.equal((await x.client.fieldFetch('/api/workspace')).status,503);
   assert.equal((await x.client.fieldFetch('/api/initial-measurements/governorate-project')).status,503);
   assert.deepEqual(x.raw,before,'Access filtering retains inaccessible work in storage');
-  await assert.rejects(x.client.saveFieldChange('rename-project','governorate-project',{projectName:'Forbidden'}),/Indoor Sales.*internet/i);
-  await assert.rejects(x.client.retryReviewedProject('governorate-project','new-version'),/Indoor Sales.*internet/i);
-  await assert.rejects(x.client.keepReviewedServerVersion({project:snapshot.projects[0],openings:[],measurementReports:[]}),/Indoor Sales.*internet/i);
+  await assert.rejects(x.client.saveFieldChange('rename-project','governorate-project',{projectName:'Forbidden'}),/requires an internet connection/i);
+  await assert.rejects(x.client.retryReviewedProject('governorate-project','new-version'),/requires an internet connection/i);
+  await assert.rejects(x.client.keepReviewedServerVersion({project:snapshot.projects[0],openings:[],measurementReports:[]}),/requires an internet connection/i);
   assert.deepEqual(x.raw,before);
 });
 
@@ -169,7 +169,7 @@ test('missing or invalid Indoor Sales branches fail closed, including old snapsh
     for (const key of ['projects', 'queue', 'openings', 'measurementReports', 'archivedProjects']) assert.deepEqual(view[key], []);
     assert.deepEqual(view.followUpHistories, {});
     assert.equal(x.raw.queue.length, 3);
-    await assert.rejects(x.client.saveFieldChange('reopen', projects[0].id, {}), /Indoor Sales.*internet/i);
+    await assert.rejects(x.client.saveFieldChange('reopen', projects[0].id, {}), /requires an internet connection/i);
   }
 });
 
@@ -198,9 +198,9 @@ test('device workspace and direct project URLs cannot read or modify another bra
   const restricted = projects[1].id;
   assert.equal((await x.client.fieldFetch(`/api/initial-measurements/${restricted}`)).status, 503);
   const before = structuredClone(x.raw);
-  await assert.rejects(x.client.saveFieldChange('reopen', restricted, {}), /Indoor Sales.*internet/i);
-  await assert.rejects(x.client.retryReviewedProject(restricted, 'new-version'), /Indoor Sales.*internet/i);
-  await assert.rejects(x.client.keepReviewedServerVersion({ project: projects[1], openings: [], measurementReports: [] }), /Indoor Sales.*internet/i);
+  await assert.rejects(x.client.saveFieldChange('reopen', restricted, {}), /requires an internet connection/i);
+  await assert.rejects(x.client.retryReviewedProject(restricted, 'new-version'), /requires an internet connection/i);
+  await assert.rejects(x.client.keepReviewedServerVersion({ project: projects[1], openings: [], measurementReports: [] }), /requires an internet connection/i);
   assert.deepEqual(x.raw, before);
 });
 
@@ -232,7 +232,7 @@ test('a pending project missing from the server snapshot is hidden even if its c
   assert.equal(x.raw.projects.length, 1);
   assert.equal(x.raw.queue.length, 1);
   assert.equal(x.raw.openings.length, 1);
-  await assert.rejects(x.client.saveFieldChange('reopen', projects[0].id, {}), /Indoor Sales.*internet/i);
+  await assert.rejects(x.client.saveFieldChange('reopen', projects[0].id, {}), /requires an internet connection/i);
   globalThis.fetch = async () => Response.json({ actor, projects: [projects[0]], openings: [], queue: [] });
   assert.equal((await x.client.prepareOffline({recovery:true})).projects.length, 1, 'A later authorized recovery snapshot restores retained work');
 });

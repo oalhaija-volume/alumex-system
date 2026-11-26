@@ -2,14 +2,15 @@
 
 import { useState } from 'react';
 import { useI18n } from '@/components/i18n/I18nProvider';
-import { canRenameClient, normalizeClientName } from '@/lib/clients/name';
+import { canRenameClient, normalizeClientName, type ClientNameUpdate } from '@/lib/clients/name';
 import type { FieldActor, FieldProject } from '@/lib/offline/types';
+import { notifyWorkspaceChanged } from '@/lib/workflow/workspaceEvents';
 import { api, button, field, Notice, secondary } from './ui';
 
 export function ClientNameEditor({ project, actor, onSaved }: {
   project: FieldProject;
   actor: FieldActor;
-  onSaved: (clientName: string) => Promise<void>;
+  onSaved: (update: ClientNameUpdate) => Promise<void>;
 }) {
   const { term, t } = useI18n();
   const [editing, setEditing] = useState(false);
@@ -26,11 +27,12 @@ export function ClientNameEditor({ project, actor, onSaved }: {
     try {
       const payload = normalizeClientName({ clientName: name });
       if (!navigator.onLine) throw new Error('Connect to the internet before changing the client name.');
-      const result = await api<{ client: { client_name: string } }>(`/api/projects/${project.id}/client`, {
+      const result = await api<ClientNameUpdate>(`/api/projects/${project.id}/client`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, expectedClientName: expectedName }),
       });
-      await onSaved(result.client.client_name);
+      await onSaved(result);
+      notifyWorkspaceChanged();
       setEditing(false);
       setNotice('Client name updated.');
     } catch (cause) {
@@ -45,7 +47,7 @@ export function ClientNameEditor({ project, actor, onSaved }: {
         <label className="block font-medium text-slate-700">{term('Client name')}
           <input name="clientName" value={name} onChange={event => setName(event.target.value)} required maxLength={150} dir="auto" className={field}/>
         </label>
-        <p className="mt-2 text-xs leading-5 text-slate-600">{term('This updates the client record for all linked projects.')}</p>
+        <p className="mt-2 text-xs leading-5 text-slate-600">{term('This updates the client name, this project title, and current quotations and contracts. Original signed contracts are kept; revised copies need new approval and signature.')}</p>
         <div className="mt-3 flex flex-wrap gap-3">
           <button type="submit" className={button}>{busy ? t('common.saving') : t('common.saveChanges')}</button>
           <button type="button" className={secondary} onClick={() => { setEditing(false); setError(''); }}>{t('common.cancel')}</button>

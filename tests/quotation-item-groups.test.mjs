@@ -19,7 +19,7 @@ function load(path,dependencies={}) {
 const catalogRules=load('../src/lib/workflow/catalogRules.ts');
 const alumexModels=load('../src/lib/workflow/alumexModels.ts',{'./catalogRules':catalogRules});
 const pricing=load('../src/lib/workflow/pricing.ts',{'./catalogRules':catalogRules, './alumexModels': alumexModels});
-const {quotationItemGroups}=load('../src/lib/quotations/itemGroups.ts',{
+const {quotationItemGroups,quotationOpeningDisplayArea}=load('../src/lib/quotations/itemGroups.ts',{
  '../workflow/catalogRules':catalogRules,
  '@/lib/workflow/catalogRules':catalogRules,
 });
@@ -166,6 +166,7 @@ test('metrics use measured window area while prices retain the per-window billin
  assert.equal(quote.lines[0].system.quantity,4);
  const [group]=quotationItemGroups(quote);
  assert.equal(group.area,1.5);
+ assert.equal(group.displayArea,1.5,'Ordinary windows retain their measured quotation area');
  assert.equal(group.billableArea,4);
  assert.equal(group.openingCount,4);
  assert.equal(group.subtotal,960000);
@@ -186,11 +187,56 @@ test('louver summaries use the saved minimum-dimension billable area once per op
  const opening={id:'louver',floor:'GF',room:'Office',width:50,height:150,quantity:3,opening_type:'Louver',opening_direction:'Hinged'};
  const catalog=[{id:'louver-product',name:'Louver',category:'opening_product',unit:'sqm',unit_price:100000,is_active:true}];
  const quote=pricing.priceQuotation([opening],[{openingId:opening.id,systemId:'louver-product',extras:[]}],catalog,'fixture');
+ const before=structuredClone(quote);freeze(quote);
  const [group]=quotationItemGroups(quote);
  assert.equal(group.key,'louver');
  assert.equal(group.area,2.25);
+ assert.equal(quotationOpeningDisplayArea(quote.lines[0]),4.5);
+ assert.equal(group.displayArea,4.5,'The saved billable quantity already includes all three openings');
  assert.equal(group.billableArea,4.5);
+ assert.equal(group.openingCount,3);
  assert.equal(group.subtotal,450000);
+ assert.deepEqual(quote,before,'Displaying billed area cannot change measurements or prices');
+});
+
+test('louver product aliases display the saved sqm quantity for measured windows and doors',()=>{
+ for(const product of ['Louver','Louvers','Louvres','  LOUVERS  '])for(const type of ['Window','Door']){
+  const saved=line('selected-louver',{type,product,width:80,height:150,quantity:2,glassAmount:20000,extras:[charge('handle','Handle',5000)]});
+  saved.system.quantity=3;
+  saved.glass.quantity=3;
+  const before=structuredClone(saved);freeze(saved);
+  const [group]=quotationItemGroups({lines:[saved]});
+  assert.equal(quotationOpeningDisplayArea(saved),3,`${product} selected for ${type}`);
+  assert.equal(group.key,'louver');
+  assert.equal(group.area,2.4);
+  assert.equal(group.displayArea,3,'Glass and accessories must not add the same area again');
+  assert.equal(group.openingCount,2);
+  assert.deepEqual(saved,before);
+ }
+});
+
+test('historical louver display uses its saved billed quantity without applying current minimums again',()=>{
+ const older=line('historical-louver',{type:'Louver',product:'Saved custom specification',width:50,height:150,quantity:3,systemAmount:325000});
+ older.system.quantity=3.25;
+ const before=structuredClone(older);freeze(older);
+ const [group]=quotationItemGroups({lines:[older]});
+ assert.equal(quotationOpeningDisplayArea(older),3.25);
+ assert.equal(group.area,2.25);
+ assert.equal(group.displayArea,3.25);
+ assert.equal(group.subtotal,325000);
+ assert.deepEqual(older,before,'Historical display must retain saved measurements, quantities and amounts');
+});
+
+test('non-sqm louvers retain measured area instead of treating item or length quantities as square metres',()=>{
+ for(const unit of ['item','meter']){
+  const saved=line('non-sqm-louver',{type:'Louver',product:'Louver',width:80,height:70,quantity:3});
+  saved.system.unit=unit;saved.system.quantity=3;
+  const [group]=quotationItemGroups({lines:[saved]});
+  assert.equal(quotationOpeningDisplayArea(saved),saved.area);
+  assert.equal(group.displayArea,saved.area);
+  assert.equal(group.billableArea,0);
+  assert.equal(group.openingCount,3);
+ }
 });
 
 test('billable sqm summaries exclude item systems and never add glass or accessories',()=>{
@@ -223,6 +269,7 @@ test('mixed opening and facade services add priced service area without counting
  const before=structuredClone(quote);freeze(quote);
  const [group]=quotationItemGroups(quote);
  assert.equal(group.area,17.345678);
+ assert.equal(group.displayArea,17.345678);
  assert.equal(group.openingCount,2);
  assert.equal(group.subtotal,1175000);
  assert.deepEqual(quote,before);
@@ -241,6 +288,7 @@ test('standalone sqm quantities contribute area without inventing opening counts
  ]);
  assert.equal(result.reduce((sum,group)=>sum+group.subtotal,0),435000);
  assert.equal(result.reduce((sum,group)=>sum+group.billableArea,0),0.5);
+ assert.equal(result.reduce((sum,group)=>sum+group.displayArea,0),0.5);
 });
 
 test('older lines without quantities still count one opening and use their saved decimal area',()=>{
@@ -254,7 +302,7 @@ test('older lines without quantities still count one opening and use their saved
  assert.equal(standalone.openingCount,0);
 });
 
-for(const locale of ['en','ar'])test(`${locale} contract summaries show precise saved billable area while quotation summaries stay measured`,()=>{
+for(const locale of ['en','ar'])test(`${locale} quotation and contract louver totals display saved billable area while measured views retain physical area`,()=>{
  const terms=JSON.parse(readFileSync(new URL(`../messages/${locale}.json`,import.meta.url),'utf8')).terms;
  const term=(value,replacements={})=>(terms[value]??value??'').replace(/\{(\w+)\}/g,(match,key)=>replacements[key]??match);
  const formatNumber=(value,maximumFractionDigits=4)=>new Intl.NumberFormat('en-GB',{maximumFractionDigits}).format(value);
@@ -263,7 +311,48 @@ for(const locale of ['en','ar'])test(`${locale} contract summaries show precise 
   'react/jsx-runtime':jsxRuntime,
   '@/components/i18n/I18nProvider':{useI18n:()=>({locale,term,formatNumber,formatMoney})},
   '@/lib/workflow/pricing':pricing,
-  '@/lib/quotations/itemGroups':{quotationItemGroups},
+  '@/lib/quotations/itemGroups':{quotationItemGroups,quotationOpeningDisplayArea},
+  './OpeningAreaIndicator':{},
+ });
+ const catalog=[
+  {id:'louver',name:'Louver',category:'opening_product',unit:'sqm',unit_price:100000,is_active:true},
+  {id:'window',name:'Alumex System',category:'aluminum_system',unit:'sqm',unit_price:240000,is_active:true},
+ ];
+ const openings=[
+  {id:'louver',floor:'GF',room:'Office',width:50,height:150,quantity:3,opening_type:'Louver',opening_direction:'Hinged'},
+  {id:'window',floor:'GF',room:'Kitchen',width:50,height:100,quantity:1,opening_type:'Window',opening_direction:'Sliding'},
+ ];
+ const quote=pricing.priceQuotation(openings,openings.map(opening=>({openingId:opening.id,systemId:opening.id,extras:[]})),catalog,'fixture');
+ const before=structuredClone(quote);freeze(quote);
+ for(const [areaBasis,louverArea,totalArea] of [[undefined,4.5,5.5],['quoted',4.5,5.5],['billable',4.5,5.5],['measured',2.25,2.75]]){
+  const markup=renderToStaticMarkup(React.createElement(document.OpeningSchedule,{quote,areaBasis,showOpeningAreaTotal:true}));
+  const groupStart=markup.indexOf('data-item-group="louver"');
+  const group=markup.slice(groupStart,markup.indexOf('</section>',groupStart));
+  assert.ok(group.includes(`50 × 150`),'Original dimensions remain visible');
+  assert.ok(group.includes(`<span class="document-table-detail">${formatNumber(louverArea,2)} ${term('m²')}</span>`),'Louver line area includes the saved physical quantity exactly once');
+  assert.ok(group.includes(`data-area="${louverArea}" data-opening-count="3"`),'Louver subtotal shows the same basis as its line');
+  assert.ok(markup.slice(markup.indexOf('class="document-total"')).includes(`data-area="${totalArea}" data-opening-count="4"`));
+  const openingAreaStart=markup.indexOf(`<dt>${term(areaBasis==='measured'?'Total opening area':'Billable area')}</dt>`,markup.indexOf('class="mb-4 ms-auto max-w-sm'));
+  assert.ok(openingAreaStart>0);
+  const displayedOpeningArea=areaBasis==='measured'?2.75:5.5;
+  assert.ok(markup.slice(openingAreaStart,markup.indexOf('</dd>',openingAreaStart)).includes(`${formatNumber(displayedOpeningArea,4)} ${term('m²')}`));
+  if(areaBasis==='measured')assert.ok(markup.includes(term('{count} openings · {area} m² measured',{count:'4',area:'2.75'})),'The explicitly measured view keeps physical area');
+  else assert.equal(markup.includes('2.75'),false,'Quotation and contract headers cannot expose actual area');
+  assert.ok(group.includes(formatMoney(450000)));
+ }
+ assert.deepEqual(quote,before,'Rendering any area basis cannot alter saved quantities or pricing');
+});
+
+for(const locale of ['en','ar'])test(`${locale} quotation and contract summaries show only precise saved billable area`,()=>{
+ const terms=JSON.parse(readFileSync(new URL(`../messages/${locale}.json`,import.meta.url),'utf8')).terms;
+ const term=(value,replacements={})=>(terms[value]??value??'').replace(/\{(\w+)\}/g,(match,key)=>replacements[key]??match);
+ const formatNumber=(value,maximumFractionDigits=4)=>new Intl.NumberFormat('en-GB',{maximumFractionDigits}).format(value);
+ const formatMoney=value=>`${formatNumber(value,0)} ${locale==='ar'?'د.ع':'IQD'}`;
+ const document=load('../src/components/workflow/CommercialDocument.tsx',{
+  'react/jsx-runtime':jsxRuntime,
+  '@/components/i18n/I18nProvider':{useI18n:()=>({locale,term,formatNumber,formatMoney})},
+  '@/lib/workflow/pricing':pricing,
+  '@/lib/quotations/itemGroups':{quotationItemGroups,quotationOpeningDisplayArea},
   './OpeningAreaIndicator':{},
  });
  const catalog=[{id:'system',name:'Alumex System',category:'aluminum_system',unit:'sqm',unit_price:270000,is_active:true}];
@@ -287,16 +376,90 @@ for(const locale of ['en','ar'])test(`${locale} contract summaries show precise 
  assert.ok(hingedContract.includes('data-area-basis="billable"'));
  assert.ok(contract.slice(contract.indexOf('class="document-total"')).includes(`66.9413 ${term('m²')}`));
  assert.ok(contract.includes(term('Minimum billable area: 1 m² per window.')));
- assert.ok(contract.includes(term('{count} openings · {area} m² measured',{count:'24',area:'65.67'})),'Physical measured area remains explicitly labelled in the opening schedule');
+ assert.equal(contract.includes('65.67'),false,'The contract header cannot expose actual area');
  const hingedQuotation=section(quotation,'hinged');
- assert.ok(hingedQuotation.includes(`<dt>${term('Total area')}</dt>`));
- assert.ok(hingedQuotation.includes(`36.12 ${term('m²')}`));
- assert.equal(quotation.includes('data-area-basis="billable"'),false);
+ assert.ok(hingedQuotation.includes(`<dt>${term('Billable area')}</dt>`));
+ assert.ok(hingedQuotation.includes(`37.3866 ${term('m²')}`));
+ assert.equal(quotation.includes(`36.12 ${term('m²')}`),false);
+ assert.ok(quotation.includes('data-area-basis="billable"'));
  assert.deepEqual(quote,before,'Changing the summary basis cannot alter saved area, quantities or any monetary amount');
 });
 
+for(const locale of ['en','ar'])test(`${locale} quotation shows only saved billed area for small hinged windows throughout the document`,()=>{
+ const terms=JSON.parse(readFileSync(new URL(`../messages/${locale}.json`,import.meta.url),'utf8')).terms;
+ const term=(value,replacements={})=>(terms[value]??value??'').replace(/\{(\w+)\}/g,(match,key)=>replacements[key]??match);
+ const formatNumber=(value,maximumFractionDigits=4)=>new Intl.NumberFormat('en-GB',{maximumFractionDigits}).format(value);
+ const formatMoney=value=>`${formatNumber(value,0)} ${locale==='ar'?'د.ع':'IQD'}`;
+ const i18n={useI18n:()=>({locale,term,formatNumber,formatMoney})};
+ const indicators=load('../src/components/workflow/OpeningAreaIndicator.tsx',{'react/jsx-runtime':jsxRuntime,'@/components/i18n/I18nProvider':i18n,'@/lib/workflow/pricing':pricing});
+ const document=load('../src/components/workflow/CommercialDocument.tsx',{
+  'react/jsx-runtime':jsxRuntime,
+  '@/components/i18n/I18nProvider':i18n,
+  '@/lib/workflow/pricing':pricing,
+  '@/lib/quotations/itemGroups':{quotationItemGroups,quotationOpeningDisplayArea},
+  './OpeningAreaIndicator':indicators,
+ });
+ const catalog=[{id:'hinged-system',name:'Alumex Hinged Window',category:'aluminum_system',unit:'sqm',unit_price:300000,is_active:true}];
+ const openings=[[67,39],[57,53],[93,50],[164,73]].map(([width,height],index)=>({id:`hinged-${index}`,width,height,quantity:1,opening_type:'Window',opening_direction:'Hinged',floor:'GF',room:'Office'}));
+ const quote=pricing.priceQuotation(openings,openings.map(opening=>({openingId:opening.id,systemId:'hinged-system',extras:[]})),catalog,'fixture');
+ const before=structuredClone(quote);freeze(quote);
+ const [group]=quotationItemGroups(quote);
+ assert.ok(Math.abs(group.area-2.2256)<1e-9);
+ assert.ok(Math.abs(group.billableArea-4.1972)<1e-9);
+ assert.equal(group.subtotal,1259160);
+ const quotation=renderToStaticMarkup(React.createElement(document.OpeningSchedule,{quote,showAreaColors:true,showOpeningAreaTotal:true}));
+ const subtotalStart=quotation.indexOf('data-group-subtotal="hinged"');
+ const subtotal=quotation.slice(subtotalStart,quotation.indexOf('</section>',subtotalStart));
+ const total=quotation.slice(quotation.indexOf('class="document-total"'));
+ for(const summary of [subtotal,total]){
+  assert.ok(summary.includes(`<dt>${term('Billable area')}</dt>`));
+  assert.ok(summary.includes(`4.1972 ${term('m²')}`));
+  assert.ok(summary.includes(formatMoney(1259160)));
+  assert.ok(summary.includes('data-area-basis="billable"'));
+ }
+ const header=quotation.slice(quotation.indexOf('document-section-heading'),quotation.indexOf('opening-area-legend'));
+ assert.ok(header.includes(term('Billable area: {area} m²',{area:'4.1972'})));
+ assert.ok(quotation.includes(`<dt>${term('Billable area')}</dt><dd class="font-semibold"><bdi>4.1972 ${term('m²')}</bdi>`),'Optional opening total uses saved billed quantities');
+ for(const actual of ['2.23','0.2613','0.3021','0.465','0.26','0.3','0.47'])assert.equal(quotation.includes(actual),false,`Actual area ${actual} cannot leak into quotation rows, header or color badges`);
+ assert.equal(quotation.includes(term('{count} openings · {area} m² measured',{count:'4',area:'2.23'})),false);
+ assert.ok(quotation.includes('opening-area-green'),'The existing selling-target colors remain available');
+ assert.ok(quotation.includes(`<span class="document-table-detail">1.1972 ${term('m²')}</span>`),'Line areas retain four decimals of their saved billing quantity');
+ assert.equal(quotation.split(term('Minimum billable area: 1 m² per window.')).length-1,3,'Each of the three windows below 1 m² explains its billing minimum');
+ for(const areaBasis of ['quoted','billable']){
+  const markup=renderToStaticMarkup(React.createElement(document.OpeningSchedule,{quote,areaBasis}));
+  assert.ok(markup.includes('data-area-basis="billable"'),'Explicit commercial area aliases keep a single billing basis');
+  assert.equal(markup.includes('2.23'),false);
+ }
+ const measured=renderToStaticMarkup(React.createElement(document.OpeningSchedule,{quote,areaBasis:'measured'}));
+ assert.ok(measured.includes(`2.23 ${term('m²')}`),'Measurement-only views can still display physical area');
+ const repeatedOpening={...openings[0],width:50,height:75,quantity:3};
+ const repeated=pricing.priceQuotation([repeatedOpening],[{openingId:repeatedOpening.id,systemId:'hinged-system',extras:[]}],catalog,'fixture');
+ const historical=structuredClone(repeated);
+ historical.lines[0].system.quantity=1.125;
+ historical.lines[0].system.total=337500;
+ historical.lines[0].total=337500;
+ historical.total=337500;
+ for(const [saved,area] of [[repeated,3],[historical,1.125]]){
+  const savedBefore=structuredClone(saved);freeze(saved);
+  const markup=renderToStaticMarkup(React.createElement(document.OpeningSchedule,{quote:saved,showOpeningAreaTotal:true}));
+  assert.ok(markup.includes(`data-area="${area}" data-opening-count="3"`),'Repeated openings use the saved billing quantity exactly once');
+  assert.ok(markup.includes(`<span class="document-table-detail">${area} ${term('m²')}</span>`),'Historical billed quantities are not recomputed using current minimums');
+  assert.equal(markup.includes('1.13'),false,'Physical area cannot leak through rounding');
+  assert.deepEqual(saved,savedBefore);
+ }
+ const itemSystem=structuredClone(repeated);
+ itemSystem.lines[0].system={...itemSystem.lines[0].system,unit:'item',quantity:3,rate:100000,total:300000};
+ itemSystem.lines[0].total=300000;itemSystem.total=300000;
+ const itemMarkup=renderToStaticMarkup(React.createElement(document.OpeningSchedule,{quote:itemSystem,showAreaColors:true,showOpeningAreaTotal:true}));
+ assert.ok(itemMarkup.includes(`3 ${term('item')}`),'Systems billed per item retain their saved count');
+ assert.equal(itemMarkup.includes(`<span class="document-table-detail">1.125 ${term('m²')}</span>`),false,'An item system cannot display its physical area as billed sqm');
+ assert.equal(itemMarkup.includes('1.13'),false);
+ assert.equal(itemMarkup.includes('0.375'),false);
+ assert.deepEqual(quote,before,'Clarifying the saved billing basis cannot change measurements, quantities or prices');
+});
 
-for(const locale of ['en','ar'])test(`${locale} Curtain Wall measured summary precedes add-ons and its subtotal shows only money`,()=>{
+
+for(const locale of ['en','ar'])test(`${locale} Curtain Wall billable summary precedes add-ons and its subtotal shows only money`,()=>{
  const terms=JSON.parse(readFileSync(new URL(`../messages/${locale}.json`,import.meta.url),'utf8')).terms;
  const term=(value,replacements={})=>(terms[value]??value??'').replace(/\{(\w+)\}/g,(match,key)=>replacements[key]??match);
  const formatNumber=(value,maximumFractionDigits=4)=>new Intl.NumberFormat('en-GB',{maximumFractionDigits}).format(value);
@@ -305,7 +468,7 @@ for(const locale of ['en','ar'])test(`${locale} Curtain Wall measured summary pr
   'react/jsx-runtime':jsxRuntime,
   '@/components/i18n/I18nProvider':{useI18n:()=>({locale,term,formatNumber,formatMoney})},
   '@/lib/workflow/pricing':pricing,
-  '@/lib/quotations/itemGroups':{quotationItemGroups},
+  '@/lib/quotations/itemGroups':{quotationItemGroups,quotationOpeningDisplayArea},
   './OpeningAreaIndicator':{},
  });
  const catalog=[

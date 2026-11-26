@@ -149,7 +149,7 @@ test('Indoor title changes require online access and preserve existing device da
   const currentProject={...project,created_by:'outdoor-creator',branch:'Karkh',client_id:'unchanged-client'};
   const x=device(t,{employee,currentProject});
   const before=x.state;
-  await assert.rejects(x.client.saveFieldChange('rename-project',projectId,{projectName:'  عنوان المشروع الجديد  ',clientName:'Must not change'},actor.id),/Indoor Sales.*internet/i);
+  await assert.rejects(x.client.saveFieldChange('rename-project',projectId,{projectName:'  عنوان المشروع الجديد  ',clientName:'Must not change'},actor.id),/requires an internet connection/i);
   assert.deepEqual(x.state,before);
 });
 

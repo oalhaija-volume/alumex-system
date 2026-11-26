@@ -101,7 +101,7 @@ test('verified reassignment refreshes assignment and exception proof even while 
  await x.client.prepareOffline();
  const raw=x.raw;assert.equal(raw.projects[0].measurement_assignment_id,'44444444-4444-4444-8444-444444444444');
  assert.equal(raw.projects[0].measurement_exception_employee_id,null);assert.equal(raw.projects[0].measurement_exception_assignment_id,null);assert.equal(raw.projects[0].measurement_exception_reason,null);
- assert.equal(raw.projects[0].project_name,'Retained draft');assert.deepEqual(raw.queue,[queued]);assert.deepEqual(raw.openings,[opening]);assert.equal(x.visible.projects.length,0);
+ assert.equal(raw.projects[0].project_name,'Server name','A pending opening does not prevent verified identity updates');assert.deepEqual(raw.queue,[queued]);assert.deepEqual(raw.openings,[opening]);assert.equal(x.visible.projects.length,0);
  await assert.rejects(x.client.saveFieldChange('opening',projectId,opening),/reference only/);
 });
 
@@ -114,16 +114,22 @@ test('an incomplete remote projection cannot preserve an old task exception',asy
 });
 
 test('an ordinary reassignment clears the local exception instead of transferring it to another task',async t=>{
- const x=setup(t,{actor:{...actor,role:'Admin'}});
+ const x=setup(t,{actor:{...actor,role:'Sales Manager'}});
  await x.client.saveFieldChange('assign-measurements',projectId,{assignedOutdoorSalesId:collectorId});
  const p=x.raw.projects[0];assert.equal(p.assigned_outdoor_sales_id,collectorId);assert.notEqual(p.measurement_assignment_id,assignmentId);
  assert.equal(p.measurement_exception_employee_id,null);assert.equal(p.measurement_exception_assignment_id,null);assert.equal(p.measurement_exception_reason,null);
 });
 
 test('an exception grant cannot be fabricated in the offline queue',async t=>{
- const x=setup(t,{actor:{...actor,role:'Admin'}}),before=x.raw;
+ const x=setup(t,{actor:{...actor,role:'Sales Manager'}}),before=x.raw;
  await assert.rejects(x.client.saveFieldChange('assign-measurements',projectId,{assignedOutdoorSalesId:employeeId,measurementExceptionReason:'Unverified local grant'}),/assigned online by an Admin/);
  assert.deepEqual(x.raw,before);
  const response=await x.client.fieldFetch('/api/workspace',{method:'PATCH',body:JSON.stringify({projectId,action:'assign-measurements',assignedOutdoorSalesId:employeeId,measurementExceptionReason:'Must reach the server'})});
  assert.equal(response.status,409);assert.deepEqual(x.raw,before);
+});
+
+test('Admin reassignment requires online access and retains the saved exception and opening',async t=>{
+ const x=setup(t,{actor:{...actor,role:'Admin'}}),before=x.raw;
+ await assert.rejects(x.client.saveFieldChange('assign-measurements',projectId,{assignedOutdoorSalesId:collectorId}),/requires an internet connection/i);
+ assert.deepEqual(x.raw,before);
 });

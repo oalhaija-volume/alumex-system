@@ -181,11 +181,11 @@ function offline(context, actor = employee(), projects = []) {
 test('Karkh Indoor Najaf registration and edits require online access', async context => {
   const x = offline(context);
   const before=x.state;
-  await assert.rejects(x.client.saveFieldChange('register', projectId, registration('النجف', { governorate_office: 'Najaf' }), actorId),/Indoor Sales.*internet/i);
-  await assert.rejects(x.client.saveFieldChange('rename-project', projectId, { projectName: 'New Najaf showroom project' }, actorId),/Indoor Sales.*internet/i);
+  await assert.rejects(x.client.saveFieldChange('register', projectId, registration('النجف', { governorate_office: 'Najaf' }), actorId),/requires an internet connection/i);
+  await assert.rejects(x.client.saveFieldChange('rename-project', projectId, { projectName: 'New Najaf showroom project' }, actorId),/requires an internet connection/i);
   await assert.rejects(x.client.saveFieldChange('follow-up', projectId, {
     nextFollowUp: '2026-11-20T08:00:00Z', followUpType: 'call', note: 'Karkh follows up', followUpOwnerId: actorId,
-  }, actorId),/Indoor Sales.*internet/i);
+  }, actorId),/requires an internet connection/i);
   assert.deepEqual(x.state,before);
 });
 
@@ -199,6 +199,6 @@ test('offline Outdoor cannot forge the Karkh Najaf office marker during registra
 test('offline Karkh creator cannot mark legacy Najaf through a queued edit', async context => {
   const x = offline(context, employee(), [project]);
   const before = x.state;
-  await assert.rejects(x.client.saveFieldChange('rename-project', projectId, { projectName: 'Denied', governorate_office: 'Karkh' }, actorId), /Indoor Sales.*internet/i);
+  await assert.rejects(x.client.saveFieldChange('rename-project', projectId, { projectName: 'Denied', governorate_office: 'Karkh' }, actorId), /requires an internet connection/i);
   assert.deepEqual(x.state, before);
 });

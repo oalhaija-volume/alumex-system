@@ -124,23 +124,29 @@ function offline(context, role = 'Indoor Sales', branch = 'Najaf') {
 test('Najaf Indoor requires online access for legacy project edits and retains saved work', async context => {
   const x = offline(context);
   const before=x.state;
-  await assert.rejects(x.client.saveFieldChange('rename-project', projectId, { projectName: 'Updated Najaf title' }, actorId),/Indoor Sales.*internet/i);
-  await assert.rejects(x.client.saveFieldChange('follow-up', projectId, { nextFollowUp: '2026-11-20T08:00:00Z', followUpType: 'call', note: 'Najaf follow-up', followUpOwnerId: ownerId }, actorId),/Indoor Sales.*internet/i);
-  await assert.rejects(x.client.saveFieldChange('assign-measurements', projectId, { assignedOutdoorSalesId: outdoorId }, actorId),/Indoor Sales.*internet/i);
+  await assert.rejects(x.client.saveFieldChange('rename-project', projectId, { projectName: 'Updated Najaf title' }, actorId),/requires an internet connection/i);
+  await assert.rejects(x.client.saveFieldChange('follow-up', projectId, { nextFollowUp: '2026-11-20T08:00:00Z', followUpType: 'call', note: 'Najaf follow-up', followUpOwnerId: ownerId }, actorId),/requires an internet connection/i);
+  await assert.rejects(x.client.saveFieldChange('assign-measurements', projectId, { assignedOutdoorSalesId: outdoorId }, actorId),/requires an internet connection/i);
   assert.deepEqual(x.state,before);
 });
 
 for (const branch of ['Karkh', 'Rasafa']) test(`${branch} Indoor cannot queue legacy Najaf edits despite creator identity`, async context => {
   const x = offline(context, 'Indoor Sales', branch), before = x.state;
   for (const [action, payload] of [['rename-project', { projectName: 'Denied' }], ['assign-measurements', { assignedOutdoorSalesId: outdoorId }]]) {
-    await assert.rejects(x.client.saveFieldChange(action, projectId, payload, actorId), /Indoor Sales.*internet/i);
+    await assert.rejects(x.client.saveFieldChange(action, projectId, payload, actorId), /requires an internet connection/i);
   }
   assert.deepEqual(x.state, before);
 });
 
 test('global offline access cannot assign legacy Najaf work to Baghdad employees', async context => {
-  const x = offline(context, 'Admin', 'Karkh'), before = x.state;
+  const x = offline(context, 'Sales Director', 'Karkh'), before = x.state;
   await assert.rejects(x.client.saveFieldChange('assign-measurements', projectId, { assignedOutdoorSalesId: baghdadId }, actorId), /project branch/);
   await assert.rejects(x.client.saveFieldChange('follow-up', projectId, { nextFollowUp: '2026-11-20T08:00:00Z', followUpType: 'call', note: '', followUpOwnerId: baghdadId }, actorId), /project branch/);
+  assert.deepEqual(x.state, before);
+});
+
+test('Admin cannot queue legacy Najaf edits offline and retains existing work', async context => {
+  const x = offline(context, 'Admin', 'Karkh'), before = x.state;
+  await assert.rejects(x.client.saveFieldChange('assign-measurements', projectId, { assignedOutdoorSalesId: baghdadId }, actorId), /requires an internet connection/i);
   assert.deepEqual(x.state, before);
 });

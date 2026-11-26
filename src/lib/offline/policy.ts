@@ -1,9 +1,9 @@
-// Indoor Sales works against the current server version. Existing device
+// Admin and Indoor Sales work against the current server version. Existing device
 // records remain available only to the synchronization and recovery flows.
-export const indoorOnlineRequiredMessage = 'Indoor Sales requires an internet connection. Reconnect to continue.';
+export const indoorOnlineRequiredMessage = 'This account requires an internet connection. Reconnect to continue.';
 
 export function canUseOfflineWorkspace(role: string | null | undefined): boolean {
-  return role !== 'Indoor Sales';
+  return role !== 'Admin' && role !== 'Indoor Sales';
 }
 
 const ONLINE_ONLY_USER = 'alumex-online-only-user';

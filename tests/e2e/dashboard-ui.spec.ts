@@ -194,8 +194,8 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: dashboard layout, c
     for (const stageButton of await stages.getByRole('button', { pressed: false }).all()) expect((await stageButton.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
 
-  // Every stage retains the existing primary action route, including the
-  // leadership Operations handoff and the cancelled/closed record routes.
+  // Project titles open the complete project record. Every stage retains its
+  // existing primary action, including Operations and cancelled/closed records.
   const expectedRoutes = [
     `/mini-crm#project-${state.projects[0].id}`, `/mini-crm#project-${state.projects[1].id}`,
     `/initial-measurements/${state.projects[2].id}`, `/quotation/${state.projects[3].id}`,
@@ -204,7 +204,11 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: dashboard layout, c
     `/projects#project-${state.projects[9].id}`, `/projects/${state.projects[10].id}/follow-ups`,
   ];
   for (let index = 0; index < expectedRoutes.length; index++) {
-    await expect(projects.getByRole('article', { name: state.projects[index].project_name, exact: true }).getByRole('heading').getByRole('link')).toHaveAttribute('href', expectedRoutes[index]);
+    const project = projects.getByRole('article', { name: state.projects[index].project_name, exact: true });
+    await expect(project.getByRole('heading').getByRole('link')).toHaveAttribute('href', state.projects[index].pending ? expectedRoutes[index] : `/projects/${state.projects[index].id}`);
+    if (state.projects[index].pending) await expect(project.getByRole('link', { name: tr('Open project →'), exact: true })).toHaveCount(0);
+    else await expect(project.getByRole('link', { name: tr('Open project →'), exact: true })).toHaveAttribute('href', `/projects/${state.projects[index].id}`);
+    await expect(project.locator('a[title]').first()).toHaveAttribute('href', expectedRoutes[index]);
   }
   const target = projects.getByRole('article', { name: targetName, exact: true });
   await target.screenshot({ path: `${artifactDir}/${testInfo.project.name}-${locale}-project.png` });

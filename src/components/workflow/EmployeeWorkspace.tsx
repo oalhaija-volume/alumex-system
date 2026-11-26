@@ -18,7 +18,7 @@ type Employee = {
   is_active: boolean;
   updated_at: string;
 };
-const employeeRoles = ['Sales Director', 'CEO', 'Sales Manager', 'Indoor Sales', 'Outdoor Sales', 'Operations Manager', 'Project Manager', 'HR'];
+const employeeRoles = ['Sales Director', 'CEO', 'Sales Manager', 'Branch Manager', 'Indoor Sales', 'Outdoor Sales', 'Operations Manager', 'Project Manager', 'HR'];
 const primaryAdmin = (employee: Employee) => employee.email?.toLowerCase() === 'admin@alumex.com';
 
 function PasswordReset({ employeeId, disabled, onBusyChange }: {

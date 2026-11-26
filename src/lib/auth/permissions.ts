@@ -6,6 +6,10 @@ export const leadershipRoles = ['Admin', 'CEO', 'Sales Director', 'Company Owner
 export function isLeadershipRole(role: string | null | undefined) {
  return leadershipRoles.some(value => value === role);
 }
+export const projectOverviewRoles = [...leadershipRoles, 'Branch Manager'] as const;
+export function canViewProjectOverview(role: string | null | undefined) {
+ return projectOverviewRoles.some(value => value === role);
+}
 export const quotationRoles = [...leadershipRoles, 'Indoor Sales', 'Sales Manager'] as const;
 export const desktopDownloadRoles = [...leadershipRoles, 'Indoor Sales', 'Sales Manager'] as const;
 export function canDownloadDesktopApp(role: string | null | undefined) {
@@ -30,6 +34,7 @@ export function canAccessRoute(pathname: string, role: AppRole | null) {
  if(pathname === '/downloads/windows')return canDownloadDesktopApp(role);
  if(pathname === "/project-log")return role === 'Outdoor Sales';
  if(pathname === '/signed-contracts')return canPrepareQuotation(role);
+ if(/^\/projects\/[0-9a-f-]{36}$/i.test(pathname))return canViewProjectOverview(role);
  if(/^\/(quotation|contract)\/[0-9a-f-]{36}$/i.test(pathname))return canPrepareQuotation(role);
  if(isCRMRoute(pathname))return canAccessCRM(role);
  if(pathname === "/hr")return isLeadershipRole(role) || role === "HR";

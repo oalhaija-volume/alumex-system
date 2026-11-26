@@ -4,10 +4,9 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import { effectiveProjectBranch, hasGlobalProjectAccess } from '@/lib/auth/projectBranchAccess';
-import { canRenameClient } from '@/lib/clients/name';
+import { applyClientNameUpdate, canRenameClient, type ClientNameUpdate } from '@/lib/clients/name';
 import type { SignedContractRecord, SignedContractsData } from '@/lib/contracts/signedContracts';
 import { updateSavedClientName } from '@/lib/offline/client';
-import { notifyWorkspaceChanged } from '@/lib/workflow/workspaceEvents';
 import { ClientNameEditor } from './ClientNameEditor';
 import { card, field, Notice, secondary, useResource, Workspace } from './ui';
 
@@ -41,14 +40,12 @@ export function SignedContractsWorkspace() {
     finally { setRefreshing(false); }
   }
 
-  async function renamed(record: SignedContractRecord, clientName: string) {
+  async function renamed(record: SignedContractRecord, update: ClientNameUpdate) {
     if (!data) return;
-    setData(current => current ? { ...current, records: current.records.map(row =>
-      row.project.id === record.project.id || (record.project.client_id && row.project.client_id === record.project.client_id)
-        ? { ...row, project: { ...row.project, client_name: clientName } } : row,
+    setData(current => current && current.actor.id === data.actor.id ? { ...current, records: current.records.map(row =>
+      ({ ...row, project: applyClientNameUpdate(row.project, update) }),
     ) } : current);
-    notifyWorkspaceChanged();
-    await updateSavedClientName(data.actor.id, record.project.id, record.project.client_id, clientName)
+    await updateSavedClientName(data.actor.id, record.project.id, record.project.client_id, update.client.client_name, update.projects)
       .catch(() => { /* The next device refresh will update its saved client record. */ });
   }
 
@@ -56,7 +53,7 @@ export function SignedContractsWorkspace() {
   return <Workspace title="Signed contracts" description="Signed contract records for your branch, including projects transferred to Operations.">
     <Notice error={error} />
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-      <p className="max-w-2xl text-sm leading-6 text-slate-600">{term('Client name corrections update the shared client record across the system. The signed document keeps its original details.')}</p>
+      <p className="max-w-2xl text-sm leading-6 text-slate-600">{term('Client name corrections update the client record, matching project titles and current documents. Original signed contracts are retained; revised copies need new approval and signature.')}</p>
       <button type="button" className={secondary} disabled={loading || refreshing} onClick={() => void refresh()}>
         {term(refreshing ? 'Refreshing records…' : 'Refresh records')}
       </button>
@@ -95,7 +92,7 @@ export function SignedContractsWorkspace() {
             <span className="rounded-md bg-green-50 px-3 py-1 text-xs font-semibold text-green-800">{term('Signed contract')}</span>
           </div>
           {canRenameClient(record.project, data.actor)
-            ? <ClientNameEditor project={record.project} actor={data.actor} onSaved={clientName => renamed(record, clientName)} />
+            ? <ClientNameEditor project={record.project} actor={data.actor} onSaved={update => renamed(record, update)} />
             : <p className="mt-3 break-words text-sm text-slate-600">{term('Client name')}: <bdi className="font-medium text-slate-900">{record.project.client_name || term('Not added')}</bdi></p>}
           <dl className="mt-4 grid grid-cols-1 gap-x-5 gap-y-4 border-t border-slate-100 pt-4 text-sm sm:grid-cols-2 xl:grid-cols-3">
             <div><dt className="text-slate-500">{term('Branch')}</dt><dd className="mt-1 font-medium">{term(effectiveProjectBranch(record.project))}</dd></div>

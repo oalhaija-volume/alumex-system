@@ -98,11 +98,26 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: louver pricing mini
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   const schedule = page.locator('.document-schedule');
   const card = (id: string) => page.locator(`[data-opening-id="${id}"]`);
+  const louverGroup = schedule.locator('[data-item-group="louver"]');
+  const expectScheduleAreas = async (lineAreas: [number, number], groupArea: number, totalArea: number) => {
+    for (const [index, area] of lineAreas.entries()) {
+      const dimensions = louverGroup.locator('tbody').nth(index).locator('td').nth(1);
+      await expect(dimensions.locator('.document-table-detail').nth(1)).toHaveText(`${localizedNumber(locale, area)} ${term('m²')}`);
+    }
+    await expect(louverGroup.locator('[data-area]')).toHaveAttribute('data-area', String(groupArea));
+    await expect(louverGroup.locator('[data-area]')).toContainText(`${localizedNumber(locale, groupArea)} ${term('m²')}`);
+    await expect(louverGroup.locator('[data-area]')).toHaveAttribute('data-opening-count', '3');
+    await expect(schedule.locator('.document-total [data-area]')).toHaveAttribute('data-area', String(totalArea));
+    await expect(schedule.locator('.document-total [data-area]')).toContainText(`${localizedNumber(locale, totalArea)} ${term('m²')}`);
+    await expect(schedule.locator('.document-total [data-area]')).toHaveAttribute('data-opening-count', '4');
+    await expect(schedule.getByText(term('Total opening area'), { exact: true }).locator('..').locator('dd')).toHaveText(`${localizedNumber(locale, totalArea)} ${term('m²')}`);
+  };
   await page.goto(`/quotation/${projectId}`);
   const edit = page.getByRole('button', { name: term('Edit quotation'), exact: true });
   await expect(edit).toBeVisible();
   await expect(schedule.getByText(term(note), { exact: true })).toHaveCount(0);
   await expect(schedule).toContainText('80 × 150');
+  await expectScheduleAreas([2.4, 1], 3.4, 3.9);
   await edit.click();
   await expect(card('louver')).toContainText('80 × 150');
   await expect(card('louver')).toContainText(term(note));
@@ -125,13 +140,14 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: louver pricing mini
   expect(history[0].quotation).toEqual(initial);
   await expect(schedule.getByText(term(note), { exact: true })).toHaveCount(2);
   await expect(schedule).toContainText('80 × 150');
-  await expect(schedule).toContainText(localizedNumber(locale, 2.4));
-  await expect(schedule.locator('[data-item-group="louver"]')).toContainText(localizedNumber(locale, 300000));
+  await expectScheduleAreas([3, 1.2], 4.2, 4.7);
+  await expect(louverGroup).toContainText(localizedNumber(locale, 300000));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath(`${locale}-louver-pricing-document.png`), fullPage: true });
   await page.getByRole('combobox', { name: term('Quotation version'), exact: true }).selectOption('1');
   await expect(schedule.getByText(term(note), { exact: true })).toHaveCount(0);
   await expect(schedule).toContainText('80 × 150');
+  await expectScheduleAreas([2.4, 1], 3.4, 3.9);
   expect(posts).toHaveLength(1);
   expect(unexpected).toEqual([]);
   expect(errors).toEqual([]);

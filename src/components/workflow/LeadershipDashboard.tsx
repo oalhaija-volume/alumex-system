@@ -11,7 +11,8 @@ import { matchesProjectSearch } from '@/lib/dashboard/projectSearch';
 import Link from 'next/link';
 import { Noto_Sans_Arabic } from 'next/font/google';
 import { useState, type ReactNode } from 'react';
-import { isLeadershipRole } from '@/lib/auth/permissions';
+import { canViewProjectOverview, isLeadershipRole } from '@/lib/auth/permissions';
+import type { ClientNameUpdate } from '@/lib/clients/name';
 import { useI18n } from '@/components/i18n/I18nProvider';
 import type { FieldProject, SalesWorkspaceData } from '@/lib/offline/types';
 import { needsSalesFollowUp, projectLink, projectStage, projectStages, stageDetails, type ProjectStage } from '@/lib/workflow/stages';
@@ -48,7 +49,7 @@ export const dashboardStageTone: Record<ProjectStage, keyof typeof dashboardTone
 type Scope = 'all' | 'sales' | 'overdue' | 'operations' | 'unscheduled';
 type ProjectEditors = {
   onProjectSaved?: () => Promise<void>;
-  onClientNameSaved?: (project: FieldProject, clientName: string) => Promise<void>;
+  onClientNameSaved?: (project: FieldProject, update: ClientNameUpdate) => Promise<void>;
   onIndoorSalesSaved?: (assignment: SavedIndoorSalesAssignment) => Promise<void>;
 };
 
@@ -80,6 +81,7 @@ function ProjectRow({ project, data, leadership, overdue, busy, onDelete, onProj
   const details = stageDetails(project);
   const tone = dashboardTones[dashboardStageTone[currentStage]];
   const action = actionFor(project, leadership);
+  const overview = canViewProjectOverview(data.actor.role) && !project.pending ? `/projects/${project.id}` : null;
   const outdoor = project.assignedOutdoorSales ?? (!project.assigned_outdoor_sales_id && (project.original_creator_role === 'Outdoor Sales' || data.outdoorSales?.some(employee => employee.id === project.created_by)) ? project.registeredBy : null);
   const broughtInBy = projectOutdoorSalesOrigin(project, data.outdoorSales);
   const panelId = `project-panel-${project.id}`;
@@ -90,7 +92,7 @@ function ProjectRow({ project, data, leadership, overdue, busy, onDelete, onProj
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
         <div className="flex min-w-0 flex-1 basis-full flex-wrap items-baseline gap-x-3 gap-y-1 xl:basis-0">
           <h3 id={`project-name-${project.id}`} className="min-w-0 break-words text-base font-semibold leading-7 text-slate-950 [overflow-wrap:anywhere]">
-            <Link href={action.href} className="rounded-sm hover:text-blue-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">{project.project_name}</Link>
+            <Link href={overview??action.href} prefetch={false} className="rounded-sm hover:text-blue-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">{project.project_name}</Link>
           </h3>
           <span className="text-sm text-slate-600"><bdi>{term(project.project_number)}</bdi>{project.branch && <span> · {term(projectBranchLabels[project.branch])}{project.governorate && <> · <bdi>{project.governorate}</bdi></>}</span>}</span>
           {project.pending && <span className="text-sm text-slate-600">{term('Saved on device')}</span>}
@@ -115,6 +117,7 @@ function ProjectRow({ project, data, leadership, overdue, busy, onDelete, onProj
           <div className="min-w-0 break-words"><dt className="inline text-slate-500">{term('Measurements by')}: </dt><dd className="inline font-medium text-slate-800"><bdi>{outdoor ?? term('Not assigned')}</bdi></dd></div>
         </dl>
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-2">
+          {overview && <Link href={overview} prefetch={false} className={`${compactControl} text-blue-700 hover:bg-blue-50`}>{term('Open project →')}</Link>}
           {currentStage !== 'site' && currentStage !== 'closed' && needsSalesFollowUp(project) && <Link href={`/mini-crm#project-${project.id}`} className={`${compactControl} text-blue-700 hover:bg-blue-50`}>{term('Follow up')}</Link>}
           {(['details', 'history'] as const).map(panel => <button key={panel} type="button" aria-expanded={expanded === panel} aria-controls={panelId} onClick={() => setExpanded(expanded === panel ? null : panel)} className={`${compactControl} ${expanded === panel ? 'bg-slate-100 text-slate-950' : 'text-slate-600 hover:bg-slate-50'}`}>
             {term(panel === 'details' ? 'Project details' : 'Follow-up history')}
@@ -137,7 +140,7 @@ function ProjectRow({ project, data, leadership, overdue, busy, onDelete, onProj
         </dl>
         <MeasurementDelayNotice project={project}/>
         {(onProjectSaved || onClientNameSaved || onIndoorSalesSaved) && <div className="mt-3 grid gap-x-6 border-t border-slate-200 pt-1 sm:grid-cols-2">
-          <div>{onProjectSaved && <ProjectNameEditor project={project} actor={data.actor} onSaved={onProjectSaved}/>}{onClientNameSaved && <ClientNameEditor project={project} actor={data.actor} onSaved={clientName => onClientNameSaved(project, clientName)}/>}</div>
+          <div>{onProjectSaved && <ProjectNameEditor project={project} actor={data.actor} onSaved={onProjectSaved}/>}{onClientNameSaved && <ClientNameEditor project={project} actor={data.actor} onSaved={update => onClientNameSaved(project, update)}/>}</div>
           {onIndoorSalesSaved && <IndoorSalesEditor project={project} data={data} onSaved={onIndoorSalesSaved}/>}
         </div>}
       </div>}

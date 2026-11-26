@@ -7,7 +7,7 @@ import * as jsx from 'react/jsx-runtime';
 import ts from 'typescript';
 
 const cache=new Map();
-const translations={locale:'en',direction:'ltr',term:(value,replacements={})=>String(value??'').replace(/\{(\w+)\}/g,(match,key)=>replacements[key]??match),formatNumber:value=>String(value),formatMoney:value=>`${value} IQD`};
+const translations={locale:'en',direction:'ltr',term:(value,replacements={})=>String(value??'').replace(/\{(\w+)\}/g,(match,key)=>replacements[key]??match),formatNumber:value=>String(value),formatMoney:value=>`${value} IQD`,formatDate:value=>value,formatDateTime:value=>value};
 const dependencies={'react':React,'react/jsx-runtime':jsx,'@/components/i18n/I18nProvider':{useI18n:()=>translations}};
 function load(path){
  const initial=path instanceof URL?path:new URL(path,import.meta.url);
@@ -33,7 +33,8 @@ function load(path){
 }
 const {priceQuotation}=load('../src/lib/workflow/pricing.ts');
 const {operationalSpecifications}=load('../src/lib/workflow/operations.ts');
-const {OpeningSchedule}=load('../src/components/workflow/CommercialDocument.tsx');
+const {OpeningSchedule,DocumentParties}=load('../src/components/workflow/CommercialDocument.tsx');
+const {SavedContractDocument}=load('../src/components/contracts/SavedContractDocument.tsx');
 const {Agreement2027Document}=load('../src/components/contracts/Agreement2027Document.tsx');
 const {emptyAgreement2027Fields,buildAgreement2027Snapshot}=load('../src/lib/contracts/agreement2027.ts');
 const {agreement2027Terms}=load('../src/lib/contracts/agreement2027Content.ts');
@@ -92,6 +93,24 @@ function sourceContract(quotation,specifications=[]){
  return {number:'CT-SELECTED-SPECS',createdAt:'2026-11-22T09:00:00Z',template:'residential',client:{name:'Client',mobile:'07000',client_type:'individual'},project:{name:'Project',number:'PRJ-SELECTED',address:'Baghdad'},quotation,agreement2027:buildAgreement2027Snapshot(quotation,'residential',emptyAgreement2027Fields(),specifications),terms:agreement2027Terms('residential')};
 }
 
+test('quotation parties display both corrected names and keep the stable project reference',()=>{
+ const html=renderToStaticMarkup(React.createElement(DocumentParties,{client:{name:'Corrected client',mobile:'07000'},project:{name:'Corrected project title',number:'PRJ-UNCHANGED',address:'Baghdad'}}));
+ assert.match(html,/Corrected client/);assert.match(html,/data-document-project-name/);assert.match(html,/Corrected project title/);assert.match(html,/PRJ-UNCHANGED/);
+});
+
+for(const layout of ['plain','historical','source'])test(`${layout} corrected contract displays synchronized party and project names without changing saved prices`,()=>{
+ const quotation=priceQuotation([opening],[choice],catalog,'indoor');
+ const contract=sourceContract(quotation);
+ contract.client.name='Corrected client';contract.project.name='Corrected project title';
+ contract.agreement2027.fields.clientLegalName='Corrected client';contract.agreement2027.fields.ownerName='Corrected client';
+ if(layout==='plain')delete contract.agreement2027;
+ if(layout==='historical')delete contract.agreement2027.documentLayout;
+ const before=structuredClone(contract);
+ const html=renderToStaticMarkup(React.createElement(SavedContractDocument,{contract}));
+ assert.match(html,/Corrected client/);assert.match(html,/Corrected project title/);
+ assert.deepEqual(contract,before);assert.equal(contract.quotation.total,quotation.total);
+});
+
 test('a new A16-only contract renders its selected specification and approved rate without the rest of the catalog or empty price rows',()=>{
  const quotation=priceQuotation([opening],[{...choice,systemModel:'A16',glassId:'',extras:[]}],catalog,'indoor');
  const contract=sourceContract(quotation);const before=structuredClone(contract);
@@ -126,4 +145,77 @@ test('a captured source contract without the new selection flag keeps its histor
  const html=renderToStaticMarkup(React.createElement(Agreement2027Document,{contract,signedAt:'2026-11-23T10:00:00Z'}));
  assert.ok(html.includes('data-agreement-field="rate-alumex-4500"'),'Existing saved source layouts are not silently rewritten by a read');
  assert.deepEqual(contract,before);
+});
+
+for(const kind of ['residential','commercial'])for(const compact of [true,false])test(`${kind} ${compact?'compact':'full'} source contracts include their saved quotation opening schedule exactly once`,()=>{
+ const openings=[[67,39],[57,53],[93,50],[164,73]].map(([width,height],index)=>({...opening,id:`hinged-${index}`,width,height,quantity:1,opening_direction:'Hinged'}));
+ const products=[...catalog,{id:'standalone-door',name:'A Swing Door',category:'standalone_product',unit:'item',unit_price:120000,is_active:true}];
+ const quotation=priceQuotation(openings,openings.map(item=>({openingId:item.id,systemId:'system',systemRate:300000,extras:[]})),products,'indoor',[{id:'standalone-door',quantity:2}]);
+ const contract={...sourceContract(quotation),template:kind,terms:agreement2027Terms(kind),agreement2027:buildAgreement2027Snapshot(quotation,kind,emptyAgreement2027Fields())};
+ contract.agreement2027.compactLayout=compact?true:undefined;
+ const before=structuredClone(contract);
+ function freeze(value){if(value&&typeof value==='object'){Object.freeze(value);Object.values(value).forEach(freeze);}}
+ freeze(contract);
+ const html=renderToStaticMarkup(React.createElement(Agreement2027Document,{contract,signedAt:'2026-11-26T09:00:00Z',evidence:{method:'hard_copy',signer:'Saved signer'}}));
+ assert.equal((html.match(/data-contract-opening-schedule/g)??[]).length,1);
+ assert.equal((html.match(/class="document-schedule"/g)??[]).length,1,'The full quotation list must appear once per contract');
+ const appendix=html.slice(html.indexOf('data-contract-opening-schedule'));
+ assert.equal((appendix.match(/class="document-opening-group/g)??[]).length,4,'Each saved opening receives its own schedule row');
+ for(const [width,height] of [[67,39],[57,53],[93,50],[164,73]])assert.ok(appendix.includes(`${width} × ${height}`));
+ const billed=Number(appendix.match(/data-area="([^"]+)"/)?.[1]);
+ assert.ok(Math.abs(billed-4.1972)<1e-9,'The schedule must retain the saved window billing minimums');
+ assert.ok(appendix.includes('Billable area'));
+ assert.ok(appendix.includes('A Swing Door'),'Standalone quotation products accompany the opening rows');
+ assert.ok(appendix.includes(`${quotation.total} IQD`),'The schedule reconciles to the frozen contract quotation');
+ assert.ok(appendix.includes(contract.number),'The appendix identifies its contract');
+ assert.doesNotMatch(appendix,/2\.23|0\.2613|0\.3021|0\.465|m² measured/);
+ assert.ok(html.indexOf('data-agreement-layout="source-pdf-2027"')<html.indexOf('data-contract-opening-schedule'));
+ assert.deepEqual(contract,before,'Displaying the contract appendix must not revise signed quotation, terms or product selections');
+});
+
+test('historical agreements retain one existing opening schedule without a duplicate appendix',()=>{
+ const contract=sourceContract(priceQuotation([opening],[choice],catalog,'indoor'));
+ contract.agreement2027.documentLayout=undefined;
+ const before=structuredClone(contract);
+ const html=renderToStaticMarkup(React.createElement(Agreement2027Document,{contract}));
+ assert.equal((html.match(/class="document-schedule"/g)??[]).length,1);
+ assert.equal(html.includes('data-contract-opening-schedule'),false);
+ assert.deepEqual(contract,before);
+});
+
+for(const kind of ['residential','commercial','unified'])test(`${kind} historical contracts retain one saved billable opening list even with fewer than four terms`,()=>{
+ const openings=[[67,39],[57,53],[93,50],[164,73]].map(([width,height],index)=>({...opening,id:`historical-hinged-${index}`,width,height,quantity:1,opening_direction:'Hinged'}));
+ const quotation=priceQuotation(openings,openings.map(item=>({openingId:item.id,systemId:'system',systemRate:300000,extras:[]})),catalog,'saved-author');
+ const signature='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==';
+ const fields=emptyAgreement2027Fields();
+ fields.approvals.salesEngineer={name:'Saved engineer',date:'2026-11-26',signature};
+ fields.companyRepresentativeSignature=signature;
+ const agreement=buildAgreement2027Snapshot(quotation,kind,fields,[{openingId:openings[0].id,aluminumColor:'Saved bronze',glassColor:'Saved clear',bottomFrame:'',notes:'Saved opening detail'}]);
+ agreement.documentLayout=undefined;
+ for(const length of [0,1,2,3,4,19]){
+  const terms=agreement2027Terms(kind).slice(0,length);
+  const contract={...sourceContract(quotation),template:kind,terms,agreement2027:agreement};
+  const before=structuredClone(contract);
+  function freeze(value){if(value&&typeof value==='object'){Object.freeze(value);Object.values(value).forEach(freeze);}}
+  freeze(contract);
+  const html=renderToStaticMarkup(React.createElement(Agreement2027Document,{contract,signedAt:'2026-11-26T09:00:00Z'}));
+  assert.equal((html.match(/class="document-schedule"/g)??[]).length,1,`${length} saved terms must still render exactly one opening list`);
+  assert.equal((html.match(/data-agreement-section="specifications"/g)??[]).length,1);
+  assert.equal((html.match(/class="document-opening-group/g)??[]).length,4);
+  const specifications=html.indexOf('data-agreement-section="specifications"');
+  assert.ok(specifications<html.indexOf('data-agreement-section="annex"'),'The saved list remains before the readiness annex');
+  if(length>=4){
+   assert.ok(specifications>html.indexOf('data-agreement-clause="4"'),'Existing contracts keep the list inside their fourth saved term');
+   if(length>4)assert.ok(specifications<html.indexOf('data-agreement-clause="5"'));
+  }
+  const subtotal=html.slice(html.indexOf('data-group-subtotal="hinged"'));
+  assert.match(subtotal,/Billable area/);
+  assert.ok(Math.abs(Number(subtotal.match(/data-area="([^"]+)"/)?.[1])-4.1972)<1e-9);
+  assert.ok(subtotal.includes('1259160 IQD'),'The list retains every saved charge and its quotation total');
+  assert.doesNotMatch(html,/0\.2613|0\.3021|0\.465|m² measured/);
+  assert.ok(html.includes('Saved opening detail'));
+  assert.ok(html.includes(signature),'Saved staff signature remains visible');
+  assert.equal((html.match(/data-agreement-clause="/g)??[]).length,length,'No legal terms are added or removed');
+  assert.deepEqual(contract,before,'Display fallback cannot rewrite saved terms, amounts, specifications, signatures or billing quantities');
+ }
 });

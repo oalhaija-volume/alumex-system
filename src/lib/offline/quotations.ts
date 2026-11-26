@@ -9,6 +9,7 @@ import { activeFieldUser, readStoredFieldState, updateFieldState, type FieldChan
 import type { FieldState } from './types';
 import type { OfflineQuotationData, OfflineQuotationEntry, OfflineQuotationOperation, OfflineQuotationReview, OfflineQuotationState } from './quotationTypes';
 import { canUseOfflineWorkspace, indoorOnlineRequiredMessage, isIndoorOnlineUser } from './policy';
+import { quotationIdentity, retainQuotationIdentity } from './quotationIdentity';
 
 const endpoint = '/api/offline/quotations';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -81,8 +82,8 @@ function validData(value: unknown): value is OfflineQuotationData {
 function safeData(data: OfflineQuotationData): OfflineQuotationData {
   const copy = structuredClone(data);
   delete copy.offlineQuotation;
-  const { id, project_name, project_number, address, building_type, branch, governorate, governorate_office, created_by, assigned_outdoor_sales_id, sales_status, additional_openings_state } = copy.project;
-  copy.project = { id, project_name, project_number, address, building_type, branch, governorate, governorate_office, created_by, assigned_outdoor_sales_id, sales_status, additional_openings_state };
+  const { id, project_name, updated_at, project_number, address, building_type, branch, governorate, governorate_office, created_by, assigned_outdoor_sales_id, sales_status, additional_openings_state } = copy.project;
+  copy.project = { id, project_name, ...(updated_at===undefined?{}:{updated_at}), project_number, address, building_type, branch, governorate, governorate_office, created_by, assigned_outdoor_sales_id, sales_status, additional_openings_state };
   copy.client = { name: copy.client.name, mobile: copy.client.mobile, client_type: copy.client.client_type };
   if (copy.flow?.evidence) {
     // Keep a truthy lock without storing signatures or private file locations.
@@ -153,7 +154,8 @@ export function projectOfflineQuotation(data: OfflineQuotationData, body: Record
 
 function pendingData(state: OfflineQuotationState, entry: OfflineQuotationEntry): OfflineQuotationData {
   const pending = state.queue.find(operation => operation.projectId === entry.projectId && permitsDraft(entry, operation));
-  return pending ? { ...(pending.successor?.draft ?? pending.draft), offlineQuotation: { pending: true, recordedAt: pending.successor?.recordedAt ?? pending.recordedAt, ...(pending.error ? { error: pending.error } : {}) } } : entry.data;
+  const draft=pending?.successor?.draft??pending?.draft;
+  return pending&&draft ? { ...quotationIdentity(draft,{project_name:entry.data.project.project_name,client_name:entry.data.client.name,updated_at:entry.data.project.updated_at}), offlineQuotation: { pending: true, recordedAt: pending.successor?.recordedAt ?? pending.recordedAt, ...(pending.error ? { error: pending.error } : {}) } } : entry.data;
 }
 
 export function quotationSyncStatus(state: FieldState | null): { pending: number; error: string | null } {
@@ -202,7 +204,7 @@ export async function prepareOfflineQuotations({ background = false }: { backgro
       const received = new Set(receivedEntries.map(entry => entry.projectId));
       permissionLost = current.entries.some(entry => entry.available && (!received.has(entry.projectId)
         || entry.data.quotationAccess !== 'prices' && receivedEntries.find(item => item.projectId === entry.projectId)?.data.quotationAccess === 'prices'));
-      const entries: OfflineQuotationEntry[] = receivedEntries.map(entry => ({ ...entry, data: { ...safeData(entry.data), ...(sharedCatalog ? { catalog: sharedCatalog } : {}) }, available: true, downloadedAt }));
+      const entries: OfflineQuotationEntry[] = receivedEntries.map(entry => ({ ...entry, data: { ...retainQuotationIdentity(safeData(entry.data),current.entries.find(previous=>previous.projectId===entry.projectId)?.data), ...(sharedCatalog ? { catalog: sharedCatalog } : {}) }, available: true, downloadedAt }));
       const missing = current.entries.filter(entry => !received.has(entry.projectId) && current.queue.some(operation => operation.projectId === entry.projectId));
       entries.push(...missing.map(entry => ({ ...entry, available: false })));
       const queue = current.queue.map(operation => received.has(operation.projectId) ? operation : { ...operation, error: revoked, status: 403 });
@@ -220,7 +222,7 @@ async function cacheResponse(projectId: string, data: OfflineQuotationData, run:
   await updateFieldState(run.actor, state => {
     run.check(); if (!state || state.actor.id !== run.actor) throw new Error(changedAccount);
     const current = state.quotations ?? empty();
-    const entry = { projectId, data: safeData(data), available: true, downloadedAt: new Date().toISOString() };
+    const entry = { projectId, data: retainQuotationIdentity(safeData(data),current.entries.find(previous=>previous.projectId===projectId)?.data), available: true, downloadedAt: new Date().toISOString() };
     return { ...state, quotations: archiveNarrowedDrafts({ ...current, entries: [...current.entries.filter(item => item.projectId !== projectId), entry] }) };
   }, 'snapshot');
 }
@@ -303,7 +305,9 @@ export async function syncOfflineQuotations(): Promise<void> {
         const quoteState = current.quotations;
         const pending = quoteState.queue.find(item => item.id === sent!.id);
         if (!pending) return current;
-        const confirmed = { ...pending.draft, flow: result?.flow ?? { ...pending.draft.flow!, revision: (pending.body.revision as number) + 1 } };
+        const cached=quoteState.entries.find(entry=>entry.projectId===pending.projectId)?.data;
+        const acknowledged={ ...pending.draft, flow: result?.flow ?? { ...pending.draft.flow!, revision: (pending.body.revision as number) + 1 } };
+        const confirmed=cached?quotationIdentity(acknowledged,{project_name:cached.project.project_name,client_name:cached.client.name,updated_at:cached.project.updated_at}):acknowledged;
         delete confirmed.offlineQuotation;
         let successor: OfflineQuotationOperation | undefined;
         if (pending.successor) {

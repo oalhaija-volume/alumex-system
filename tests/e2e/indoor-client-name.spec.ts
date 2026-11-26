@@ -19,10 +19,11 @@ test.beforeAll(async () => {
     import {createRoot} from 'react-dom/client';
     import {I18nProvider} from '@/components/i18n/I18nProvider';
     import {ClientNameEditor} from '@/components/workflow/ClientNameEditor';
+    import {applyClientNameUpdate} from '@/lib/clients/name';
     function Harness(){
       const role=new URLSearchParams(location.search).get('role')||'Indoor Sales';
       const [project,setProject]=useState({id:'${projectId}',client_id:'client-fixture',client_name:'${originalName}',project_name:'Separate project title',branch:'Karkh',updated_at:'2026-11-10T08:00:00Z'});
-      return <main className="mx-auto max-w-3xl p-5"><h1 className="text-xl font-semibold">Separate project title</h1><ClientNameEditor project={project} actor={{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',role,name:'Indoor employee',branch:'Karkh'}} onSaved={async()=>{const response=await fetch('/qa/client-project');setProject(await response.json());}}/></main>;
+      return <main className="mx-auto max-w-3xl p-5"><h1 className="text-xl font-semibold">{project.project_name}</h1><ClientNameEditor project={project} actor={{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',role,name:'Indoor employee',branch:'Karkh'}} onSaved={async update=>setProject(current=>applyClientNameUpdate(current,update))}/></main>;
     }
     createRoot(document.getElementById('root')!).render(<I18nProvider><Harness/></I18nProvider>);
   `);
@@ -43,6 +44,7 @@ test.beforeAll(async () => {
 
 test('Projects updates every visible project linked to the renamed client', async ({ page, context, request }) => {
   const secondProjectId = '22222222-2222-4222-8222-222222222222';
+  const defaultTitleProjectId = '33333333-3333-4333-8333-333333333333';
   const actor = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', role: 'Indoor Sales', name: 'Indoor employee', branch: 'Karkh' };
   const base = {
     client_id: 'client-fixture', client_name: originalName, branch: 'Karkh',
@@ -54,6 +56,7 @@ test('Projects updates every visible project linked to the renamed client', asyn
   const projects = [
     { ...base, id: projectId, project_name: 'First project title' },
     { ...base, id: secondProjectId, project_number: 'PRJ-CLIENT-SECOND', project_name: 'Second project title' },
+    { ...base, id: defaultTitleProjectId, project_number: 'PRJ-CLIENT-DEFAULT', project_name: originalName },
   ];
   const login = await request.get('/login');
   expect(login.status()).toBe(200);
@@ -72,14 +75,21 @@ test('Projects updates every visible project linked to the renamed client', asyn
     if (url.hostname !== 'localhost') { unexpected.push(req.method() + ' ' + url.hostname); return route.abort('blockedbyclient'); }
     if (url.pathname === '/projects' && req.resourceType() === 'document') return route.fulfill({ contentType: 'text/html', body: html });
     if (url.pathname === '/qa/client-workspace.bundle.js') return route.fulfill({ contentType: 'text/javascript', body: readFileSync(resolve(output, 'client-workspace.bundle.js')) });
+    if (/^\/qa\/\d+\.bundle\.js$/.test(url.pathname)) return route.fulfill({ contentType: 'text/javascript', body: readFileSync(resolve(output, url.pathname.slice('/qa/'.length))) });
     if (url.pathname === '/api/workspace' && req.method() === 'GET') return route.fulfill({ json: { actor, projects, indoorSales: [actor], outdoorSales: [] } });
     if (url.pathname === '/api/offline' && req.method() === 'GET') return route.fulfill({ json: { actor, projects, indoorSales: [actor], outdoorSales: [], openings: [], queue: [], syncedAt: null } });
+    if (url.pathname === '/api/shared-quotations' && req.method() === 'GET') return route.fulfill({ json: { projects: [] } });
     if (url.pathname === `/api/projects/${projectId}/client` && req.method() === 'PATCH') {
       const body = req.postDataJSON();
       assert.deepEqual(body, { clientName: 'Shared corrected client', expectedClientName: originalName });
       attempts.push(body);
-      for (const project of projects) project.client_name = body.clientName;
-      return route.fulfill({ json: { ok: true, client: { id: 'client-fixture', client_name: body.clientName } } });
+      const changes = projects.filter(project => project.id === projectId || project.project_name === originalName).map(project => ({ id: project.id, project_name: body.clientName, updated_at: '2026-11-10T09:00:00Z' }));
+      for (const project of projects) {
+        project.client_name = body.clientName;
+        const change = changes.find(row => row.id === project.id);
+        if (change) Object.assign(project, change);
+      }
+      return route.fulfill({ json: { ok: true, client: { id: 'client-fixture', client_name: body.clientName }, projects: changes, documentRevisionsCreated: 0 } });
     }
     if (/^\/api\/projects\/.+\/follow-ups$/.test(url.pathname)) return route.fulfill({ json: { project: projects.find(project => url.pathname.includes(project.id)), entries: [] } });
     if (url.pathname === '/api/notifications') return route.fulfill({ json: { notifications: [], userId: actor.id } });
@@ -90,17 +100,18 @@ test('Projects updates every visible project linked to the renamed client', asyn
   await expect(page).toHaveURL('http://localhost:3003/projects');
   await expect(page).toHaveTitle('Alumex Quotation System');
   await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
-  const first = page.locator(`#project-${projectId}`), second = page.locator(`#project-${secondProjectId}`);
+  const first = page.locator(`#project-${projectId}`), second = page.locator(`#project-${secondProjectId}`), defaultTitle = page.locator(`#project-${defaultTitleProjectId}`);
   await expect(first.getByText(originalName, { exact: true })).toBeVisible();
   await expect(second.getByText(originalName, { exact: true })).toBeVisible();
   await first.getByRole('button', { name: 'Edit client name', exact: true }).click();
   await first.getByRole('textbox', { name: 'Client name', exact: true }).fill('Shared corrected client');
   await first.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(first.getByRole('status')).toHaveText('Client name updated.');
-  await expect(first.getByText('Shared corrected client', { exact: true })).toBeVisible();
+  await expect(first.getByText('Shared corrected client', { exact: true }).first()).toBeVisible();
   await expect(second.getByText('Shared corrected client', { exact: true })).toBeVisible();
-  await expect(first.getByRole('heading', { name: 'First project title', exact: true })).toBeVisible();
+  await expect(first.getByRole('heading', { name: 'Shared corrected client', exact: true })).toBeVisible();
   await expect(second.getByRole('heading', { name: 'Second project title', exact: true })).toBeVisible();
+  await expect(defaultTitle.getByRole('heading', { name: 'Shared corrected client', exact: true })).toBeVisible();
   expect(attempts).toHaveLength(1);
   await expect(page.locator('nextjs-portal')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -134,7 +145,7 @@ for (const locale of ['en', 'ar'] as const) for (const role of ['Indoor Sales', 
       if (rejectNextSave) { rejectNextSave = false; return route.fulfill({ status: 409, json: { error: conflict } }); }
       assert.equal(body.expectedClientName, currentName);
       currentName = body.clientName;
-      return route.fulfill({ json: { ok: true, client: { id: 'client-fixture', client_name: currentName } } });
+      return route.fulfill({ json: { ok: true, client: { id: 'client-fixture', client_name: currentName }, projects: [{ id: projectId, project_name: currentName, updated_at: '2026-11-10T09:00:00Z' }], documentRevisionsCreated: 0 } });
     }
     if (url.pathname === '/qa/client-project') return route.fulfill({ json: { id: projectId, client_id: 'client-fixture', client_name: currentName, project_name: 'Separate project title', branch: 'Karkh', updated_at: '2026-11-10T08:00:00Z' } });
     if (url.pathname.startsWith('/api/') || !['GET', 'HEAD', 'OPTIONS'].includes(req.method())) { unexpected.push(req.method() + ' ' + url.pathname); return route.fulfill({ status: 405, json: { error: 'Unexpected API request' } }); }
@@ -151,7 +162,7 @@ for (const locale of ['en', 'ar'] as const) for (const role of ['Indoor Sales', 
   await edit().click();
   await expect(input()).toHaveValue(originalName);
   await expect(input()).toHaveAttribute('maxlength', '150');
-  await expect(form().getByText(term('This updates the client record for all linked projects.'), { exact: true })).toBeVisible();
+  await expect(form().getByText(term('This updates the client name, this project title, and current quotations and contracts. Original signed contracts are kept; revised copies need new approval and signature.'), { exact: true })).toBeVisible();
   await input().fill('Discarded change'); await cancel().click();
   expect(attempts).toHaveLength(0);
   await edit().click(); await input().fill(''); await save().click();
@@ -180,7 +191,7 @@ for (const locale of ['en', 'ar'] as const) for (const role of ['Indoor Sales', 
   await input().fill(secondName); await save().click();
   await expect(form()).toHaveCount(0);
   expect(attempts[2]).toEqual({ clientName: secondName, expectedClientName: proposed });
-  await expect(page.getByRole('heading', { name: 'Separate project title', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: secondName, exact: true })).toBeVisible();
   await expect(page.locator('nextjs-portal')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath(`${locale}-client-name-updated.png`), fullPage: true });

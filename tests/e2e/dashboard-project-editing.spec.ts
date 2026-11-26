@@ -1,4 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { resolve } from 'node:path';
 import enMessages from '../../messages/en.json';
 import arMessages from '../../messages/ar.json';
 import type { FieldProject, FieldState } from '../../src/lib/offline/types';
@@ -17,6 +20,38 @@ const originalVersion = '2026-11-10T09:00:00Z';
 const nextVersion = '2026-11-11T10:00:00Z';
 const clientConflict = 'This client changed on another device. Reload the projects before changing its name.';
 const ownerConflict = 'This project changed on another device. Reload before changing Indoor Sales.';
+const localHeadless = resolve('.next/cache/qa-client-name/chrome-headless-shell-mac-arm64/chrome-headless-shell');
+test.use({ serviceWorkers: 'block', video: 'off', launchOptions: { executablePath: existsSync(localHeadless) ? localHeadless : undefined } });
+let bundle = '', styles = '';
+
+// The real offline shell redirects office employees to their online workspace.
+// Mount the actual dashboard directly so its isolated API/IDB fixtures remain
+// independent of login and offline-device navigation policies.
+test.beforeAll(async ({ request }, testInfo) => {
+  const directory = testInfo.outputPath('component');
+  mkdirSync(directory, { recursive: true });
+  const entry = resolve(directory, 'entry.tsx'), loader = resolve(directory, 'typescript-loader.cjs');
+  const cssLoader = resolve(directory, 'css-loader.cjs'), fontMock = resolve(directory, 'font.ts');
+  writeFileSync(entry, `import React from 'react';import {createRoot} from 'react-dom/client';import {I18nProvider} from '@/components/i18n/I18nProvider';import {SalesDashboard} from '@/components/workflow/SalesDashboard';createRoot(document.getElementById('root')!).render(<I18nProvider><SalesDashboard/></I18nProvider>);`);
+  writeFileSync(loader, `const ts=require('typescript');module.exports=function(source){return ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText;};`);
+  writeFileSync(fontMock, `export const Noto_Sans_Arabic=()=>({variable:'qa-dashboard-arabic'});`);
+  writeFileSync(cssLoader, `const postcss=require('postcss');const local=require('next/dist/compiled/postcss-modules-local-by-default');const scope=require('next/dist/compiled/postcss-modules-scope');module.exports=function(source){const done=this.async();postcss([local(),scope({generateScopedName:name=>'qa_name_'+name})]).process(source,{from:this.resourcePath}).then(result=>{const names={};result.root.walkRules(':export',rule=>{rule.walkDecls(decl=>{names[decl.prop]=decl.value;});rule.remove();});done(null,'const style=document.createElement("style");style.textContent='+JSON.stringify(result.root.toString())+';document.head.appendChild(style);export default '+JSON.stringify(names)+';');},done);};`);
+  const require = createRequire(resolve('package.json'));
+  const { webpack } = require('next/dist/compiled/webpack/webpack');
+  type Stats = { hasErrors(): boolean; toString(options: { all: boolean; errors: boolean }): string };
+  await new Promise<void>((accept, reject) => webpack({ mode: 'production', target: 'web', context: process.cwd(), devtool: false,
+    entry, output: { path: directory, filename: 'dashboard.js' },
+    resolve: { extensions: ['.tsx', '.ts', '.js', '.json'], alias: { 'next/font/google': fontMock, '@': resolve('src') } },
+    module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: [loader] }, { test: /\.module\.css$/, use: [cssLoader] }] },
+    plugins: [new webpack.DefinePlugin({ 'process.env': JSON.stringify({ NODE_ENV: 'production' }) }), new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 })],
+    optimization: { minimize: false }, performance: { hints: false },
+  }, (error: Error | null, stats: Stats) => error ? reject(error) : stats.hasErrors()
+    ? reject(new Error(stats.toString({ all: false, errors: true }))) : accept()));
+  bundle = readFileSync(resolve(directory, 'dashboard.js'), 'utf8');
+  const login = await request.get('/login');
+  expect(login.status()).toBe(200);
+  styles = [...(await login.text()).matchAll(/<link[^>]*rel="stylesheet"[^>]*>/g)].map(match => match[0]).join('');
+});
 
 function term(locale: Locale, value: string) {
   const terms: Record<string, string> = (locale === 'ar' ? arMessages : enMessages).terms;
@@ -71,6 +106,13 @@ async function dashboard(page: Page, locale: Locale, role: string) {
   page.on('pageerror', error => errors.push(error.message));
   await page.clock.setFixedTime(new Date('2026-11-11T09:00:00Z'));
   await page.addInitScript(value => localStorage.setItem('alumex_locale', value), locale);
+  await page.route('**/*', async route => {
+    const request = route.request(), url = new URL(request.url());
+    if (url.origin !== 'http://localhost:3003') return route.abort('blockedbyclient');
+    if (url.pathname === '/offline' && request.resourceType() === 'document') return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html lang="${locale}" dir="${locale === 'ar' ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${styles}</head><body><div id="root"></div><script src="/qa/dashboard-name.js"></script></body></html>` });
+    if (url.pathname === '/qa/dashboard-name.js') return route.fulfill({ contentType: 'text/javascript', body: bundle });
+    return route.continue();
+  });
   await page.route('**/api/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname;
     if (request.method() === 'PATCH') {
@@ -79,8 +121,9 @@ async function dashboard(page: Page, locale: Locale, role: string) {
       if (path === `/api/projects/${firstId}/client`) {
         if (failures.client) { failures.client = false; return route.fulfill({ status: 409, json: { error: clientConflict } }); }
         expect(body).toEqual({ clientName: expect.any(String), expectedClientName: originalClient });
-        state.projects = state.projects.map(project => project.client_id === state.projects[0].client_id ? { ...project, client_name: body.clientName } : project);
-        return route.fulfill({ json: { ok: true, client: { id: state.projects[0].client_id, client_name: body.clientName } } });
+        const changes = [{ id: firstId, project_name: body.clientName, updated_at: nextVersion }];
+        state.projects = state.projects.map(project => project.client_id === state.projects[0].client_id ? { ...project, client_name: body.clientName, ...(project.id === firstId ? changes[0] : {}) } : project);
+        return route.fulfill({ json: { ok: true, client: { id: state.projects[0].client_id, client_name: body.clientName }, projects: changes, documentRevisionsCreated: 0 } });
       }
       if (path === `/api/projects/${firstId}/indoor-sales`) {
         if (failures.owner) { failures.owner = false; return route.fulfill({ status: 409, json: { error: ownerConflict } }); }
@@ -114,17 +157,17 @@ async function dashboard(page: Page, locale: Locale, role: string) {
     window.dispatchEvent(new Event('field-change'));
   }, state);
   const projects = page.getByRole('region', { name: term(locale, 'Projects'), exact: true });
-  const target = projects.getByRole('article', { name: 'Residence المنصور', exact: true });
+  const target = projects.locator(`article[aria-labelledby="project-name-${firstId}"]`);
   await expect(target).toBeVisible();
   const details = target.getByRole('button', { name: term(locale, 'Project details'), exact: true });
   await details.click();
   return { state, projects, target, details, errors, writes, failures };
 }
 
-async function combineFilters(page: Page, locale: Locale) {
+async function combineFilters(page: Page, locale: Locale, search = 'Residence') {
   const filters = page.getByRole('region', { name: term(locale, 'Project filters'), exact: true });
   await filters.locator('summary').click();
-  await filters.getByRole('searchbox').fill('Residence');
+  await filters.getByRole('searchbox').fill(search);
   await filters.getByRole('combobox', { name: term(locale, 'Project stage'), exact: true }).selectOption('quotation-response');
   await filters.getByRole('combobox', { name: term(locale, 'Created month'), exact: true }).selectOption('2026-11');
   await filters.getByRole('combobox', { name: term(locale, 'Created by'), exact: true }).selectOption(actorId);
@@ -132,8 +175,8 @@ async function combineFilters(page: Page, locale: Locale) {
   return filters;
 }
 
-async function expectPreservedFilters(filters: Locator, locale: Locale) {
-  await expect(filters.getByRole('searchbox')).toHaveValue('Residence');
+async function expectPreservedFilters(filters: Locator, locale: Locale, search = 'Residence') {
+  await expect(filters.getByRole('searchbox')).toHaveValue(search);
   await expect(filters.locator('details')).not.toHaveAttribute('open');
   await expect(filters.getByRole('combobox', { name: term(locale, 'Project stage'), exact: true, includeHidden: true })).toHaveValue('quotation-response');
   await expect(filters.getByRole('combobox', { name: term(locale, 'Created month'), exact: true, includeHidden: true })).toHaveValue('2026-11');
@@ -184,7 +227,8 @@ for (const locale of ['en', 'ar'] as const) {
     const { state, target, details, projects, errors, writes, failures } = await dashboard(page, locale, role);
     const before = structuredClone(state.projects);
     const tr = (value: string) => term(locale, value), messages = locale === 'ar' ? arMessages : enMessages;
-    const filters = await combineFilters(page, locale);
+    const stableSearch = state.projects[0].project_number;
+    const filters = await combineFilters(page, locale, stableSearch);
     await expect(projects.locator('article')).toHaveCount(1);
     if (role === 'Admin') {
       await expect(target.getByRole('button', { name: tr('Edit project name'), exact: true })).toHaveCount(0);
@@ -216,16 +260,16 @@ for (const locale of ['en', 'ar'] as const) {
     await expect(form).toHaveCount(0);
     await expect(target.getByRole('status')).toContainText(tr('Client name updated.'));
     await expect(details).toHaveAttribute('aria-expanded', 'true');
-    await expectPreservedFilters(filters, locale);
+    await expectPreservedFilters(filters, locale, stableSearch);
     await expect(projects.locator('article')).toHaveCount(1);
-    await expect(target.getByRole('heading', { name: 'Residence المنصور', exact: true })).toBeVisible();
+    await expect(target.getByRole('heading', { name: proposed, exact: true })).toBeVisible();
     await expect.poll(async () => (await storedState(page)).projects.filter(project => project.client_id === state.projects[0].client_id).map(project => project.client_name)).toEqual([proposed, proposed]);
     await filters.getByRole('button', { name: tr('Clear filters'), exact: true }).click();
     const second = projects.getByRole('article', { name: 'Second site موقع ثان', exact: true });
     await expect(second.getByText(proposed, { exact: true })).toBeVisible();
-    await expect(target.getByRole('heading')).toHaveText('Residence المنصور');
-    expect(state.projects.map(project => project.project_name)).toEqual(['Residence المنصور', 'Second site موقع ثان', 'Basra site موقع البصرة']);
-    expect(state.projects).toEqual([{ ...before[0], client_name: proposed }, { ...before[1], client_name: proposed }, before[2]]);
+    await expect(target.getByRole('heading')).toHaveText(proposed);
+    expect(state.projects.map(project => project.project_name)).toEqual([proposed, 'Second site موقع ثان', 'Basra site موقع البصرة']);
+    expect(state.projects).toEqual([{ ...before[0], client_name: proposed, project_name: proposed, updated_at: nextVersion }, { ...before[1], client_name: proposed }, before[2]]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await target.screenshot({ path: testInfo.outputPath(`client-name-${role.replaceAll(' ', '-')}-${locale}.png`) });
     expect(errors).toEqual([]);

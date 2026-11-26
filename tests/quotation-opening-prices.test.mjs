@@ -85,7 +85,7 @@ function checkSavedPrices(html,translations,discount) {
  ]);
  assert.ok(html.includes(term('Minimum billable area: 1 m² per window.')));
  const summary=new Map([...html.matchAll(/<dt>([\s\S]*?)<\/dt><dd[^>]*>([\s\S]*?)<\/dd>/g)].map(match=>[text(match[1]),text(match[2])]));
- assert.equal(summary.get(term('Total opening area')),`4 ${term('m²')}`,'Measured area includes repetitions once and excludes billing minimums');
+ assert.equal(summary.get(term('Billable area')),`5 ${term('m²')}`,'Billable area sums saved system quantities including per-window minimums');
  const displayedTotal=text(html.match(/<div class="document-total">[\s\S]*?<strong>([\s\S]*?)<\/strong>/)[1]);
  const openingTotals=rows.map(group=>Number(group[0].at(-1).replaceAll(',','')));
  assert.equal(openingTotals.reduce((sum,value)=>sum+value,0)+100000,2125000,'Displayed opening totals plus the standalone item reconcile to the saved subtotal');
@@ -95,10 +95,10 @@ function checkSavedPrices(html,translations,discount) {
  assert.deepEqual(groupSubtotals.get('a swing door'),{label:term('{group} subtotal',{group:term('A Swing Door')}),amount:money(100000)});
  const measures=[...html.matchAll(/<dl class="document-summary-measures"[^>]*>([\s\S]*?)<\/dl>/g)].map(match=>[...match[1].matchAll(/<dt>([\s\S]*?)<\/dt><dd>([\s\S]*?)<\/dd>/g)].map(value=>[text(value[1]),text(value[2])]));
  assert.deepEqual(measures,[
-  [[term('Total area'),`4 ${term('m²')}`],[term('Total openings'),'3']],
-  [[term('Total area'),`0 ${term('m²')}`],[term('Total openings'),'0']],
-  [[term('Total area'),`4 ${term('m²')}`],[term('Total openings'),'3']],
- ],'Group and grand totals show measured sqm and physical opening quantities, excluding accessories and non-area standalone units');
+  [[term('Billable area'),`5 ${term('m²')}`],[term('Total openings'),'3']],
+  [[term('Billable area'),`0 ${term('m²')}`],[term('Total openings'),'0']],
+  [[term('Billable area'),`5 ${term('m²')}`],[term('Total openings'),'3']],
+ ],'Group and grand totals show saved billable sqm and physical opening quantities, excluding accessories and non-area standalone units');
  assert.ok(html.includes(`<span>${term('Grand total')}</span>`),'Both document languages explicitly label the final grand total');
  assert.equal(displayedTotal,money(discount?2018750:2125000));
  if(discount){

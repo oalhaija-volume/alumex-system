@@ -64,9 +64,30 @@ test('client names trim Arabic and English, cap length and ignore unrelated fiel
   }
 });
 
+test('confirmed rename results update only authoritative project titles and keep custom sibling titles', () => {
+  const { applyClientNameUpdate, normalizeClientNameUpdate } = modules()('lib/clients/name');
+  const update = normalizeClientNameUpdate({
+    client: { id: 'shared-client', client_name: 'اسم العميل المصحح', privateNotes: 'never exposed' },
+    projects: [{ id: projectId, project_name: 'اسم العميل المصحح', updated_at: '2026-11-26T10:00:00Z', privatePath: 'never exposed' }],
+    documentRevisionsCreated: 1, privateSource: 'never exposed',
+  });
+  const target = { id: projectId, client_id: 'shared-client', client_name: 'Old client', project_name: 'Old project', pending: true, serverUpdatedAt: 'original version' };
+  const sibling = { ...target, id: 'custom-sibling', project_name: 'Separate building' };
+  const unrelated = { ...target, id: 'unrelated', client_id: 'other-client' };
+  assert.deepEqual(applyClientNameUpdate(target, update), { ...target, client_name: update.client.client_name, project_name: update.client.client_name, updated_at: '2026-11-26T10:00:00Z' });
+  assert.deepEqual(applyClientNameUpdate(sibling, update), { ...sibling, client_name: update.client.client_name });
+  assert.equal(applyClientNameUpdate(unrelated, update), unrelated);
+  const newer = { ...target, updated_at: '2026-11-26T10:01:00Z', client_name: 'A later correction' };
+  assert.equal(applyClientNameUpdate(newer, update), newer, 'A delayed response cannot replace a later correction');
+  assert.doesNotMatch(JSON.stringify(update), /never exposed/);
+  for (const invalid of [{ id: 'legacy', client_name: 'Partial old response' }, { ...update, projects: null }, { ...update, documentRevisionsCreated: -1 }, { ...update, projects: [{ ...update.projects[0], updated_at: 'invalid' }] }]) {
+    assert.throws(() => normalizeClientNameUpdate(invalid), /synchronization is not available/);
+  }
+});
+
 function endpoint({ role = 'Indoor Sales', branch = 'Karkh', currentProject = project, accessStatus, rpcError = null } = {}) {
   const calls = [], scopes = [];
-  const result = { client_id: 'client-fixture', client_name: 'Reviewed client' };
+  const result = { client: { id: 'client-fixture', client_name: 'Reviewed client' }, projects: [{ id: projectId, project_name: 'Reviewed client', updated_at: '2026-11-26T10:00:00Z' }], documentRevisionsCreated: 1 };
   const api = modules({
     'next/server': { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } },
     '@/lib/workflow/access': {
@@ -94,7 +115,7 @@ test('client rename uses the authenticated actor and sends only the client-name 
   const x = endpoint();
   const response = await x.patch({ ...rename, actorId: 'forged', client_id: 'forged', projectName: 'forged', mobile: 'forged', sales_status: 'contract_signed' });
   assert.equal(response.status, 200);
-  assert.deepEqual(response.body, { ok: true, client: x.result });
+  assert.deepEqual(response.body, { ok: true, ...x.result });
   assert.deepEqual(x.scopes, [true]);
   assert.deepEqual(x.calls, [{
     name: 'rename_project_client',

@@ -7,12 +7,19 @@ export type QuotationItemGroup = {
  additionalItems:StandaloneCharge[];
  subtotal:number;
  area:number;
+ displayArea:number;
  billableArea:number;
  openingCount:number;
 };
 
 const groupOrder = ['sliding','hinged','curtain wall','louver'];
 const normalize = (value:string) => value.trim().toLowerCase().replace(/[&-]/g,' ').replace(/\s+/g,' ');
+
+export function quotationOpeningDisplayArea(line:QuoteLine):number {
+ // Saved sqm quantities already include repetitions and the minimum used for pricing.
+ return line.system.unit==='sqm'&&(line.opening.opening_type==='Louver'||productGroup(line.system.name)==='Louver')
+  ?line.system.quantity:line.area;
+}
 
 function productGroup(name:string):string {
  const key=normalize(name);
@@ -48,7 +55,7 @@ export function quotationItemGroups(quote:Pick<QuoteSnapshot,'lines'|'additional
   const key=normalize(label);
   let group=groups.get(key);
   if(!group){
-   group={key,label,lines:[],additionalItems:[],subtotal:0,area:0,billableArea:0,openingCount:0};
+   group={key,label,lines:[],additionalItems:[],subtotal:0,area:0,displayArea:0,billableArea:0,openingCount:0};
    groups.set(key,group);
   }
   return group;
@@ -59,6 +66,7 @@ export function quotationItemGroups(quote:Pick<QuoteSnapshot,'lines'|'additional
   group.subtotal+=line.total;
   // Saved line area already includes repeated openings and excludes billing minima.
   group.area+=line.area;
+  group.displayArea+=quotationOpeningDisplayArea(line);
   // The saved system quantity includes any billing minimum and repetitions.
   // Glass and accessories share that area; counting them would duplicate it.
   if(line.system.unit==='sqm')group.billableArea+=line.system.quantity;
@@ -69,7 +77,7 @@ export function quotationItemGroups(quote:Pick<QuoteSnapshot,'lines'|'additional
   group.additionalItems.push(item);
   group.subtotal+=item.total+(item.extras??[]).reduce((sum,extra)=>sum+extra.total,0);
   // Services have area, but no physical opening count; accessories add neither.
-  if(item.unit==='sqm'&&!item.projectAddon){group.area+=item.quantity;group.billableArea+=item.quantity;}
+  if(item.unit==='sqm'&&!item.projectAddon){group.area+=item.quantity;group.displayArea+=item.quantity;group.billableArea+=item.quantity;}
  }
  return [...groups.values()].sort((a,b)=>{
   const aIndex=groupOrder.indexOf(a.key),bIndex=groupOrder.indexOf(b.key);

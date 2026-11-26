@@ -66,7 +66,7 @@ test('offline snapshots preserve lock markers without evidence, signatures or co
   assert.doesNotMatch(JSON.stringify(safe), /signature-private|private-path|Private signer|contract-private/);
 });
 
-function fixture({ prices = false, revision = 1, accessStatus = null, syncError = null } = {}) {
+function fixture({ prices = false, revision = 1, accessStatus = null, syncError = null, role = 'Indoor Sales' } = {}) {
   const calls = [], reads = [], receipts = new Map();
   const project = { id: projectId, client_id: 'client', project_name: 'Offline quote', project_number: 'PRJ-OFFLINE',
     branch: prices ? 'Rasafa' : 'Karkh', governorate: null, building_type: 'residential_building', sales_status: 'quotation_in_progress', additional_openings_state: null };
@@ -109,7 +109,7 @@ function fixture({ prices = false, revision = 1, accessStatus = null, syncError 
     '@/lib/contracts/uploadedTerms': { uploadedContractTerms: () => [] },
     '@/lib/workflow/access': { salesProject: async () => accessStatus
       ? { response: response.json({ error: 'Project not found.' }, { status: accessStatus }) }
-      : { admin, auth: { user: { id: actorId }, role: 'Indoor Sales' }, project, quotationAccess: prices ? 'prices' : 'full' } } });
+      : { admin, auth: { user: { id: actorId }, role }, project, quotationAccess: prices ? 'prices' : 'full' } } });
   const route = compiled('app/api/sales-flow/[projectId]/route');
   return { calls, reads, receipts, flow, project, post: (body = normalRequest, requestHeaders = headers()) => route.POST(
     new Request(`http://localhost:3003/api/sales-flow/${projectId}`, { method: 'POST', headers: requestHeaders, body: JSON.stringify(body) }),
@@ -199,6 +199,18 @@ test('offline approval/signing cannot enter a save transaction and ordinary onli
   assert.ok((await result.json()).flow);
 });
 
+for (const role of ['Admin', 'Indoor Sales']) test(`${role} retains exactly-once recovery for previously saved quotation drafts`, async () => {
+  const x = fixture({ role });
+  const first = await x.post();
+  assert.equal(first.status, 200);
+  assert.equal((await first.json()).revision, 2);
+  const retry = await x.post();
+  assert.equal(retry.status, 200);
+  assert.equal((await retry.json()).replayed, true);
+  assert.equal(x.calls.filter(call => call.name === 'sync_offline_quotation').length, 1);
+  assert.equal(x.calls.find(call => call.name === 'sync_offline_quotation').args.p_actor, actorId);
+});
+
 function snapshotFixture({ role = 'Sales Manager', grants = ['00000000-0000-4000-8000-000000000002'], many = false, grantError = false } = {}) {
   const makeProject = (id, branch, extra = {}) => ({ id, branch, governorate: null, governorate_office: null,
     project_number: `PRJ-${id}`, project_name: 'Snapshot project', client_id: 'client', archived_at: null,
@@ -259,10 +271,10 @@ test('snapshot pagination is bounded and complete only after the final same-acto
   assert.equal(last.quotations.length, 1); assert.equal(last.complete, true); assert.equal(last.nextCursor, null);
   assert.equal(new Set([...first.quotations, ...last.quotations].map(row => row.projectId)).size, 51);
 });
-test('Indoor Sales cannot download offline quotations regardless of shared grants, and nonsales roles stay denied', async () => {
+test('Admin and Indoor Sales cannot download offline quotations regardless of shared grants, and nonsales roles stay denied', async () => {
   const noGrant = await (await snapshotFixture({ grants: [] }).get()).json();
   assert.ok(noGrant.quotations.every(row => row.data.quotationAccess === 'full'));
-  for (const options of [{ role: 'Indoor Sales' }, { role: 'Indoor Sales', grants: [] }, { role: 'Indoor Sales', grantError: true }]) {
+  for (const role of ['Admin', 'Indoor Sales']) for (const options of [{ role }, { role, grants: [] }, { role, grantError: true }]) {
     const response = await snapshotFixture(options).get();
     assert.equal(response.status, 403); assert.equal((await response.json()).code, 'INDOOR_ONLINE_REQUIRED');
   }

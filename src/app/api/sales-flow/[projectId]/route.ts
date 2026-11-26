@@ -30,8 +30,8 @@ export async function GET(request:Request,context:Context){
   return new Response(file.data,{headers:{'Content-Type':file.data.type,'Content-Disposition':'attachment; filename="signed-contract"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
  }
  if(access.quotationAccess==='prices'){
-  const {id,project_number,project_name,address,building_type,branch,governorate,sales_status,additional_openings_state}=project;
-  return NextResponse.json({quotationAccess:'prices',project:{id,project_number,project_name,address,building_type,branch,governorate,sales_status,additional_openings_state},client:client.data,flow:flow.data?{...flow.data,contract:null,evidence:flow.data.evidence?{recorded:true}:null}:null,openings:openings.data,catalog:catalog.data,history:[],sizeHistory:[]},{headers:{'Cache-Control':'private, no-store','X-Alumex-Actor':access.auth.user.id}});
+  const {id,project_number,project_name,address,building_type,branch,governorate,sales_status,additional_openings_state,updated_at}=project;
+  return NextResponse.json({quotationAccess:'prices',project:{id,project_number,project_name,address,building_type,branch,governorate,sales_status,additional_openings_state,updated_at},client:client.data,flow:flow.data?{...flow.data,contract:null,evidence:flow.data.evidence?{recorded:true}:null}:null,openings:openings.data,catalog:catalog.data,history:[],sizeHistory:[]},{headers:{'Cache-Control':'private, no-store','X-Alumex-Actor':access.auth.user.id}});
  }
  // Old installations can continue opening quotations until the size-edit
  // migration is applied. Existing revision snapshots still remain available.

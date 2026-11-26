@@ -7,6 +7,21 @@
   color: #000;
 }
 
+.openingSchedule {
+  width: 100%;
+  max-width: 794px;
+  margin: 20px auto 0;
+  padding: 24px;
+  border: 1px solid #dbe3e8;
+  background: #fff;
+}
+
+@media (max-width: 600px) {
+  .openingSchedule {
+    padding: 16px;
+  }
+}
+
 .page {
   position: relative;
   container-type: inline-size;
@@ -177,6 +192,16 @@
     margin: 0;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+
+  .openingSchedule {
+    page: sales-document;
+    break-before: page;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
   }
 
   .page {

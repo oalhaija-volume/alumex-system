@@ -124,8 +124,8 @@ test.beforeAll(async ({ request }, testInfo) => {
  // the same meaning they have in the application stylesheet.
  writeFileSync(cssLoader, "module.exports=function(source){const names=[...source.matchAll(/\\.([a-zA-Z_][\\w-]*)/g)].map(match=>match[1]);const css=source.replace(/:global\\(([^)]+)\\)/g,'$1');return 'const sheet=document.createElement(\"style\");sheet.textContent='+JSON.stringify(css)+';document.head.appendChild(sheet);export default '+JSON.stringify(Object.fromEntries(names.map(name=>[name,name])))+';';};");
  const require = createRequire(resolve('package.json'));
- const { webpack } = require('next/dist/compiled/webpack/webpack') as { webpack: ((config: Record<string, unknown>, callback: (error: Error | null, stats?: { hasErrors(): boolean; toString(options: Record<string, unknown>): string }) => void) => void) & { DefinePlugin: new (values: Record<string, string>) => unknown } };
- await new Promise<void>((accept, reject) => webpack({ mode: 'production', target: 'web', context: process.cwd(), entry, output: { path: bundleDirectory, filename: 'contract-component.js' }, resolve: { extensions: ['.tsx', '.ts', '.js', '.json'], alias: { '@': resolve('src') } }, module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: [loader] }, { test: /\.module\.css$/, use: [cssLoader] }] }, plugins: [new webpack.DefinePlugin({ 'process.env': JSON.stringify({ NODE_ENV: 'production' }) })], optimization: { minimize: false }, performance: { hints: false } }, (error, stats) => error ? reject(error) : !stats || stats.hasErrors() ? reject(new Error(stats?.toString({ all: false, errors: true }) ?? 'Contract component unavailable')) : accept()));
+ const { webpack } = require('next/dist/compiled/webpack/webpack') as { webpack: ((config: Record<string, unknown>, callback: (error: Error | null, stats?: { hasErrors(): boolean; toString(options: Record<string, unknown>): string }) => void) => void) & { DefinePlugin: new (values: Record<string, string>) => unknown; optimize: { LimitChunkCountPlugin: new (options: { maxChunks: number }) => unknown } } };
+ await new Promise<void>((accept, reject) => webpack({ mode: 'production', target: 'web', context: process.cwd(), entry, output: { path: bundleDirectory, filename: 'contract-component.js' }, resolve: { extensions: ['.tsx', '.ts', '.js', '.json'], alias: { '@': resolve('src') } }, module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: [loader] }, { test: /\.module\.css$/, use: [cssLoader] }] }, plugins: [new webpack.DefinePlugin({ 'process.env': JSON.stringify({ NODE_ENV: 'production' }) }), new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 })], optimization: { minimize: false }, performance: { hints: false } }, (error, stats) => error ? reject(error) : !stats || stats.hasErrors() ? reject(new Error(stats?.toString({ all: false, errors: true }) ?? 'Contract component unavailable')) : accept()));
  bundle = readFileSync(resolve(bundleDirectory, 'contract-component.js'), 'utf8');
  const login = await request.get('/login'); expect(login.status()).toBe(200);
  stylesheetLinks = [...(await login.text()).matchAll(/<link[^>]*rel="stylesheet"[^>]*>/g)].map(match => match[0]).join('');
@@ -227,11 +227,27 @@ async function compactLayout(page: Page) {
  return { pages, flowPages, sequence };
 }
 
+async function expectContractOpeningSchedule(page: Page, contract: ContractSnapshot) {
+ const paper = page.locator('.commercial-document');
+ const appendix = paper.locator('[data-contract-opening-schedule]');
+ await expect(appendix).toHaveCount(1);
+ await expect(paper.locator('.document-schedule')).toHaveCount(1);
+ await expect(appendix.locator('.document-schedule')).toHaveCount(1);
+ await expect(appendix.locator('.document-opening-group')).toHaveCount(contract.quotation.lines.length);
+ const billableArea = contract.quotation.lines.reduce((sum, line) => sum + (line.system.unit === 'sqm' ? line.system.quantity : 0), 0)
+  + (contract.quotation.additionalItems ?? []).reduce((sum, item) => sum + (item.unit === 'sqm' && !item.projectAddon ? item.quantity : 0), 0);
+ const measures = appendix.locator('.document-total .document-summary-measures');
+ await expect(measures).toHaveAttribute('data-area-basis', 'billable');
+ await expect(measures).toHaveAttribute('data-area', String(billableArea));
+ await expect(appendix.locator('.document-total strong')).toContainText(number(contract.quotation.total));
+}
+
 for (const locale of ['en', 'ar'] as const) {
  for (const mode of ['one', 'mixed', 'unknown', 'long'] as const) test(`${locale}: selected ${mode} specifications contain only approved products and preserve every saved item on screen and paper`, async ({ page }, testInfo) => {
   const state = selectedFixture(mode), before = structuredClone(state.flow.contract!);
   const health = await mount(page, locale, state);
   const paper = page.locator('.commercial-document');
+  await expectContractOpeningSchedule(page, before);
   const products = paper.locator('[data-agreement-product]');
   const names = mode === 'mixed'
    ? ['ALUMEX A16', 'Low-E Glass', 'Handle', 'ALUMEX CURTAIN WALL C W 60', 'Curtain Wall Arch', 'ALUMEX SKYLIGHT C W 60', 'Sub Frame', 'ALUMEX SWING DOOR']
@@ -244,11 +260,11 @@ for (const locale of ['en', 'ar'] as const) {
   if (mode === 'long') expect(physicalPages).toBeGreaterThan(6);
   else if (mode === 'one' || mode === 'unknown') expect(physicalPages).toBeLessThanOrEqual(6);
   const text = (await products.allTextContents()).join(' ').replace(/\s+/g, ' ').toLowerCase();
-  const entireDocument = (await paper.textContent())!.replace(/\s+/g, ' ').toLowerCase();
+  const sourceDocument = (await paper.locator('[data-agreement-layout="source-pdf-2027"]').textContent())!.replace(/\s+/g, ' ').toLowerCase();
   const unselected = ['ALUMEX A16 Pro', 'ALUMEX 16 PRO', 'ALUMEX 4500', 'ALUMEX PUSH OUT', 'THE ADDRESS AS A18', 'Glass Mirror', 'Turn And Tilt'];
   if (mode !== 'mixed') unselected.push('ALUMEX CURTAIN WALL', 'ALUMEX SKYLIGHT', 'ALUMEX SWING DOOR', 'Low-E Glass', 'Handle');
   if (mode === 'unknown') unselected.push('ALUMEX A16');
-  for (const name of unselected) expect(entireDocument).not.toContain(name.toLowerCase());
+  for (const name of unselected) expect(sourceDocument).not.toContain(name.toLowerCase());
   expect(text).not.toContain('—');
   const rates = mode === 'mixed' ? [270001, 20000, 12345, 312345, 150000, 430987, 17000, 516789] : [270001];
   for (const rate of rates) expect(text).toContain(number(rate));
@@ -263,8 +279,14 @@ for (const locale of ['en', 'ar'] as const) {
   const pdfPath = testInfo.outputPath(`${locale}-${mode}-selected-products.pdf`);
   const bytes = await page.pdf({ path: pdfPath, format: 'A4', preferCSSPageSize: true, printBackground: true });
   expect(bytes.byteLength).toBeLessThanOrEqual(3 * 1024 * 1024);
-  const pdf = await PDFDocument.load(bytes); expect(pdf.getPageCount()).toBe(physicalPages);
-  const extraction = JSON.parse(execFileSync('swift', ['-module-cache-path', resolve(directory, 'swift-cache'), resolve(bundleDirectory, 'extract-pdf.swift'), pdfPath], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 })) as { text: string };
+  const pdf = await PDFDocument.load(bytes); expect(pdf.getPageCount()).toBeGreaterThanOrEqual(physicalPages + 1);
+  // Technical-selection assertions apply to the original source pages. The
+  // appended quotation retains all saved rows, including zero-quantity items.
+  const sourcePdf = await PDFDocument.create();
+  for (const sourcePage of await sourcePdf.copyPages(pdf, Array.from({ length: physicalPages }, (_, index) => index))) sourcePdf.addPage(sourcePage);
+  const sourcePdfPath = testInfo.outputPath(`${locale}-${mode}-source-specifications.pdf`);
+  writeFileSync(sourcePdfPath, await sourcePdf.save());
+  const extraction = JSON.parse(execFileSync('swift', ['-module-cache-path', resolve(directory, 'swift-cache'), resolve(bundleDirectory, 'extract-pdf.swift'), sourcePdfPath], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 })) as { text: string };
   for (const name of names) expect(normalized(extraction.text)).toContain(normalized(name));
   for (const name of unselected) expect(normalized(extraction.text).toLowerCase()).not.toContain(normalized(name).toLowerCase());
   expect(state.flow.contract).toEqual(before);
@@ -406,6 +428,7 @@ for (const locale of ['en', 'ar'] as const) {
   else expect(state.flow.quotation.total).toBeGreaterThan(15000000);
   const health = await mount(page, locale, state);
   const paper = page.locator('.commercial-document'), payments = paper.locator('[data-agreement-section="payments"]');
+  await expectContractOpeningSchedule(page, state.flow.contract!);
   const layout = await compactLayout(page);
   expect(layout.pages.length).toBeLessThanOrEqual(7);
   await expect(paper.locator(`[data-contract-type="${kind}"]`)).toHaveAttribute('aria-checked', 'true');
@@ -441,7 +464,7 @@ for (const locale of ['en', 'ar'] as const) {
   const bytes = await page.pdf({ path: pdfPath, format: 'A4', preferCSSPageSize: true, printBackground: true });
   expect(bytes.byteLength, 'The printed contract must fit the existing signed-copy upload limit').toBeLessThanOrEqual(3 * 1024 * 1024);
   const printed = await PDFDocument.load(bytes);
-  expect(printed.getPageCount()).toBe(layout.pages.length);
+  expect(printed.getPageCount()).toBeGreaterThanOrEqual(layout.pages.length + 1);
   writeFileSync(testInfo.outputPath(`${locale}-${kind}-compact-layout.json`), JSON.stringify(layout, null, 2) + '\n');
   const extraction = JSON.parse(execFileSync('swift', ['-module-cache-path', resolve(directory, 'swift-cache'), resolve(bundleDirectory, 'extract-pdf.swift'), pdfPath], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 })) as { pages: number; text: string };
   // Original Arabic source glyphs remain vector paths. Dynamic system fields
@@ -565,6 +588,7 @@ for (const locale of ['en', 'ar'] as const) {
   const before = structuredClone(state.flow);
   const health = await mount(page, locale, state);
   const paper = page.locator('.commercial-document');
+  await expectContractOpeningSchedule(page, before.contract!);
   const layout = await compactLayout(page);
   const signatureBand = paper.locator('[data-agreement-band="formal-signatures"]');
   const signingPage = signatureBand.locator('xpath=ancestor::*[@data-agreement-page]');
@@ -607,7 +631,7 @@ for (const locale of ['en', 'ar'] as const) {
   const bytes = await page.pdf({ path: pdfPath, format: 'A4', preferCSSPageSize: true, printBackground: true });
   expect(bytes.byteLength, 'The signed contract must fit the existing signed-copy upload limit').toBeLessThanOrEqual(3 * 1024 * 1024);
   const pdf = await PDFDocument.load(bytes);
-  expect(pdf.getPageCount()).toBe(layout.pages.length);
+  expect(pdf.getPageCount()).toBeGreaterThanOrEqual(layout.pages.length + 1);
   const extraction = JSON.parse(execFileSync('swift', ['-module-cache-path', resolve(directory, 'swift-cache'), resolve(bundleDirectory, 'extract-pdf.swift'), pdfPath], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 })) as { text: string };
   expect(normalized(extraction.text)).toContain(normalized(fields.companyRepresentativeName));
   expect(normalized(extraction.text)).toContain(normalized(state.flow.evidence.signer));

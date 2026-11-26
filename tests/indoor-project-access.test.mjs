@@ -162,7 +162,7 @@ for (const branch of ['Karkh', 'Rasafa', 'Najaf', null, 'unknown']) {
     const response = await x.load('src/app/api/offline/route').GET(request());
     assert.equal(response.status,403);
     assert.equal(response.body.code,'INDOOR_ONLINE_REQUIRED');
-    assert.match(response.body.error,/Indoor Sales.*internet/i);
+    assert.match(response.body.error,/requires an internet connection/i);
     assert.match(response.headers['Cache-Control'],/no-store/);
     assert.deepEqual(x.reads,[],'Denied offline preparation must not load business data');
     assert.deepEqual(x.writes,[]);
@@ -173,7 +173,7 @@ for (const branch of ['Karkh', 'Rasafa', 'Najaf', null, 'unknown']) {
 for (const role of ['Admin', 'Sales Director', 'Company Owner']) {
   test(`${role} keeps existing project visibility across branches`, async () => {
     for (const path of ['dashboard', 'workspace', 'offline']) {
-      const response = await fixture({ role }).load(`src/app/api/${path}/route`).GET(request());
+      const response = await fixture({ role }).load(`src/app/api/${path}/route`).GET(request(undefined, role === 'Admin' && path === 'offline' ? '?recovery=1' : ''));
       assert.equal(response.status, 200);
       assert.deepEqual(response.body.projects.map(p => p.id), projects.map(p => p.id));
     }

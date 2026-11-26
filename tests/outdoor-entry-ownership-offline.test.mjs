@@ -121,6 +121,6 @@ test('Indoor Sales requires online access to edit an opening with unknown origin
   const old = { ...opening, createdBy: null };
   const x = setup(t, { actor: { ...actor, role: 'Indoor Sales', branch: 'Karkh' }, projects: [{ ...project, branch: 'Karkh' }], openings: [old] });
   const before=x.raw;
-  await assert.rejects(x.client.saveFieldChange('edit-opening', projectId, { previous: old, opening: { ...old, width: 155 } }),/Indoor Sales.*internet/i);
+  await assert.rejects(x.client.saveFieldChange('edit-opening', projectId, { previous: old, opening: { ...old, width: 155 } }),/requires an internet connection/i);
   assert.deepEqual(x.raw,before);
 });

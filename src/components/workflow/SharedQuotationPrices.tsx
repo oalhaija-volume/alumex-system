@@ -140,7 +140,7 @@ export function SharedQuotationPrices({ projectId, data, reload, error: resource
           <button type="submit" disabled={locked || busy || invalidRates || !hasChanges || flow.stage === 'contract' && !replaceUnsignedContract} className={`${button} mt-5 w-full sm:w-auto`}>{term(busy ? 'Saving…' : 'Save revised quotation')}</button>
         </div>
       </form>
-      <DocumentPaper><DocumentHeader kind="Quotation" number={reference} createdAt={quotation.createdAt} /><DocumentParties client={data.client} project={{ number: project.project_number, address: project.address, branch: project.branch, governorate: project.governorate }} /><OpeningSchedule quote={quotation} /></DocumentPaper>
+      <DocumentPaper><DocumentHeader kind="Quotation" number={reference} createdAt={quotation.createdAt} /><DocumentParties client={data.client} project={{ name: project.project_name, number: project.project_number, address: project.address, branch: project.branch, governorate: project.governorate }} /><OpeningSchedule quote={quotation} /></DocumentPaper>
     </>}
   </Workspace>;
 }

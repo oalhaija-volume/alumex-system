@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { canRenameClient, normalizeClientName } from '@/lib/clients/name';
+import { canRenameClient, normalizeClientName, normalizeClientNameUpdate } from '@/lib/clients/name';
 import { salesProject } from '@/lib/workflow/access';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ projectId: string }> }) {
@@ -30,5 +30,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ pr
     const status = result.error.code === '42501' ? 403 : result.error.code === '22023' ? 400 : 409;
     return NextResponse.json({ error: result.error.message }, { status });
   }
-  return NextResponse.json({ ok: true, client: result.data });
+  try {
+    return NextResponse.json({ ok: true, ...normalizeClientNameUpdate(result.data) }, { headers: { 'Cache-Control': 'private, no-store' } });
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+  }
 }

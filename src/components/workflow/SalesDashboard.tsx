@@ -19,7 +19,8 @@ import { SharedQuotationProjects } from './SharedQuotationProjects';
 import { button,card,field,Notice,useResource,useNow,Workspace } from './ui';
 export function SalesDashboard(){
  const { term,formatDateTime,formatNumber } = useI18n();
- const {data,error,setError,setData,loading,reload}=useResource<SalesWorkspaceData>('/api/workspace');const [stage,setStage]=useState('all');const [search,setSearch]=useState('');const [due,setDue]=useState('all');
+ const dashboardUrl=typeof window!=='undefined'&&window.location.pathname==='/offline'?'/api/workspace':'/api/workspace?view=dashboard';
+ const {data,error,setError,setData,loading,reload}=useResource<SalesWorkspaceData>(dashboardUrl);const [stage,setStage]=useState('all');const [search,setSearch]=useState('');const [due,setDue]=useState('all');
  const [busy,setBusy]=useState('');const [notice,setNotice]=useState('');
  const registration=useProjectRegistrationFilters(data?.projects??[]);
  const projects=registration.filteredProjects;const now=useNow();const crm=canAccessCRM(data?.actor.role);const outdoor=data?.actor.role==='Outdoor Sales';

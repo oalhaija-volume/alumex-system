@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { hasOverviewSignedCopy, loadOverviewReportPhoto, loadProjectOverview, overviewHeaders, overviewUuid, projectOverviewAccess, ProjectOverviewLoadError } from '@/lib/workflow/projectOverviewServer';
+import { hasOverviewSignedCopy, loadOverviewOpeningCapture, loadOverviewReportPhoto, loadProjectOverview, overviewHeaders, overviewUuid, projectOverviewAccess, ProjectOverviewLoadError } from '@/lib/workflow/projectOverviewServer';
+import { projectOverviewSections, type ProjectOverviewSection } from '@/lib/workflow/projectOverview';
 import type { SalesFlow } from '@/lib/workflow/types';
 
 export async function GET(request: Request, { params }: { params: Promise<{ projectId: string }> }) {
@@ -8,6 +9,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ proj
  if (access.response) return access.response;
  const headers = { ...overviewHeaders, 'X-Alumex-Actor': access.auth.user.id };
  const query = new URL(request.url).searchParams;
+ if (query.has('opening')) {
+  const openingId = query.get('opening') ?? '';
+  if (!overviewUuid.test(openingId) || query.has('report') || query.has('download')) return NextResponse.json({ error: 'Project not found.' }, { status: 404, headers });
+  const result = await loadOverviewOpeningCapture(access.admin, projectId, openingId);
+  return result.response ?? NextResponse.json(result.capture, { headers });
+ }
  if (query.has('report')) {
   const reportId = query.get('report') ?? '';
   if (!overviewUuid.test(reportId) || query.has('download')) return NextResponse.json({ error: 'Measurement report not found.' }, { status: 404, headers });
@@ -26,7 +33,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ proj
   return new Response(file.data, { headers: { ...headers, 'Content-Type': file.data.type || 'application/octet-stream', 'Content-Disposition': 'attachment; filename="signed-contract"', 'X-Content-Type-Options': 'nosniff' } });
  }
  try {
-  return NextResponse.json(await loadProjectOverview(access), { headers });
+  const section = query.get('section') ?? 'overview';
+  if (!projectOverviewSections.includes(section as ProjectOverviewSection)) return NextResponse.json({ error: 'Project not found.' }, { status: 404, headers });
+  return NextResponse.json(await loadProjectOverview(access, section as ProjectOverviewSection, !query.has('section')), { headers });
  } catch (error) {
   return NextResponse.json({ error: error instanceof ProjectOverviewLoadError ? error.message : 'Unable to load project details.' }, { status: 500, headers });
  }

@@ -140,13 +140,17 @@ test.beforeAll(async ({ request }) => {
   styles = [...(await response.text()).matchAll(/<link[^>]*rel="stylesheet"[^>]*>/g)].map(match => match[0]).join('');
 });
 
-async function mount(page: Page, context: BrowserContext, locale: 'en' | 'ar', options: { empty?: boolean; rejectInitial?: boolean; sourceContract?: boolean; viaDashboard?: boolean; documentRevisionRole?: string; rejectRevisionAction?: boolean } = {}) {
+async function mount(page: Page, context: BrowserContext, locale: 'en' | 'ar', options: { empty?: boolean; rejectInitial?: boolean; sourceContract?: boolean; viaDashboard?: boolean; documentRevisionRole?: string; rejectRevisionAction?: boolean; openingCapture?: boolean } = {}) {
   const messages = JSON.parse(readFileSync(resolve(`messages/${locale}.json`), 'utf8'));
   const terms: Record<string, string> = messages.terms;
   const term = (value: string) => terms[value] ?? value;
   const errorMessage = (value: string) => terms[value] ?? value;
   const state = fixture();
   if (options.documentRevisionRole) addDocumentRevision(state, options.documentRevisionRole);
+  if (options.openingCapture) {
+    state.openings[0].has_curtain_wall_capture = true;
+    state.openings[0].curtain_wall_capture = { note: 'Saved opening capture note', photo: signatureImage };
+  }
   if (options.sourceContract && state.flow?.contract) {
     const fields = emptyAgreement2027Fields();
     fields.clientLegalName = 'Saved source contract client';
@@ -157,6 +161,7 @@ async function mount(page: Page, context: BrowserContext, locale: 'en' | 'ar', o
   const before = structuredClone(state), errors: string[] = [], unexpected: string[] = [];
   let reads = 0, dashboardReads = 0, rejectNextRevisionAction = options.rejectRevisionAction ?? false;
   const actions: Record<string, unknown>[] = [];
+  const sectionReads: string[] = [], captureReads: string[] = [];
   const html = `<!doctype html><html lang="${locale}" dir="${locale === 'ar' ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${styles}<title>Project overview fixture</title></head><body><div id="root"></div><script src="/qa/project-overview.bundle.js"></script></body></html>`;
   await context.addInitScript(value => {
     localStorage.setItem('alumex_locale', value);
@@ -219,10 +224,26 @@ async function mount(page: Page, context: BrowserContext, locale: 'en' | 'ar', o
     if (url.pathname === '/qa/project-overview.bundle.js') return route.fulfill({ contentType: 'text/javascript', body: bundle });
     if (url.pathname === endpoint && url.searchParams.get('report') === reportId) return route.fulfill({ json: { photo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6l8AAAAASUVORK5CYII=' } });
     if (url.pathname === endpoint && url.searchParams.get('download') === 'signed') return route.fulfill({ contentType: 'application/pdf', body: '%PDF-1.4\nFixture signed contract\n%%EOF' });
-    if (url.pathname === endpoint && !url.search) {
+    if (url.pathname === endpoint && url.searchParams.has('opening')) {
+      const id = url.searchParams.get('opening')!;
+      captureReads.push(id);
+      const opening = state.openings.find(row => row.id === id);
+      return route.fulfill({ status: opening ? 200 : 404, json: opening ? { curtain_wall_capture: opening.curtain_wall_capture, skylight_capture: opening.skylight_capture } : { error: 'Project not found.' } });
+    }
+    if (url.pathname === endpoint && (!url.search || url.searchParams.has('section'))) {
       reads++;
       if (options.rejectInitial && reads === 1) return route.fulfill({ status: 500, json: { error: 'Unable to load project details.' } });
-      return route.fulfill({ json: state });
+      const section = url.searchParams.get('section') ?? 'overview';
+      sectionReads.push(section);
+      const payload = structuredClone(state);
+      payload.section = section as NonNullable<ProjectOverviewData['section']>;
+      if (section !== 'overview') payload.contacts = [];
+      if (section !== 'measurements') { payload.openings = []; payload.measurementReports = []; payload.sizeHistory = []; }
+      else payload.openings = payload.openings.map(opening => ({ ...opening, curtain_wall_capture: null, skylight_capture: null }));
+      if (section !== 'follow-ups') payload.followUps.entries = [];
+      if (section !== 'quotation' && section !== 'contract') { payload.flow = null; payload.history = []; }
+      if (section !== 'contract') { payload.documentRevisions = []; payload.signedCopyAvailable = false; }
+      return route.fulfill({ json: payload });
     }
     if (url.pathname === '/api/dashboard') {
       dashboardReads++;
@@ -238,7 +259,7 @@ async function mount(page: Page, context: BrowserContext, locale: 'en' | 'ar', o
     return route.continue();
   });
   await page.goto(options.viaDashboard ? '/dashboard' : pathname);
-  return { term, errorMessage, state, before, errors, unexpected, actions, reads: () => reads, dashboardReads: () => dashboardReads };
+  return { term, errorMessage, state, before, errors, unexpected, actions, sectionReads, captureReads, reads: () => reads, dashboardReads: () => dashboardReads };
 }
 
 for (const locale of ['en', 'ar'] as const) test(`${locale}: Branch Manager opens project information and commercial documents from the dashboard`, async ({ page, context }, testInfo) => {
@@ -262,7 +283,7 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: Branch Manager open
   await expect(page.getByRole('button', { name: /Generate|Save quotation|Sign contract/ })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(state.dashboardReads()).toBe(1);
-  expect(state.reads()).toBe(1);
+  expect(state.sectionReads).toEqual(['overview', 'quotation', 'contract']);
   expect(state.errors).toEqual([]);
   expect(state.unexpected).toEqual([]);
 });
@@ -335,8 +356,10 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: complete project vi
     await expect(page.getByRole('button', { name: state.term(label), exact: true })).toHaveCount(0);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const readsBeforeRefresh = state.reads();
   await page.getByRole('button', { name: state.term('Refresh records'), exact: true }).click();
-  await expect.poll(state.reads).toBe(2);
+  await expect.poll(state.reads).toBe(readsBeforeRefresh + 1);
+  expect(state.sectionReads.at(-1)).toBe('contract');
   expect(state.errors).toEqual([]);
   expect(state.unexpected).toEqual([]);
   expect(state.state).toEqual(state.before);
@@ -494,4 +517,30 @@ for (const locale of ['en', 'ar'] as const) test(`${locale}: a stale approval re
   expect(state.state.flow).toEqual(state.before.flow);
   expect(state.errors).toEqual([]);
   expect(state.unexpected).toEqual([]);
+});
+
+for (const locale of ['en', 'ar'] as const) test(`${locale}: project tabs request only selected records and opening images load on demand`, async ({ page, context }, testInfo) => {
+  if (testInfo.project.name === 'mobile-chromium') await page.setViewportSize({ width: 375, height: 950 });
+  const state = await mount(page, context, locale, { openingCapture: true });
+  await expect(page.getByText('Fixture legal client', { exact: true }).first()).toBeVisible();
+  expect(state.sectionReads).toEqual(['overview']);
+  expect(state.captureReads).toEqual([]);
+  await expect(page.locator('.commercial-document')).toHaveCount(0);
+  await page.getByRole('tab', { name: state.term('Measurements'), exact: true }).click();
+  await expect(page.getByText('Fixture measurement report note', { exact: true })).toBeVisible();
+  expect(state.sectionReads).toEqual(['overview', 'measurements']);
+  await expect(page.getByText('Saved opening capture note', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('img', { name: state.term('Curtain Wall photo'), exact: true })).toHaveCount(0);
+  expect(state.captureReads).toEqual([]);
+  await page.getByRole('button', { name: state.term('View opening details and photos'), exact: true }).click();
+  await expect(page.getByText('Saved opening capture note', { exact: true })).toBeVisible();
+  await expect(page.getByRole('img', { name: state.term('Curtain Wall photo'), exact: true })).toBeVisible();
+  expect(state.captureReads).toEqual([state.state.openings[0].id]);
+  await page.getByRole('tab', { name: state.term('Contract'), exact: true }).click();
+  await expect(page.locator('.commercial-document')).toContainText('CT-SAVED-FIXTURE');
+  await expect(page.locator('.commercial-document')).toContainText('2,700,000');
+  expect(state.sectionReads).toEqual(['overview', 'measurements', 'contract']);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(state.errors).toEqual([]);expect(state.unexpected).toEqual([]);
+  expect(state.state).toEqual(state.before);
 });

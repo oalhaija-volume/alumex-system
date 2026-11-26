@@ -42,6 +42,7 @@ function route(role) {
   const deps={
     '@/lib/auth/projectBranchAccess':branchAccess,
     '@/lib/auth/outdoorTeams':{},'@/lib/measurements/visitHistory':{},
+    '@/lib/workflow/projectList':{},'@/lib/workflow/projectListServer':{},'@/lib/dashboard/outdoorProjectFilters':{},
     '@/lib/measurements/measurementDelay':{},
     '@/lib/workflow/reactivation':{normalizeReactivation},
     '@/lib/workflow/projectName':{},

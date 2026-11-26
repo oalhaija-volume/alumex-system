@@ -12,7 +12,8 @@ export const secondary='min-h-11 rounded-md border border-slate-300 bg-white px-
 export const card='rounded-lg border border-slate-200 bg-white p-5 sm:p-7';
 export async function api<T>(url:string,init?:RequestInit):Promise<T>{
  const commercial=url==='/api/shared-quotations'||/^\/api\/sales-flow\/[0-9a-f-]{36}(?:\?|$)/i.test(url);
- const transport=commercial&&isOfflineDevice()?(await import('@/lib/offline/quotations')).quotationFetch:url==='/api/workspace'?fieldFetch:fetch;
+ const workspaceRecord=/^\/api\/workspace\?projectId=[0-9a-f-]{36}$/i.test(url);
+ const transport=commercial&&isOfflineDevice()?(await import('@/lib/offline/quotations')).quotationFetch:url==='/api/workspace'||url==='/api/workspace?view=dashboard'||workspaceRecord?fieldFetch:fetch;
  const response=await transport(url,{cache:'no-store',...init});const data=await response.json();if(!response.ok)throw new Error(data.error??'Unable to complete request.');
  if(url==='/api/workspace'&&init?.method?.toUpperCase()==='PATCH')notifyWorkspaceChanged(data?.pending!==true);
  return data;
@@ -21,6 +22,8 @@ export function useResource<T>(url:string){
  const [data,setData]=useState<T|null>(null);
  const [error,setError]=useState('');
  const [loading,setLoading]=useState(true);
+ const [settledUrl,setSettledUrl]=useState<string|null>(null);
+ const [dataUrl,setDataUrl]=useState<string|null>(null);
  const reloadResource=useRef<(()=>Promise<void>)|null>(null);
  useEffect(()=>{
   let timer:ReturnType<typeof setTimeout>;
@@ -33,6 +36,7 @@ export function useResource<T>(url:string){
    load:signal=>api<T>(url,{signal}),
    onData:result=>{
      setData(result);
+     setDataUrl(url);
      hasData=true;
      setError('');
      if(result&&typeof result==='object'&&'actor' in result){
@@ -41,7 +45,7 @@ export function useResource<T>(url:string){
      }
    },
    onError:cause=>setError(cause instanceof Error?cause.message:'Unable to complete request.'),
-   onSettled:()=>setLoading(false),
+   onSettled:()=>{setLoading(false);setSettledUrl(url);},
   });
   async function reload(){
    clearTimeout(timer);pendingForce=false;
@@ -75,7 +79,8 @@ export function useResource<T>(url:string){
    timer=setTimeout(()=>{pendingForce=false;void loader.refresh(true);},150);
   }
   void loader.refresh();
-  const live=commercial||url==='/api/workspace'||url==='/api/dashboard'||url==='/api/outdoor-sales-coverage'||url==='/api/signed-contracts'||/^\/api\/projects\/[0-9a-f-]{36}(?:\/contract-revisions)?$/i.test(url);
+  const pathname=url.split('?')[0];
+  const live=commercial||pathname==='/api/workspace'||pathname==='/api/dashboard'||pathname==='/api/outdoor-sales-coverage'||pathname==='/api/signed-contracts'||/^\/api\/projects\/[0-9a-f-]{36}(?:\/contract-revisions)?$/i.test(pathname);
   // Saved quotation acknowledgments refresh their view, while background polls
   // cannot replace a form the employee is still editing.
   const interval=live&&!commercial?setInterval(()=>{if(document.visibilityState==='visible')changed();},30000):undefined;
@@ -88,7 +93,9 @@ export function useResource<T>(url:string){
   };
  },[url]);
  const reload=useCallback(async()=>{await reloadResource.current?.();},[]);
- return {data,setData,error,setError,loading,reload};
+ // A search, page or tab change must never render the previous URL's records
+ // while its new request is still in flight.
+ return {data:dataUrl===url?data:null,setData,error:settledUrl===url?error:'',setError,loading:loading||settledUrl!==url,reload};
 }
 export function Workspace({title,description,children,action}:{title:string;description:string;children:React.ReactNode;action?:React.ReactNode}){const {term}=useI18n();return <section className="sales-document mx-auto max-w-5xl px-5 py-9 sm:px-8 sm:py-12 print:max-w-none print:p-0">{action?<header className="flex items-start justify-between gap-3 print:hidden"><h1 className="min-w-0 text-2xl font-semibold tracking-tight">{term(title)}</h1>{action}</header>:<h1 className="text-3xl font-semibold tracking-tight print:hidden">{term(title)}</h1>}<p className="mt-3 mb-8 text-sm leading-6 text-slate-500 print:hidden">{term(description)}</p>{children}</section>;}
 export function Notice({error}:{error:string}){const {errorMessage}=useI18n();return error?<div role="alert" className="mb-5 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{errorMessage(error)}</div>:null;}

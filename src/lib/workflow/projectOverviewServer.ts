@@ -12,7 +12,7 @@ import type { MeasurementReport } from '@/lib/measurements/completion';
 import type { FollowUpEntry } from './followUps';
 import type { OpeningSizeHistory } from './openingSizeChanges';
 import type { QuotationRevision, SalesFlow } from './types';
-import type { ProjectOverviewClient, ProjectOverviewContact, ProjectOverviewData, ProjectOverviewOpening } from './projectOverview';
+import type { ProjectOverviewClient, ProjectOverviewContact, ProjectOverviewData, ProjectOverviewOpening, ProjectOverviewSection } from './projectOverview';
 import { overviewHeaders, overviewUuid } from './projectOverview';
 import { loadContractDocumentRevisions } from '@/lib/contracts/documentRevisionsServer';
 
@@ -22,10 +22,13 @@ type DatabaseError = { code?: string; message?: string };
 type ReadResult<T> = { data: T | null; error: DatabaseError | null };
 type Receipt = Pick<Database['public']['Tables']['field_sync_receipts']['Row'], 'operation_id' | 'project_id' | 'actor_id' | 'action' | 'recorded_at' | 'result'>;
 type Person = { id: string; full_name: string | null; username: string | null };
-type SavedOpening = Omit<ProjectOverviewOpening, 'recordedBy'>;
+type SavedOpening = Omit<ProjectOverviewOpening, 'recordedBy' | 'curtain_wall_capture' | 'skylight_capture'> & Partial<Pick<ProjectOverviewOpening, 'curtain_wall_capture' | 'skylight_capture'>>;
 
 export { overviewHeaders, overviewUuid } from './projectOverview';
 const missingTable = (error: DatabaseError | null) => !!error && ['42P01', 'PGRST205'].includes(error.code ?? '');
+// Capture JSON can contain large data URLs. The measurement list carries flags;
+// an authorized opening-specific request retrieves the saved capture on demand.
+export const overviewOpeningColumns = 'id,project_id,created_by,created_at,updated_at,has_arch,has_roller_shutter,work_area,facade_number,has_curtain_wall_capture,has_skylight_capture,floor,room,opening_code,site_readiness,width,height,solid_panel_height,fixed_height,quantity,area_sqm,product_system,glass_type,aluminum_color,shape,opening_type,bottom_frame,opening_direction,glass_color,measurement_request_id,measurement_visit_id,measurement_submission_id,measurement_version,notes';
 
 export class ProjectOverviewLoadError extends Error {}
 
@@ -81,20 +84,25 @@ export function hasOverviewSignedCopy(flow: Pick<SalesFlow, 'contract' | 'eviden
  return /^[A-Za-z0-9._-]+$/.test(objectName) && objectName !== '.' && objectName !== '..';
 }
 
-export async function loadProjectOverview(access: Exclude<Awaited<ReturnType<typeof projectOverviewAccess>>, { response: unknown }>): Promise<ProjectOverviewData> {
+export async function loadProjectOverview(access: Exclude<Awaited<ReturnType<typeof projectOverviewAccess>>, { response: unknown }>, section: ProjectOverviewSection = 'overview', legacyFull = false): Promise<ProjectOverviewData> {
  const { admin, project, auth } = access;
  const warnings: string[] = [];
+ const measurements = legacyFull || section === 'measurements';
+ const documents = legacyFull || section === 'quotation' || section === 'contract';
  const [client, contacts, openings, flow, history, reports, sizeHistory, receipts, attempts, documentRevisions] = await Promise.all([
   optionalRead<ProjectOverviewClient | null>(admin.from('clients').select('id,name:client_name,mobile,alternate_mobile,address,province,city,email,notes,client_type,company_name,whatsapp,preferred_language').eq('id', project.client_id).maybeSingle(), warnings, 'Unable to load client information.', null),
-  rows<ProjectOverviewContact>(offset => admin.from('client_contacts').select('*').eq('client_id', project.client_id).or(`project_id.is.null,project_id.eq.${project.id}`).order('is_primary', { ascending: false }).order('id').range(offset, offset + 999), 'Unable to load project contacts.', warnings),
-  rows<SavedOpening>(offset => admin.from('openings').select('*').eq('project_id', project.id).order('created_at').order('id').range(offset, offset + 999), 'Unable to load project measurements.'),
-  optionalRead<SalesFlow | null>(admin.from('sales_workflows').select('project_id,revision,stage,quotation,contract,evidence,signed_at,accepted_at,accepted_by').eq('project_id', project.id).maybeSingle(), warnings, 'Quotation and contract information is unavailable on this installation.', null),
-  rows<QuotationRevision>(offset => admin.from('quotation_revisions').select('version,quotation,contract,previous_stage,superseded_at').eq('project_id', project.id).order('version', { ascending: false }).range(offset, offset + 999), 'Unable to load quotation history.', warnings),
-  rows<MeasurementReport>(offset => admin.from('measurement_completion_reports').select('id,project_id,note,has_photo,recorded_by,recorded_by_name,recorded_at').eq('project_id', project.id).order('recorded_at', { ascending: false }).order('id').range(offset, offset + 999), 'Unable to load measurement notes.', warnings),
-  rows<OpeningSizeHistory>(offset => admin.from('opening_size_history').select('*').eq('project_id', project.id).order('changed_at', { ascending: false }).order('id').range(offset, offset + 999), 'Unable to load size change history.', warnings),
-  rows<Receipt>(offset => admin.from('field_sync_receipts').select('operation_id,project_id,actor_id,action,recorded_at,result').eq('project_id', project.id).in('action', ['follow-up', 'ready', 'assign-measurements', 'cancel-project', 'reactivate-project']).order('recorded_at', { ascending: false }).order('operation_id').range(offset, offset + 999), 'Unable to load follow-up history.', warnings),
-  loadMeasurementAttempts(admin, [project.id]),
-  loadContractDocumentRevisions(admin, project.id),
+  legacyFull || section === 'overview' ? rows<ProjectOverviewContact>(offset => admin.from('client_contacts').select('*').eq('client_id', project.client_id).or(`project_id.is.null,project_id.eq.${project.id}`).order('is_primary', { ascending: false }).order('id').range(offset, offset + 999), 'Unable to load project contacts.', warnings) : [],
+  measurements ? rows<SavedOpening>(offset => {
+   const query = legacyFull ? admin.from('openings').select('*') : admin.from('openings').select(overviewOpeningColumns);
+   return query.eq('project_id', project.id).order('created_at').order('id').range(offset, offset + 999);
+  }, 'Unable to load project measurements.') : [],
+  documents ? optionalRead<SalesFlow | null>(admin.from('sales_workflows').select('project_id,revision,stage,quotation,contract,evidence,signed_at,accepted_at,accepted_by').eq('project_id', project.id).maybeSingle(), warnings, 'Quotation and contract information is unavailable on this installation.', null) : null,
+  documents ? rows<QuotationRevision>(offset => admin.from('quotation_revisions').select('version,quotation,contract,previous_stage,superseded_at').eq('project_id', project.id).order('version', { ascending: false }).range(offset, offset + 999), 'Unable to load quotation history.', warnings) : [],
+  measurements ? rows<MeasurementReport>(offset => admin.from('measurement_completion_reports').select('id,project_id,note,has_photo,recorded_by,recorded_by_name,recorded_at').eq('project_id', project.id).order('recorded_at', { ascending: false }).order('id').range(offset, offset + 999), 'Unable to load measurement notes.', warnings) : [],
+  measurements ? rows<OpeningSizeHistory>(offset => admin.from('opening_size_history').select('*').eq('project_id', project.id).order('changed_at', { ascending: false }).order('id').range(offset, offset + 999), 'Unable to load size change history.', warnings) : [],
+  legacyFull || section === 'follow-ups' ? rows<Receipt>(offset => admin.from('field_sync_receipts').select('operation_id,project_id,actor_id,action,recorded_at,result').eq('project_id', project.id).in('action', ['follow-up', 'ready', 'assign-measurements', 'cancel-project', 'reactivate-project']).order('recorded_at', { ascending: false }).order('operation_id').range(offset, offset + 999), 'Unable to load follow-up history.', warnings) : [],
+  measurements ? loadMeasurementAttempts(admin, [project.id]) : { data: null, error: null },
+  legacyFull || section === 'contract' ? loadContractDocumentRevisions(admin, project.id) : [],
  ]);
  if (attempts.error) {
   if (missingTable(attempts.error)) warnings.push('Unable to load visit history.');
@@ -121,14 +129,22 @@ export async function loadProjectOverview(access: Exclude<Awaited<ReturnType<typ
    assignedOutdoorSales: typeof value.assignedOutdoorSales === 'string' ? value.assignedOutdoorSales : null,
   };
  });
- if (!entries.some(entry => entry.action === 'follow-up') && project.project_notes) entries.push({ id: 'previous-note', action: 'snapshot', note: project.project_notes, nextFollowUp: project.next_follow_up_at, recordedAt: null, recordedBy: 'Not recorded' });
+ if ((legacyFull || section === 'follow-ups') && !entries.some(entry => entry.action === 'follow-up') && project.project_notes) entries.push({ id: 'previous-note', action: 'snapshot', note: project.project_notes, nextFollowUp: project.next_follow_up_at, recordedAt: null, recordedBy: 'Not recorded' });
  const record: FieldProject = { ...project, created_by: project.created_by ?? '', phone: client?.mobile ?? null, client_name: client?.name, registeredBy: name(project.created_by) ?? 'Employee', assignedOutdoorSales: name(project.assigned_outdoor_sales_id), followUpOwner: name(project.follow_up_owner_id), legacyOutdoorSalesOwner: name(project.legacy_outdoor_sales_id), measurementDelayedBy: name(project.measurement_delayed_by), clientCancelledBy: name(project.client_cancelled_by), measurement_attempts: attempts.data?.get(project.id) ?? [] };
  return {
+  section: legacyFull ? undefined : section,
   actor: { id: auth.user.id, role: auth.role, name: auth.profile?.full_name ?? auth.profile?.username ?? undefined, branch: auth.profile?.branch ?? null },
-  project: record, client, contacts, openings: openings.map(opening => ({ ...opening, recordedBy: name(opening.created_by) ?? 'Employee' })),
+  project: record, client, contacts, openings: openings.map(opening => ({ ...opening, curtain_wall_capture: legacyFull ? opening.curtain_wall_capture ?? null : null, skylight_capture: legacyFull ? opening.skylight_capture ?? null : null, recordedBy: name(opening.created_by) ?? 'Employee' })),
   flow: withoutStoragePaths(flow), history: withoutStoragePaths(history), followUps: { project: record, entries }, measurementReports: reports,
   sizeHistory: sizeHistory.map(change => ({ ...change, changed_by_name: name(change.changed_by) ?? 'Employee' })), warnings: [...new Set(warnings)], signedCopyAvailable: hasOverviewSignedCopy(flow, project.id), documentRevisions,
  };
+}
+
+export async function loadOverviewOpeningCapture(admin: Admin, projectId: string, openingId: string) {
+ const result = await admin.from('openings').select('curtain_wall_capture,skylight_capture').eq('project_id', projectId).eq('id', openingId).maybeSingle();
+ if (result.error) return { response: NextResponse.json({ error: 'Unable to load project measurements.' }, { status: 500, headers: overviewHeaders }) };
+ if (!result.data) return { response: NextResponse.json({ error: 'Project not found.' }, { status: 404, headers: overviewHeaders }) };
+ return { capture: result.data };
 }
 
 export async function loadOverviewReportPhoto(admin: Admin, projectId: string, reportId: string) {

@@ -9,22 +9,43 @@ import { salesProject,salesRoles } from '@/lib/workflow/access';
 import { canRenameProject, normalizeProjectName } from '@/lib/workflow/projectName';
 import { isOutdoorAssignmentMember } from '@/lib/auth/outdoorTeams';
 import { hasGlobalProjectAccess } from '@/lib/auth/projectBranchAccess';
-export async function GET(){
+import { parseProjectListQuery, projectIdPattern } from '@/lib/workflow/projectList';
+import { loadWorkspaceDashboardProjects, loadWorkspaceProjectList } from '@/lib/workflow/projectListServer';
+import { outdoorProjectOptions } from '@/lib/dashboard/outdoorProjectFilters';
+export async function GET(request?:Request){
  const auth=await requireRole(salesRoles);if(!auth.ok)return NextResponse.json({error:auth.error},{status:auth.status});
+ const params=new URL(request?.url??'http://localhost/api/workspace').searchParams;
+ const projectId=params.get('projectId')??undefined;
+ if(projectId!==undefined&&!projectIdPattern.test(projectId))return NextResponse.json({error:'Invalid project.'},{status:400});
+ if(projectId&&params.has('view'))return NextResponse.json({error:'Choose a project or a project list.'},{status:400});
+ if(params.has('view')&&!['projects','dashboard'].includes(params.get('view')??''))return NextResponse.json({error:'Invalid project view.'},{status:400});
+ const dashboard=params.get('view')==='dashboard';
+ let listQuery;
+ try{if(params.get('view')==='projects')listQuery=parseProjectListQuery(params);}catch(error){return NextResponse.json({error:(error as Error).message},{status:400});}
  const admin=createAdminClient();
  const actor={id:auth.user.id,role:auth.role,branch:auth.profile?.branch,outdoorRotationStartBranch:auth.profile?.outdoor_rotation_start_branch,outdoorTeamMemberIds:auth.outdoorTeamMemberIds};
  let directoryQuery=admin.from('profiles').select('id,full_name,username,role,branch,outdoor_rotation_start_branch').in('role',['Indoor Sales', 'Sales Manager','Outdoor Sales']).eq('is_active',true).eq('status','Active').order('full_name');
  if(!hasGlobalProjectAccess(auth.role))directoryQuery=auth.profile?.branch==='Karkh'||auth.profile?.branch==='Rasafa'
   ?directoryQuery.or(`branch.eq.${auth.profile.branch},and(role.eq."Outdoor Sales",branch.in.(Karkh,Rasafa))`)
   :directoryQuery.eq('branch',auth.profile?.branch??'');
- const [result,directory]=await Promise.all([loadWorkspaceProjects(admin,actor),directoryQuery]);
+ const directoryRequest=Promise.resolve(directoryQuery);
+ const [fullResult,listResult,directory]=await Promise.all([
+  listQuery?null:dashboard?loadWorkspaceDashboardProjects(admin,actor):loadWorkspaceProjects(admin,actor,projectId),
+  listQuery?loadWorkspaceProjectList(admin,actor,listQuery,directoryRequest):null,
+  directoryRequest
+ ]);
+ if(listResult?.error)return NextResponse.json({error:listResult.error},{status:500});
+ const list=listResult&&'data' in listResult?listResult:null;
+ const result=list?{data:list.data,error:null}:fullResult!;
  if(result.error)return NextResponse.json({error:'Unable to load projects.'},{status:500});
+ if(directory.error)return NextResponse.json({error:'Unable to load employee assignments.'},{status:500});
+ const outdoorDirectory=directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee',branch:p.branch,outdoorRotationStartBranch:p.outdoor_rotation_start_branch??null}));
  const clientIds=[...new Set((result.data??[]).map(p=>p.client_id))];
- const ids=[...new Set([auth.user.id,...(result.data??[]).flatMap(p=>[p.created_by,p.legacy_outdoor_sales_id,p.assigned_outdoor_sales_id,p.follow_up_owner_id,p.measurement_delayed_by,p.client_cancelled_by]).filter((id):id is string=>!!id)])];
+ const ids=[...new Set([auth.user.id,...(list?outdoorProjectOptions(list.index,outdoorDirectory).map(person=>person.id):[]),...(result.data??[]).flatMap(p=>[p.created_by,p.legacy_outdoor_sales_id,p.assigned_outdoor_sales_id,p.follow_up_owner_id,p.measurement_delayed_by,p.client_cancelled_by]).filter((id):id is string=>!!id)])];
  const [clients,profiles,attempts]=await Promise.all([
-  loadWorkspaceRows(clientIds,batch=>admin.from('clients').select('id,mobile,client_name').in('id',batch)),
+  list?{data:list.clients,error:null}:loadWorkspaceRows(clientIds,batch=>admin.from('clients').select('id,mobile,client_name').in('id',batch)),
   loadWorkspaceRows(ids,batch=>admin.from('profiles').select('id,full_name,username,outdoor_rotation_start_branch').in('id',batch)),
-  loadMeasurementAttempts(admin,(result.data??[]).map(project=>project.id))
+  list||dashboard?{data:null,error:null}:loadMeasurementAttempts(admin,(result.data??[]).map(project=>project.id))
  ]);
  if(attempts.error)return NextResponse.json({error:'Unable to load visit history.'},{status:500});
  if(clients.error)return NextResponse.json({error:'Unable to load client contacts.'},{status:500});
@@ -34,7 +55,7 @@ export async function GET(){
  const contacts=new Map((clients.data??[]).map(c=>[c.id,c]));
  const name=(id:string|null)=>id?(people.get(id)?.full_name??people.get(id)?.username):null;
  const actorProfile=people.get(auth.user.id);
- return NextResponse.json({actor:{id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds,branch:auth.profile?.branch??null,outdoorRotationStartBranch:auth.role==='Outdoor Sales'?actor.outdoorRotationStartBranch??null:null,name:actorProfile?.full_name??actorProfile?.username??'Employee'},outdoorSales:directory.data.filter(p=>p.role==='Outdoor Sales').map(p=>({id:p.id,name:p.full_name??p.username??'Employee',branch:p.branch,outdoorRotationStartBranch:p.outdoor_rotation_start_branch??null})),indoorSales:directory.data.filter(p=>(p.role === 'Indoor Sales' || p.role === 'Sales Manager')).map(p=>({id:p.id,name:p.full_name??p.username??'Employee',role:p.role,branch:p.branch})),projects:(result.data??[]).map(p=>({...p,project_log_only:isHistoricalProject(p,actor),measurement_attempts:attempts.data?.get(p.id)??[],clientCancelledBy:name(p.client_cancelled_by)??null,measurementDelayedBy:name(p.measurement_delayed_by)??null,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)?.mobile??null,client_name:contacts.get(p.client_id)?.client_name,assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===auth.user.id,assignedToTeam:isOutdoorAssignmentMember(p,actor),registeredBy:name(p.created_by)??'Employee',legacyOutdoorSalesOwner:name(p.legacy_outdoor_sales_id)??null}))},{headers:{'Cache-Control':'no-store'}});
+ return NextResponse.json({actor:{id:auth.user.id,role:auth.role,outdoorTeamMemberIds:auth.outdoorTeamMemberIds,branch:auth.profile?.branch??null,outdoorRotationStartBranch:auth.role==='Outdoor Sales'?actor.outdoorRotationStartBranch??null:null,name:actorProfile?.full_name??actorProfile?.username??'Employee'},...(dashboard?{summary:true}:{}),...(list?{pagination:list.pagination,outdoorOptions:outdoorProjectOptions(list.index.map(p=>({...p,registeredBy:name(p.created_by)??'Employee',legacyOutdoorSalesOwner:name(p.legacy_outdoor_sales_id)??null})),outdoorDirectory)}:{}),outdoorSales:outdoorDirectory,indoorSales:directory.data.filter(p=>(p.role === 'Indoor Sales' || p.role === 'Sales Manager')).map(p=>({id:p.id,name:p.full_name??p.username??'Employee',role:p.role,branch:p.branch})),projects:(result.data??[]).map(p=>({...p,project_log_only:isHistoricalProject(p,actor),...(!list&&!dashboard?{measurement_attempts:attempts.data?.get(p.id)??[]}:{} ),clientCancelledBy:name(p.client_cancelled_by)??null,measurementDelayedBy:name(p.measurement_delayed_by)??null,followUpOwner:name(p.follow_up_owner_id)??null,phone:contacts.get(p.client_id)?.mobile??null,client_name:contacts.get(p.client_id)?.client_name,assignedOutdoorSales:name(p.assigned_outdoor_sales_id)??null,assignedToYou:p.assigned_outdoor_sales_id===auth.user.id,assignedToTeam:isOutdoorAssignmentMember(p,actor),registeredBy:name(p.created_by)??'Employee',legacyOutdoorSalesOwner:name(p.legacy_outdoor_sales_id)??null}))},{headers:{'Cache-Control':'no-store'}});
 }
 export async function PATCH(request:Request){
  const body=await request.json().catch(()=>null);if(typeof body?.projectId!=='string')return NextResponse.json({error:'Project is required.'},{status:400});

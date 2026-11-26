@@ -8,6 +8,8 @@ import type { ContractDocumentRevision } from '@/lib/contracts/documentRevisions
 
 export const overviewUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const overviewHeaders = { 'Cache-Control': 'private, no-store' };
+export const projectOverviewSections = ['overview', 'measurements', 'follow-ups', 'quotation', 'contract'] as const;
+export type ProjectOverviewSection = typeof projectOverviewSections[number];
 
 type Tables = Database['public']['Tables'];
 
@@ -17,8 +19,10 @@ export type ProjectOverviewClient = Pick<Tables['clients']['Row'],
 
 export type ProjectOverviewContact = Tables['client_contacts']['Row'];
 export type ProjectOverviewOpening = Tables['openings']['Row'] & { recordedBy: string };
+export type ProjectOverviewOpeningCapture = Pick<Tables['openings']['Row'], 'curtain_wall_capture' | 'skylight_capture'>;
 
 export type ProjectOverviewData = {
+ section?: ProjectOverviewSection;
  actor: { id: string; role: string; name?: string; branch?: string | null };
  project: FieldProject;
  client: ProjectOverviewClient | null;

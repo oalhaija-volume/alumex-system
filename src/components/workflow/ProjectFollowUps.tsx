@@ -87,7 +87,9 @@ export function ProjectFollowUps({ projectId }: { projectId: string }) {
   const [visible, setVisible] = useState(false);
   const heading = useId();
   useEffect(() => {
-    const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) { setVisible(true); observer.disconnect(); } }, { rootMargin: '200px' });
+    // Keep observing after the first visit so off-screen cards release their
+    // history subscription and polling timer while retaining the rendered data.
+    const observer = new IntersectionObserver(entries => { setVisible(entries.some(entry => entry.isIntersecting)); }, { rootMargin: '200px' });
     if (container.current) observer.observe(container.current);
     return () => observer.disconnect();
   }, []);

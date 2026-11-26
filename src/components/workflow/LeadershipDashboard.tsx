@@ -22,7 +22,8 @@ import { OutdoorSalesCoverage } from './OutdoorSalesCoverage';
 import { ClientNameEditor } from './ClientNameEditor';
 import { ProjectNameEditor } from './ProjectNameEditor';
 import { IndoorSalesEditor, type SavedIndoorSalesAssignment } from './IndoorSalesEditor';
-import { button, field, Notice, secondary } from './ui';
+import { button, field, Notice, secondary, useResource } from './ui';
+import { projectListPageSize } from '@/lib/workflow/projectList';
 import styles from './LeadershipDashboard.module.css';
 
 const dashboardArabic = Noto_Sans_Arabic({
@@ -52,6 +53,18 @@ type ProjectEditors = {
   onClientNameSaved?: (project: FieldProject, update: ClientNameUpdate) => Promise<void>;
   onIndoorSalesSaved?: (assignment: SavedIndoorSalesAssignment) => Promise<void>;
 };
+
+function ProjectDetailNotes({project}:{project:FieldProject}) {
+  const {term}=useI18n();
+  const {data,error,loading}=useResource<SalesWorkspaceData>(`/api/workspace?projectId=${project.id}`);
+  const record=data?.projects.find(row=>row.id===project.id);
+  return <><Notice error={error}/>{loading?<p role="status" className="mt-3 text-sm">{term('Loading project information…')}</p>:record&&<>
+    <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm leading-6 sm:grid-cols-2">
+      {record.readiness_note&&<div><dt className="text-slate-500">{term('Reason not ready for measurement')}</dt><dd dir="auto" className="whitespace-pre-wrap break-words">{record.readiness_note}</dd></div>}
+      {record.project_notes&&<div><dt className="text-slate-500">{term('Latest follow-up note')}</dt><dd className="whitespace-pre-wrap break-words">{record.project_notes}</dd></div>}
+    </dl><MeasurementDelayNotice project={record}/>
+  </>}</>;
+}
 
 function actionFor(project: FieldProject, leadership: boolean) {
   const stage = projectStage(project);
@@ -135,10 +148,8 @@ function ProjectRow({ project, data, leadership, overdue, busy, onDelete, onProj
           <div><dt className="text-slate-500">{term('Created by')}</dt><dd><bdi>{project.registeredBy === 'Employee' ? term('Employee') : project.registeredBy}</bdi><time dateTime={project.created_at} className="block text-slate-500">{formatDateTime(project.created_at)}</time></dd></div>
           <div><dt className="text-slate-500">{term('Last updated')}</dt><dd>{formatDateTime(project.updated_at)}</dd></div>
           <div className="sm:col-span-2"><dt className="text-slate-500">{term('Address')}</dt><dd className="break-words">{project.address ?? '—'}</dd></div>
-          {project.readiness_note && <div className="sm:col-span-2"><dt className="text-slate-500">{term('Reason not ready for measurement')}</dt><dd dir="auto" className="whitespace-pre-wrap break-words">{project.readiness_note}</dd></div>}
-          {project.project_notes && <div className="sm:col-span-2"><dt className="text-slate-500">{term('Latest follow-up note')}</dt><dd className="whitespace-pre-wrap break-words">{project.project_notes}</dd></div>}
         </dl>
-        <MeasurementDelayNotice project={project}/>
+        <ProjectDetailNotes key={`${project.id}:${project.updated_at}`} project={project}/>
         {(onProjectSaved || onClientNameSaved || onIndoorSalesSaved) && <div className="mt-3 grid gap-x-6 border-t border-slate-200 pt-1 sm:grid-cols-2">
           <div>{onProjectSaved && <ProjectNameEditor project={project} actor={data.actor} onSaved={onProjectSaved}/>}{onClientNameSaved && <ClientNameEditor project={project} actor={data.actor} onSaved={update => onClientNameSaved(project, update)}/>}</div>
           {onIndoorSalesSaved && <IndoorSalesEditor project={project} data={data} onSaved={onIndoorSalesSaved}/>}
@@ -159,6 +170,8 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
   const [stage, setStage] = useState<ProjectStage | 'all'>('all');
   const [scope, setScope] = useState<Scope>('all');
   const [search, setSearch] = useState('');
+  const [coverageOpen,setCoverageOpen]=useState(false);
+  const [tasksOpen,setTasksOpen]=useState(false);
   const registration = useProjectRegistrationFilters(data.projects);
   const outdoorFilter = useOutdoorSalesProjectFilters(data.projects, data.outdoorSales, registration.filteredProjects);
   const projects = outdoorFilter.filteredProjects;
@@ -176,6 +189,11 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
     return matchesScope && (stage === 'all' || projectStage(project) === stage)
       && matchesProjectSearch(project, search);
   });
+  const filterKey=JSON.stringify([stage,scope,search,registration.month,registration.creator,outdoorFilter.salesperson,outdoorFilter.order]);
+  const [paging,setPaging]=useState({key:filterKey,page:1});
+  const totalPages=Math.max(1,Math.ceil(selected.length/projectListPageSize));
+  const page=Math.min(paging.key===filterKey?paging.page:1,totalPages);
+  const visible=selected.slice((page-1)*projectListPageSize,page*projectListPageSize);
   function reset() { setStage('all'); setScope('all'); setSearch(''); registration.reset(); outdoorFilter.reset(); }
 
   return <section lang={locale} className={`${dashboardArabic.variable} ${styles.dashboard} mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8`}>
@@ -194,12 +212,12 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
       </button>)}
     </section>
 
-    {leadership&&<details className={`${styles.coverage} mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white`}>
+    {leadership&&<details onToggle={event=>setCoverageOpen(event.currentTarget.open)} className={`${styles.coverage} mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white`}>
       <summary className="flex min-h-12 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">
         <span>{t('dashboard.outdoorCoverage.title')}</span>
         <svg aria-hidden="true" className={styles.coverageChevron} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m6 9 6 6 6-6"/></svg>
       </summary>
-      <div className={styles.coverageContent}><OutdoorSalesCoverage/></div>
+      <div className={styles.coverageContent}>{coverageOpen&&<OutdoorSalesCoverage/>}</div>
     </details>}
 
     <div className="mt-4">
@@ -228,9 +246,10 @@ export function LeadershipDashboard({ data, error, now, notice = '', busy = '', 
     <section aria-label={term('Projects')} className="mt-6">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold text-slate-950">{term(stage === 'all' ? 'All projects' : projectStages.find(item => item.id === stage)?.label)} <span className="font-normal text-slate-500">· {formatNumber(selected.length)}</span></h2>{(stage !== 'all' || scope !== 'all' || search || registration.month || registration.creator || outdoorFilter.salesperson) && <button type="button" onClick={reset} className="min-h-11 text-sm font-semibold text-blue-700">{term('Clear filters')}</button>}</div>
       {!selected.length ? <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center"><p className="text-sm text-slate-600">{term('No projects match this view.')}</p><button type="button" onClick={reset} className="mt-3 min-h-11 text-sm font-semibold text-blue-700">{term('Show all projects')}</button></div> : <div className="grid grid-cols-1 gap-3">
-        {selected.map(project => <ProjectRow key={project.id} project={project} data={data} leadership={leadership} overdue={overdue(project)} busy={busy} onDelete={onDelete} onProjectSaved={onProjectSaved} onClientNameSaved={onClientNameSaved} onIndoorSalesSaved={onIndoorSalesSaved}/>)}
+        {visible.map(project => <ProjectRow key={project.id} project={project} data={data} leadership={leadership} overdue={overdue(project)} busy={busy} onDelete={onDelete} onProjectSaved={onProjectSaved} onClientNameSaved={onClientNameSaved} onIndoorSalesSaved={onIndoorSalesSaved}/>)}
       </div>}
+      {totalPages>1&&<nav aria-label={term('Project pages')} className="mt-5 flex flex-wrap items-center justify-between gap-3"><button type="button" className={secondary} disabled={page<=1} onClick={()=>setPaging({key:filterKey,page:page-1})}>{term('Previous')}</button><p className="text-sm text-slate-600">{term('Page {page} of {pages}',{page:formatNumber(page),pages:formatNumber(totalPages)})}</p><button type="button" className={secondary} disabled={page>=totalPages} onClick={()=>setPaging({key:filterKey,page:page+1})}>{term('Next')}</button></nav>}
     </section>
-    <details className="mt-6 rounded-lg border border-slate-200 bg-white p-4"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-800">{term('Measurement tasks and follow-up reminders')}</summary><div className="pt-4"><SalesTaskPanel data={{...data, projects}} now={now}/></div></details>
+    <details onToggle={event=>setTasksOpen(event.currentTarget.open)} className="mt-6 rounded-lg border border-slate-200 bg-white p-4"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-800">{term('Measurement tasks and follow-up reminders')}</summary><div className="pt-4">{tasksOpen&&<SalesTaskPanel data={{...data, projects}} now={now}/>}</div></details>
   </section>;
 }

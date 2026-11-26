@@ -47,11 +47,12 @@ export async function loadWorkspaceRows<T, E>(
   return { data: rows, error: null };
 }
 
-export async function loadWorkspaceProjects(admin: Admin, actor: Actor) {
+export async function loadWorkspaceProjects(admin: Admin, actor: Actor, projectId?: string) {
   const branches = projectBranchesForActor(actor);
   const projectPage = (offset: number) => {
     let query = admin.from('projects').select(workspaceProjectColumns)
       .order('created_at', { ascending: false }).order('id').range(offset, offset + 999);
+    if (projectId) query = query.eq('id', projectId);
     if (actor.role === 'Outdoor Sales') query = query.or(outdoorProjectFilter(actor, true));
     // Legacy Governorates rows can still represent Najaf geographically.
     if (branches !== null && actor.role !== 'Outdoor Sales') query = branches.includes('Najaf')
@@ -73,9 +74,11 @@ export async function loadWorkspaceProjects(admin: Admin, actor: Actor) {
   // does not change project RLS or grant access to measurement write endpoints.
   const previousIds = new Set<string>();
   for (let offset = 0; ; offset += 1000) {
-    const previous = await admin.from('field_sync_receipts').select('project_id')
+    let previousQuery = admin.from('field_sync_receipts').select('project_id')
       .eq('actor_id', actor.id).in('action', ['delay-measurements', 'finish'])
       .order('operation_id').range(offset, offset + 999);
+    if (projectId) previousQuery = previousQuery.eq('project_id', projectId);
+    const previous = await previousQuery;
     if (previous.error) return { ...result, data: null, error: previous.error };
     for (const row of previous.data) previousIds.add(row.project_id);
     if (previous.data.length < 1000) break;

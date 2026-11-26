@@ -445,13 +445,15 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
   return response;
  }
  if(method==='GET'){
-  let s=await readFieldState();const id=url.split('/').pop();
-  const pending=s?.queue.some(c=>url==='/api/workspace'||c.projectId===id);
+  const recordId=/^\/api\/workspace\?projectId=([0-9a-f-]{36})$/i.exec(url)?.[1];
+  const workspace=url==='/api/workspace'||url==='/api/workspace?view=dashboard'||!!recordId;
+  let s=await readFieldState();const id=recordId??url.split('/').pop();
+  const pending=s?.queue.some(c=>workspace&&!recordId||c.projectId===id);
   // This explicit device workspace already owns an account-scoped snapshot.
   // OfflineStatus refreshes it in the background; reads need no second API call.
   const savedProject=s?.projects.find(p=>p.id===id);
   if(savedProject?.project_log_only&&url.startsWith('/api/initial-measurements/'))return Response.json({error:'This project is available in your log for reference only.'},{status:403});
-  const useSaved=isDeviceWorkspace()&&s&&(url==='/api/workspace'||savedProject);
+  const useSaved=isDeviceWorkspace()&&s&&(workspace||savedProject);
   let attemptedNetwork=false;
   if(!useSaved && !pending && isFieldOnline()){
    attemptedNetwork=true;
@@ -464,17 +466,18 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
    const response=await fetch(url,{...init,signal:controller.signal});connection(true);
    if(response.ok){
     const data=await response.clone().json();
-    if(s && url==='/api/workspace' && data.actor?.id===s.actor.id && activeFieldUser()===s.actor.id){
+    if(s && workspace && data.actor?.id===s.actor.id && activeFieldUser()===s.actor.id){
      const workspace=data as SalesWorkspaceData;
      const remoteProjects=new Map(workspace.projects.map(project=>[project.id,project]));
      await updateFieldState(s.actor.id,old=>{
       if(!old)throw new Error('Offline account unavailable.');
       const registrations=new Set(old.queue.filter(change=>change.action==='register').map(change=>change.projectId));
-      const unavailableProjectIds=old.projects.filter(project=>!remoteProjects.has(project.id)&&(!registrations.has(project.id)||old.unavailableProjectIds?.includes(project.id))).map(project=>project.id);
+      const missing=old.projects.filter(project=>(!recordId||project.id===recordId)&&!remoteProjects.has(project.id)&&(!registrations.has(project.id)||old.unavailableProjectIds?.includes(project.id))).map(project=>project.id);
+      const unavailableProjectIds=recordId?[...new Set([...(old.unavailableProjectIds??[]).filter(id=>id!==recordId),...missing])]:missing;
       return {...old,actor:workspace.actor,outdoorSales:workspace.outdoorSales??old.outdoorSales,indoorSales:workspace.indoorSales,unavailableProjectIds,projects:old.projects.map(project=>remoteProjects.has(project.id)?withCurrentProjectAccess(project,remoteProjects.get(project.id)!):project)};
      },'snapshot');
     }
-    if(s && url!=='/api/workspace' && data.project && data.openings && activeFieldUser()===s.actor.id)await updateFieldState(s.actor.id,old=>{
+    if(s && !workspace && data.project && data.openings && activeFieldUser()===s.actor.id)await updateFieldState(s.actor.id,old=>{
      if(!old)throw new Error('Offline account unavailable.');
      const pending=old.queue.some(change=>change.projectId===id);
      return {...old,unavailableProjectIds:(old.unavailableProjectIds??[]).filter(projectId=>projectId!==id),projects:old.projects.map(project=>project.id===id?(pending?withCurrentProjectAccess(project,data.project):{...project,...data.project}):project),openings:pending?old.openings:[...old.openings.filter(opening=>opening.projectId!==id),...data.openings.map((opening:RegistrationOpening)=>retainSkylightCapture({...opening,projectId:id!},old.openings))]};
@@ -499,7 +502,7 @@ export async function fieldFetch(url:string,init?:RequestInit):Promise<Response>
    if(requestedActor&&s?.actor.id!==requestedActor)return Response.json({error:'Sign in with the employee who opened this workspace.'},{status:401});
   }
   if(!s)return Response.json({error:'Open this workspace online once before working offline.'},{status:503});
-  if(url==='/api/workspace')return Response.json({actor:s.actor,outdoorSales:s.outdoorSales??[],indoorSales:s.indoorSales??[],projects:s.projects});
+  if(workspace)return Response.json({actor:s.actor,outdoorSales:s.outdoorSales??[],indoorSales:s.indoorSales??[],projects:recordId?s.projects.filter(project=>project.id===recordId):s.projects});
   const p=s.projects.find(p=>p.id===id);
   return p?Response.json({project:p,canCancelProject:canCancelProject(p,s.actor),canDelayMeasurements:canDelayMeasurements(p,s.actor),canResumeMeasurements:canResumeMeasurements(p,s.actor),openings:s.openings.filter(o=>o.projectId===id)}):Response.json({error:'This project is not downloaded on this device.'},{status:404});
  }

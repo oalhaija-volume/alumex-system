@@ -41,11 +41,11 @@ const projects = progress.map(([name, overrides], index) => ({
   ...overrides,
 }));
 
-function dashboardDependencies(role, locale) {
+function dashboardDependencies(role, locale, rows = projects) {
   const terms = JSON.parse(readFileSync(new URL(`../messages/${locale}.json`, import.meta.url), 'utf8')).terms;
   const term = (value, replacements = {}) => (terms[value] ?? value)
     .replace(/\{(\w+)\}/g, (match, key) => replacements[key] ?? match);
-  const data = { actor: { role, id: 'actor' }, projects, outdoorSales: [] };
+  const data = { actor: { role, id: 'actor' }, projects: rows, outdoorSales: [] };
   const dependencies = {
     react: React, 'react/jsx-runtime': jsxRuntime,
     'next/link': ({ children, prefetch, ...props }) => {
@@ -56,6 +56,7 @@ function dashboardDependencies(role, locale) {
     './LeadershipDashboard.module.css': { dashboard: 'dashboard' },
     '@/lib/auth/permissions': permissions,
     '@/lib/workflow/stages': stages,
+    '@/lib/workflow/projectList': { projectListPageSize: 25 },
     '@/lib/intake/projectBranch': { projectBranchLabels: { Karkh: 'Karkh' } },
     '@/lib/dashboard/projectSearch': { matchesProjectSearch: () => true },
     '@/lib/dashboard/outdoorProjectFilters': { projectOutdoorSalesOrigin: () => null },
@@ -79,7 +80,7 @@ function dashboardDependencies(role, locale) {
       Workspace: ({ children }) => React.createElement('section', null, children),
       useResource: url => {
         assert.equal(url, '/api/dashboard', 'Branch managers keep the scoped status-only list API');
-        return { data: { projects }, loading: false, error: '' };
+        return { data: { projects: rows }, loading: false, error: '' };
       },
     },
   };
@@ -112,6 +113,21 @@ for (const locale of ['en', 'ar']) test(`${locale}: Branch Manager can open proj
   assert.ok(markup.includes(term('Open project →')));
   assert.equal(markup.includes('href="/mini-crm'), false);
   assert.equal(markup.includes('href="/intake'), false);
+});
+
+for (const leadership of [true, false]) test(`${leadership ? 'Leadership' : 'Company'} dashboard bounds rendered cards while retaining all-project counts`, () => {
+  const rows = Array.from({ length: 60 }, (_, index) => ({ ...projects[1],
+    id: `22222222-2222-4222-8222-${String(index + 1).padStart(12, '0')}`,
+    project_name: `Project ${index + 1}`, project_number: `PRJ-PAGED-${index + 1}` }));
+  const { dependencies, data } = dashboardDependencies(leadership ? 'Admin' : 'Branch Manager', 'en', rows);
+  const component = load(`../src/components/workflow/${leadership ? 'LeadershipDashboard' : 'CompanyDashboard'}.tsx`, dependencies);
+  const markup = renderToStaticMarkup(leadership
+    ? React.createElement(component.LeadershipDashboard, { data, error: '', now: 0 })
+    : React.createElement(component.CompanyDashboard, { role: 'Branch Manager' }));
+  assert.equal([...markup.matchAll(/<article\b/g)].length, 25);
+  assert.ok(markup.includes('60'), 'Overview totals retain every accessible record');
+  assert.ok(markup.includes('Page 1 of 3'));
+  assert.equal(markup.includes('PRJ-PAGED-60<'), false, 'Later page cards do not mount early');
 });
 
 test('unrelated employee dashboards do not receive project record links', () => {

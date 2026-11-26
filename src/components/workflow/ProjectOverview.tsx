@@ -1,20 +1,15 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- Project images and signatures are saved private data URLs. */
 import Link from 'next/link';
-import { useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useRef, useState, type ReactNode } from 'react';
 import { useI18n } from '@/components/i18n/I18nProvider';
-import { SavedContractDocument } from '@/components/contracts/SavedContractDocument';
-import { ContractRevisionActions } from '@/components/contracts/ContractRevisionActions';
-import type { ContractDocumentRevision } from '@/lib/contracts/documentRevisions';
-import { canPrepareQuotation } from '@/lib/auth/permissions';
 import { normalizeCurtainWallCapture, normalizeSkylightCapture } from '@/lib/measurements/registrationOpening';
 import { followUpTypeLabel } from '@/lib/workflow/followUps';
 import { stageDetails } from '@/lib/workflow/stages';
-import type { ProjectOverviewData, ProjectOverviewOpening } from '@/lib/workflow/projectOverview';
+import type { ProjectOverviewData, ProjectOverviewOpening, ProjectOverviewOpeningCapture } from '@/lib/workflow/projectOverview';
 import { ProjectRecord } from './ProjectRecord';
 import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDelayNotice';
 import { FollowUpHistoryTable, FollowUpPrintButton } from './ProjectFollowUps';
-import { DocumentFooter, DocumentHeader, DocumentPaper, DocumentParties, OpeningSchedule } from './CommercialDocument';
 import { api, card, Notice, secondary, useResource, Workspace } from './ui';
 
 const sections = [
@@ -25,6 +20,7 @@ const sections = [
  { id: 'contract', label: 'Contract' },
 ] as const;
 type Section = typeof sections[number]['id'];
+const ProjectDocuments = lazy(() => import('./ProjectOverviewDocuments').then(module => ({ default: module.ProjectDocuments })));
 
 function Details({ items }: { items: [string, ReactNode][] }) {
  const { term } = useI18n();
@@ -80,10 +76,20 @@ function ProjectInformation({ data }: { data: ProjectOverviewData }) {
  </div>;
 }
 
-function OpeningInformation({ opening }: { opening: ProjectOverviewOpening }) {
+function OpeningInformation({ opening, projectId }: { opening: ProjectOverviewOpening; projectId: string }) {
  const { term, formatNumber, formatDateTime } = useI18n();
- const curtain = normalizeCurtainWallCapture(opening.curtain_wall_capture);
- const skylight = normalizeSkylightCapture(opening.skylight_capture);
+ const [capture, setCapture] = useState<ProjectOverviewOpeningCapture | null>(null);
+ const [busy, setBusy] = useState(false);
+ const [error, setError] = useState('');
+ const curtain = normalizeCurtainWallCapture((capture ?? opening).curtain_wall_capture);
+ const skylight = normalizeSkylightCapture((capture ?? opening).skylight_capture);
+ async function loadCapture() {
+  setBusy(true); setError('');
+  try { setCapture(await api<ProjectOverviewOpeningCapture>(`/api/projects/${projectId}?opening=${encodeURIComponent(opening.id)}`)); }
+  catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to load project measurements.'); }
+  finally { setBusy(false); }
+ }
+
  return <article className="min-w-0 rounded-md border border-slate-200 p-4">
   <h3 className="font-semibold">{term(opening.opening_type)} {term(opening.opening_direction)}</h3>
   <p className="mt-2 text-sm text-slate-600">{term(opening.floor)} · {term(opening.room)}{opening.work_area ? ` · ${term(opening.work_area === 'internal' ? 'Internal works' : 'Facade')}` : ''}</p>
@@ -95,6 +101,8 @@ function OpeningInformation({ opening }: { opening: ProjectOverviewOpening }) {
    ['Solid panel height (cm)', opening.solid_panel_height > 0 ? formatNumber(opening.solid_panel_height) : null],
    ['Fixed height (cm)', opening.fixed_height > 0 ? formatNumber(opening.fixed_height) : null], ['Notes', opening.notes],
   ]}/></div>
+  {!capture && !curtain && !skylight && (opening.has_curtain_wall_capture || opening.has_skylight_capture) && <button type="button" disabled={busy} onClick={() => void loadCapture()} className={`${secondary} mt-4`}>{term(busy ? 'Loading…' : 'View opening details and photos')}</button>}
+  <Notice error={error}/>
   {curtain?.note && <p className="mt-4 whitespace-pre-wrap break-words text-sm">{curtain.note}</p>}
   {curtain?.photo && <img src={curtain.photo} alt={term('Curtain Wall photo')} className="mt-4 max-h-80 w-full rounded-md object-contain"/>}
   {skylight && <div className="mt-4 space-y-3 text-sm">{skylight.sections.map((section, index) => <p key={index}><bdi>{section.label}</bdi> · <bdi dir="ltr">{formatNumber(section.width)} × {formatNumber(section.length)}</bdi> {term('cm')}</p>)}
@@ -122,7 +130,7 @@ function ProjectMeasurements({ data }: { data: ProjectOverviewData }) {
  }
  return <div className="space-y-5">
   <section className={card}><h2 className="mb-5 text-lg font-semibold">{term('Measurements')}</h2>
-   {!data.openings.length ? <p className="text-sm text-slate-500">{term('No openings recorded yet.')}</p> : <div className="grid gap-4 lg:grid-cols-2">{data.openings.map(opening => <OpeningInformation key={opening.id} opening={opening}/>)}</div>}
+   {!data.openings.length ? <p className="text-sm text-slate-500">{term('No openings recorded yet.')}</p> : <div className="grid gap-4 lg:grid-cols-2">{data.openings.map(opening => <OpeningInformation key={opening.id} opening={opening} projectId={data.project.id}/>)}</div>}
   </section>
   <section className={card} aria-label={term('Measurement notes and photos')}><h2 className="mb-5 text-lg font-semibold">{term('Measurement notes and photos')}</h2><Notice error={error}/>
    {!data.measurementReports.length ? <p className="text-sm text-slate-500">{term('No measurement notes recorded.')}</p> : <div className="space-y-4">{data.measurementReports.map(report => <article key={report.id} className="border-t border-slate-100 pt-4 text-sm">
@@ -144,59 +152,15 @@ function ProjectMeasurements({ data }: { data: ProjectOverviewData }) {
  </div>;
 }
 
-function ProjectDocuments({ data, kind, onRevisionUpdated }: { data: ProjectOverviewData; kind: 'quotation' | 'contract'; onRevisionUpdated: (revision: ContractDocumentRevision) => void }) {
- const { term, formatNumber, formatDateTime } = useI18n();
- const [selectedVersion, setVersion] = useState<string | null>(null);
- const version = selectedVersion ?? (kind === 'contract' && data.documentRevisions?.length ? `document-${data.documentRevisions[0].id}` : 'current');
- const [printing, setPrinting] = useState(false);
- const [error, setError] = useState('');
- const revision = version === 'current' ? null : data.history.find(row => String(row.version) === version);
- const documentRevision = version.startsWith('document-') ? data.documentRevisions?.find(row => `document-${row.id}` === version) : null;
- const quote = version === 'current' ? data.flow?.quotation : revision?.quotation;
- const contract = documentRevision?.contract ?? (version === 'current' ? data.flow?.contract : revision?.contract);
- const present = kind === 'quotation' ? quote : contract;
- const history = data.history.filter(row => kind === 'quotation' || row.contract);
- async function printDocument() {
-  setPrinting(true); setError('');
-  try { await document.fonts.ready; await Promise.all(Array.from(document.querySelectorAll<HTMLImageElement>('.commercial-document img')).map(image => image.decode())); window.print(); }
-  catch { setError('Unable to prepare this document for printing.'); }
-  finally { setPrinting(false); }
- }
- return <div className="space-y-5">
-  <div className="flex flex-wrap items-end justify-between gap-4 print:hidden">
-   <label className="block text-sm font-medium">{term(kind === 'quotation' ? 'Quotation version' : 'Contract version')}
-    <select aria-label={term(kind === 'quotation' ? 'Quotation version' : 'Contract version')} value={version} onChange={event => { setVersion(event.target.value); setError(''); }} className="mt-2 block min-h-11 max-w-full rounded-md border border-slate-300 bg-white px-3 py-2">
-     <option value="current">{kind === 'contract' && data.documentRevisions?.length ? term('Original contract') : term('Revision {number} · Current', { number: formatNumber((kind === 'contract' ? data.flow?.contract?.quotation.version : data.flow?.quotation.version) ?? 1) })}</option>
-     {kind === 'contract' && data.documentRevisions?.map(row => <option key={row.id} value={`document-${row.id}`}>{term('Contract revision {number}', { number: formatNumber(row.document_revision) })} · {term(row.superseded_at ? 'Superseded revision' : row.status === 'signed' ? 'Signed' : row.status === 'approved' ? 'Approved · Awaiting signature' : 'Awaiting approval')}</option>)}
-     {history.map(row => <option key={row.version} value={row.version}>{term('Revision {number} · Superseded', { number: formatNumber(row.version) })}</option>)}
-    </select>
-   </label>
-   <div className="flex flex-wrap gap-3">
-    {kind === 'contract' && version === 'current' && data.signedCopyAvailable && <a href={`/api/projects/${data.project.id}?download=signed`} className={`${secondary} inline-flex items-center`}>{term('Download signed copy')}</a>}
-    {present && <button type="button" disabled={printing} onClick={() => void printDocument()} className={secondary}>{term(printing ? 'Preparing print…' : kind === 'quotation' ? 'Print quotation' : 'Print contract')}</button>}
-   </div>
-  </div>
-  <Notice error={error}/>
-  {documentRevision && <ContractRevisionActions key={`${documentRevision.id}-${documentRevision.revision}`} documentRevision={documentRevision} canManage={canPrepareQuotation(data.actor.role)} onUpdated={onRevisionUpdated}/>}
-  {kind === 'contract' && version === 'current' && data.flow?.signed_at && <p className="text-sm text-green-800 print:hidden">{term('Signed on')}: {formatDateTime(data.flow.signed_at)} · {data.flow.evidence?.signer}</p>}
-  {!present ? <div className={card}><p className="text-sm text-slate-500">{term(kind === 'quotation' ? 'No quotation has been saved for this project yet.' : 'No contract has been generated for this project yet.')}</p></div> : kind === 'quotation' && quote ? <DocumentPaper>
-   <DocumentHeader kind="Quotation" number={`QT-${data.project.project_number}-${quote.version ?? 1}`} createdAt={quote.createdAt}/>
-   <DocumentParties client={{ name: data.client?.name ?? data.project.client_name ?? '—', mobile: data.client?.mobile ?? null }} project={{ name: data.project.project_name, number: data.project.project_number, address: data.project.address, branch: data.project.branch, governorate: data.project.governorate }}/>
-   <OpeningSchedule quote={quote} areaBasis="billable"/><DocumentFooter reference={`QT-${data.project.project_number}-${quote.version ?? 1}`}/>
-  </DocumentPaper> : contract ? <SavedContractDocument contract={contract} signedAt={documentRevision ? documentRevision.signed_at : version === 'current' ? data.flow?.signed_at : null} evidence={documentRevision ? documentRevision.evidence : version === 'current' ? data.flow?.evidence : null} documentRevision={documentRevision}/> : null}
- </div>;
-}
-
 export function ProjectOverview({ projectId, initialSection = 'overview' }: { projectId: string; initialSection?: Section }) {
  const { term, direction } = useI18n();
- const { data, setData, error, loading, reload } = useResource<ProjectOverviewData>(`/api/projects/${projectId}`);
  const [section, setSection] = useState<Section>(initialSection);
+ const { data, setData, error, loading, reload } = useResource<ProjectOverviewData>(`/api/projects/${projectId}?section=${section}`);
+ const matchingSection = data && (!data.section || data.section === section);
  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
  return <Workspace title={data?.project.project_name ?? term('Project overview')} description={data ? data.project.project_number : term('Project information, measurements, history and commercial documents.')}>
   <div className="mb-5 flex flex-wrap justify-between gap-3 print:hidden"><Link href="/dashboard" className={`${secondary} inline-flex items-center`}>{term('Back to dashboard')}</Link><button type="button" disabled={loading} onClick={() => void reload()} className={secondary}>{term('Refresh records')}</button></div>
   <Notice error={error}/>
-  {loading ? <p role="status">{term('Loading project information…')}</p> : data && <>
-   {!!data.warnings.length && <aside className="mb-5 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 print:hidden" role="status">{data.warnings.map(warning => <p key={warning}>{term(warning)}</p>)}</aside>}
    <nav aria-label={term('Project sections')} className="mb-6 print:hidden"><div role="tablist" aria-label={term('Project sections')} className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
     {sections.map((item, index) => <button key={item.id} ref={node => { tabs.current[index] = node; }} type="button" role="tab" id={`project-tab-${item.id}`} aria-controls={`project-section-${item.id}`} aria-selected={section === item.id} tabIndex={section === item.id ? 0 : -1} onClick={() => setSection(item.id)} onKeyDown={event => {
      const step = event.key === 'ArrowRight' ? (direction === 'rtl' ? -1 : 1) : event.key === 'ArrowLeft' ? (direction === 'rtl' ? 1 : -1) : 0;
@@ -205,11 +169,16 @@ export function ProjectOverview({ projectId, initialSection = 'overview' }: { pr
      setSection(sections[next].id); tabs.current[next]?.focus();
     }} className={`min-h-11 rounded-md border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${section === item.id ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>{term(item.label)}</button>)}
    </div></nav>
+  {!data ? loading && <p role="status">{term('Loading project information…')}</p> : <>
+   {!!data.warnings.length && <aside className="mb-5 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 print:hidden" role="status">{data.warnings.map(warning => <p key={warning}>{term(warning)}</p>)}</aside>}
+
    <section role="tabpanel" id={`project-section-${section}`} aria-labelledby={`project-tab-${section}`}>
+    {!matchingSection ? <p role="status">{term('Loading project information…')}</p> : <>
     {section === 'overview' && <ProjectInformation data={data}/>}
     {section === 'measurements' && <ProjectMeasurements key={projectId} data={data}/>}
     {section === 'follow-ups' && <section className={card}><div className="mb-5 flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">{term('Follow-up history')}</h2><FollowUpPrintButton history={data.followUps}/></div><FollowUpHistoryTable entries={data.followUps.entries}/></section>}
-    {(section === 'quotation' || section === 'contract') && <ProjectDocuments key={`${projectId}-${section}`} data={data} kind={section} onRevisionUpdated={updated => setData(current => current ? { ...current, documentRevisions: (current.documentRevisions ?? []).map(row => row.id === updated.id ? updated : row) } : current)}/>}
+    {(section === 'quotation' || section === 'contract') && <Suspense fallback={<p role="status">{term('Loading project information…')}</p>}><ProjectDocuments key={`${projectId}-${section}`} data={data} kind={section} onRevisionUpdated={updated => setData(current => current ? { ...current, documentRevisions: (current.documentRevisions ?? []).map(row => row.id === updated.id ? updated : row) } : current)}/></Suspense>}
+    </>}
    </section>
   </>}
  </Workspace>;

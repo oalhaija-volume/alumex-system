@@ -29,6 +29,46 @@ test('a successful workspace read publishes a server snapshot rather than invali
  assert.equal(x.state.projects[0].measurement_branch,'Rasafa');assert.deepEqual(x.state.outdoorSales,directory);assert.deepEqual(x.state.queue,[]);
 });
 
+test('a single project record refresh leaves unrelated retained projects and queued work intact',async()=>{
+ const otherId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+ const project={id:projectId,branch:'Karkh',created_by:actor.id,updated_at:'2026-11-14T08:00:00Z',project_name:'Old name'};
+ const other={...project,id:otherId,project_name:'Unsynced other project'};
+ const change={id:'queued-other',projectId:otherId,action:'rename-project',payload:{projectName:'Unsynced other project'}};
+ const x=setup({projects:[project,other],queue:[change]});navigator.onLine=true;window.location={pathname:'/quotation/'+projectId};
+ const requests=[];
+ globalThis.fetch=async url=>{requests.push(url);return Response.json({actor,projects:[{...project,project_name:'Server name'}],outdoorSales:[],indoorSales:[]});};
+ const response=await x.client.fieldFetch('/api/workspace?projectId='+projectId);
+ assert.deepEqual(requests,['/api/workspace?projectId='+projectId]);
+ assert.equal((await response.json()).projects.length,1);
+ assert.equal(x.state.projects[0].project_name,'Server name');
+ assert.deepEqual(x.state.projects[1],other);
+ assert.deepEqual(x.state.queue,[change]);
+ assert.deepEqual(x.state.unavailableProjectIds,[]);
+});
+
+test('a scoped record response marks only the requested inaccessible project unavailable',async()=>{
+ const otherId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+ const project={id:projectId,branch:'Karkh',created_by:actor.id,updated_at:'2026-11-14T08:00:00Z'};
+ const x=setup({projects:[project,{...project,id:otherId}]});navigator.onLine=true;window.location={pathname:'/contract/'+projectId};
+ globalThis.fetch=async()=>Response.json({actor,projects:[],outdoorSales:[],indoorSales:[]});
+ await x.client.fieldFetch('/api/workspace?projectId='+projectId);
+ assert.deepEqual(x.state.unavailableProjectIds,[projectId]);
+ assert.equal(x.state.projects.length,2,'The retained records are preserved for recovery');
+});
+
+test('an offline single-record read returns only its visible project without downloading the workspace',async()=>{
+ const otherId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+ const project={id:projectId,branch:'Karkh',created_by:actor.id,project_name:'Pending project'};
+ const change={id:'pending',projectId,action:'rename-project',payload:{projectName:'Pending project'}};
+ const x=setup({projects:[project,{...project,id:otherId}],queue:[change]});window.location={pathname:'/offline'};
+ globalThis.fetch=async()=>assert.fail('Offline record must use the retained snapshot');
+ const response=await x.client.fieldFetch('/api/workspace?projectId='+projectId);
+ const data=await response.json();
+ assert.deepEqual(data.projects,[project]);
+ assert.equal('openings' in data,false);
+ assert.deepEqual(x.state.queue,[change]);
+});
+
 test('a delayed failed workspace read returns the current rotation projection without changing retained work',async t=>{
  t.mock.timers.setTime(Date.parse('2026-11-15T20:59:59.999Z'));
  const outdoor={...actor,role:'Outdoor Sales',branch:'Rasafa',outdoorRotationStartBranch:'Rasafa'};

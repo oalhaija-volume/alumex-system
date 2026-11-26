@@ -2,14 +2,13 @@
 import { useI18n } from '@/components/i18n/I18nProvider';
 import { ProjectRecord } from './ProjectRecord';
 /* eslint-disable @next/next/no-img-element -- Signatures are private inline PNG data, not remotely optimized images. */
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import Link from 'next/link';
 import { SignaturePad } from '@/components/contracts/SignaturePad';
 import { Agreement2027Document } from '@/components/contracts/Agreement2027Document';
 import { SavedContractDocument } from '@/components/contracts/SavedContractDocument';
 import { ContractRevisionActions } from '@/components/contracts/ContractRevisionActions';
 import type { ContractDocumentRevision } from '@/lib/contracts/documentRevisions';
-import { Agreement2027FieldsForm } from '@/components/contracts/Agreement2027FieldsForm';
 import type { Agreement2027Fields } from '@/lib/contracts/agreement2027Types';
 import type { ContractSnapshot, SalesFlow, SignedEvidence } from '@/lib/workflow/types';
 import { DocumentHeader,DocumentParties,OpeningSchedule,ContractTerms,DocumentFooter,DocumentPaper } from './CommercialDocument';
@@ -17,6 +16,7 @@ import { api,button,card,field,Notice,secondary,useResource,Workspace } from './
 
 type ContractProject = {additional_openings_state?:string|null;sales_status?:string|null};
 type ContractData = {flow:SalesFlow|null;project:ContractProject};
+const Agreement2027FieldsForm = lazy(() => import('@/components/contracts/Agreement2027FieldsForm').then(module => ({ default: module.Agreement2027FieldsForm })));
 
 export function ContractWorkspace({projectId,canReviewRevisions=false}:{projectId:string;canReviewRevisions?:boolean}) {
  const {term,formatNumber}=useI18n();
@@ -134,7 +134,7 @@ function ContractContent({projectId,project,flow,contract,readOnly=false,onFlow,
   {canEditContract&&agreement&&<p className="mb-5 text-sm leading-6 text-slate-600 print:hidden">{text('Project details and approved quotation prices are filled automatically. Review the contract and complete any applicable contact, handover, sample and stage-date fields before signing.','تُعبّأ بيانات المشروع وأسعار عرض السعر المعتمد تلقائياً. راجع العقد واستكمل بيانات الاتصال والتحويل والعينات ومواعيد المراحل التي تنطبق على المشروع قبل التوقيع.')}</p>}
   {canEditContract&&agreementFields&&editingDetails&&<section data-agreement-fields-form aria-label={text('Contract details','بيانات العقد')} className={`${card} mb-6 space-y-5 print:hidden`}>
    <h2 className="text-lg font-semibold">{text('Complete contract details','استكمال بيانات العقد')}</h2>
-   <fieldset disabled={busy} className="min-w-0"><Agreement2027FieldsForm value={agreementFields} onChange={setAgreementFields} disabled={busy}/></fieldset>
+   <fieldset disabled={busy} className="min-w-0"><Suspense fallback={<p role="status">{term('Loading contract…')}</p>}><Agreement2027FieldsForm value={agreementFields} onChange={setAgreementFields} disabled={busy}/></Suspense></fieldset>
    <div className="flex flex-wrap gap-3"><button type="button" disabled={busy} onClick={()=>void saveContractDetails()} className={button}>{busy?term('Saving…'):text('Save contract details','حفظ بيانات العقد')}</button><button type="button" disabled={busy} onClick={()=>{setEditingDetails(false);setAgreementFields(contract.agreement2027?.fields??null);setError('');}} className={secondary}>{term('Cancel changes')}</button></div>
   </section>}
   {editingDetails&&<p role="status" className="mb-5 text-sm font-medium text-amber-800 print:text-black">{text('Save the contract details or cancel changes before printing or signing.','احفظ بيانات العقد أو ألغِ التغييرات قبل الطباعة أو التوقيع.')}</p>}

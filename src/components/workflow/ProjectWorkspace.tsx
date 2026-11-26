@@ -1,7 +1,7 @@
 "use client";
 import { MeasurementDelayNotice } from '@/components/measurements/MeasurementDelayNotice';
 import { useI18n } from '@/components/i18n/I18nProvider';
-import type { FieldProject,SalesWorkspaceData } from '@/lib/offline/types';
+import type { FieldProject } from '@/lib/offline/types';
 import { followUpFormValues } from './FollowUpFields';
 import { ProjectFollowUps } from './ProjectFollowUps';
 import { MiniCRM } from './MiniCRM';
@@ -19,11 +19,23 @@ import { useOutdoorSalesProjectFilters } from './useOutdoorSalesProjectFilters';
 import { OutdoorSalesProjectFilter } from './OutdoorSalesProjectFilter';
 import { SharedQuotationProjects } from './SharedQuotationProjects';
 import { projectOutdoorSalesOrigin } from '@/lib/dashboard/outdoorProjectFilters';
-import { api,button,card,Notice,useResource,useNow,Workspace } from './ui';
+import { matchesProjectSearch } from '@/lib/dashboard/projectSearch';
+import { projectListPageSize, projectListURL, type ProjectListData } from '@/lib/workflow/projectList';
+import { useEffect } from 'react';
+import { api,button,card,field,secondary,Notice,useResource,useNow,Workspace } from './ui';
 type Project=FieldProject;
 export function ProjectWorkspace({followUps=false,canDelete=false}:{followUps?:boolean;canDelete?:boolean}){
- const { term,formatDateTime } = useI18n();
- const {data,setData,error,setError,loading,reload}=useResource<SalesWorkspaceData>('/api/workspace');const [busy,setBusy]=useState('');const [notice,setNotice]=useState('');const now=useNow();
+ const { term,formatDateTime,formatNumber } = useI18n();
+ const [page,setPage]=useState(1);const [search,setSearch]=useState('');const [query,setQuery]=useState('');const [salesperson,setSalesperson]=useState('');const [order,setOrder]=useState<'newest'|'oldest'>('newest');const [focus,setFocus]=useState('');
+ const paginated=!followUps&&!(typeof window!=='undefined'&&window.location.pathname==='/offline');
+ useEffect(()=>{if(search===query)return;const timer=setTimeout(()=>{setQuery(search);setPage(1);},300);return()=>clearTimeout(timer);},[search,query]);
+ useEffect(()=>{
+  const reveal=()=>{const match=/^#project-([0-9a-f-]{36})$/i.exec(window.location.hash);if(match){setFocus(match[1]);setSearch('');setQuery('');setSalesperson('');setPage(1);}};
+  reveal();window.addEventListener('hashchange',reveal);return()=>window.removeEventListener('hashchange',reveal);
+ },[]);
+ const url=paginated?projectListURL({page,pageSize:projectListPageSize,q:query,salesperson,order,focus}):'/api/workspace';
+ const {data,setData,error,setError,loading,reload}=useResource<ProjectListData>(url);const [busy,setBusy]=useState('');const [notice,setNotice]=useState('');const now=useNow();
+ useEffect(()=>{if(!focus||!data?.projects.some(project=>project.id===focus))return;const target=document.getElementById(`project-${focus}`);target?.scrollIntoView({block:'start'});if(target){target.tabIndex=-1;target.focus({preventScroll:true});}},[data,focus]);
  const outdoorFilter=useOutdoorSalesProjectFilters(data?.projects??[],data?.outdoorSales);
  async function update(p:Project,action:string,form?:HTMLFormElement){setBusy(p.id);setError('');setNotice('');const fields=form?new FormData(form):null;const values=fields?(['cancel-project','reactivate-project'].includes(action)?{note:fields.get('note'),confirmed:true,expectedUpdatedAt:p.updated_at}:action==='follow-up'?followUpFormValues(form!):{assignedOutdoorSalesId:fields.get('assignedOutdoorSalesId'),...(action==='assign-measurements'&&fields.has('measurementBranch')?{measurementBranch:fields.get('measurementBranch')}:{})}):{};try{const result=await api<{pending?:boolean}>('/api/workspace',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId:p.id,action,...values})});await reload();setNotice(action==='reactivate-project'?'Project reactivated.':action==='cancel-project'?'Project marked cancelled by client.':action==='ready'||action==='assign-measurements'||action==='request-openings'?result.pending?'Measurement assignment saved on this device. The employee will be notified after sync.':'Measurements assigned. The employee will see the task in their mobile workspace.':'Follow-up saved.');}catch(e){setError((e as Error).message);}finally{setBusy('');}}
  async function remove(p:Project){
@@ -33,13 +45,17 @@ export function ProjectWorkspace({followUps=false,canDelete=false}:{followUps?:b
  }
  if(followUps&&!loading&&!canAccessCRM(data?.actor.role))return <Notice error="CRM access is limited to Indoor Sales and company leadership."/>;
  if(followUps)return <MiniCRM data={data} error={error} notice={notice} loading={loading} busy={busy} now={now} canDelete={canDelete} onUpdate={update} onDelete={remove}/>;
- const projects=outdoorFilter.filteredProjects;
+ const projects=paginated?data?.projects??[]:outdoorFilter.filteredProjects.filter(project=>matchesProjectSearch(project,search));
+ const pagination=paginated?data?.pagination:undefined;
+ const filter=paginated?{options:data?.outdoorOptions??[],salesperson,setSalesperson:(id:string)=>{setSalesperson(id);setPage(1);setFocus('');},order,setOrder:(value:'newest'|'oldest')=>{setOrder(value);setPage(1);setFocus('');},total:pagination?.totalProjects??0}:outdoorFilter;
  return <Workspace title="Projects" description="Every client project, its current step, and the employee who registered it.">
   <Notice error={error}/>
   {notice&&<p role="status" className="mb-5 text-green-700">{term(notice)}</p>}
   <Link href="/intake" className={`${button} mb-6 inline-block`}>{term("New client & project")}</Link>
   {data?.actor.role==='Indoor Sales'&&<SharedQuotationProjects key={data.actor.id}/>}
-  {!loading&&<OutdoorSalesProjectFilter filter={outdoorFilter}/>}
+  <label className="mb-5 block text-sm font-medium text-slate-700">{term('Find a project')}<input type="search" value={search} maxLength={200} onChange={event=>{setSearch(event.target.value);setFocus('');}} placeholder={term('Name, project number, phone or address')} className={field}/></label>
+  {!loading&&<OutdoorSalesProjectFilter filter={filter}/>}
+  {!loading&&<div className="mb-5 flex flex-wrap items-center justify-between gap-3"><p role="status" className="text-sm text-slate-600">{term('Showing {count} of {total} projects',{count:formatNumber(projects.length),total:formatNumber(pagination?.total??outdoorFilter.total)})}</p><button type="button" className="min-h-11 px-2 text-sm font-semibold text-blue-700" onClick={()=>{setSearch('');setQuery('');setSalesperson('');setOrder('newest');setPage(1);setFocus('');outdoorFilter.reset();}}>{term('Clear filters')}</button></div>}
   {loading?<p>{term("Loading projects…")}</p>:!projects.length?<div className={card}>{term(data?.projects.length?"No projects match this view.":"No projects yet. Start by registering a client.")}</div>:<div className="space-y-4">{projects.map(p=>{const broughtInBy=projectOutdoorSalesOrigin(p,data?.outdoorSales);return <article key={p.id} id={`project-${p.id}`} className={`${card} scroll-mt-5`}>
    <div className="flex flex-wrap justify-between gap-4"><div><p className="text-xs font-semibold text-blue-600">{term(p.project_number)}{p.pending?` · ${term('Saved on device')}`:''}</p><h2 className="mt-2 text-xl font-semibold">{p.project_name}</h2><p className="mt-2 text-sm text-slate-600">{p.address}</p>{p.governorate&&<p className="mt-1 text-sm font-medium text-slate-700">{term('Governorates')} · <bdi>{p.governorate}</bdi></p>}</div><span className="h-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-medium">{term(stageDetails(p).label)}</span></div>
    {data&&<ProjectNameEditor project={p} actor={data.actor} onSaved={reload}/>}
@@ -61,5 +77,6 @@ export function ProjectWorkspace({followUps=false,canDelete=false}:{followUps?:b
    {canDelete&&<div className="mt-4 border-t border-slate-100 pt-3"><button type="button" disabled={!!busy||p.pending} onClick={()=>void remove(p)} className="min-h-11 rounded-md px-3 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">{busy===p.id?term("Please wait…"):term("Delete project")}</button>{p.pending&&<span className="block text-xs text-slate-500">{term("Sync saved changes before deleting.")}</span>}</div>}
    {canAccessCRM(data?.actor.role)&&<ProjectFollowUps projectId={p.id}/>}
   </article>;})}</div>}
+  {pagination&&pagination.totalPages>1&&<nav aria-label={term('Project pages')} className="mt-6 flex flex-wrap items-center justify-between gap-3"><button type="button" className={secondary} disabled={loading||pagination.page<=1} onClick={()=>{setPage(pagination.page-1);setFocus('');}}>{term('Previous')}</button><p className="text-sm text-slate-600">{term('Page {page} of {pages}',{page:formatNumber(pagination.page),pages:formatNumber(pagination.totalPages)})}</p><button type="button" className={secondary} disabled={loading||pagination.page>=pagination.totalPages} onClick={()=>{setPage(pagination.page+1);setFocus('');}}>{term('Next')}</button></nav>}
  </Workspace>;
 }
